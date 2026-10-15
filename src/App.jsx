@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, localTimeStamp } from "./lib/export.js";
-import { saveSession, loadSession, clearSession, saveSettings, loadSettings, shrinkDataUrl, downscaleImage } from "./lib/persist.js";
+import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, shrinkDataUrl, downscaleImage } from "./lib/persist.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
@@ -38,6 +38,10 @@ const thSt     = { padding: "6px 8px", textAlign: "left", fontSize: 10, fontWeig
 const tdSt     = { padding: "6px 8px", color: "#e2e8f0", fontSize: 12 };
 const inputSt  = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 8, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 14 };
 const labelSt  = { fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 };
+const modalBg   = { position: "fixed", inset: 0, background: "#0d1117", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto" };
+const modalCard = { background: "#161b22", borderRadius: 16, border: "1px solid #21262d", padding: 36, width: 440, maxWidth: "90vw" };
+const errSt     = { fontSize: 12, color: "#f87171", marginBottom: 12, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 6 };
+const bigBtn    = { width: "100%", padding: "13px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer" };
 
 function statusColor(s) {
   if (s === S_PASS)    return "#22c55e";
@@ -85,55 +89,27 @@ function ResumeModal({ session, onResume, onDiscard }) {
   );
 }
 
-// ── Session start modal ───────────────────────────────────────────────────────
-function SessionStartModal({ onStart, xlsxReady }) {
-  const [role,     setRole]     = useState(ROLES[0].id);
-  const [pin,      setPin]      = useState("");
-  const [order,    setOrder]    = useState("");
-  const [operator, setOperator] = useState("");
-  const [notes,    setNotes]    = useState("");
-  const [file,     setFile]     = useState(null);
-  const [error,    setError]    = useState(null);
-  const [loading,  setLoading]  = useState(false);
-  const fileRef = useRef(null);
+// ── Sign-in (once per shift) ──────────────────────────────────────────────────
+function SignInModal({ onSignIn, initial }) {
+  const [role,  setRole]  = useState(initial?.role || ROLES[0].id);
+  const [pin,   setPin]   = useState("");
+  const [name,  setName]  = useState(initial?.name || "");
+  const [error, setError] = useState(null);
 
-  const handleFile = (e) => {
-    const f = e.target.files[0];
-    if (f) { setFile(f); setError(null); }
-    e.target.value = "";
-  };
-
-  const handleStart = async () => {
+  const submit = () => {
     const roleDef = ROLES.find(r => r.id === role);
     if (PIN_REQUIRED && pin !== roleDef.pin) { setError("Wrong PIN for " + roleDef.label + "."); return; }
-    if (!operator.trim()) { setError("Please enter your name."); return; }
-    if (!order.trim())    { setError("Please enter an order number."); return; }
-    if (!file)            { setError("Please upload a roster file."); return; }
-    setLoading(true);
-    try {
-      const isExcel = /\.(xlsx|xls)$/i.test(file.name);
-      const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
-      if (parsed.length === 0) {
-        setError("No valid rows found. The file needs a header row with name and/or number columns.");
-        setLoading(false);
-        return;
-      }
-      onStart({ roster: parsed, orderNumber: order.trim(), operatorName: operator.trim(), notes: notes.trim(), role, rosterFile: file.name });
-    } catch (err) {
-      setError("Failed to parse roster: " + err.message);
-      setLoading(false);
-    }
+    if (!name.trim()) { setError("Please enter your name."); return; }
+    onSignIn({ role, name: name.trim() });
   };
-
-  const onEnter = e => { if (e.key === "Enter") handleStart(); };
+  const onEnter = e => { if (e.key === "Enter") submit(); };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto" }}>
-      <div style={{ background: "#161b22", borderRadius: 16, border: "1px solid #21262d", padding: 36, width: 440, maxWidth: "90vw" }}>
+    <div style={modalBg}>
+      <div style={modalCard}>
         <div style={{ fontSize: 32, marginBottom: 6, textAlign: "center" }}>🏭</div>
         <div style={{ fontWeight: 900, fontSize: 22, textAlign: "center", marginBottom: 2 }}>Jersey QC Scanner</div>
-        <div style={{ fontSize: 13, color: "#64748b", textAlign: "center", marginBottom: 22 }}>Sign in and set up your order</div>
-
+        <div style={{ fontSize: 13, color: "#64748b", textAlign: "center", marginBottom: 22 }}>Sign in once per shift</div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Role</label>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
@@ -145,29 +121,67 @@ function SessionStartModal({ onStart, xlsxReady }) {
             ))}
           </div>
         </div>
-
         {PIN_REQUIRED && (
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>PIN</label>
             <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} placeholder="••••" autoFocus onKeyDown={onEnter} style={inputSt} />
           </div>
         )}
-
-        <div style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 18 }}>
           <label style={labelSt}>Your name</label>
-          <input value={operator} onChange={e => setOperator(e.target.value)} placeholder="e.g. John Smith" autoFocus={!PIN_REQUIRED} onKeyDown={onEnter} style={inputSt} />
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. John Smith" autoFocus={!PIN_REQUIRED} onKeyDown={onEnter} style={inputSt} />
         </div>
+        {error && <div style={errSt}>{error}</div>}
+        <button onClick={submit} style={bigBtn}>Sign in →</button>
+      </div>
+    </div>
+  );
+}
 
+// ── Order setup (every order; no PIN) ─────────────────────────────────────────
+function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut }) {
+  const [order,   setOrder]   = useState("");
+  const [notes,   setNotes]   = useState("");
+  const [file,    setFile]    = useState(null);
+  const [error,   setError]   = useState(null);
+  const [loading, setLoading] = useState(false);
+  const fileRef = useRef(null);
+
+  const handleFile = (e) => { const f = e.target.files[0]; if (f) { setFile(f); setError(null); } e.target.value = ""; };
+
+  const handleStart = async () => {
+    if (!order.trim()) { setError("Please enter an order number."); return; }
+    if (!file)         { setError("Please upload a roster file."); return; }
+    setLoading(true);
+    try {
+      const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+      const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
+      if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); return; }
+      onStart({ roster: parsed, orderNumber: order.trim(), notes: notes.trim(), rosterFile: file.name });
+    } catch (err) {
+      setError("Failed to parse roster: " + err.message);
+      setLoading(false);
+    }
+  };
+  const onEnter = e => { if (e.key === "Enter") handleStart(); };
+
+  return (
+    <div style={modalBg}>
+      <div style={modalCard}>
+        <div style={{ fontSize: 32, marginBottom: 6, textAlign: "center" }}>📋</div>
+        <div style={{ fontWeight: 900, fontSize: 22, textAlign: "center", marginBottom: 2 }}>Set up the order</div>
+        <div style={{ fontSize: 13, color: "#64748b", textAlign: "center", marginBottom: 22, display: "flex", gap: 8, justifyContent: "center", alignItems: "center" }}>
+          <span>{operatorName} · {cap(role || "")}</span>
+          <button onClick={onSignOut} style={{ ...btnGhost, padding: "1px 8px", fontSize: 11 }}>Sign out</button>
+        </div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order number</label>
-          <input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" onKeyDown={onEnter} style={inputSt} />
+          <input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" autoFocus onKeyDown={onEnter} style={inputSt} />
         </div>
-
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order notes <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. sponsor logo left sleeve · captain C on #19" rows={2} style={{ ...inputSt, resize: "vertical", fontSize: 13 }} />
         </div>
-
         <div style={{ marginBottom: 18 }}>
           <label style={labelSt}>Roster file</label>
           <div onClick={() => fileRef.current.click()}
@@ -177,14 +191,9 @@ function SessionStartModal({ onStart, xlsxReady }) {
           </div>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.tsv,.txt" style={{ display: "none" }} onChange={handleFile} />
         </div>
-
-        {error && (
-          <div style={{ fontSize: 12, color: "#f87171", marginBottom: 12, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 6 }}>{error}</div>
-        )}
-
-        <button onClick={handleStart} disabled={loading}
-          style={{ width: "100%", padding: "13px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 16, cursor: loading ? "wait" : "pointer", opacity: loading ? 0.7 : 1 }}>
-          {loading ? "Loading…" : "Start Session →"}
+        {error && <div style={errSt}>{error}</div>}
+        <button onClick={handleStart} disabled={loading} style={{ ...bigBtn, cursor: loading ? "wait" : "pointer", opacity: loading ? 0.7 : 1 }}>
+          {loading ? "Loading…" : "Start order →"}
         </button>
       </div>
     </div>
@@ -214,7 +223,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, confirmKey, cancelKey }) {
+function ScanOverlay({ state, actions, binMap, extraCols, confirmKey, cancelKey, retryKey }) {
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
   const isList  = mode === "pick" || mode === "close";
@@ -267,13 +276,14 @@ function ScanOverlay({ state, actions, binMap, extraCols, confirmKey, cancelKey 
     const onKey = (e) => {
       if (e.repeat) return;                       // a held key or pedal is one press, not many
       if (mode === "done") return;
+      if (e.code === retryKey) { const o = options.find(x => x.id === "retry"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }
       if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled) o.run(); return; }
       if (e.code === cancelKey || e.code === "ArrowDown") { e.preventDefault(); lastKeyRef.current = Date.now(); move(1); return; }
       if (e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [options, selectedIdx, mode, confirmKey, cancelKey]);
+  }, [options, selectedIdx, mode, confirmKey, cancelKey, retryKey]);
 
   // A bumped mouse never overrides a key press made in the last moment.
   const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) setSelectedIdx(i); }, []);
@@ -287,13 +297,13 @@ function ScanOverlay({ state, actions, binMap, extraCols, confirmKey, cancelKey 
     return (
       <button onClick={o.run} onMouseEnter={() => hover(i)}
         style={{ padding: "12px 22px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.18)"}`, background: o.primary ? accent : "transparent", color: o.primary ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
-        <span>{o.label} {sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
+        <span>{o.label} {o.id === "retry" ? <Kbd light>{formatKey(retryKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
         {o.hint && <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.7 }}>{o.hint}</span>}
       </button>
     );
   };
 
-  const hintLine = `${formatKey(confirmKey)} select · ${formatKey(cancelKey)} or ↓ next option · ↑ previous`;
+  const hintLine = `${formatKey(confirmKey)} select · ${formatKey(cancelKey)} or ↓ next option · ↑ previous · ${formatKey(retryKey)} retry scan`;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "none", padding: "20px 0", overflowY: "auto" }}>
@@ -493,13 +503,16 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
   }, [onClose, listening]);
 
   const keyRows = [
-    { label: "Scan trigger",     key: "scanKey" },
-    { label: "Confirm / select", key: "confirmKey" },
-    { label: "Navigate",         key: "cancelKey" },
+    { label: "Scan",       key: "scanKey" },
+    { label: "Select",     key: "confirmKey" },
+    { label: "Navigate",   key: "cancelKey" },
+    { label: "Retry scan", key: "retryKey" },
   ];
-  const reserved = ["Enter", "Escape", "Tab"];
+  const reserved = ["Escape", "Tab"];
   const problems = [];
-  if (temp.confirmKey === temp.cancelKey) problems.push("Confirm and Navigate cannot be the same key.");
+  const onScreen = ["confirmKey", "cancelKey", "retryKey"];   // these three act on the same screen, so they must differ
+  const labelOf  = k => keyRows.find(r => r.key === k).label;
+  onScreen.forEach((a, i) => onScreen.slice(i + 1).forEach(b => { if (temp[a] === temp[b]) problems.push(`${labelOf(a)} and ${labelOf(b)} cannot be the same key.`); }));
   keyRows.forEach(r => { if (reserved.includes(temp[r.key])) problems.push(`${r.label} cannot be ${temp[r.key]}.`); });
 
   const selSt = { ...inputSt, padding: "6px 10px", fontSize: 13 };
@@ -520,7 +533,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
               <button onClick={() => setListening(r.key)} style={{ ...btnGhost, whiteSpace: "nowrap", padding: "4px 10px" }}>Change</button>
             </div>
           ))}
-          <div style={{ fontSize: 11, color: "#475569" }}>Navigate moves down the options on every screen; Confirm selects the highlighted one. ↑ ↓ also work.</div>
+          <div style={{ fontSize: 11, color: "#475569" }}>Select picks the highlighted option; Navigate (or ↓ ↑) moves it; Retry scan re-shoots from any screen with nothing recorded. Scan only works when no screen is open, so it may share a key with Select.</div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -632,20 +645,22 @@ export default function App() {
   const addRef          = useRef(null);
   const photoRef        = useRef(null);
   const rosterVersion   = useRef(0);     // scans that started before a roster change are ignored
-  const gateRef         = useRef(createMotionGate());
+  const gateRef         = useRef(createMotionGate({ log: m => console.log("[hands-free] " + m) }));
 
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...(loadSettings() || {}) }));
-  const { scanKey, confirmKey, cancelKey } = settings;
+  const { scanKey, confirmKey, cancelKey, retryKey } = settings;
 
   const [savedSession]  = useState(() => { const s = loadSession(); return s && s.sessionStarted && Array.isArray(s.roster) && s.roster.length ? s : null; });
   const [resumeDecided, setResumeDecided] = useState(false);
 
+  const [savedSignIn]   = useState(() => loadSignIn());      // who is at this station outlives any one order
+  const [signedIn,           setSignedIn]           = useState(() => !!savedSignIn);
   const [sessionStarted,     setSessionStarted]     = useState(false);
-  const [role,               setRole]               = useState("");
+  const [role,               setRole]               = useState(() => savedSignIn?.role || "");
   const [roster,             setRoster]             = useState([]);
   const [rosterFile,         setRosterFile]         = useState(null);
   const [orderNumber,        setOrderNumber]        = useState("");
-  const [operatorName,       setOperatorName]       = useState("");
+  const [operatorName,       setOperatorName]       = useState(() => savedSignIn?.name || "");
   const [notes,              setNotes]              = useState("");
   const [cameraOn,           setCameraOn]           = useState(false);
   const [cameras,            setCameras]            = useState([]);
@@ -733,19 +748,32 @@ export default function App() {
     setRole(s.role || ""); setRoster(s.roster); setRosterFile(s.rosterFile || null);
     setOrderNumber(s.orderNumber || ""); setOperatorName(s.operatorName || ""); setNotes(s.notes || "");
     setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null);
+    setSignedIn(true); saveSignIn({ role: s.role || "", name: s.operatorName || "" });
     setSessionStarted(true); setResumeDecided(true);
   }, [savedSession]);
 
   const discardSession = useCallback(() => { clearSession(); setResumeDecided(true); }, []);
 
-  const startNewOrder = useCallback(() => {
-    if (log.length > 0 && !window.confirm(`Start a new order? Export first if you need the ${log.length} scans from order ${orderNumber || "—"}.`)) return;
+  // Clears the order; the operator stays signed in and goes straight to order setup.
+  const resetOrder = useCallback(() => {
     clearSession();
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
-    setRoster([]); setRosterFile(null); setLog([]); setBinMap(null); setFirstScanTime(null);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false);
-  }, [log.length, orderNumber]);
+  }, []);
+
+  const startNewOrder = useCallback(() => {
+    if (log.length > 0 && !window.confirm(`Start a new order? Export first if you need the ${log.length} scans from order ${orderNumber || "—"}.`)) return;
+    resetOrder();
+  }, [log.length, orderNumber, resetOrder]);
+
+  const signOut = useCallback(() => {
+    if (log.length > 0 && !window.confirm(`Sign out? Export first if you need the ${log.length} scans from order ${orderNumber || "—"}.`)) return;
+    resetOrder();
+    clearSignIn();
+    setSignedIn(false); setRole(""); setOperatorName("");
+  }, [log.length, orderNumber, resetOrder]);
 
   // ── Camera ────────────────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -904,7 +932,7 @@ export default function App() {
       setOverlay({ mode: "done", scan, match: overlay.match });
       playTone("pass");
     },
-    retry()  { setOverlay(null); },
+    retry()  { setOverlay(null); armAutoScan(); },
     pick(c)  { if (!overlay?.scan || !c || isDone(c)) return; setOverlay({ mode: "confirm", scan: overlay.scan, match: c, note: overlay.note }); },
     reasons() { setOverlay(o => ({ mode: "reasons", scan: o.scan, match: o.match || null, returnTo: o })); },
     back()   { setOverlay(o => o.returnTo || null); },
@@ -920,15 +948,15 @@ export default function App() {
     flagContinue() {
       const o = overlay; if (!o?.scan) return;
       const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, match: null, status: S_FLAGGED, reason: o.reason || "Flagged by operator", ...stamp() };
-      setLog(prev => [entry, ...prev]); setLastResult(entry); setOverlay(null); playTone("flag");
+      setLog(prev => [entry, ...prev]); setLastResult(entry); setOverlay(null); playTone("flag"); armAutoScan();
     },
-    skipDuplicate() { setOverlay(null); },
+    skipDuplicate() { setOverlay(null); armAutoScan(); },
     flagDuplicate() {
       const o = overlay; if (!o?.scan) return;
       const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, match: o.match || null, status: S_FLAGGED, reason: "Duplicate — scanned again after passing", ...stamp() };
-      setLog(prev => [entry, ...prev]); setLastResult(entry); setOverlay(null); playTone("flag");
+      setLog(prev => [entry, ...prev]); setLastResult(entry); setOverlay(null); playTone("flag"); armAutoScan();
     },
-    continueSupervisor() { setOverlay(null); },
+    continueSupervisor() { setOverlay(null); armAutoScan(); },
     dismissDone() { setOverlay(null); armAutoScan(); },
   }), [overlay, stamp, armAutoScan]);
 
@@ -975,16 +1003,19 @@ export default function App() {
 
       {showResume && <ResumeModal session={savedSession} onResume={resumeSession} onDiscard={discardSession} />}
 
-      {!sessionStarted && !showResume && (
-        <SessionStartModal
-          xlsxReady={xlsxReady}
-          onStart={({ roster, orderNumber, operatorName, notes, role, rosterFile }) => {
+      {!showResume && !signedIn && (
+        <SignInModal initial={savedSignIn}
+          onSignIn={({ role, name }) => { setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name }); setResumeDecided(true); }} />
+      )}
+
+      {!showResume && signedIn && !sessionStarted && (
+        <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut}
+          onStart={({ roster, orderNumber, notes, rosterFile }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile);
-            setOrderNumber(orderNumber); setOperatorName(operatorName); setNotes(notes); setRole(role);
+            setOrderNumber(orderNumber); setNotes(notes);
             setSessionStarted(true); setResumeDecided(true);
-          }}
-        />
+          }} />
       )}
 
       {showBinSetup && binMap && (
@@ -992,7 +1023,7 @@ export default function App() {
       )}
 
       {overlay && (
-        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} confirmKey={confirmKey} cancelKey={cancelKey} />
+        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} />
       )}
 
       {showSettings && (
@@ -1024,7 +1055,8 @@ export default function App() {
           <Pill color="#22c55e">{passCount} Pass</Pill>
           <Pill color="#ef4444">{flagCount} Flag</Pill>
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
-          {sessionStarted && <button onClick={startNewOrder} style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>New order</button>}
+          {sessionStarted && <button onClick={startNewOrder} title="Finish this order and set up the next one — no PIN needed" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>New order</button>}
+          {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>Sign out</button>}
           <button onClick={() => setShowSettings(true)} style={{ ...btnGhost, padding: "3px 9px" }}>⚙</button>
         </div>
       </div>
@@ -1154,7 +1186,7 @@ export default function App() {
 
               <div style={{ padding: "7px 12px", borderTop: "1px solid #21262d", background: "#0d1117", flexShrink: 0 }}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px" }}>
-                  {[["scan", keyLabel, "Scan"], ["confirm", formatKey(confirmKey), "Confirm / select"], ["nav", formatKey(cancelKey), "Next option"], ["arrows", "↑↓", "Move"]].map(([id, k, d]) => (
+                  {[["scan", keyLabel, "Scan"], ["confirm", formatKey(confirmKey), "Select"], ["nav", formatKey(cancelKey), "Next option"], ["retry", formatKey(retryKey), "Retry scan"], ["arrows", "↑↓", "Move"]].map(([id, k, d]) => (
                     <div key={id} style={{ display: "flex", gap: 5, alignItems: "center" }}>
                       <kbd style={{ background: "#1e293b", border: "1px solid #334155", padding: "1px 6px", borderRadius: 4, fontSize: 10 }}>{k}</kbd>
                       <span style={{ fontSize: 10, color: "#64748b" }}>{d}</span>

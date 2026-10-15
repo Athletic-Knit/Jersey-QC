@@ -1,7 +1,8 @@
 // ── Motion detection for hands-free scanning ──────────────────────────────────
 // A tiny grayscale sample of the camera feed, compared frame to frame. After a
-// confirm the app waits for the picture to CHANGE (jersey swapped) and then go
-// STILL before it scans — so it never photographs an empty table or a hand.
+// confirm the gate waits for the old jersey to go, then for something with
+// TEXTURE (fabric, a printed number) to sit still — an empty table is flat and
+// never triggers a scan, no matter how still it is.
 
 export function sampleFrame(video, canvas, w = 32, h = 18) {
   if (!video || !video.videoWidth) return null;
@@ -14,7 +15,7 @@ export function sampleFrame(video, canvas, w = 32, h = 18) {
   return gray;
 }
 
-// Mean absolute difference, 0–255.
+// Mean absolute difference between two frames, 0–255.
 export function frameDiff(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
   let sum = 0;
@@ -22,25 +23,73 @@ export function frameDiff(a, b) {
   return sum / a.length;
 }
 
+// Mean absolute difference between neighbouring pixels: a bare table is near 0,
+// a jersey with a number is well above it.
+export function texture(gray, w = 32, h = 18) {
+  if (!gray) return 0;
+  let sum = 0, n = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w - 1; x++) { sum += Math.abs(gray[y * w + x] - gray[y * w + x + 1]); n++; }
+  for (let y = 0; y < h - 1; y++) for (let x = 0; x < w; x++) { sum += Math.abs(gray[y * w + x] - gray[(y + 1) * w + x]); n++; }
+  return n ? sum / n : 0;
+}
+
 /**
- * Drives the "changed, then settled" cycle. Call tick(frame) every ~200 ms.
- * Returns true exactly once, when it is time to scan.
+ * Call tick(frame) every ~200 ms while armed. Returns true exactly once, when
+ * it is time to scan. Phases:
+ *   lift     wait for the picture to change at all (old jersey picked up)
+ *   settle1  first stillness: flat → it's the table, go to `place`;
+ *            textured → probably the next jersey, give the hand a moment (`window`)
+ *   place    empty table: wait for something to be put down
+ *   settle2  stillness after the placement: textured → scan; flat → back to `place`
+ * Thresholds are the floor's to tune: `minTexture` decides table vs jersey.
  */
-export function createMotionGate({ changeAt = 14, stillBelow = 4, stillTicks = 4, timeoutTicks = 100 } = {}) {
-  let prev = null, moved = false, still = 0, ticks = 0, armed = false;
+export function createMotionGate({ changeAt = 14, stillBelow = 4, stillTicks = 3, minTexture = 5, placeWindowTicks = 6, timeoutTicks = 150, width = 32, height = 18, log } = {}) {
+  let armed = false, phase = "idle", prev = null, ref = null, still = 0, ticks = 0, windowLeft = 0;
+  const reset = () => { prev = null; ref = null; still = 0; ticks = 0; windowLeft = 0; phase = "lift"; };
+  const fire  = () => { armed = false; phase = "idle"; return true; };
   return {
-    arm()    { prev = null; moved = false; still = 0; ticks = 0; armed = true; },
-    disarm() { armed = false; },
+    arm()    { reset(); armed = true; },
+    disarm() { armed = false; phase = "idle"; },
     get armed() { return armed; },
+    get phase() { return phase; },
     tick(frame) {
       if (!armed || !frame) return false;
-      ticks++;
-      if (ticks > timeoutTicks) { armed = false; return false; }
-      const d = prev ? frameDiff(prev, frame) : 0;
+      if (++ticks > timeoutTicks) { armed = false; phase = "idle"; log?.("timed out"); return false; }
+      if (!ref) { ref = frame; prev = frame; return false; }          // the old jersey, before anything moves
+      const d = frameDiff(prev, frame);
       prev = frame;
-      if (!moved) { if (d >= changeAt) moved = true; return false; }
-      if (d < stillBelow) still++; else still = 0;
-      if (still >= stillTicks) { armed = false; return true; }
+      const isStill = () => { still = d < stillBelow ? still + 1 : 0; return still >= stillTicks; };
+
+      if (phase === "lift") {
+        if (d >= changeAt) { phase = "settle1"; still = 0; }
+        return false;
+      }
+      if (phase === "settle1") {
+        if (!isStill()) return false;
+        if (frameDiff(ref, frame) < changeAt) { phase = "lift"; still = 0; return false; }   // nothing really changed
+        const t = texture(frame, width, height);
+        log?.(`settled, texture ${t.toFixed(1)}`);
+        if (t < minTexture) { phase = "place"; still = 0; return false; }
+        phase = "window"; windowLeft = placeWindowTicks; still = 0;
+        return false;
+      }
+      if (phase === "window") {
+        if (d >= changeAt) { phase = "settle2"; still = 0; return false; }
+        if (--windowLeft <= 0) { log?.("scan (fast swap)"); return fire(); }
+        return false;
+      }
+      if (phase === "place") {
+        if (d >= changeAt) { phase = "settle2"; still = 0; }
+        return false;
+      }
+      if (phase === "settle2") {
+        if (!isStill()) return false;
+        const t = texture(frame, width, height);
+        log?.(`placed, texture ${t.toFixed(1)}`);
+        if (t < minTexture) { phase = "place"; still = 0; return false; }
+        log?.("scan");
+        return fire();
+      }
       return false;
     },
   };

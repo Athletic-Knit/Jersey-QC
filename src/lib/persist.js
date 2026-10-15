@@ -1,7 +1,8 @@
 // ── Session + settings persistence (localStorage) ─────────────────────────────
 // A refresh, a crash or a closed tab must not cost an order's work.
 const SESSION_KEY  = "jerseyqc.session.v1";
-const SETTINGS_KEY = "jerseyqc.settings.v1";
+const SETTINGS_KEY = "jerseyqc.settings.v2";   // v2: Enter selects, R retries
+const SIGNIN_KEY   = "jerseyqc.signin.v1";
 
 // localStorage can be full, blocked, or absent (private window); never let that throw.
 const quiet = fn => { try { return fn(); } catch { return undefined; } };
@@ -10,6 +11,10 @@ export function loadSession()   { return quiet(() => { const v = localStorage.ge
 export function clearSession()  { quiet(() => localStorage.removeItem(SESSION_KEY)); }
 export function saveSettings(s) { quiet(() => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))); }
 export function loadSettings()  { return quiet(() => { const v = localStorage.getItem(SETTINGS_KEY); return v ? JSON.parse(v) : null; }) ?? null; }
+// Who is signed in at this station outlives any one order.
+export function saveSignIn(s)   { quiet(() => localStorage.setItem(SIGNIN_KEY, JSON.stringify(s))); }
+export function loadSignIn()    { return quiet(() => { const v = localStorage.getItem(SIGNIN_KEY); return v ? JSON.parse(v) : null; }) ?? null; }
+export function clearSignIn()   { quiet(() => localStorage.removeItem(SIGNIN_KEY)); }
 
 // Shrink a data URL to a small thumbnail. The log keeps hundreds of these;
 // full 1280×720 frames would hold 100 MB+ on a long order.

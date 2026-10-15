@@ -32,7 +32,10 @@ export const ROLES = [
 export const PIN_REQUIRED = (env.VITE_PIN_REQUIRED ?? "true") !== "false";
 
 export const DEFAULT_SETTINGS = {
-  scanKey: "KeyB", confirmKey: "KeyB", cancelKey: "KeyA",
+  scanKey: "KeyB",        // take a picture (only when no screen is open)
+  confirmKey: "Enter",    // select the highlighted option on any screen
+  cancelKey: "KeyA",      // move to the next option (↓ ↑ also work)
+  retryKey: "KeyR",       // retry the scan wherever it is offered; nothing is recorded
   rotation: 180,          // 0 | 90 | 180 | 270 — how the camera is mounted
   cameraId: "",           // "" = browser default
   autoScan: true,         // hands-free: scan when the jersey changes and settles
