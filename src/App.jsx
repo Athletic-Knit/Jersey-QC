@@ -790,7 +790,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
         )}
 
         <div style={{ display: "flex", gap: 8 }}>
-          <button disabled={problems.length > 0} onClick={() => { onSave(temp); onClose(); }} style={{ ...btnPri, flex: 1, opacity: problems.length ? 0.5 : 1 }}>Save</button>
+          <button disabled={problems.length > 0} onClick={() => { onSave(temp); onClose(temp); }} style={{ ...btnPri, flex: 1, opacity: problems.length ? 0.5 : 1 }}>Save</button>
           <button onClick={onClose} style={btnGhost}>Cancel</button>
         </div>
       </div>
@@ -1124,6 +1124,16 @@ export default function App() {
     gateRef.current.arm(lastScanFrameRef.current); setArmed(true);
   }, [settings.autoScan, cameraOn, inputMode, modalOpen]);
 
+  // Closing a dialog (complete modal, settings, supervisor view) hands the table
+  // back to the operator: re-arm, so the next placement scans without B. The
+  // baseline is the last scan's frame, so the same jersey still lying there does
+  // not scan again. `autoScan` overrides the setting when Settings just saved it.
+  const closeDialog = useCallback((hide, autoScan = settings.autoScan) => {
+    hide();
+    if (overlay || !autoScan || !cameraOn || inputMode !== "camera") return;
+    gateRef.current.arm(lastScanFrameRef.current); setArmed(true);
+  }, [overlay, settings.autoScan, cameraOn, inputMode]);
+
   // ── Photo upload ──────────────────────────────────────────────────────────
   const handlePhotoUpload = useCallback((e) => {
     const file = e.target.files[0]; if (!file) return;
@@ -1310,7 +1320,7 @@ export default function App() {
           onSignIn={({ role, name }) => { setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name }); setResumeDecided(true); }} />
       )}
 
-      {showSupervisor && <SupervisorPanel operatorName={operatorName} onClose={() => setShowSupervisor(false)} />}
+      {showSupervisor && <SupervisorPanel operatorName={operatorName} onClose={() => closeDialog(() => setShowSupervisor(false))} />}
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
         <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onSupervisor={() => setShowSupervisor(true)}
@@ -1331,13 +1341,13 @@ export default function App() {
       )}
 
       {showSettings && (
-        <SettingsPanel settings={settings} cameras={cameras} onSave={setSettings} onClose={() => setShowSettings(false)} />
+        <SettingsPanel settings={settings} cameras={cameras} onSave={setSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
       )}
 
       {showRosterComplete && (
         <RosterCompleteModal roster={roster}
-          onExport={() => { exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf); setShowRosterComplete(false); }}
-          onDismiss={() => setShowRosterComplete(false)} />
+          onExport={() => { exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf); closeDialog(() => setShowRosterComplete(false)); }}
+          onDismiss={() => closeDialog(() => setShowRosterComplete(false))} />
       )}
 
       {/* Header */}
