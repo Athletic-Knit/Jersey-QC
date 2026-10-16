@@ -840,6 +840,9 @@ export default function App() {
     if (!videoRef.current || !canvasRef.current || scanning || !cameraOn || roster.length === 0 || inputMode !== "camera") return;
     const video = videoRef.current;
     if (!video.videoWidth) { setError("Camera is still starting — try again in a second."); return; }
+    // A dead track leaves the last frame frozen on screen; never scan that.
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (!track || track.readyState !== "live") { setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); return; }
     const canvas = canvasRef.current;
     const w = video.videoWidth, h = video.videoHeight;
     const rot = Number(settings.rotation) || 0, swap = rot === 90 || rot === 270;
@@ -851,26 +854,30 @@ export default function App() {
     ctx.drawImage(video, -w / 2, -h / 2, w, h);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     doRunScan(dataUrl.split(",")[1], dataUrl);
-  }, [scanning, cameraOn, roster.length, inputMode, settings.rotation, doRunScan]);
+  }, [scanning, cameraOn, roster.length, inputMode, settings.rotation, doRunScan, stopCamera]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
+  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume;
   useEffect(() => {
     if (!cameraOn || inputMode !== "camera" || !settings.autoScan) return;
     const id = setInterval(() => {
       const gate = gateRef.current;
+      if (modalOpen) { if (gate.armed) { gate.disarm(); setArmed(false); } return; }   // never scan behind a dialog
       if (!gate.armed) { setArmed(a => a ? false : a); return; }
       if (overlay || scanning) return;
+      const track = streamRef.current?.getVideoTracks?.()[0];
+      if (!track || track.readyState !== "live") { gate.disarm(); setArmed(false); setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); return; }
       const frame = sampleFrame(videoRef.current, motionCanvasRef.current);
       if (gate.tick(frame)) { setArmed(false); doTriggerScan(); }
       else if (!gate.armed) setArmed(false);
     }, 200);
     return () => clearInterval(id);
-  }, [cameraOn, inputMode, settings.autoScan, overlay, scanning, doTriggerScan]);
+  }, [cameraOn, inputMode, settings.autoScan, overlay, scanning, modalOpen, doTriggerScan, stopCamera]);
 
   const armAutoScan = useCallback(() => {
-    if (!settings.autoScan || !cameraOn || inputMode !== "camera") return;
+    if (!settings.autoScan || !cameraOn || inputMode !== "camera" || modalOpen) return;
     gateRef.current.arm(); setArmed(true);
-  }, [settings.autoScan, cameraOn, inputMode]);
+  }, [settings.autoScan, cameraOn, inputMode, modalOpen]);
 
   // ── Photo upload ──────────────────────────────────────────────────────────
   const handlePhotoUpload = useCallback((e) => {
