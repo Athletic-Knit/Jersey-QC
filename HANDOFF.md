@@ -40,7 +40,9 @@ Matching hardening (accents, surname vs full name, `00`, shared numbers, colour-
 
 Claude's browser pane has no camera; `tools/browser-harness.js` fakes one (a canvas streamed via `captureStream`) and a controllable network, and includes the 100-jersey driver. Paste it into the console at `http://localhost:5174` after signing in and starting an order. Results land in `window.__run`. Caveat learned the hard way: after editing a `src/lib/*` file, **hard-reload the page** — React Fast Refresh keeps old objects alive inside `useRef` (the motion gate).
 
-Break-it drill (16 Oct): 16 cases, all pass after fixes (dead-camera scan, gate behind modals). 100-jersey run was in progress at hand-off: 31/107 done, 1 driver-side miss (the script could not navigate to "enter by hand" from a near-miss screen; the feature itself was verified by hand).
+Break-it drill (16 Oct): 16 cases, all pass after fixes (dead-camera scan, gate behind modals).
+
+100-jersey simulated run (16 Oct, 107 events, at 70/107 when the chat was handed off): 0 errors, 0 false scans, hands-free fired on 99% of placements, ~3.9 s per normal jersey, 4.5–5.6 s for the awkward ones. Per type (ok/n): normal 49/49, nameless 6/6, sleeve-merged 3/3, crumpled 3/3 (R + rescan), one-digit misread 2/2, defect→supervisor 1/1, network down 1/1 (one retry), 429 1/1, duplicate 1/1, hand pull-back 1/1 (no scan). The only misses were the test driver, not the app: from a *near-miss* pick screen it failed to navigate to "None of these — enter by hand" (2 of 2). **That path has not been verified by hand yet** — the enter-by-hand feature was verified from NOT FOUND and COULD NOT READ. Check it first in the next session: scan a number near a roster number (e.g. 88 when only 8 exists), press A to "None of these — enter by hand", Enter.
 
 ## Known gaps / next
 
