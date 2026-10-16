@@ -990,8 +990,11 @@ export default function App() {
   const discardSession = useCallback(() => { clearSession(); setResumeDecided(true); }, []);
 
   // Clears the order; the operator stays signed in and goes straight to order setup.
+  // The camera pane unmounts with the roster, so the stream must be released too.
   const resetOrder = useCallback(() => {
     clearSession();
+    streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null;   // stopCamera is declared below
+    gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
     setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null);
