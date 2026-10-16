@@ -3,8 +3,13 @@
 // station keeps working from files.
 const STATION_KEY = "jerseyqc.station.v1";
 
+// A station is normally identified per browser (stored once). `?station=line2`
+// in the URL names it instead — a fixed label on a floor PC's shortcut, or
+// several demo stations in one browser.
 export function stationId() {
   try {
+    const named = new URLSearchParams(window.location.search).get("station");
+    if (named) return "st-" + named.replace(/[^\w-]/g, "").slice(0, 24);
     let id = localStorage.getItem(STATION_KEY);
     if (!id) { id = "st-" + Math.random().toString(36).slice(2, 8); localStorage.setItem(STATION_KEY, id); }
     return id;
