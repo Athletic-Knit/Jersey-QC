@@ -19,7 +19,7 @@ const p2 = n => String(n).padStart(2, "0");
 export function localDateStamp(d = new Date()) { return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; }
 export function localTimeStamp(d = new Date()) { return `${localDateStamp(d)} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`; }
 
-export const STATUS_LABEL = { pass: "PASS", flag: "FLAGGED", missing: "MISSING", short: "SHORT-SHIPPED" };
+export const STATUS_LABEL = { pass: "PASS", flag: "FLAGGED", manual: "MANUAL", missing: "MISSING", short: "SHORT-SHIPPED" };
 export function rosterStatusLabel(r) { return STATUS_LABEL[r.scanned] || "NOT SCANNED"; }
 
 // Latest log entry per roster row, for reason / resolution / operator columns.

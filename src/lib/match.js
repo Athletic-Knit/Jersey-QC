@@ -1,9 +1,10 @@
 // ── Matching: what the operator sees for a read { name, number } ─────────────
 import { norm, normNum, nameMatches, editDistance } from "./text.js";
 
-// A row counts as done only when it passed. A flagged row is out for repair and
-// comes back with a pink slip to be scanned again, so it stays selectable.
-export const isDone = r => r.scanned === "pass";
+// A row counts as done when it passed, or was entered by hand (awaiting the
+// supervisor's sign-off). A flagged row is out for repair and comes back with a
+// pink slip to be scanned again, so it stays selectable.
+export const isDone = r => r.scanned === "pass" || r.scanned === "manual";
 
 export function isNumberOnlyRoster(roster) {
   return roster.length > 0 && roster.every(r => !r.name);
