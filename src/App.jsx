@@ -280,6 +280,9 @@ function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
 }
 
 // ── Supervisor view: every station live, and rosters to send ─────────────────
+// "st-line2" (from ?station=line2) reads as "Line 2"; any other id as itself.
+const stationLabel = id => { const n = String(id || "").replace(/^st-/, ""); const m = n.match(/^line[-_ ]?(\d+)$/i); return m ? `Line ${m[1]}` : n || "station"; };
+
 function SupervisorPanel({ operatorName, onClose }) {
   const [data,    setData]    = useState(() => ({ stations: [], now: Date.now() }));
   const [rosters, setRosters] = useState([]);
@@ -287,12 +290,29 @@ function SupervisorPanel({ operatorName, onClose }) {
   const [notes,   setNotes]   = useState("");
   const [file,    setFile]    = useState(null);
   const [msg,     setMsg]     = useState(null);
+  const [alerts,  setAlerts]  = useState([]);     // new "needs you" items since this view opened
+  const seenRef = useRef(null);                   // keys already announced; null until the first report
   const fileRef = useRef(null);
 
   const refresh = useCallback(() => {
-    hub.stations().then(setData).catch(() => setMsg("The hub is not reachable — is the server running?"));
+    hub.stations().then(d => {
+      setData(d);
+      // Announce every unresolved attention item that was not in the previous
+      // report. The first report seeds the set, so opening the view is quiet.
+      const keys = new Set(), fresh = [];
+      d.stations.forEach(s => (s.attention || []).forEach(a => {
+        if (a.resolution) return;
+        const k = `${s.id}|${a.time}|${a.jersey}|${a.status}`;
+        keys.add(k);
+        if (seenRef.current && !seenRef.current.has(k)) fresh.push({ key: k, at: Date.now(), station: stationLabel(s.id), operator: s.operatorName || "—", status: a.status, jersey: a.jersey, reason: a.reason, time: a.time });
+      }));
+      seenRef.current = keys;
+      setAlerts(prev => [...fresh.reverse(), ...prev.filter(x => Date.now() - x.at < 45000)].slice(0, 8));
+      if (fresh.length) playTone("flag");
+    }).catch(() => setMsg("The hub is not reachable — is the server running?"));
     hub.rosters().then(r => setRosters(r.rosters || [])).catch(() => {});
   }, []);
+  const dismiss = key => setAlerts(a => a.filter(x => x.key !== key));
   useEffect(() => { refresh(); const t = setInterval(refresh, 4000); return () => clearInterval(t); }, [refresh]);
 
   const send = async () => {
@@ -313,9 +333,24 @@ function SupervisorPanel({ operatorName, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 1800, display: "flex", flexDirection: "column", color: "#e2e8f0", fontFamily: "system-ui,sans-serif" }}>
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations</div><div style={{ fontSize: 11, color: "#64748b" }}>{operatorName} · refreshes every 4 s</div></div>
+        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {alerts.length > 0 && <Pill color="#ef4444">{alerts.length} new</Pill>}</div><div style={{ fontSize: 11, color: "#64748b" }}>{operatorName} · refreshes every 4 s · a station's flag or by-hand entry pops up here</div></div>
         <button onClick={onClose} style={{ ...btnGhost, padding: "6px 14px" }}>← Back to scanning</button>
       </div>
+      {alerts.length > 0 && (
+        <div style={{ position: "absolute", top: 54, right: 16, width: 380, maxWidth: "calc(100% - 32px)", zIndex: 1900, display: "flex", flexDirection: "column", gap: 8 }}>
+          {alerts.map(a => (
+            <div key={a.key} role="alert" style={{ background: a.status === "manual" ? "#3b2a06" : "#4a0d0d", border: `1px solid ${a.status === "manual" ? "#f59e0b" : "#ef4444"}`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 24px rgba(0,0,0,0.55)", color: "#fff", fontSize: 13 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                <div style={{ fontWeight: 800 }}>{a.status === "manual" ? "✍" : "🛑"} {a.station} · {a.operator}</div>
+                <button onClick={() => dismiss(a.key)} title="Dismiss" style={{ background: "transparent", border: 0, color: "#94a3b8", cursor: "pointer", fontSize: 15, lineHeight: 1 }}>✕</button>
+              </div>
+              <div style={{ marginTop: 3 }}><strong>{a.jersey}</strong> — {a.reason}</div>
+              <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 3 }}>{a.status === "manual" ? "Entered by hand — needs your sign-off" : "Jersey is on its way to you"} · {a.time}</div>
+            </div>
+          ))}
+          {alerts.length > 1 && <button onClick={() => setAlerts([])} style={{ ...btnGhost, alignSelf: "flex-end", padding: "4px 10px", fontSize: 11 }}>Dismiss all</button>}
+        </div>
+      )}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12, alignContent: "start" }}>
           {data.stations.length === 0 && <div style={{ color: "#64748b", padding: 24 }}>No station has reported yet. A station appears here within a few seconds of starting an order.</div>}
@@ -324,7 +359,7 @@ function SupervisorPanel({ operatorName, onClose }) {
             return (
               <div key={s.id} style={{ ...card, padding: 14, border: `1px solid ${stale ? "#334155" : s.counts?.flag ? "#ef4444" : "#21262d"}`, opacity: stale ? 0.6 : 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <div style={{ fontWeight: 800, fontSize: 15 }}>{s.operatorName || "—"} <span style={{ fontWeight: 400, color: "#64748b", fontSize: 12 }}>· {cap(s.role || "")}</span></div>
+                  <div style={{ fontWeight: 800, fontSize: 15 }}><span style={{ color: "#60a5fa" }}>{stationLabel(s.id)}</span> · {s.operatorName || "—"} <span style={{ fontWeight: 400, color: "#64748b", fontSize: 12 }}>· {cap(s.role || "")}</span></div>
                   <div style={{ fontSize: 11, color: stale ? "#f87171" : "#64748b" }}>{stale ? `last seen ${age(s)} s ago` : "live"}</div>
                 </div>
                 <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2 }}>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong> · {s.rosterFile || "no roster"}</div>
