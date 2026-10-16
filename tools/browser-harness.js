@@ -79,7 +79,8 @@ window.__startRun = () => (async () => {
   // Read the scan overlay when one is up, else the page: the result card under
   // the camera repeats "ENTERED BY HAND" after a by-hand entry and must not
   // look like a live screen.
-  const text = () => { const ov = [...document.querySelectorAll("div")].find(d => d.style.position === "fixed" && d.style.zIndex === "1000"); return (ov || document.body).innerText; };
+  const ov = () => [...document.querySelectorAll("div")].find(d => d.style.position === "fixed" && d.style.zIndex === "1000");
+  const text = () => (ov() || document.body).innerText;
   const key = window.__key, btn = window.__btn;
   const setVal = (el, v) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, v); el.dispatchEvent(new Event("input", { bubbles: true })); };
   const run = window.__run = { i: 0, total: 0, results: [], started: Date.now(), done: false, errors: [] };
@@ -94,7 +95,7 @@ window.__startRun = () => (async () => {
   ev.splice(90, 0, { type: "duplicate", row: ev[10].row });
   const defects = ev.filter(e => e.type === "defect"); ev.push({ type: "return", row: defects[0].row }); ev.push({ type: "return", row: defects[1].row });
   run.total = ev.length;
-  const screen = () => { const t = text(); if (t.includes("Confirm — next jersey")) return "green"; if (t.includes("Which jersey is this?") || t.includes("No exact match")) return "pick"; if (t.includes("ALREADY DONE")) return "dup"; if (t.includes("COULD NOT READ")) return "noread"; if (t.includes("NOT FOUND")) return "notfound"; if (t.includes("SCAN FAILED")) return "failed"; if (t.includes("ENTERED BY HAND")) return "manualDone"; if (t.includes("GO TO SUPERVISOR")) return "supervisor"; if (t.includes("What's wrong")) return "reasons"; if (t.includes("Enter the jersey by hand")) return "form"; if (t.includes("Order Complete") || t.includes("Every jersey accounted")) return "complete"; return null; };
+  const screen = () => { const o = ov(); if (!o) { const b = document.body.innerText; return (b.includes("Order Complete") || b.includes("Every jersey accounted")) ? "complete" : null; } const t = o.innerText; if (t.includes("Confirm — next jersey")) return "green"; if (t.includes("Which jersey is this?") || t.includes("No exact match")) return "pick"; if (t.includes("ALREADY DONE")) return "dup"; if (t.includes("COULD NOT READ")) return "noread"; if (t.includes("NOT FOUND")) return "notfound"; if (t.includes("SCAN FAILED")) return "failed"; if (t.includes("ENTERED BY HAND")) return "manualDone"; if (t.includes("GO TO SUPERVISOR")) return "supervisor"; if (t.includes("What's wrong")) return "reasons"; if (t.includes("Enter the jersey by hand")) return "form"; if (t.includes("Order Complete") || t.includes("Every jersey accounted")) return "complete"; return null; };
   const waitScreen = async (ms = 6000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (screen()) return screen(); await w(150); } return null; };
   const highlighted = () => { const lines = text().split("\n"); const i = lines.findIndex(l => l.trim() === "← Enter"); if (i > 0) return lines[i - 1]; const b = [...document.querySelectorAll("button")].find(x => [...x.querySelectorAll("kbd")].some(k => k.textContent === "Enter")); return b ? b.textContent : ""; };
   const navigateTo = async pred => { await w(300); for (let n = 0; n < 16; n++) { if (pred(highlighted())) { key("Enter"); return true; } key("KeyA"); await w(120); } return false; };
@@ -127,7 +128,7 @@ window.__startRun = () => (async () => {
         if (s === "dup")      { await w(250); key("Enter"); await w(500); res.ok = true; return; }
         if (s === "noread" || s === "failed") { await w(250); key("KeyR"); await w(500); __net.fake = good; __net.mode = "ok"; key("KeyB"); await waitScreen(5000); res.screens.push(screen()); await finish(); return; }
         if (s === "notfound") { res.ok = await byHand(r); res.screens.push(res.ok ? "byHand" : "BYHAND-MISS"); return; }
-        if (s === "complete") { btn("Review first")?.click(); await w(300); res.ok = true; return; }
+        if (s === "complete") { btn("Review first")?.click(); await w(400); key("KeyB"); s = await waitScreen(5000); res.screens.push("after-complete:" + s); if (s === "green") { await w(250); key("Enter"); await w(1100); res.ok = true; } return; }   // a repaired jersey coming back after the modal: dismiss, then scan (hands-free is disarmed behind dialogs)
         res.screens.push("UNHANDLED:" + s);
       };
       if (e.type === "defect" && s === "green") { await w(250); key("KeyA"); await w(150); key("KeyA"); await w(150); key("Enter"); await w(500); res.screens.push(screen()); key("KeyA"); await w(120); key("KeyA"); await w(120); key("KeyA"); await w(120); key("Enter"); await w(600); res.screens.push(screen()); key("Enter"); await w(800); res.ok = screen() === null; }
