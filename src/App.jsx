@@ -223,7 +223,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, confirmKey, cancelKey, retryKey }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, cancelKey, retryKey }) {
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
   const isList  = mode === "pick" || mode === "close";
@@ -338,9 +338,17 @@ function ScanOverlay({ state, actions, binMap, extraCols, confirmKey, cancelKey,
           {state.note && <div style={{ marginTop: 12, fontSize: 16, color: "#fcd34d" }}>✎ {state.note}</div>}
           {mode === "confirm" && (
             <>
-              <div style={{ marginTop: 18, fontSize: 15, color: "#86efac", opacity: 0.85, textAlign: "center", padding: "0 20px" }}>
-                Check: {CHECKLIST.join(" · ")}
+              <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>
+                <span style={{ fontSize: 14, color: "#86efac", fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", marginRight: 4 }}>Check</span>
+                {CHECKLIST.map(c => (
+                  <span key={c} style={{ padding: "6px 14px", borderRadius: 999, border: "2px solid rgba(134,239,172,0.55)", background: "rgba(34,197,94,0.16)", color: "#fff", fontWeight: 700, fontSize: "clamp(15px, 2vw, 21px)", whiteSpace: "nowrap" }}>{c}</span>
+                ))}
               </div>
+              {notes && (
+                <div style={{ marginTop: 12, padding: "8px 18px", borderRadius: 12, background: "rgba(245,158,11,0.16)", border: "2px solid rgba(245,158,11,0.55)", color: "#fde68a", fontWeight: 700, fontSize: "clamp(15px, 2vw, 21px)", textAlign: "center", maxWidth: 900 }}>
+                  📝 {notes}
+                </div>
+              )}
               <div style={{ marginTop: 18, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
                 {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
               </div>
@@ -645,6 +653,7 @@ export default function App() {
   const addRef          = useRef(null);
   const photoRef        = useRef(null);
   const rosterVersion   = useRef(0);     // scans that started before a roster change are ignored
+  const lastScanFrameRef = useRef(null); // what the camera saw at the last scan, for the hands-free gate
   const gateRef         = useRef(createMotionGate({ log: m => console.log("[hands-free] " + m) }));
 
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...(loadSettings() || {}) }));
@@ -843,6 +852,7 @@ export default function App() {
     // A dead track leaves the last frame frozen on screen; never scan that.
     const track = streamRef.current?.getVideoTracks?.()[0];
     if (!track || track.readyState !== "live") { setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); return; }
+    lastScanFrameRef.current = sampleFrame(video, motionCanvasRef.current);
     const canvas = canvasRef.current;
     const w = video.videoWidth, h = video.videoHeight;
     const rot = Number(settings.rotation) || 0, swap = rot === 90 || rot === 270;
@@ -876,7 +886,7 @@ export default function App() {
 
   const armAutoScan = useCallback(() => {
     if (!settings.autoScan || !cameraOn || inputMode !== "camera" || modalOpen) return;
-    gateRef.current.arm(); setArmed(true);
+    gateRef.current.arm(lastScanFrameRef.current); setArmed(true);
   }, [settings.autoScan, cameraOn, inputMode, modalOpen]);
 
   // ── Photo upload ──────────────────────────────────────────────────────────
@@ -1030,7 +1040,7 @@ export default function App() {
       )}
 
       {overlay && (
-        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} />
+        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} />
       )}
 
       {showSettings && (

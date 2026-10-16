@@ -54,6 +54,44 @@ describe("motion gate", () => {
     expect(g.tick(flat(120))).toBe(false);             // settled but flat → back to place
     expect(g.phase).toBe("place");
   });
+  it("the hand pulling back from the jersey just scanned does not re-scan it", () => {
+    const scanned = busy();                           // what the camera saw at scan time
+    const g = gate(); g.arm(scanned);
+    const withHand = busy(); for (let i = 0; i < 12; i++) withHand[i] = 255;   // hand over part of it
+    expect(g.tick(withHand)).toBe(false);             // big change: hand moves in
+    expect(g.tick(busy())).toBe(false);               // hand gone: big change back
+    expect(g.tick(busy())).toBe(false);               // still 1
+    expect(g.tick(busy())).toBe(false);               // still 2 → identical to the scanned frame → wait
+    expect(g.phase).toBe("lift");
+    expect(g.armed).toBe(true);
+  });
+  it("a nudged jersey, then a hand over it, is still the same jersey", () => {
+    const scanned = busy();
+    const g = gate(); g.arm(scanned);
+    const nudged = busy(5);                           // a small shift: every pixel moves a little
+    const dN = frameDiff(scanned, nudged); expect(dN).toBeGreaterThanOrEqual(3); expect(dN).toBeLessThan(10);
+    g.tick(nudged); g.tick(nudged); g.tick(nudged);   // small move, then it rests → new baseline
+    expect(g.phase).toBe("lift");
+    const withHand = Uint8Array.from(nudged); for (let i = 8; i < 20; i++) withHand[i] = 255;
+    expect(g.tick(withHand)).toBe(false);             // hand in: big change
+    expect(g.tick(nudged)).toBe(false);               // hand out
+    expect(g.tick(nudged)).toBe(false);
+    expect(g.tick(nudged)).toBe(false);               // settled: identical to the new baseline → wait
+    expect(g.phase).toBe("lift");
+    expect(g.armed).toBe(true);
+  });
+  it("a same-team jersey that differs only by a few digits counts as a new jersey", () => {
+    const scanned = busy();
+    const g = gate(); g.arm(scanned);
+    const nextNumber = busy(); for (let i = 0; i < 6; i++) nextNumber[i] = 255 - nextNumber[i];   // a few pixels of digit changed
+    const d = frameDiff(scanned, nextNumber);
+    expect(d).toBeGreaterThan(3); expect(d).toBeLessThan(60);
+    g.tick(busy(60));                                 // motion while swapping
+    expect(g.tick(nextNumber)).toBe(false);
+    expect(g.tick(nextNumber)).toBe(false);
+    expect(g.tick(nextNumber)).toBe(false);           // settled, textured, not identical → window
+    expect(g.phase).toBe("window");
+  });
   it("frameDiff is the mean absolute difference", () => {
     expect(frameDiff(flat(0), flat(10))).toBe(10);
     expect(frameDiff(null, flat(1))).toBe(0);

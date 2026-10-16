@@ -43,12 +43,17 @@ export function texture(gray, w = 32, h = 18) {
  *   settle2  stillness after the placement: textured → scan; flat → back to `place`
  * Thresholds are the floor's to tune: `minTexture` decides table vs jersey.
  */
-export function createMotionGate({ changeAt = 14, stillBelow = 4, stillTicks = 3, minTexture = 5, placeWindowTicks = 6, timeoutTicks = 150, width = 32, height = 18, log } = {}) {
-  let armed = false, phase = "idle", prev = null, ref = null, still = 0, ticks = 0, windowLeft = 0;
-  const reset = () => { prev = null; ref = null; still = 0; ticks = 0; windowLeft = 0; phase = "lift"; };
+// Measured on a 32×18 sample: identical frame 0.0, same jersey with one digit changed 3.7,
+// the jersey nudged 18 px 8.5, a different player 12.4, a hand over the jersey 29.6, the bare table 60.
+// So: `sameBelow` sits under the one-digit change, `changeAt` between a nudge and a swap.
+export function createMotionGate({ changeAt = 10, stillBelow = 4, sameBelow = 2.5, stillTicks = 3, minTexture = 5, placeWindowTicks = 6, timeoutTicks = 150, width = 32, height = 18, log } = {}) {
+  let armed = false, phase = "idle", prev = null, ref = null, still = 0, ticks = 0, windowLeft = 0, drifted = false;
+  const reset = () => { prev = null; ref = null; still = 0; ticks = 0; windowLeft = 0; drifted = false; phase = "lift"; };
   const fire  = () => { armed = false; phase = "idle"; return true; };
   return {
-    arm()    { reset(); armed = true; },
+    // `refFrame` is the frame that was just scanned: anything that still looks
+    // like it (the same jersey after the hand pulls back) is not a new jersey.
+    arm(refFrame = null) { reset(); ref = refFrame || null; prev = refFrame || null; armed = true; },
     disarm() { armed = false; phase = "idle"; },
     get armed() { return armed; },
     get phase() { return phase; },
@@ -61,12 +66,20 @@ export function createMotionGate({ changeAt = 14, stillBelow = 4, stillTicks = 3
       const isStill = () => { still = d < stillBelow ? still + 1 : 0; return still >= stillTicks; };
 
       if (phase === "lift") {
-        if (d >= changeAt) { phase = "settle1"; still = 0; }
+        if (d >= changeAt) { phase = "settle1"; still = 0; drifted = false; return false; }
+        // The jersey was nudged (a small move) and came to rest: that resting
+        // position is the new "same picture", or the next hand-wave would read
+        // as a different jersey.
+        if (d >= stillBelow) { drifted = true; still = 0; return false; }
+        if (drifted && ++still >= stillTicks) { ref = frame; drifted = false; still = 0; log?.("nudged — new baseline"); }
         return false;
       }
       if (phase === "settle1") {
         if (!isStill()) return false;
-        if (frameDiff(ref, frame) < changeAt) { phase = "lift"; still = 0; return false; }   // nothing really changed
+        // Only an essentially identical picture (the hand pulled back, nothing moved)
+        // is "the same jersey": same-team jerseys differ by a few digits, and that
+        // must count as new.
+        if (frameDiff(ref, frame) < sameBelow) { log?.("same picture as the last scan — waiting"); phase = "lift"; still = 0; return false; }
         const t = texture(frame, width, height);
         log?.(`settled, texture ${t.toFixed(1)}`);
         if (t < minTexture) { phase = "place"; still = 0; return false; }
