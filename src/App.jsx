@@ -290,15 +290,18 @@ function SupervisorPanel({ operatorName, onClose }) {
   const [notes,   setNotes]   = useState("");
   const [file,    setFile]    = useState(null);
   const [msg,     setMsg]     = useState(null);
-  const [alerts,  setAlerts]  = useState([]);     // new "needs you" items since this view opened
+  const [alerts,  setAlerts]  = useState([]);     // "needs you" items not yet acknowledged here
+  const [backlog, setBacklog] = useState(null);   // what was already open when this view opened
+  const [hubDown, setHubDown] = useState(null);   // when the hub stopped answering, or null
+  const [desktop, setDesktop] = useState(() => (typeof Notification === "undefined" ? "unsupported" : Notification.permission));
   const seenRef = useRef(null);                   // keys already announced; null until the first report
   const fileRef = useRef(null);
 
   const refresh = useCallback(() => {
     hub.stations().then(d => {
-      setData(d);
+      setData(d); setHubDown(null);
       // Announce every unresolved attention item that was not in the previous
-      // report. The first report seeds the set, so opening the view is quiet.
+      // report. The first report seeds the set and becomes the backlog banner.
       const keys = new Set(), fresh = [];
       d.stations.forEach(s => (s.attention || []).forEach(a => {
         if (a.resolution) return;
@@ -306,13 +309,34 @@ function SupervisorPanel({ operatorName, onClose }) {
         keys.add(k);
         if (seenRef.current && !seenRef.current.has(k)) fresh.push({ key: k, at: Date.now(), station: stationLabel(s.id), operator: s.operatorName || "—", status: a.status, jersey: a.jersey, reason: a.reason, time: a.time });
       }));
+      if (!seenRef.current) {
+        const stations = d.stations.filter(s => keys.size && [...keys].some(k => k.startsWith(s.id + "|")) || (s.carried || []).length);
+        const items = keys.size + d.stations.reduce((n, s) => n + (s.carried || []).length, 0);
+        setBacklog(items ? { items, stations: stations.length } : null);
+      }
       seenRef.current = keys;
-      setAlerts(prev => [...fresh.reverse(), ...prev.filter(x => Date.now() - x.at < 45000)].slice(0, 8));
-      if (fresh.length) playTone("flag");
-    }).catch(() => setMsg("The hub is not reachable — is the server running?"));
+      if (fresh.length) {
+        setAlerts(prev => [...fresh.reverse(), ...prev].slice(0, 50));
+        playTone("flag");
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          try {
+            if (fresh.length <= 3) fresh.forEach(a => new Notification(`${a.station} · ${a.operator}`, { body: `${a.jersey} — ${a.reason}`, tag: a.key, requireInteraction: true }));
+            else new Notification(`${fresh.length} jerseys need you`, { body: fresh.map(a => `${a.station}: ${a.jersey}`).join(" · "), tag: "batch-" + Date.now(), requireInteraction: true });
+          } catch { /* the browser refused; the toast and tone still happened */ }
+        }
+      }
+    }).catch(() => setHubDown(t => t || Date.now()));
     hub.rosters().then(r => setRosters(r.rosters || [])).catch(() => {});
   }, []);
   const dismiss = key => setAlerts(a => a.filter(x => x.key !== key));
+  // A click unlocks the browser's audio and asks for desktop notifications,
+  // which pop up even when this tab is hidden or the browser is behind a window.
+  const enableDesktop = () => {
+    playTone("scan");
+    if (typeof Notification === "undefined") { setDesktop("unsupported"); return; }
+    Notification.requestPermission().then(p => { setDesktop(p); if (p === "granted") new Notification("Jersey QC alerts are on", { body: "You will be told here when a station needs you." }); }).catch(() => {});
+  };
+  const markCarriedDone = (stationIdValue, key) => hub.clearCarried(stationIdValue, key).then(refresh).catch(() => setMsg("Could not update the hub."));
   useEffect(() => { refresh(); const t = setInterval(refresh, 4000); return () => clearInterval(t); }, [refresh]);
 
   const send = async () => {
@@ -333,12 +357,35 @@ function SupervisorPanel({ operatorName, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 1800, display: "flex", flexDirection: "column", color: "#e2e8f0", fontFamily: "system-ui,sans-serif" }}>
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {alerts.length > 0 && <Pill color="#ef4444">{alerts.length} new</Pill>}</div><div style={{ fontSize: 11, color: "#64748b" }}>{operatorName} · refreshes every 4 s · a station's flag or by-hand entry pops up here</div></div>
-        <button onClick={onClose} style={{ ...btnGhost, padding: "6px 14px" }}>← Back to scanning</button>
+        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {alerts.length > 0 && <Pill color="#ef4444">{alerts.length} need you</Pill>}</div><div style={{ fontSize: 11, color: "#64748b" }}>{operatorName} · refreshes every 4 s · a station's flag or by-hand entry pops up here</div></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {desktop === "granted"
+            ? <span style={{ fontSize: 11, color: "#22c55e" }}>🔔 Desktop alerts on</span>
+            : desktop === "denied"
+              ? <span style={{ fontSize: 11, color: "#f87171" }} title="Allow notifications for this site in the browser's address bar">🔕 Desktop alerts blocked by the browser</span>
+              : desktop === "unsupported"
+                ? <span style={{ fontSize: 11, color: "#64748b" }}>No desktop alerts in this browser</span>
+                : <button onClick={enableDesktop} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#f59e0b", color: "#fcd34d" }}>🔔 Turn on sound &amp; desktop alerts</button>}
+          {alerts.length > 0 && <button onClick={() => setAlerts([])} style={{ ...btnGhost, padding: "6px 12px" }}>Mark all seen</button>}
+          <button onClick={onClose} style={{ ...btnGhost, padding: "6px 14px" }}>← Back to scanning</button>
+        </div>
       </div>
+      {hubDown && (
+        <div style={{ background: "#7f1d1d", color: "#fff", padding: "10px 16px", fontSize: 14, fontWeight: 700, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+          <span>⚠ The hub stopped answering at {new Date(hubDown).toLocaleTimeString()} — nothing below is live. Stations keep scanning on their own. Is the server window still open on the host PC?</span>
+          <button onClick={refresh} style={{ ...btnGhost, padding: "4px 10px", color: "#fff", borderColor: "#fff" }}>Retry</button>
+        </div>
+      )}
+      {backlog && !hubDown && (
+        <div style={{ background: "#422006", color: "#fde68a", padding: "8px 16px", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+          <span><strong>{backlog.items} {backlog.items === 1 ? "jersey was" : "jerseys were"} already waiting for you</strong> across {backlog.stations} {backlog.stations === 1 ? "station" : "stations"} when this screen opened — see the red lists on the cards.</span>
+          <button onClick={() => setBacklog(null)} style={{ background: "transparent", border: 0, color: "#fde68a", cursor: "pointer", fontSize: 15 }}>✕</button>
+        </div>
+      )}
       {alerts.length > 0 && (
         <div style={{ position: "absolute", top: 54, right: 16, width: 380, maxWidth: "calc(100% - 32px)", zIndex: 1900, display: "flex", flexDirection: "column", gap: 8 }}>
-          {alerts.map(a => (
+          {alerts.length > 3 && <div style={{ textAlign: "right", fontSize: 12, color: "#fca5a5" }}>{alerts.length - 3} more below the newest three — all are in the station cards</div>}
+          {alerts.slice(0, 3).map(a => (
             <div key={a.key} role="alert" style={{ background: a.status === "manual" ? "#3b2a06" : "#4a0d0d", border: `1px solid ${a.status === "manual" ? "#f59e0b" : "#ef4444"}`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 24px rgba(0,0,0,0.55)", color: "#fff", fontSize: 13 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                 <div style={{ fontWeight: 800 }}>{a.status === "manual" ? "✍" : "🛑"} {a.station} · {a.operator}</div>
@@ -348,7 +395,7 @@ function SupervisorPanel({ operatorName, onClose }) {
               <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 3 }}>{a.status === "manual" ? "Entered by hand — needs your sign-off" : "Jersey is on its way to you"} · {a.time}</div>
             </div>
           ))}
-          {alerts.length > 1 && <button onClick={() => setAlerts([])} style={{ ...btnGhost, alignSelf: "flex-end", padding: "4px 10px", fontSize: 11 }}>Dismiss all</button>}
+          {alerts.length > 1 && <button onClick={() => setAlerts([])} style={{ ...btnGhost, alignSelf: "flex-end", padding: "4px 10px", fontSize: 11 }}>Mark all seen</button>}
         </div>
       )}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
@@ -380,6 +427,17 @@ function SupervisorPanel({ operatorName, onClose }) {
                       <div key={i} style={{ fontSize: 12, marginBottom: 3 }}>
                         <span style={{ color: a.status === "manual" ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>{a.status === "manual" ? "✍" : "🛑"} {a.jersey}</span>
                         <span style={{ color: "#94a3b8" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {s.carried?.length > 0 && (
+                  <div style={{ marginTop: 10, borderTop: "1px solid #21262d", paddingTop: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Still open from earlier orders</div>
+                    {s.carried.map(c => (
+                      <div key={c.key} style={{ fontSize: 12, marginBottom: 4, display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                        <span><span style={{ color: c.status === "manual" ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>{c.status === "manual" ? "✍" : "🛑"} {c.jersey}</span><span style={{ color: "#94a3b8" }}> — order {c.order} · {c.reason}</span></span>
+                        <button onClick={() => markCarriedDone(s.id, c.key)} title="Dealt with — remove from this list" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, flexShrink: 0 }}>Done</button>
                       </div>
                     ))}
                   </div>
@@ -939,6 +997,7 @@ export default function App() {
   const [xlsxReady,          setXlsxReady]          = useState(!!window.XLSX);
   const [showSettings,       setShowSettings]       = useState(false);
   const [showRosterComplete, setShowRosterComplete] = useState(false);
+  const [hubOk, setHubOk] = useState(null);       // did the last progress report reach the hub? null = never tried
   const [showBinSetup,       setShowBinSetup]       = useState(false);
   const [showSupervisor,     setShowSupervisor]     = useState(false);
   const [binMap,             setBinMap]             = useState(null);
@@ -994,7 +1053,7 @@ export default function App() {
   useEffect(() => {
     if (!sessionStarted) return;
     const id = stationId();
-    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber, notes, rosterFile, roster, log, lastConfirmed })).catch(() => {});
+    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber, notes, rosterFile, roster, log, lastConfirmed })).then(() => setHubOk(true)).catch(() => setHubOk(false));
     send();
     const t = setInterval(send, 5000);
     return () => clearInterval(t);
@@ -1404,6 +1463,7 @@ export default function App() {
           <Pill color="#22c55e">{passCount} Pass</Pill>
           <Pill color="#ef4444">{flagCount} Flag</Pill>
           {manualCount > 0 && <Pill color="#f59e0b">{manualCount} By hand</Pill>}
+          {hubOk === false && <Pill color="#f87171">Supervisor screen not reachable — scanning still works</Pill>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
           {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
           {sessionStarted && <button onClick={startNewOrder} title="Finish this order and set up the next one — no PIN needed" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>New order</button>}

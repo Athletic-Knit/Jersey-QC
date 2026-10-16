@@ -52,6 +52,40 @@ Break-it drill (16 Oct): 16 cases, all pass after fixes (dead-camera scan, gate 
 - **Nudge (1 of 1) re-scanned the same jersey**: #38 Lessard shifted 18 px → a scan → ALREADY DONE, cleared by R. `changeAt 10` is marginal for a long-name jersey; the measured 8.5 was on a different sample. Tune on real fabric (console `[hands-free]` numbers).
 - **Completion modal vs a jersey coming back from repair**: when the last row was accounted for, the complete modal opened while #31 Walker was still out with the supervisor. Behind a dialog hands-free is disarmed, and nothing re-armed it when the dialog closed — after "Review first" the next placement (#34 King) needed B. **Fixed (16 Oct):** `closeDialog()` in App re-arms the gate when the complete modal, Settings or the supervisor view closes (no overlay up, camera on, hands-free on — Settings passes the just-saved value so turning it off there does not arm). Not wired to the Resume and Bin dialogs, which close before the camera is on. Verified in the browser pane: each of the three closes → "Waiting for the next jersey…"; a jersey placed after closing scanned in 1.3 s without B; the same jersey still on the table did not re-scan; hands-free off + Save → stays "Ready". The eslint rule `react-hooks/set-state-in-effect` rejects doing this in an effect — that is why it is in the close handlers. The driver did not scan Walker's return in that run (its "complete" branch just dismissed); patched to dismiss, press B and confirm — **that patch is unverified**.
 
+## Monday demo — two PCs (runbook)
+
+**Host PC = server + supervisor screen.**
+1. Double-click `Start Jersey QC.bat`. Keep its window open; it prints `Other PCs: https://<ip>:5173`. (If the IP changed since last time, that line is the truth. The PC's hostname, `https://<hostname>:5173`, usually works too and does not change.)
+2. **Once, by a person with admin rights** (PowerShell "Run as administrator") — Windows blocks port 5173 from other PCs until this exists:
+   ```
+   netsh advfirewall firewall add rule name="Jersey QC 5173" dir=in action=allow protocol=TCP localport=5173 profile=domain,private
+   ```
+3. Chrome → `https://localhost:5173` → sign in as **Supervisor** → **Supervisor view** → click **🔔 Turn on sound & desktop alerts** → Allow. (Chrome shows the prompt only after that click. Claude's own browser pane blocks notifications, so this could not be tried here; the toast and tone were.)
+4. Send the order: order number, notes from the order paper, roster file → **Send to stations**. It appears under "Rosters waiting".
+
+**Operator PC = station.**
+1. Chrome → `https://<ip>:5173/?station=line1` → "Advanced" → "Proceed" (self-signed certificate, once per PC). `?station=line1` makes the supervisor's card read "Line 1".
+2. Allow the camera when Chrome asks. Sign in as **Inspector**.
+3. The order is under **From the supervisor** — tap it, Start order, label the bins, Start Camera. Hands-free arms after the first confirmed jersey.
+
+**Break-it script — what to try, and what should happen now.**
+- Same jersey twice → ALREADY DONE; nothing recorded unless "Log it as a duplicate" is chosen.
+- Sleeves folded over the number → a pick list ("sleeve numbers may have merged") or a red screen with the flatten/tuck tip; `R` retries.
+- Crumpled number → COULD NOT READ with the tip; `R`, or Enter by hand.
+- A jersey not on the roster → NOT FOUND → Enter by hand → passes as MANUAL → supervisor gets an **amber** toast ("needs your sign-off").
+- A near miss (88 when only 8 exists) → "No exact match" list → "None of these — enter by hand" → no loop (fixed 16 Oct).
+- A defect → "Not right" → reason → GO TO SUPERVISOR → supervisor gets a **red** toast, the tone, a desktop notification, "N need you" in the header — within ~9 s (5 s report + 4 s poll).
+- Operator PC loses network → SCAN FAILED after one retry; the station shows **"Supervisor screen not reachable — scanning still works"**; everything resumes when the network is back.
+- Close the server window on the host → supervisor sees the red **"hub stopped answering"** bar; the station keeps scanning (reads fail only because the API proxy is on the host too). Reopen the .bat → Retry.
+- Reload the operator page mid-order → "Resume order" → everything back, including the log.
+- Open Settings, the supervisor view or finish the order and close the dialog → hands-free re-arms (fixed 16 Oct).
+- Finish the order → completion modal → Excel export has every row with its status.
+- Start a new order while a flagged jersey is still out → the supervisor still sees it under **"Still open from earlier orders"** with a **Done** button.
+- Supervisor opens the view late → amber banner "N jerseys were already waiting for you across M stations"; nothing is lost.
+- Nudge a jersey → should not re-scan. **Honest risk:** the threshold was measured on a fake camera; on real fabric it may re-scan (safe: ALREADY DONE, `R`). Tune `changeAt` in `src/lib/motion.js` from the console `[hands-free]` numbers.
+
+**Not covered by Monday's build:** hands-free thresholds on real fabric and the real mount; USB camera unplug; the API key is in the served bundle (C6); the hub has no authentication (anyone on the LAN can open the supervisor view); desktop notifications need Chrome's permission.
+
 ## Known gaps / next
 
 - Deployment items not done by decision: bundle xlsx (C5), key to server (C6), production build instead of dev server (C7), proxy rate limit (C11), Windows service (D9), DHCP reservation (D10), firewall rule (D11), real cert (D12). B12 (roster names in the prompt) deliberately not done.

@@ -5,6 +5,7 @@
 //   GET    /api/hub/stations            every station's latest snapshot
 //   POST   /api/hub/stations/:id        a station reports (body = snapshot)
 //   DELETE /api/hub/stations/:id
+//   DELETE /api/hub/stations/:id/carried?key=…   supervisor marks an item from an earlier order done
 //   GET    /api/hub/rosters             rosters waiting for stations (summaries)
 //   GET    /api/hub/rosters/:id         one roster, with rows
 //   POST   /api/hub/rosters             { orderNumber, notes, fileName, rows, by }
@@ -35,7 +36,25 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
     try {
       if (kind === "stations") {
         if (req.method === "GET" && !id) return json(res, 200, { now: Date.now(), stations: Object.values(state.stations).sort((a, b) => b.updatedAt - a.updatedAt) });
-        if (req.method === "POST" && id)  { const body = await readBody(req); state.stations[id] = { ...body, id, updatedAt: Date.now() }; save(); return json(res, 200, { ok: true }); }
+        if (req.method === "POST" && id) {
+          const body = await readBody(req);
+          const prev = state.stations[id];
+          // The station moved to another order: its unresolved items are still
+          // physically on their way to the supervisor, so they stay listed
+          // under the station until the supervisor marks them done.
+          let carried = prev?.carried || [];
+          if (prev && prev.orderNumber && body.orderNumber !== prev.orderNumber) {
+            const open = (prev.attention || []).filter(a => !a.resolution).map(a => ({ ...a, order: prev.orderNumber, key: `${prev.orderNumber}|${a.time}|${a.jersey}|${a.status}` }));
+            const seen = new Set(carried.map(c => c.key));
+            carried = [...open.filter(c => !seen.has(c.key)), ...carried].slice(0, 50);
+          }
+          state.stations[id] = { ...body, id, carried, updatedAt: Date.now() }; save(); return json(res, 200, { ok: true });
+        }
+        if (req.method === "DELETE" && id && parts[2] === "carried") {
+          const key = new URL(req.url, "http://hub").searchParams.get("key");
+          const s = state.stations[id]; if (s) { s.carried = (s.carried || []).filter(c => c.key !== key); save(); }
+          return json(res, 200, { ok: true });
+        }
         if (req.method === "DELETE" && id) { delete state.stations[id]; save(); return json(res, 200, { ok: true }); }
       }
       if (kind === "rosters") {

@@ -27,6 +27,7 @@ export const hub = {
   report:        (id, snapshot) => call(`/api/hub/stations/${id}`, { method: "POST", body: JSON.stringify(snapshot) }),
   stations:      ()             => call("/api/hub/stations"),
   removeStation: id             => call(`/api/hub/stations/${id}`, { method: "DELETE" }),
+  clearCarried:  (id, key)      => call(`/api/hub/stations/${id}/carried?key=${encodeURIComponent(key)}`, { method: "DELETE" }),
   rosters:       ()             => call("/api/hub/rosters"),
   roster:        id             => call(`/api/hub/rosters/${id}`),
   sendRoster:    body           => call("/api/hub/rosters", { method: "POST", body: JSON.stringify(body) }),
