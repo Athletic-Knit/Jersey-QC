@@ -76,7 +76,10 @@ window.__rosterCSV = (() => {
 // by hand), 2 duplicates.
 window.__startRun = () => (async () => {
   const w = ms => new Promise(r => setTimeout(r, ms));
-  const text = () => document.body.innerText;
+  // Read the scan overlay when one is up, else the page: the result card under
+  // the camera repeats "ENTERED BY HAND" after a by-hand entry and must not
+  // look like a live screen.
+  const text = () => { const ov = [...document.querySelectorAll("div")].find(d => d.style.position === "fixed" && d.style.zIndex === "1000"); return (ov || document.body).innerText; };
   const key = window.__key, btn = window.__btn;
   const setVal = (el, v) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, v); el.dispatchEvent(new Event("input", { bubbles: true })); };
   const run = window.__run = { i: 0, total: 0, results: [], started: Date.now(), done: false, errors: [] };
@@ -95,7 +98,7 @@ window.__startRun = () => (async () => {
   const waitScreen = async (ms = 6000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (screen()) return screen(); await w(150); } return null; };
   const highlighted = () => { const lines = text().split("\n"); const i = lines.findIndex(l => l.trim() === "← Enter"); if (i > 0) return lines[i - 1]; const b = [...document.querySelectorAll("button")].find(x => [...x.querySelectorAll("kbd")].some(k => k.textContent === "Enter")); return b ? b.textContent : ""; };
   const navigateTo = async pred => { await w(300); for (let n = 0; n < 16; n++) { if (pred(highlighted())) { key("Enter"); return true; } key("KeyA"); await w(120); } return false; };
-  const byHand = async r => { const ok = await navigateTo(h => /enter by hand/i.test(h)); await w(500); if (!ok) return false; const ins = [...document.querySelectorAll("input")]; if (ins.length >= 4) { setVal(ins[2], r.size || ""); setVal(ins[3], r.team || ""); } btn("Save")?.click(); await w(600); const s = screen(); key("Enter"); await w(1100); return s === "manualDone"; };
+  const byHand = async r => { const ok = await navigateTo(h => /enter by hand/i.test(h)); await w(500); if (!ok) return false; const ins = [...document.querySelectorAll("input")]; if (ins.length >= 4) { setVal(ins[2], r.size || ""); setVal(ins[3], r.team || ""); } btn("Save")?.click(); await w(600); let s = screen(); if (s === "pick") { await navigateTo(h => /as typed/i.test(h)); await w(600); s = screen(); } key("Enter"); await w(1100); return s === "manualDone"; };
   const place = async (r, read) => { __net.fake = read; __draw("table"); await w(1300); __draw("jersey", (r.name || "").toUpperCase(), r.number); };
   let first = true, prev = null;
   for (const e of ev) {

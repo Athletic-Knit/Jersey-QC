@@ -429,7 +429,13 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
     const notRight = { id: "notright", label: "✎ Not right — pick a reason", run: actions.reasons };
     const byHand   = { id: "manual",   label: "⌨ Enter by hand",          hint: "camera cannot read it, or not on the roster", run: actions.manual };
     if (mode === "confirm")    return [{ id: "confirm", label: "✓ Confirm — next jersey", primary: true, run: actions.confirm }, retry, notRight];
-    if (isList)                return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), retry, { ...byHand, label: "⌨ None of these — enter by hand" }, { ...notRight, label: "🚩 Bad jersey — pick a reason" }];
+    if (isList) {
+      const t = state.typed;
+      const none = t
+        ? { ...byHand, label: `⌨ None of these — add #${t.number || "?"}${t.name ? " " + t.name : ""} as typed`, hint: "goes on the roster as added by operator" }
+        : { ...byHand, label: "⌨ None of these — enter by hand" };
+      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), retry, none, { ...notRight, label: "🚩 Bad jersey — pick a reason" }];
+    }
     if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "✎ Bad jersey — pick a reason" }];
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue — next jersey", primary: true, run: actions.continueManual }];
     if (mode === "manual")     return [];
@@ -437,7 +443,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
     if (mode === "reasons")    return [...REASONS.map(r => ({ id: r.id, label: r.label, hint: r.route, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") return [{ id: "cont", label: "✓ Continue — next jersey", primary: true, run: actions.continueSupervisor }];
     return [];
-  }, [mode, isList, candidates, actions]);
+  }, [mode, isList, candidates, actions, state.typed]);
 
   const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
   const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
@@ -1167,7 +1173,25 @@ export default function App() {
   // ── Overlay actions ───────────────────────────────────────────────────────
   const stamp = useCallback(() => ({ timestamp: localTimeStamp(), operator: operatorName }), [operatorName]);
 
-  const actions = useMemo(() => ({
+  const actions = useMemo(() => {
+    // Commit a hand-typed jersey: mark the roster row if the typed values hit one
+    // exactly, otherwise add a row — what the operator typed is what is printed.
+    const commitTyped = (o, { number, name, size, team }, exactRow) => {
+      let row, reason;
+      if (exactRow) {
+        row = exactRow; reason = "Entered by operator — the camera could not read it";
+        setRoster(prev => prev.map(r => r._id === row._id ? { ...r, scanned: "manual" } : r));
+      } else {
+        row = { _id: roster.reduce((mx, r) => Math.max(mx, r._id), -1) + 1, name, number, team, size, scanned: "manual", added: "operator" };
+        reason = "Not on the roster — added by operator";
+        setRoster(prev => [...prev, row]);
+      }
+      const entry = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, match: row, status: S_MANUAL, reason, ...stamp() };
+      setLog(prev => [entry, ...prev]); setLastResult(entry); setLastConfirmed(entry);
+      setOverlay({ mode: "manualDone", scan: o.scan, match: row, reason });
+      playTone("pass");
+    };
+    return {
     confirm() {
       if (!overlay?.match) return;
       const scan  = overlay.scan;
@@ -1204,28 +1228,36 @@ export default function App() {
     },
     continueSupervisor() { setOverlay(null); armAutoScan(); },
     dismissDone() { setOverlay(null); armAutoScan(); },
-    manual() { setOverlay(o => ({ mode: "manual", scan: o?.scan, match: null, teams: teamNames, returnTo: o })); },
+    // "Enter by hand". On a list the operator already typed for (overlay.typed),
+    // "None of these" adds the typed row instead of reopening the form — the
+    // typed value is the truth, and the screen can never loop back on itself.
+    manual() {
+      const o = overlay;
+      if (o?.typed) { commitTyped(o, o.typed, null); return; }
+      setOverlay({ mode: "manual", scan: o?.scan, match: null, teams: teamNames, returnTo: o });
+    },
     manualSubmit({ number, name, size, team }) {
       const o = overlay; if (!o) return;
+      const typed = { number, name, size, team };
       const m = findMatches(roster, name, number);
       if (m.type === "duplicate") { setOverlay({ mode: "duplicate", scan: o.scan, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""} already passed this session.` }); playTone("flag"); return; }
-      if (m.type === "pick" || m.type === "close") { setOverlay({ mode: "pick", scan: o.scan, candidates: m.candidates, reason: "What you typed matches these rows — which one?", note: "Typed by operator — the camera could not read it" }); return; }
-      let row, reason;
-      if (m.type === "exact") {
-        row = m.match; reason = "Entered by operator — the camera could not read it";
-        setRoster(prev => prev.map(r => r._id === row._id ? { ...r, scanned: "manual" } : r));
-      } else {
-        row = { _id: roster.reduce((mx, r) => Math.max(mx, r._id), -1) + 1, name, number, team, size, scanned: "manual", added: "operator" };
-        reason = "Not on the roster — added by operator";
-        setRoster(prev => [...prev, row]);
+      if (m.type === "exact") { commitTyped(o, typed, m.match); return; }
+      if (m.type === "pick" || m.type === "close") {
+        // A near miss the operator has already rejected: they typed exactly what
+        // the camera read, so the nearest rows were on the previous screen. Add it.
+        const d = o.scan?.detected;
+        const sameAsRead = d && String(d.number ?? "").trim() === number && String(d.name ?? "").trim().toLowerCase() === name.toLowerCase();
+        if (m.type === "close" && sameAsRead) { commitTyped(o, typed, null); return; }
+        setOverlay({ mode: "pick", scan: o.scan, candidates: m.candidates, typed,
+          reason: m.type === "pick" ? "What you typed matches these rows — which one?" : "What you typed is close to these rows — one of them, or add it as typed?",
+          note: "Typed by operator — the camera could not read it" });
+        return;
       }
-      const entry = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, match: row, status: S_MANUAL, reason, ...stamp() };
-      setLog(prev => [entry, ...prev]); setLastResult(entry); setLastConfirmed(entry);
-      setOverlay({ mode: "manualDone", scan: o.scan, match: row, reason });
-      playTone("pass");
+      commitTyped(o, typed, null);
     },
     continueManual() { setOverlay(null); armAutoScan(); },
-  }), [overlay, stamp, armAutoScan, roster, teamNames]);
+    };
+  }, [overlay, stamp, armAutoScan, roster, teamNames]);
 
   // ── Flag resolution (from the result card) ────────────────────────────────
   const resolveFlag = useCallback((logId, decision, note) => {
