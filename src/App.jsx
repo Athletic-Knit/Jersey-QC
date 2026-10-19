@@ -1300,10 +1300,12 @@ export default function App() {
     gateRef.current.arm(lastScanFrameRef.current); setArmed(true);
   }, [overlay, settings.autoScan, handsFreePaused, remaining, cameraOn, inputMode]);
   // Pause/resume hands-free from the camera panel: the camera stays on and B still scans.
+  // One button, three states: off in Settings → turn it on; running → pause; paused → resume.
   const toggleHandsFree = () => {
-    if (!handsFreePaused) { gateRef.current.disarm(); setArmed(false); setHandsFreePaused(true); return; }
-    setHandsFreePaused(false);
-    if (settings.autoScan && cameraOn && inputMode === "camera" && !modalOpen && !overlay && remaining > 0) { gateRef.current.arm(lastScanFrameRef.current); setArmed(true); }
+    if (!settings.autoScan) { setSettings(s => ({ ...s, autoScan: true })); setHandsFreePaused(false); }
+    else if (!handsFreePaused) { gateRef.current.disarm(); setArmed(false); setHandsFreePaused(true); return; }
+    else setHandsFreePaused(false);
+    if (cameraOn && inputMode === "camera" && !modalOpen && !overlay && remaining > 0) { gateRef.current.arm(lastScanFrameRef.current); setArmed(true); }
   };
 
   // ── Photo upload ──────────────────────────────────────────────────────────
@@ -1643,7 +1645,7 @@ export default function App() {
                       <>
                         <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,0.55)", padding: "3px 9px", borderRadius: 20 }}>
                           <div style={{ width: 7, height: 7, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e"}` }} />
-                          <span style={{ fontSize: 10, color: "#e2e8f0" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? "Hands-free paused — B to scan" : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : "Ready"}</span>
+                          <span style={{ fontSize: 10, color: "#e2e8f0" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? "Hands-free paused — B to scan" : !settings.autoScan ? "Hands-free off — B to scan" : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : "Ready"}</span>
                         </div>
                         <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.55)", color: "#94a3b8", fontSize: 10, padding: "3px 9px", borderRadius: 12, whiteSpace: "nowrap" }}>
                           Press <kbd style={{ background: "#1e293b", padding: "1px 4px", borderRadius: 3, fontSize: 10 }}>{keyLabel}</kbd> to scan
@@ -1656,8 +1658,8 @@ export default function App() {
                       ? <button onClick={startCamera} style={{ ...btnPri, flex: 1, fontSize: 15, padding: "12px" }}>Start Camera</button>
                       : <>
                           <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 42 }}>■</button>
-                          {settings.autoScan && <button onClick={toggleHandsFree} title={handsFreePaused ? "Resume hands-free scanning" : "Pause hands-free — the camera stays on and B still scans"}
-                            style={{ ...btnGhost, padding: "0 12px", fontSize: 13, borderColor: handsFreePaused ? "#f59e0b" : undefined, color: handsFreePaused ? "#fcd34d" : undefined }}>{handsFreePaused ? "▶ Hands-free" : "⏸ Hands-free"}</button>}
+                          <button onClick={toggleHandsFree} title={!settings.autoScan ? "Turn hands-free scanning on" : handsFreePaused ? "Resume hands-free scanning" : "Pause hands-free — the camera stays on and B still scans"}
+                            style={{ ...btnGhost, padding: "0 12px", fontSize: 13, borderColor: handsFree ? undefined : "#f59e0b", color: handsFree ? undefined : "#fcd34d" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
                           <button onClick={() => { gateRef.current.disarm(); setArmed(false); doTriggerScan(); }} disabled={scanning}
                             style={{ ...btnPri, flex: 1, fontSize: 18, padding: "12px", opacity: scanning ? 0.4 : 1 }}>
                             {scanning ? "Reading…" : "⚡ SCAN"}
