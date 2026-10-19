@@ -258,7 +258,7 @@ function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
     <div style={{ width: "100%", maxWidth: 560, padding: "0 24px", boxSizing: "border-box" }}>
       <div style={{ fontSize: 56, textAlign: "center", lineHeight: 1 }}>✍</div>
       <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#f59e0b", textAlign: "center", marginBottom: 6 }}>Enter the jersey by hand</div>
-      <div style={{ fontSize: 15, color: "#fcd34d", textAlign: "center", marginBottom: 18, opacity: 0.9 }}>Type what is printed on the back. It passes as MANUAL and the supervisor signs it off.</div>
+      <div style={{ fontSize: 15, color: "#fcd34d", textAlign: "center", marginBottom: 18, opacity: 0.9 }}>Type what is printed on the back. On the roster: it passes as MANUAL and the supervisor signs it off. Not on the roster: nothing is added — it goes to the supervisor now.</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
         <div><label style={labelSt}>Number</label><input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={onKey} autoFocus inputMode="numeric" placeholder="##" style={field} /></div>
         <div><label style={labelSt}>Name</label><input value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} placeholder="as printed" style={field} /></div>
@@ -526,7 +526,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
     if (isList) {
       const t = state.typed;
       const none = t
-        ? { ...byHand, label: `⌨ None of these — add #${t.number || "?"}${t.name ? " " + t.name : ""} as typed`, hint: "goes on the roster as added by operator" }
+        ? { ...byHand, label: `🛑 None of these — #${t.number || "?"}${t.name ? " " + t.name : ""} is not on the roster`, hint: "nothing is added; the supervisor is told now" }
         : { ...byHand, label: "⌨ None of these — enter by hand" };
       return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), retry, none, { ...notRight, label: "🚩 Bad jersey — pick a reason" }];
     }
@@ -921,16 +921,16 @@ function BinSetupModal({ entries, onConfirm }) {
 }
 
 // ── Roster complete modal ─────────────────────────────────────────────────────
-function RosterCompleteModal({ roster, onExport, onDismiss }) {
+function RosterCompleteModal({ roster, offRosterFlags = 0, onExport, onDismiss }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const stats = [
     { label: "Passed",        value: count("pass"),    color: "#22c55e" },
     { label: "By hand",       value: count("manual"),  color: "#f59e0b" },
-    { label: "With supervisor", value: count("flag"),  color: "#ef4444" },
+    { label: "With supervisor", value: count("flag") + offRosterFlags,  color: "#ef4444" },
     { label: "Missing",       value: count("missing"), color: "#f59e0b" },
     { label: "Short-shipped", value: count("short"),   color: "#f59e0b" },
   ].filter(s => s.value > 0 || s.label === "Passed");
-  const open = count("flag") + count("manual") + count("missing") + count("short");
+  const open = count("flag") + offRosterFlags + count("manual") + count("missing") + count("short");
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: `2px solid ${open ? "#f59e0b" : "#22c55e"}`, padding: 40, maxWidth: 520, width: "90vw", textAlign: "center" }}>
@@ -1011,7 +1011,8 @@ export default function App() {
   const scannedRows    = roster.filter(r => r.scanned && r.scanned !== false);
   const remaining      = roster.filter(r => !r.scanned).length;
   const passCount      = roster.filter(r => r.scanned === "pass").length;
-  const flagCount      = roster.filter(r => r.scanned === "flag").length;
+  const offRosterFlags = log.filter(l => l.status === S_FLAGGED && l.match?.offRoster && !l.resolution).length;   // typed jerseys that are not on the roster have no row
+  const flagCount      = roster.filter(r => r.scanned === "flag").length + offRosterFlags;
   const manualCount    = roster.filter(r => r.scanned === "manual").length;
   const teamNames      = useMemo(() => [...new Set(roster.map(r => r.team).filter(Boolean))], [roster]);
   const canSupervise   = role === "supervisor" || role === "admin";
@@ -1281,22 +1282,26 @@ export default function App() {
   const stamp = useCallback(() => ({ timestamp: localTimeStamp(), operator: operatorName }), [operatorName]);
 
   const actions = useMemo(() => {
-    // Commit a hand-typed jersey: mark the roster row if the typed values hit one
-    // exactly, otherwise add a row — what the operator typed is what is printed.
+    // Commit a hand-typed jersey. On the roster: that row passes as MANUAL for
+    // the supervisor to sign off. Not on the roster: nothing is added — the
+    // roster is the order — it is flagged to the supervisor right away.
     const commitTyped = (o, { number, name, size, team }, exactRow) => {
-      let row, reason;
       if (exactRow) {
-        row = exactRow; reason = "Entered by operator — the camera could not read it";
-        setRoster(prev => prev.map(r => r._id === row._id ? { ...r, scanned: "manual" } : r));
-      } else {
-        row = { _id: roster.reduce((mx, r) => Math.max(mx, r._id), -1) + 1, name, number, team, size, scanned: "manual", added: "operator" };
-        reason = "Not on the roster — added by operator";
-        setRoster(prev => [...prev, row]);
+        const reason = "Entered by operator — the camera could not read it";
+        setRoster(prev => prev.map(r => r._id === exactRow._id ? { ...r, scanned: "manual" } : r));
+        const entry = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, match: exactRow, status: S_MANUAL, reason, ...stamp() };
+        setLog(prev => [entry, ...prev]); setLastResult(entry); setLastConfirmed(entry);
+        setOverlay({ mode: "manualDone", scan: o.scan, match: exactRow, reason });
+        playTone("pass");
+        return;
       }
-      const entry = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, match: row, status: S_MANUAL, reason, ...stamp() };
-      setLog(prev => [entry, ...prev]); setLastResult(entry); setLastConfirmed(entry);
-      setOverlay({ mode: "manualDone", scan: o.scan, match: row, reason });
-      playTone("pass");
+      const typedRow = { number, name, team, size, offRoster: true };   // no _id: never a roster row
+      const label  = `#${number || "?"}${name ? " " + name : ""}${team ? " (" + team + ")" : ""}`;
+      const reason = `Not on the roster — operator typed ${label}`;
+      const entry  = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, match: typedRow, status: S_FLAGGED, reason, ...stamp() };
+      setLog(prev => [entry, ...prev]); setLastResult(entry);
+      setOverlay({ mode: "supervisor", scan: o.scan, match: typedRow, reason: "This jersey is not on the order's roster. Nothing was added — take it to the supervisor to check against the order paper.", route: "Supervisor → check the order" });
+      playTone("flag");
     };
     return {
     confirm() {
@@ -1356,7 +1361,7 @@ export default function App() {
         const sameAsRead = d && String(d.number ?? "").trim() === number && String(d.name ?? "").trim().toLowerCase() === name.toLowerCase();
         if (m.type === "close" && sameAsRead) { commitTyped(o, typed, null); return; }
         setOverlay({ mode: "pick", scan: o.scan, candidates: m.candidates, typed,
-          reason: m.type === "pick" ? "What you typed matches these rows — which one?" : "What you typed is close to these rows — one of them, or add it as typed?",
+          reason: m.type === "pick" ? "What you typed matches these rows — which one?" : "What you typed is close to these rows — one of them, or not on the roster?",
           note: "Typed by operator — the camera could not read it" });
         return;
       }
@@ -1442,7 +1447,7 @@ export default function App() {
       )}
 
       {showRosterComplete && (
-        <RosterCompleteModal roster={roster}
+        <RosterCompleteModal roster={roster} offRosterFlags={offRosterFlags}
           onExport={() => { exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf); closeDialog(() => setShowRosterComplete(false)); }}
           onDismiss={() => closeDialog(() => setShowRosterComplete(false))} />
       )}
