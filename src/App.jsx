@@ -354,11 +354,15 @@ function SupervisorPanel({ operatorName, onClose }) {
 
   const age = s => Math.round((data.now - s.updatedAt) / 1000);
   const pct = s => s.counts?.total ? Math.round(((s.counts.total - s.counts.remaining) / s.counts.total) * 100) : 0;
+  const todayStr   = data.today || new Date().toLocaleDateString("en-CA");
+  const todayTotal = data.stations.reduce((n, s) => n + (s.day?.date === todayStr ? s.day.done : 0), 0);
+  const liveCount  = data.stations.filter(s => age(s) <= 30).length;
+  const fmtMin = m => m == null ? "—" : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 1800, display: "flex", flexDirection: "column", color: "#e2e8f0", fontFamily: "system-ui,sans-serif" }}>
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {alerts.length > 0 && <Pill color="#ef4444">{alerts.length} need you</Pill>}</div><div style={{ fontSize: 11, color: "#64748b" }}>{operatorName} · refreshes every 4 s · a station's flag or by-hand entry pops up here</div></div>
+        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {alerts.length > 0 && <Pill color="#ef4444">{alerts.length} need you</Pill>}</div><div style={{ fontSize: 12, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 14 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today across {data.stations.length} {data.stations.length === 1 ? "station" : "stations"} · {liveCount} live · {operatorName} · refreshes every 4 s</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {desktop === "granted"
             ? <span style={{ fontSize: 11, color: "#22c55e" }}>🔔 Desktop alerts on</span>
@@ -412,14 +416,18 @@ function SupervisorPanel({ operatorName, onClose }) {
                 </div>
                 <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2 }}>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong> · {s.rosterFile || "no roster"}</div>
                 <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: s.counts?.remaining === 0 ? "#22c55e" : "#3b82f6" }} /></div>
-                <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                  <Pill color="#e2e8f0">{(s.counts?.total ?? 0) - (s.counts?.remaining ?? 0)} / {s.counts?.total ?? 0} done</Pill>
+                <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, marginRight: 6 }}>{(s.counts?.total ?? 0) - (s.counts?.remaining ?? 0)}<span style={{ fontSize: 14, color: "#64748b", fontWeight: 600 }}> / {s.counts?.total ?? 0}</span></div>
                   <Pill color="#22c55e">{s.counts?.pass ?? 0} pass</Pill>
                   {s.counts?.flag > 0 && <Pill color="#ef4444">{s.counts.flag} with supervisor</Pill>}
                   {s.counts?.manual > 0 && <Pill color="#f59e0b">{s.counts.manual} by hand</Pill>}
                   {(s.counts?.missing > 0 || s.counts?.short > 0) && <Pill color="#f59e0b">{(s.counts.missing || 0) + (s.counts.short || 0)} missing/short</Pill>}
                 </div>
-                {s.lastScan && <div style={{ fontSize: 11, color: "#64748b", marginTop: 8 }}>Last: {s.lastScan.text} · {s.lastScan.time}</div>}
+                <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>
+                  <strong style={{ color: "#e2e8f0" }}>{s.day?.date === todayStr ? s.day.done : 0}</strong> today
+                  {s.rate ? <> · <strong style={{ color: "#e2e8f0" }}>{Math.round(s.rate)}</strong>/h · about {fmtMin(s.etaMin)} left</> : s.counts?.remaining > 0 ? " · rate after a few minutes of scanning" : ""}
+                </div>
+                {s.lastScan && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Now at: {s.lastScan.text} · {s.lastScan.time}</div>}
                 {s.notes && <div style={{ fontSize: 11, color: "#fcd34d", marginTop: 4 }}>Notes: {s.notes}</div>}
                 {s.attention?.length > 0 && (
                   <div style={{ marginTop: 10, borderTop: "1px solid #21262d", paddingTop: 8 }}>

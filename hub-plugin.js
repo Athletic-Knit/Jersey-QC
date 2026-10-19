@@ -35,7 +35,7 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
     const [kind, id] = parts;
     try {
       if (kind === "stations") {
-        if (req.method === "GET" && !id) return json(res, 200, { now: Date.now(), stations: Object.values(state.stations).sort((a, b) => b.updatedAt - a.updatedAt) });
+        if (req.method === "GET" && !id) return json(res, 200, { now: Date.now(), today: new Date().toLocaleDateString("en-CA"), stations: Object.values(state.stations).map(s => Object.fromEntries(Object.entries(s).filter(([k]) => k !== "history"))).sort((a, b) => b.updatedAt - a.updatedAt) });   // history stays on the hub
         if (req.method === "POST" && id) {
           const body = await readBody(req);
           const prev = state.stations[id];
@@ -48,7 +48,21 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
             const seen = new Set(carried.map(c => c.key));
             carried = [...open.filter(c => !seen.has(c.key)), ...carried].slice(0, 50);
           }
-          state.stations[id] = { ...body, id, carried, updatedAt: Date.now() }; save(); return json(res, 200, { ok: true });
+          // Day tally: jerseys done (pass or by hand) since the station's first report
+          // today, across orders. Rate and time left come from the last 20 minutes.
+          const now   = Date.now();
+          const today = new Date(now).toLocaleDateString("en-CA");            // YYYY-MM-DD, local
+          const doneOf = c => Math.max(0, (c?.total || 0) - (c?.remaining || 0));
+          const done  = doneOf(body.counts);
+          const sameOrder = !!prev && prev.orderNumber === body.orderNumber;
+          const day = prev?.day?.date === today ? { ...prev.day } : { date: today, done: 0 };
+          day.done += Math.max(0, done - (sameOrder ? doneOf(prev.counts) : 0));
+          let history = (sameOrder && prev.history) || [];
+          history = [...history, { t: now, done }].filter(h => now - h.t <= 20 * 60000).slice(-300);
+          const first = history[0], span = now - first.t;
+          const rate   = span >= 2 * 60000 && done > first.done ? (done - first.done) / span * 3600000 : null;   // jerseys per hour
+          const etaMin = rate ? Math.round((body.counts?.remaining || 0) / rate * 60) : null;
+          state.stations[id] = { ...body, id, carried, day, history, rate, etaMin, updatedAt: now }; save(); return json(res, 200, { ok: true });
         }
         if (req.method === "DELETE" && id && parts[2] === "carried") {
           const key = new URL(req.url, "http://hub").searchParams.get("key");
