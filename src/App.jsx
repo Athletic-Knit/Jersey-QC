@@ -92,7 +92,7 @@ function ResumeModal({ session, onResume, onDiscard }) {
 }
 
 // ── Sign-in (once per shift) ──────────────────────────────────────────────────
-function SignInModal({ onSignIn, initial }) {
+function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + title: hand the station to another operator without losing the order
   const [role,  setRole]  = useState(initial?.role || ROLES[0].id);
   const [pin,   setPin]   = useState("");
   const [name,  setName]  = useState(initial?.name || "");
@@ -111,7 +111,7 @@ function SignInModal({ onSignIn, initial }) {
       <div style={modalCard}>
         <div style={{ fontSize: 32, marginBottom: 6, textAlign: "center" }}>🏭</div>
         <div style={{ fontWeight: 900, fontSize: 22, textAlign: "center", marginBottom: 2 }}>Jersey QC Scanner</div>
-        <div style={{ fontSize: 13, color: "#64748b", textAlign: "center", marginBottom: 22 }}>Sign in once per shift</div>
+        <div style={{ fontSize: 13, color: "#64748b", textAlign: "center", marginBottom: 22 }}>{title || "Sign in once per shift"}</div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Role</label>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
@@ -134,7 +134,8 @@ function SignInModal({ onSignIn, initial }) {
           <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. John Smith" autoFocus={!PIN_REQUIRED} onKeyDown={onEnter} style={inputSt} />
         </div>
         {error && <div style={errSt}>{error}</div>}
-        <button onClick={submit} style={bigBtn}>Sign in →</button>
+        <button onClick={submit} style={bigBtn}>{onCancel ? "Take over →" : "Sign in →"}</button>
+        {onCancel && <button onClick={onCancel} style={{ ...btnGhost, width: "100%", marginTop: 8 }}>← Back, keep the current operator</button>}
       </div>
     </div>
   );
@@ -341,6 +342,7 @@ function SupervisorPanel({ operatorName, onClose }) {
   useEffect(() => { refresh(); const t = setInterval(refresh, 4000); return () => clearInterval(t); }, [refresh]);
 
   const send = async () => {
+    if (!order.trim()) { setMsg("Type the order number first — stations list rosters by it."); return; }
     if (!file) { setMsg("Choose a roster file first."); return; }
     try {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
@@ -1008,6 +1010,9 @@ export default function App() {
   const [showSettings,       setShowSettings]       = useState(false);
   const [showRosterComplete, setShowRosterComplete] = useState(false);
   const [hubOk, setHubOk] = useState(null);       // did the last progress report reach the hub? null = never tried
+  const [newRosters, setNewRosters] = useState([]);   // rosters the supervisor sent while this order was running
+  const knownRosterIds = useRef(null);                 // what was already waiting when this order started
+  const [showHandover, setShowHandover] = useState(false);   // another operator takes over; the order stays
   const [showBinSetup,       setShowBinSetup]       = useState(false);
   const [showSupervisor,     setShowSupervisor]     = useState(false);
   const [binMap,             setBinMap]             = useState(null);
@@ -1108,7 +1113,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setNewRosters([]);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false);
   }, []);
 
@@ -1207,7 +1212,7 @@ export default function App() {
   }, [scanning, cameraOn, roster.length, inputMode, settings.rotation, doRunScan, stopCamera]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
-  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor;
+  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHandover;
   useEffect(() => {
     if (!cameraOn || inputMode !== "camera" || !settings.autoScan) return;
     const id = setInterval(() => {
@@ -1223,6 +1228,23 @@ export default function App() {
     }, 200);
     return () => clearInterval(id);
   }, [cameraOn, inputMode, settings.autoScan, overlay, scanning, modalOpen, doTriggerScan, stopCamera]);
+
+  // A roster the supervisor sends while an order is running: say so quietly.
+  // It is offered on the order screen when this order ends or on New order.
+  useEffect(() => {
+    if (!sessionStarted) { knownRosterIds.current = null; return; }
+    const check = () => hub.rosters().then(r => {
+      const list = r.rosters || [];
+      if (knownRosterIds.current === null) { knownRosterIds.current = new Set(list.map(x => x.id)); return; }
+      const fresh = list.filter(x => !knownRosterIds.current.has(x.id));
+      if (!fresh.length) return;
+      fresh.forEach(f => knownRosterIds.current.add(f.id));
+      setNewRosters(prev => { const have = new Set(prev.map(p => p.id)); return [...prev, ...fresh.filter(f => !have.has(f.id))]; });
+    }).catch(() => {});
+    check();
+    const t = setInterval(check, 10000);
+    return () => clearInterval(t);
+  }, [sessionStarted]);
 
   const armAutoScan = useCallback(() => {
     if (!settings.autoScan || !cameraOn || inputMode !== "camera" || modalOpen) return;
@@ -1429,6 +1451,12 @@ export default function App() {
           onSignIn={({ role, name }) => { setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name }); setResumeDecided(true); }} />
       )}
 
+      {showHandover && (
+        <SignInModal title="Hand this station to another operator — the order, roster and log stay as they are" initial={{ role }}
+          onCancel={() => closeDialog(() => setShowHandover(false))}
+          onSignIn={({ role: r, name }) => { setRole(r); setOperatorName(name); saveSignIn({ role: r, name }); closeDialog(() => setShowHandover(false)); }} />
+      )}
+
       {showSupervisor && <SupervisorPanel operatorName={operatorName} onClose={() => closeDialog(() => setShowSupervisor(false))} />}
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
@@ -1482,6 +1510,7 @@ export default function App() {
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
           {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
           {sessionStarted && <button onClick={startNewOrder} title="Finish this order and set up the next one — no PIN needed" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>New order</button>}
+          {signedIn && sessionStarted && <button onClick={() => setShowHandover(true)} title="Another operator takes over this station — the order keeps going" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>Change operator</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>Sign out</button>}
           <button onClick={() => setShowSettings(true)} style={{ ...btnGhost, padding: "3px 9px" }}>⚙</button>
         </div>
@@ -1490,6 +1519,13 @@ export default function App() {
       {notes && (
         <div style={{ background: "rgba(245,158,11,0.10)", borderBottom: "1px solid rgba(245,158,11,0.35)", padding: "6px 16px", fontSize: 12, color: "#fcd34d", flexShrink: 0 }}>
           <strong>Order notes:</strong> {notes}
+        </div>
+      )}
+
+      {sessionStarted && newRosters.length > 0 && (
+        <div style={{ background: "rgba(59,130,246,0.12)", borderBottom: "1px solid rgba(59,130,246,0.4)", padding: "6px 16px", fontSize: 12, color: "#bfdbfe", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <span>📋 <strong>{newRosters.map(r => `Order ${r.orderNumber || "—"} from ${r.by || "the supervisor"} (${r.rowCount} jerseys)`).join(" · ")}</strong> is waiting for you — it is offered when this order ends, or on New order.</span>
+          <button onClick={() => setNewRosters([])} title="Hide" style={{ background: "transparent", border: 0, color: "#bfdbfe", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>✕</button>
         </div>
       )}
 
