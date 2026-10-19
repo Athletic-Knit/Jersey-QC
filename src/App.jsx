@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
-import { exportRosterXLSX, exportLogCSV, localTimeStamp } from "./lib/export.js";
+import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, shrinkDataUrl, downscaleImage } from "./lib/persist.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey } from "./lib/vision.js";
@@ -522,6 +522,8 @@ function SupervisorPanel({ operatorName, onClose }) {
           })}
         </div>
         <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid #21262d", padding: 14, overflowY: "auto" }}>
+          <button onClick={() => hub.ledger().then(l => exportDaySheetXLSX(l, stationLabel)).catch(() => setMsg("Could not fetch the day's scans from the hub."))}
+            title="One Excel file for the whole day, every station: jerseys per hour, time per jersey, flags, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 16, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {todayTotal} {todayTotal === 1 ? "jersey" : "jerseys"} so far</button>
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Send a roster</div>
           <div style={{ marginBottom: 10 }}>
             <label style={labelSt}>Send to</label>

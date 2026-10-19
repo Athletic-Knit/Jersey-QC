@@ -32,6 +32,7 @@ export const hub = {
   roster:        id             => call(`/api/hub/rosters/${id}`),
   sendRoster:    body           => call("/api/hub/rosters", { method: "POST", body: JSON.stringify(body) }),
   removeRoster:  id             => call(`/api/hub/rosters/${id}`, { method: "DELETE" }),
+  ledger:        date           => call(`/api/hub/ledger${date ? "?date=" + encodeURIComponent(date) : ""}`),   // every scan event of a day, all stations
 };
 
 // What a station tells the hub: small, no images.
@@ -41,6 +42,13 @@ export function snapshotOf({ operatorName, role, orderNumber, notes, rosterFile,
     operatorName, role, orderNumber, notes, rosterFile,
     counts: { total: roster.length, pass: count("pass"), flag: count("flag"), manual: count("manual"), missing: count("missing"), short: count("short"), remaining: roster.filter(r => !r.scanned).length },
     lastScan: lastConfirmed ? { time: lastConfirmed.timestamp, text: `#${lastConfirmed.match?.number ?? "?"}${lastConfirmed.match?.name ? " " + lastConfirmed.match.name : ""}` } : null,
+    // Every scan event of this order, compact (no images), for the hub's day
+    // ledger — the end-of-day sheet is built from these across all stations.
+    events: log.slice(0, 400).map(l => ({
+      id: l.id, t: l.timestamp, status: l.status, order: orderNumber, operator: l.operator || operatorName,
+      number: l.match?.number ?? l.detected?.number ?? "", name: l.match?.name ?? l.detected?.name ?? "", size: l.match?.size ?? "", team: l.match?.team ?? "",
+      offRoster: !!l.match?.offRoster, reason: l.reason || "", resolution: l.resolution || "",
+    })),
     attention: log.filter(l => l.status === "flagged" || l.status === "manual").slice(0, 25).map(l => ({ time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "" })),
   };
 }

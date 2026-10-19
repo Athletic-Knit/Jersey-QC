@@ -6,6 +6,7 @@
 //   POST   /api/hub/stations/:id        a station reports (body = snapshot)
 //   DELETE /api/hub/stations/:id
 //   DELETE /api/hub/stations/:id/carried?key=…   supervisor marks an item from an earlier order done
+//   GET    /api/hub/ledger?date=YYYY-MM-DD   every scan event and order of that day (default today) — the day sheet
 //   GET    /api/hub/rosters             rosters waiting for stations (summaries)
 //   GET    /api/hub/rosters/:id         one roster, with rows
 //   POST   /api/hub/rosters             { orderNumber, notes, fileName, rows, by }
@@ -63,7 +64,17 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
           const first = history[0], span = now - first.t;
           const rate   = span >= 2 * 60000 && done > first.done ? (done - first.done) / span * 3600000 : null;   // jerseys per hour
           const etaMin = rate ? Math.round((body.counts?.remaining || 0) / rate * 60) : null;
-          state.stations[id] = { ...body, id, carried, day, history, rate, etaMin, updatedAt: now }; save(); return json(res, 200, { ok: true });
+          // Day ledger: every scan event from every station, keyed so a re-sent
+          // event (same id) updates in place — a resolution added later lands too.
+          const { events = [], ...rest } = body;
+          const led = (state.ledger ||= {}); const dayLed = (led[today] ||= { events: {}, orders: {} });
+          events.forEach(ev => { if (ev && ev.id !== undefined) dayLed.events[`${id}|${ev.id}`] = { ...ev, station: id }; });
+          if (body.orderNumber) {
+            const ok = `${id}|${body.orderNumber}`; const o = dayLed.orders[ok] || { station: id, order: body.orderNumber, operator: body.operatorName, firstSeen: now };
+            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile };
+          }
+          Object.keys(led).sort().slice(0, -14).forEach(d => delete led[d]);   // keep two weeks
+          state.stations[id] = { ...rest, id, carried, day, history, rate, etaMin, updatedAt: now }; save(); return json(res, 200, { ok: true });
         }
         if (req.method === "DELETE" && id && parts[2] === "carried") {
           const key = new URL(req.url, "http://hub").searchParams.get("key");
@@ -71,6 +82,11 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
           return json(res, 200, { ok: true });
         }
         if (req.method === "DELETE" && id) { delete state.stations[id]; save(); return json(res, 200, { ok: true }); }
+      }
+      if (kind === "ledger" && req.method === "GET") {
+        const date = new URL(req.url, "http://hub").searchParams.get("date") || new Date().toLocaleDateString("en-CA");
+        const d = (state.ledger || {})[date] || { events: {}, orders: {} };
+        return json(res, 200, { date, events: Object.values(d.events).sort((a, b) => String(a.t).localeCompare(String(b.t))), orders: Object.values(d.orders), days: Object.keys(state.ledger || {}).sort() });
       }
       if (kind === "rosters") {
         if (req.method === "GET" && !id)  return json(res, 200, { rosters: Object.values(state.rosters).map(summary).sort((a, b) => b.createdAt - a.createdAt) });

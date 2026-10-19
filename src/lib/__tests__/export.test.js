@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { csvCell, safeFilename, buildLogCSV, buildRosterSheet, localDateStamp } from "../export.js";
+import { csvCell, safeFilename, buildLogCSV, buildRosterSheet, localDateStamp, buildDaySheets } from "../export.js";
 
 describe("csv", () => {
   it("quotes commas and doubles quotes", () => {
@@ -42,5 +42,34 @@ describe("roster sheet", () => {
     const body = sheet.slice(6);
     expect(body.map(r => r[0])).toEqual(["PASS", "FLAGGED", "MISSING", "NOT SCANNED"]);
     expect(body[1].slice(6, 9)).toEqual(["Stitching", "Rejected — sent back", "Cooper"]);
+  });
+});
+
+describe("day sheet", () => {
+  const ledger = {
+    date: "2026-10-19",
+    orders: [{ station: "st-line1", order: "25", operator: "Jordan", counts: { total: 3, remaining: 0 }, rosterFile: "r.csv" }],
+    events: [
+      { id: 1, t: "2026-10-19 09:00:00", status: "pass",    order: "25", operator: "Jordan", number: "1", name: "Smith", station: "st-line1" },
+      { id: 2, t: "2026-10-19 09:00:30", status: "pass",    order: "25", operator: "Jordan", number: "2", name: "Jones", station: "st-line1" },
+      { id: 3, t: "2026-10-19 09:01:00", status: "flagged", order: "25", operator: "Jordan", number: "3", name: "Kim", reason: "Stitching or seam", station: "st-line1" },
+      { id: 4, t: "2026-10-19 09:01:30", status: "pass",    order: "25", operator: "Jordan", number: "3", name: "Kim", station: "st-line1" },
+      { id: 5, t: "2026-10-19 09:02:00", status: "undo",    order: "25", operator: "Jordan", number: "2", name: "Jones", station: "st-line1" },
+    ],
+  };
+  it("counts passed minus un-checked, flags by reason, and a pace", () => {
+    const s = buildDaySheets(ledger, id => id === "st-line1" ? "Line 1" : id);
+    const header = s.summary[4], row = s.summary[5];
+    const col = name => row[header.indexOf(name)];
+    expect(col("Station")).toBe("Line 1");
+    expect(col("Passed")).toBe(2);
+    expect(col("To supervisor")).toBe(1);
+    expect(col("Un-checked")).toBe(1);
+    expect(col("Active minutes")).toBe(2);
+    expect(col("Jerseys per active hour")).toBe(60);
+    expect(col("Median seconds per jersey")).toBe(45);
+    expect(s.flags[1]).toEqual(["Stitching or seam", 1]);
+    expect(s.orders[1][0]).toBe("Line 1");
+    expect(s.events).toHaveLength(6);
   });
 });
