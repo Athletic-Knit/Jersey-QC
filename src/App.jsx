@@ -16,6 +16,7 @@ const S_FLAGGED = "flagged";
 const S_MANUAL  = "manual";
 
 function formatKey(code) {
+  if (!code) return "?";   // a key that has no setting yet (older saved settings) must never crash the screen
   const map = {
     ShiftRight: "RShift", ShiftLeft: "LShift",
     ControlRight: "RCtrl", ControlLeft: "LCtrl",
@@ -496,7 +497,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, cancelKey, retryKey }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, cancelKey, retryKey, byHandKey }) {
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
   const isList  = mode === "pick" || mode === "close";
@@ -562,13 +563,14 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
       if (mode === "manual") { if (e.code === "Escape") { e.preventDefault(); actions.back(); } return; }   // typing, not navigating
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       if (e.code === retryKey) { const o = options.find(x => x.id === "retry"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }
+      if (e.code === byHandKey) { const o = options.find(x => x.id === "manual"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }   // straight to the form, like R goes straight to retry
       if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled) o.run(); return; }
       if (e.code === cancelKey || e.code === "ArrowDown") { e.preventDefault(); lastKeyRef.current = Date.now(); move(1); return; }
       if (e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [options, selectedIdx, mode, confirmKey, cancelKey, retryKey, actions]);
+  }, [options, selectedIdx, mode, confirmKey, cancelKey, retryKey, byHandKey, actions]);
 
   // A bumped mouse never overrides a key press made in the last moment.
   const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) setSelectedIdx(i); }, []);
@@ -582,13 +584,13 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
     return (
       <button onClick={o.run} onMouseEnter={() => hover(i)}
         style={{ padding: "12px 22px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.18)"}`, background: o.primary ? accent : "transparent", color: o.primary ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
-        <span>{o.label} {o.id === "retry" ? <Kbd light>{formatKey(retryKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
+        <span>{o.label} {o.id === "retry" ? <Kbd light>{formatKey(retryKey)}</Kbd> : o.id === "manual" ? <Kbd light>{formatKey(byHandKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
         {o.hint && <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.7 }}>{o.hint}</span>}
       </button>
     );
   };
 
-  const hintLine = `${formatKey(confirmKey)} select · ${formatKey(cancelKey)} or ↓ next option · ↑ previous · ${formatKey(retryKey)} retry scan`;
+  const hintLine = `${formatKey(confirmKey)} select · ${formatKey(cancelKey)} or ↓ next option · ↑ previous · ${formatKey(retryKey)} retry scan · ${formatKey(byHandKey)} enter by hand`;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "none", padding: "20px 0", overflowY: "auto" }}>
@@ -825,10 +827,11 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
     { label: "Select",     key: "confirmKey" },
     { label: "Navigate",   key: "cancelKey" },
     { label: "Retry scan", key: "retryKey" },
+    { label: "Enter by hand", key: "byHandKey" },
   ];
   const reserved = ["Escape", "Tab"];
   const problems = [];
-  const onScreen = ["confirmKey", "cancelKey", "retryKey"];   // these three act on the same screen, so they must differ
+  const onScreen = ["confirmKey", "cancelKey", "retryKey", "byHandKey"];   // these act on the same screen, so they must differ
   const labelOf  = k => keyRows.find(r => r.key === k).label;
   onScreen.forEach((a, i) => onScreen.slice(i + 1).forEach(b => { if (temp[a] === temp[b]) problems.push(`${labelOf(a)} and ${labelOf(b)} cannot be the same key.`); }));
   keyRows.forEach(r => { if (reserved.includes(temp[r.key])) problems.push(`${r.label} cannot be ${temp[r.key]}.`); });
@@ -968,7 +971,7 @@ export default function App() {
   const gateRef         = useRef(createMotionGate({ log: m => console.log("[hands-free] " + m) }));
 
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...(loadSettings() || {}) }));
-  const { scanKey, confirmKey, cancelKey, retryKey } = settings;
+  const { scanKey, confirmKey, cancelKey, retryKey, byHandKey } = settings;
 
   const [savedSession]  = useState(() => { const s = loadSession(); return s && s.sessionStarted && Array.isArray(s.roster) && s.roster.length ? s : null; });
   const [resumeDecided, setResumeDecided] = useState(false);
@@ -1431,7 +1434,7 @@ export default function App() {
       )}
 
       {overlay && (
-        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} />
+        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey} />
       )}
 
       {showSettings && (
@@ -1597,7 +1600,7 @@ export default function App() {
 
               <div style={{ padding: "7px 12px", borderTop: "1px solid #21262d", background: "#0d1117", flexShrink: 0 }}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px" }}>
-                  {[["scan", keyLabel, "Scan"], ["confirm", formatKey(confirmKey), "Select"], ["nav", formatKey(cancelKey), "Next option"], ["retry", formatKey(retryKey), "Retry scan"], ["arrows", "↑↓", "Move"]].map(([id, k, d]) => (
+                  {[["scan", keyLabel, "Scan"], ["confirm", formatKey(confirmKey), "Select"], ["nav", formatKey(cancelKey), "Next option"], ["retry", formatKey(retryKey), "Retry scan"], ["byhand", formatKey(byHandKey), "Enter by hand"], ["arrows", "↑↓", "Move"]].map(([id, k, d]) => (
                     <div key={id} style={{ display: "flex", gap: 5, alignItems: "center" }}>
                       <kbd style={{ background: "#1e293b", border: "1px solid #334155", padding: "1px 6px", borderRadius: 4, fontSize: 10 }}>{k}</kbd>
                       <span style={{ fontSize: 10, color: "#64748b" }}>{d}</span>

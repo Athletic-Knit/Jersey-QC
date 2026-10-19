@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS = {
   confirmKey: "Enter",    // select the highlighted option on any screen
   cancelKey: "KeyA",      // move to the next option (↓ ↑ also work)
   retryKey: "KeyR",       // retry the scan wherever it is offered; nothing is recorded
+  byHandKey: "KeyW",      // open "Enter by hand" wherever it is offered (a failed read, a pick list)
   rotation: 180,          // 0 | 90 | 180 | 270 — how the camera is mounted
   cameraId: "",           // "" = browser default
   autoScan: true,         // hands-free: scan when the jersey changes and settles
