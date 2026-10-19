@@ -91,3 +91,24 @@ describe("bins", () => {
     expect(binEntries(roster, buildBinMap(roster))).toEqual([{ team: "Hawks", bin: 1 }, { team: "Ravens", bin: 2 }]);
   });
 });
+
+describe("a re-used export is a roster, not yesterday's results", () => {
+  const exported = [
+    "Order Number,25",
+    "Operator,Shiv",
+    "",
+    "Status,Name,Number,Team,Size,Bin,Reason,Resolution,Inspected By,Time",
+    "PASS,HUNTER,22,blue,Y-XL,1,,,Shiv,2026-10-15 10:01:02",
+    "NOT SCANNED,,5,yellow,A-M,2,,,,",
+  ].join("\n");
+  it("drops the app's own result columns and keeps the roster columns", () => {
+    const rows = parseCSV(exported);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].name).toBe("HUNTER");
+    expect(rows[0].number).toBe("22");
+    expect(rows[0].status).toBeUndefined();
+    expect(rows[0].bin).toBeUndefined();
+    expect(rows[0].scanned).toBeUndefined();
+    expect(displayColumns(rows)).toEqual(["name", "number", "team", "size"]);
+  });
+});

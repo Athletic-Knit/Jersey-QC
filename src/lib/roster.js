@@ -15,6 +15,9 @@ const ALIASES = {
 };
 export const CORE_COLUMNS = ["name", "number", "team", "size"];
 const STATE_COLUMNS = ["_id", "scanned", "mark"];
+// Columns this app writes into its own Excel export. A re-used export must not
+// bring yesterday's results back as roster data ("Status: PASS" on unscanned rows).
+const APP_COLUMNS = ["status", "bin", "reason", "resolution", "inspected by", "time", ...STATE_COLUMNS];
 
 export function canonicalHeader(h) {
   const key = stripBOM(String(h ?? "")).trim().toLowerCase();
@@ -64,7 +67,7 @@ export function rowsToRoster(rows) {
   const out = [];
   rows.slice(hIdx + 1).forEach(cells => {
     const row = {};
-    headers.forEach((h, i) => { if (h) row[h] = String(cells?.[i] ?? "").trim(); });
+    headers.forEach((h, i) => { if (h && !APP_COLUMNS.includes(h)) row[h] = String(cells?.[i] ?? "").trim(); });
     if (row.name || row.number) out.push(row);
   });
   return normaliseRosterRows(out);
@@ -155,7 +158,7 @@ export function displayColumns(roster) {
   if (!roster.length) return [];
   const keys = [];
   roster.forEach(r => Object.keys(r).forEach(k => { if (!keys.includes(k)) keys.push(k); }));
-  return keys.filter(k => !STATE_COLUMNS.includes(k));
+  return keys.filter(k => !APP_COLUMNS.includes(k));   // also hides them on rosters that were loaded before this rule
 }
 
 // Columns beyond the core four (goalie, colourway, style…) shown as badges.
