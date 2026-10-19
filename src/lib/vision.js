@@ -1,14 +1,15 @@
 // ── The read: one image in, { name, number } out ──────────────────────────────
 export const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
-export const PROMPT = `This is a photo of the BACK of a sports jersey laid flat, taken for quality control in a factory.
+export const PROMPT = `This is a quality-control photo from a sports-jersey factory. It usually shows the BACK of a jersey laid flat, but it may show only a loose name plate or number patch lying on the table before it is sewn on. The text may be sideways or upside down: read it in whatever orientation it is.
 Read these fields:
-- "name": the player name printed across the upper back, if any. Ignore team names, sponsor logos and wordmarks; those are not the player name.
-- "number": the LARGE number centred on the back. Jerseys also carry a smaller copy of the same number on each sleeve, and folded sleeves can sit right beside the back number: IGNORE sleeve numbers. A back number is 1 or 2 digits (00 to 99). Never return 3 or more digits.
+- "name": the player name, printed in block capitals, if any. Ignore team names, sponsor logos and wordmarks; those are not the player name. In this block lettering, G has a horizontal bar and C does not; O is round and Q has a tail; B is closed and 8 is a digit. Copy the letters exactly as printed, including apostrophes and hyphens.
+- "number": the LARGE player number, if any. Jerseys also carry a smaller copy of the same number on each sleeve, and folded sleeves can sit right beside the back number: IGNORE sleeve numbers. A player number is 1 or 2 digits (00 to 99). Never return 3 or more digits.
 - "sleeve_numbers": any numbers you can see on the sleeves, as a list, so they are not confused with the back number.
 Return ONLY valid JSON, no markdown, no commentary:
 {"name":"NAME","number":"##","sleeve_numbers":["##"]}
-Use "" for a field that is not visible.`;
+If more than one jersey or plate is in the picture, read the largest or most central one and ignore the others.
+Never leave a field empty because you are unsure, and never decide that an item is "only a sample" or "not a real name": whatever letters are printed, return them. A person checks every read against the order, so a near-miss is far more useful than nothing. Do not explain; output the JSON only. Use "" only for a field that is truly not in the picture. A name plate with no number is a valid read: return the name and "" for the number.`;
 
 const str = v => (v === null || v === undefined) ? "" : String(v).trim();
 
