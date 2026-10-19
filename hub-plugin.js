@@ -66,7 +66,7 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
         }
         if (req.method === "DELETE" && id && parts[2] === "carried") {
           const key = new URL(req.url, "http://hub").searchParams.get("key");
-          const s = state.stations[id]; if (s) { s.carried = (s.carried || []).filter(c => c.key !== key); save(); }
+          const s = state.stations[id]; if (s) { s.carried = (s.carried || []).filter(c => c.key !== key); save(); console.log(`[hub] ${new Date().toLocaleTimeString()} ${id}: supervisor marked done — ${key}`); }
           return json(res, 200, { ok: true });
         }
         if (req.method === "DELETE" && id) { delete state.stations[id]; save(); return json(res, 200, { ok: true }); }

@@ -1,8 +1,12 @@
 // ── Session + settings persistence (localStorage) ─────────────────────────────
 // A refresh, a crash or a closed tab must not cost an order's work.
-const SESSION_KEY  = "jerseyqc.session.v1";
+// A station named in the URL (?station=line2) keeps its own saved session and
+// sign-in, so several stations in one browser never resume each other's order.
+// Settings stay per browser. Without ?station= nothing changes.
+const suffix = (() => { try { const s = new URLSearchParams(window.location.search).get("station"); return s ? "." + s.replace(/[^\w-]/g, "").slice(0, 24) : ""; } catch { return ""; } })();
+const SESSION_KEY  = "jerseyqc.session.v1" + suffix;
 const SETTINGS_KEY = "jerseyqc.settings.v2";   // v2: Enter selects, R retries
-const SIGNIN_KEY   = "jerseyqc.signin.v1";
+const SIGNIN_KEY   = "jerseyqc.signin.v1" + suffix;
 
 // localStorage can be full, blocked, or absent (private window); never let that throw.
 const quiet = fn => { try { return fn(); } catch { return undefined; } };

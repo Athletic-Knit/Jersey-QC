@@ -362,15 +362,10 @@ function SupervisorPanel({ operatorName, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 1800, display: "flex", flexDirection: "column", color: "#e2e8f0", fontFamily: "system-ui,sans-serif" }}>
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {alerts.length > 0 && <Pill color="#ef4444">{alerts.length} need you</Pill>}</div><div style={{ fontSize: 12, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 14 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today across {data.stations.length} {data.stations.length === 1 ? "station" : "stations"} · {liveCount} live · {operatorName} · refreshes every 4 s</div></div>
+        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {alerts.length > 0 && <Pill color="#ef4444">{alerts.length} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {data.stations.length} {data.stations.length === 1 ? "station" : "stations"} live</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {desktop === "granted"
-            ? <span style={{ fontSize: 11, color: "#22c55e" }}>🔔 Desktop alerts on</span>
-            : desktop === "denied"
-              ? <span style={{ fontSize: 11, color: "#f87171" }} title="Allow notifications for this site in the browser's address bar">🔕 Desktop alerts blocked by the browser</span>
-              : desktop === "unsupported"
-                ? <span style={{ fontSize: 11, color: "#64748b" }}>No desktop alerts in this browser</span>
-                : <button onClick={enableDesktop} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#f59e0b", color: "#fcd34d" }}>🔔 Turn on sound &amp; desktop alerts</button>}
+          {desktop === "denied" && <span style={{ fontSize: 16 }} title="Desktop alerts are blocked — allow notifications for this site in the browser's address bar">🔕</span>}
+          {desktop === "default" && <button onClick={enableDesktop} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#f59e0b", color: "#fcd34d" }}>🔔 Turn on alerts</button>}
           {alerts.length > 0 && <button onClick={() => setAlerts([])} style={{ ...btnGhost, padding: "6px 12px" }}>Mark all seen</button>}
           <button onClick={onClose} style={{ ...btnGhost, padding: "6px 14px" }}>← Back to scanning</button>
         </div>
@@ -389,7 +384,7 @@ function SupervisorPanel({ operatorName, onClose }) {
       )}
       {alerts.length > 0 && (
         <div style={{ position: "absolute", top: 54, right: 16, width: 380, maxWidth: "calc(100% - 32px)", zIndex: 1900, display: "flex", flexDirection: "column", gap: 8 }}>
-          {alerts.length > 3 && <div style={{ textAlign: "right", fontSize: 12, color: "#fca5a5" }}>{alerts.length - 3} more below the newest three — all are in the station cards</div>}
+          {alerts.length > 3 && <div style={{ textAlign: "right", fontSize: 12, color: "#fca5a5" }}>{alerts.length - 3} more — see the cards</div>}
           {alerts.slice(0, 3).map(a => (
             <div key={a.key} role="alert" style={{ background: a.status === "manual" ? "#3b2a06" : "#4a0d0d", border: `1px solid ${a.status === "manual" ? "#f59e0b" : "#ef4444"}`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 24px rgba(0,0,0,0.55)", color: "#fff", fontSize: 13 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
@@ -406,15 +401,15 @@ function SupervisorPanel({ operatorName, onClose }) {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12, alignContent: "start" }}>
           {data.stations.length === 0 && <div style={{ color: "#64748b", padding: 24 }}>No station has reported yet. A station appears here within a few seconds of starting an order.</div>}
-          {data.stations.map(s => {
+          {data.stations.slice().sort((a, b) => stationLabel(a.id).localeCompare(stationLabel(b.id), undefined, { numeric: true })).map(s => {   /* a fixed order: cards must not jump as reports arrive */
             const stale = age(s) > 30;
             return (
               <div key={s.id} style={{ ...card, padding: 14, border: `1px solid ${stale ? "#334155" : s.counts?.flag ? "#ef4444" : "#21262d"}`, opacity: stale ? 0.6 : 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <div style={{ fontWeight: 800, fontSize: 15 }}><span style={{ color: "#60a5fa" }}>{stationLabel(s.id)}</span> · {s.operatorName || "—"} <span style={{ fontWeight: 400, color: "#64748b", fontSize: 12 }}>· {cap(s.role || "")}</span></div>
-                  <div style={{ fontSize: 11, color: stale ? "#f87171" : "#64748b" }}>{stale ? `last seen ${age(s)} s ago` : "live"}</div>
+                  <div style={{ fontWeight: 800, fontSize: 17 }}><span style={{ color: "#60a5fa" }}>{stationLabel(s.id)}</span> · {s.operatorName || "—"}</div>
+                  <div style={{ fontSize: 11, color: stale ? "#f87171" : "#22c55e" }}>{stale ? `last seen ${fmtMin(Math.round(age(s) / 60))} ago` : "● live"}</div>
                 </div>
-                <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2 }}>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong> · {s.rosterFile || "no roster"}</div>
+                <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2 }}>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong></div>
                 <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: s.counts?.remaining === 0 ? "#22c55e" : "#3b82f6" }} /></div>
                 <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, marginRight: 6 }}>{(s.counts?.total ?? 0) - (s.counts?.remaining ?? 0)}<span style={{ fontSize: 14, color: "#64748b", fontWeight: 600 }}> / {s.counts?.total ?? 0}</span></div>
@@ -425,14 +420,18 @@ function SupervisorPanel({ operatorName, onClose }) {
                 </div>
                 <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>
                   <strong style={{ color: "#e2e8f0" }}>{s.day?.date === todayStr ? s.day.done : 0}</strong> today
-                  {s.rate ? <> · <strong style={{ color: "#e2e8f0" }}>{Math.round(s.rate)}</strong>/h · about {fmtMin(s.etaMin)} left</> : s.counts?.remaining > 0 ? " · rate after a few minutes of scanning" : ""}
+                  {s.counts?.remaining === 0 && s.counts?.total > 0
+                    ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>order done</span></>
+                    : stale ? " · pace unknown — not reporting"
+                      : s.rate ? <> · <strong style={{ color: "#e2e8f0" }}>{Math.round(s.rate)}</strong>/h · about {fmtMin(s.etaMin)} left</>
+                        : " · pace shows after a few minutes"}
                 </div>
-                {s.lastScan && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Now at: {s.lastScan.text} · {s.lastScan.time}</div>}
-                {s.notes && <div style={{ fontSize: 11, color: "#fcd34d", marginTop: 4 }}>Notes: {s.notes}</div>}
+                {s.lastScan && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Now at: {s.lastScan.text} · {s.lastScan.time.slice(11)}</div>}
                 {s.attention?.length > 0 && (
                   <div style={{ marginTop: 10, borderTop: "1px solid #21262d", paddingTop: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Needs you</div>
-                    {s.attention.slice(0, 6).map((a, i) => (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#f87171", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Needs you ({s.attention.length})</div>
+                    {s.attention.length > 3 && <div style={{ fontSize: 11, color: "#64748b", marginBottom: 3 }}>newest three — the rest are in the station's log</div>}
+                    {s.attention.slice(0, 3).map((a, i) => (
                       <div key={i} style={{ fontSize: 12, marginBottom: 3 }}>
                         <span style={{ color: a.status === "manual" ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>{a.status === "manual" ? "✍" : "🛑"} {a.jersey}</span>
                         <span style={{ color: "#94a3b8" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
