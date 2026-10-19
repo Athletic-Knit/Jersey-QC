@@ -1696,7 +1696,7 @@ export default function App() {
                       : <>
                           <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 42 }}>■</button>
                           <button onClick={toggleHandsFree} title={!settings.autoScan ? "Turn hands-free scanning on" : handsFreePaused ? "Resume hands-free scanning" : "Pause hands-free — the camera stays on and B still scans"}
-                            style={{ ...btnGhost, padding: "0 12px", fontSize: 13, borderColor: handsFree ? undefined : "#f59e0b", color: handsFree ? undefined : "#fcd34d" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
+                            style={{ ...btnGhost, padding: "0 12px", fontSize: 13, fontWeight: 700, borderColor: "#f59e0b", color: "#fcd34d", background: handsFree ? "rgba(245,158,11,0.14)" : "transparent" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
                           <button onClick={() => { gateRef.current.disarm(); setArmed(false); doTriggerScan(); }} disabled={scanning}
                             style={{ ...btnPri, flex: 1, fontSize: 18, padding: "12px", opacity: scanning ? 0.4 : 1 }}>
                             {scanning ? "Reading…" : "⚡ SCAN"}
