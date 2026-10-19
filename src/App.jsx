@@ -237,6 +237,28 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   );
 }
 
+// ── A defect the reason list does not cover: the operator types it ───────────
+function ReasonTextForm({ match, onSubmit, onBack }) {
+  const [text, setText] = useState("");
+  const onKey = e => {
+    if (e.key === "Enter")  { e.preventDefault(); if (text.trim()) onSubmit(text); }
+    if (e.key === "Escape") { e.preventDefault(); onBack(); }
+  };
+  return (
+    <div style={{ width: "100%", maxWidth: 560, padding: "0 24px", boxSizing: "border-box" }}>
+      <div style={{ fontSize: 56, textAlign: "center", lineHeight: 1 }}>✎</div>
+      <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#a78bfa", textAlign: "center", marginBottom: 6 }}>What's wrong with it?</div>
+      {match && <div style={{ fontSize: 18, color: "#c4b5fd", textAlign: "center", marginBottom: 10 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}</div>}
+      <div style={{ fontSize: 15, color: "#c4b5fd", textAlign: "center", marginBottom: 18, opacity: 0.9 }}>A few words — the supervisor reads exactly this and decides where it goes.</div>
+      <input value={text} onChange={e => setText(e.target.value)} onKeyDown={onKey} autoFocus placeholder="e.g. hole under the left arm" maxLength={120} style={{ ...inputSt, fontSize: 22, padding: "12px 14px", marginBottom: 14 }} />
+      <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+        <button disabled={!text.trim()} onClick={() => onSubmit(text)} style={{ ...bigBtn, width: "auto", padding: "12px 28px", background: "#a78bfa", color: "#0d1117", opacity: text.trim() ? 1 : 0.5 }}>✓ Send to supervisor <Kbd>Enter</Kbd></button>
+        <button onClick={onBack} style={{ ...btnGhost, fontSize: 15, padding: "12px 20px" }}>← Back <Kbd light>Esc</Kbd></button>
+      </div>
+    </div>
+  );
+}
+
 // ── Manual entry: the camera could not read it, or it is not on the roster ───
 function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
   const [number, setNumber] = useState(detected?.number || "");
@@ -517,7 +539,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
   const isGreen = mode === "confirm" || mode === "done";
   const isList  = mode === "pick" || mode === "close";
   const isRed   = mode === "flag" || mode === "duplicate" || mode === "supervisor";
-  const isMenu  = mode === "reasons";
+  const isMenu  = mode === "reasons" || mode === "reasonText";
   const isManual = mode === "manual" || mode === "manualDone";
 
   const bg     = isGreen ? "#052e16" : (isList || isManual) ? "#1c1a06" : isMenu ? "#1a1033" : "#450a0a";
@@ -551,6 +573,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
     if (mode === "duplicate")  return [{ id: "skip", label: "✓ Already done — skip", primary: true, hint: "nothing is recorded", run: actions.skipDuplicate }, retry, { id: "dup", label: "🚩 Log it as a duplicate", run: actions.flagDuplicate }];
     if (mode === "reasons")    return [...REASONS.map(r => ({ id: r.id, label: r.label, hint: r.route, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") return [{ id: "cont", label: "✓ Continue — next jersey", primary: true, run: actions.continueSupervisor }];
+    if (mode === "reasonText") return [];   // typing, not navigating
     return [];
   }, [mode, isList, candidates, actions, state.typed]);
 
@@ -575,7 +598,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
     const onKey = (e) => {
       if (e.repeat) return;                       // a held key or pedal is one press, not many
       if (mode === "done") return;
-      if (mode === "manual") { if (e.code === "Escape") { e.preventDefault(); actions.back(); } return; }   // typing, not navigating
+      if (mode === "manual" || mode === "reasonText") { if (e.code === "Escape") { e.preventDefault(); actions.back(); } return; }   // typing, not navigating
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       if (e.code === retryKey) { const o = options.find(x => x.id === "retry"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }
       if (e.code === byHandKey) { const o = options.find(x => x.id === "manual"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }   // straight to the form, like R goes straight to retry
@@ -725,6 +748,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
           </div>
           <div style={{ marginTop: 10, fontSize: 13, color: "rgba(255,255,255,0.35)", textAlign: "center" }}>{hintLine}</div>
         </>
+      )}
+
+      {/* ── A reason the list does not cover ── */}
+      {mode === "reasonText" && (
+        <ReasonTextForm match={match} onSubmit={actions.reasonSubmit} onBack={actions.back} />
       )}
 
       {/* ── MANUAL entry and its confirmation ── */}
@@ -1356,10 +1384,20 @@ export default function App() {
     chooseReason(r) {
       const o = overlay; if (!o) return;
       if (r.inPlace) { setOverlay({ ...(o.returnTo || { mode: "flag", scan: o.scan }), note: r.label }); return; }
+      if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it
       const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, match: o.match || null, status: S_FLAGGED, reason: r.label, reasonId: r.id, ...stamp() };
       if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
       setLog(prev => [entry, ...prev]); setLastResult(entry);
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: r.label, route: r.route });
+      playTone("flag");
+    },
+    reasonSubmit(text) {
+      const o = overlay; if (!o) return;
+      const label = String(text || "").trim(); if (!label) return;
+      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, match: o.match || null, status: S_FLAGGED, reason: label, reasonId: "other", ...stamp() };
+      if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
+      setLog(prev => [entry, ...prev]); setLastResult(entry);
+      setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: label, route: "Supervisor decides" });
       playTone("flag");
     },
     flagContinue() {

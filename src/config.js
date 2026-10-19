@@ -15,6 +15,7 @@ export const REASONS = [
   { id: "stitching",        label: "Stitching or seam",            route: "Supervisor → stitcher" },
   { id: "cleaning",         label: "Cleaning not done",            route: "Supervisor → back to cleaning" },
   { id: "mark",             label: "Mark or dirt — clean it here", route: "Clean in place", inPlace: true },
+  { id: "other",            label: "Something else — type it",     route: "Supervisor decides", custom: true },   // free text, for what the list does not cover
 ];
 
 // Role gate. This is a convenience gate so a passer-by cannot use a station,
