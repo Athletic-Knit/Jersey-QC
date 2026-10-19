@@ -155,10 +155,13 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   // Rosters the supervisor has sent to the hub, if a hub is running.
   useEffect(() => {
     let on = true;
-    // Only rosters sent to this station, or to any station.
+    // Only rosters sent to this station, or to any station — checked every few
+    // seconds, so an order the supervisor sends while this screen is open appears by itself.
     const mine = stationId();
-    hub.rosters().then(r => { if (on) setHubRosters((r.rosters || []).filter(x => !x.forStation || x.forStation === mine)); }).catch(() => {});
-    return () => { on = false; };
+    const load = () => hub.rosters().then(r => { if (on) setHubRosters((r.rosters || []).filter(x => !x.forStation || x.forStation === mine)); }).catch(() => {});
+    load();
+    const t = setInterval(load, 5000);
+    return () => { on = false; clearInterval(t); };
   }, []);
 
   const handleFile = (e) => { const f = e.target.files[0]; if (f) { setFile(f); setPicked(null); setError(null); } e.target.value = ""; };
@@ -199,6 +202,11 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           {canSupervise && <button onClick={onSupervisor} style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, borderColor: "#f59e0b", color: "#fcd34d" }}>Supervisor view</button>}
           <button onClick={onSignOut} style={{ ...btnGhost, padding: "1px 8px", fontSize: 11 }}>Sign out</button>
         </div>
+        {hubRosters.length === 0 && (
+          <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 8, border: "1px dashed #334155", color: "#94a3b8", fontSize: 13, textAlign: "center" }}>
+            <span style={{ color: "#60a5fa" }}>●</span> Waiting for the supervisor to send an order — it will appear here by itself. Or load a roster file below.
+          </div>
+        )}
         {hubRosters.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>From the supervisor</label>
@@ -466,7 +474,9 @@ function SupervisorPanel({ operatorName, onClose }) {
                 <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2 }}>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong></div>
                 <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: s.counts?.remaining === 0 ? "#22c55e" : "#3b82f6" }} /></div>
                 <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, marginRight: 6 }}>{(s.counts?.total ?? 0) - (s.counts?.remaining ?? 0)}<span style={{ fontSize: 14, color: "#64748b", fontWeight: 600 }}> / {s.counts?.total ?? 0}</span></div>
+                  {s.counts?.total > 0
+                    ? <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, marginRight: 6 }}>{(s.counts?.total ?? 0) - (s.counts?.remaining ?? 0)}<span style={{ fontSize: 14, color: "#64748b", fontWeight: 600 }}> / {s.counts?.total ?? 0}</span></div>
+                    : <div style={{ fontSize: 15, fontWeight: 700, color: "#60a5fa", marginRight: 6 }}>Waiting for an order</div>}
                   <Pill color="#22c55e">{s.counts?.pass ?? 0} pass</Pill>
                   {s.counts?.flag > 0 && <Pill color="#ef4444">{s.counts.flag} with supervisor</Pill>}
                   {s.counts?.manual > 0 && <Pill color="#f59e0b">{s.counts.manual} by hand</Pill>}
@@ -474,7 +484,9 @@ function SupervisorPanel({ operatorName, onClose }) {
                 </div>
                 <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>
                   <strong style={{ color: "#e2e8f0" }}>{s.day?.date === todayStr ? s.day.done : 0}</strong> today
-                  {s.counts?.remaining === 0 && s.counts?.total > 0
+                  {!(s.counts?.total > 0)
+                    ? " · signed in, no order yet — send one with the form"
+                    : s.counts?.remaining === 0
                     ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>order done</span></>
                     : stale ? " · pace unknown — not reporting"
                       : s.rate ? <> · <strong style={{ color: "#e2e8f0" }}>{Math.round(s.rate)}</strong>/h · about {fmtMin(s.etaMin)} left</>
@@ -515,7 +527,7 @@ function SupervisorPanel({ operatorName, onClose }) {
             <select value={target} onChange={e => setTarget(e.target.value)} style={{ ...inputSt, fontSize: 13 }}>
               <option value="">Any station — first to take it</option>
               {data.stations.slice().sort((a, b) => stationLabel(a.id).localeCompare(stationLabel(b.id), undefined, { numeric: true })).map(s => (
-                <option key={s.id} value={s.id}>{stationLabel(s.id)} · {s.operatorName || "—"}{age(s) > 30 ? " (not reporting)" : ""}</option>
+                <option key={s.id} value={s.id}>{stationLabel(s.id)} · {s.operatorName || "—"}{age(s) > 30 ? " (not reporting)" : !(s.counts?.total > 0) ? " (waiting for an order)" : ` (on order ${s.orderNumber || "—"})`}</option>
               ))}
             </select>
             {data.stations.length === 0 && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Stations appear here once they have signed in and started once today.</div>}
@@ -1139,15 +1151,17 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", h);
   }, [sessionStarted, log.length]);
 
-  // Report to the hub (if one is running) so a supervisor can see this station.
+  // Report to the hub (if one is running) so a supervisor can see this station —
+  // from sign-in on, so a station waiting for its first order is already on the
+  // board and can be sent one. Supervisors on their own screen do not report.
   useEffect(() => {
-    if (!sessionStarted) return;
+    if (!signedIn || (role === "supervisor" && !sessionStarted)) return;
     const id = stationId();
-    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber, notes, rosterFile, roster, log, lastConfirmed })).then(() => setHubOk(true)).catch(() => setHubOk(false));
+    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", notes, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null })).then(() => setHubOk(true)).catch(() => setHubOk(false));
     send();
     const t = setInterval(send, 5000);
     return () => clearInterval(t);
-  }, [sessionStarted, operatorName, role, orderNumber, notes, rosterFile, roster, log, lastConfirmed]);
+  }, [signedIn, sessionStarted, operatorName, role, orderNumber, notes, rosterFile, roster, log, lastConfirmed]);
 
   // Open the complete modal once every row is accounted for (after at least one scan).
   useEffect(() => {
