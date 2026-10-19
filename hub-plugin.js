@@ -66,12 +66,14 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
           const etaMin = rate ? Math.round((body.counts?.remaining || 0) / rate * 60) : null;
           // Day ledger: every scan event from every station, keyed so a re-sent
           // event (same id) updates in place — a resolution added later lands too.
-          const { events = [], ...rest } = body;
+          const { events = [], rows = [], bins = null, ...rest } = body;
           const led = (state.ledger ||= {}); const dayLed = (led[today] ||= { events: {}, orders: {} });
           events.forEach(ev => { if (ev && ev.id !== undefined) dayLed.events[`${id}|${ev.id}`] = { ...ev, station: id }; });
           if (body.orderNumber) {
+            // The order record keeps the latest roster with each jersey's status, so the
+            // supervisor can download the order's QC Results sheet at any time.
             const ok = `${id}|${body.orderNumber}`; const o = dayLed.orders[ok] || { station: id, order: body.orderNumber, operator: body.operatorName, firstSeen: now };
-            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile };
+            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null };
           }
           Object.keys(led).sort().slice(0, -14).forEach(d => delete led[d]);   // keep two weeks
           state.stations[id] = { ...rest, id, carried, day, history, rate, etaMin, updatedAt: now }; save(); return json(res, 200, { ok: true });

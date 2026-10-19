@@ -341,6 +341,20 @@ const stationLabel = id => { const n = String(id || "").replace(/^st-/, ""); con
 function SupervisorPanel({ operatorName, onClose }) {
   const [data,    setData]    = useState(() => ({ stations: [], now: Date.now() }));
   const [rosters, setRosters] = useState([]);
+  const [orders,  setOrders]  = useState([]);     // every order any station worked today (from the hub's ledger)
+  useEffect(() => {
+    const load = () => hub.ledger().then(l => setOrders(l.orders || [])).catch(() => {});
+    load();
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
+  }, []);
+  // The same QC Results workbook the station exports, built from what the hub holds.
+  const downloadOrderSheet = (o) => hub.ledger().then(l => {
+    const rec = (l.orders || []).find(x => x.station === o.station && x.order === o.order) || o;
+    const rows = rec.rows || [];
+    const log = (l.events || []).filter(e => e.station === rec.station && e.order === rec.order).map(e => ({ match: { _id: e.rowId }, reason: e.reason, resolution: e.resolution, operator: e.operator, timestamp: e.t }));
+    exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "" }, displayColumns(rows), team => binFor(rec.bins, team));
+  }).catch(() => setMsg("Could not fetch that order from the hub."));
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [file,    setFile]    = useState(null);
@@ -458,6 +472,31 @@ function SupervisorPanel({ operatorName, onClose }) {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12, alignContent: "start" }}>
           {data.stations.length === 0 && <div style={{ color: "#64748b", padding: 24 }}>No station has reported yet. A station appears here within a few seconds of starting an order.</div>}
+          {orders.length > 0 && (
+            <div style={{ gridColumn: "1 / -1", order: 99, marginTop: 8 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>Orders today ({orders.length})</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {orders.slice().sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0)).map(o => {
+                  const c = o.counts || {}; const total = c.total ?? 0; const done = total - (c.remaining ?? 0); const finished = total > 0 && c.remaining === 0;
+                  const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+                  return (
+                    <div key={`${o.station}|${o.order}`} style={{ ...card, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>Order {o.order} <span style={{ fontWeight: 400, color: "#64748b" }}>· {stationLabel(o.station)} · {o.operator || "—"}</span></div>
+                        <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                          <strong style={{ color: "#e2e8f0" }}>{done} / {total}</strong> done
+                          {c.flag > 0 && <span style={{ color: "#f87171" }}> · {c.flag} with supervisor</span>}
+                          {c.manual > 0 && <span style={{ color: "#fcd34d" }}> · {c.manual} by hand</span>}
+                          {" · "}{finished ? <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(o.lastSeen)}</span> : `in progress · started ${hm(o.firstSeen)}`}
+                        </div>
+                      </div>
+                      <button onClick={() => downloadOrderSheet(o)} title="The QC Results workbook for this order: every jersey with its status, reason, resolution, inspector and time" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {data.stations.slice().sort((a, b) => stationLabel(a.id).localeCompare(stationLabel(b.id), undefined, { numeric: true })).map(s => {   /* a fixed order: cards must not jump as reports arrive */
             const stale = age(s) > 30;
             return (
@@ -1186,11 +1225,11 @@ export default function App() {
   useEffect(() => {
     if (!signedIn || (role === "supervisor" && !sessionStarted)) return;
     const id = stationId();
-    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", notes, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null })).then(() => setHubOk(true)).catch(() => setHubOk(false));
+    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", notes, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap })).then(() => setHubOk(true)).catch(() => setHubOk(false));
     send();
     const t = setInterval(send, 5000);
     return () => clearInterval(t);
-  }, [signedIn, sessionStarted, operatorName, role, orderNumber, notes, rosterFile, roster, log, lastConfirmed]);
+  }, [signedIn, sessionStarted, operatorName, role, orderNumber, notes, rosterFile, roster, log, lastConfirmed, binMap]);
 
   // Open the complete modal once every row is accounted for (after at least one scan).
   useEffect(() => {
