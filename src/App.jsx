@@ -1047,6 +1047,7 @@ export default function App() {
   const [newRosters, setNewRosters] = useState([]);   // rosters the supervisor sent while this order was running
   const knownRosterIds = useRef(null);                 // what was already waiting when this order started
   const [showHandover, setShowHandover] = useState(false);   // another operator takes over; the order stays
+  const [handsFreePaused, setHandsFreePaused] = useState(false);   // operator paused hands-free; camera stays on, B still scans
   const [showBinSetup,       setShowBinSetup]       = useState(false);
   const [showSupervisor,     setShowSupervisor]     = useState(false);
   const [binMap,             setBinMap]             = useState(null);
@@ -1056,6 +1057,10 @@ export default function App() {
   const binOf          = useCallback(team => binFor(binMap, team), [binMap]);
   const scannedRows    = roster.filter(r => r.scanned && r.scanned !== false);
   const remaining      = roster.filter(r => !r.scanned).length;
+  // Hands-free runs only while it is on in Settings, not paused by the operator,
+  // and the order still has jerseys to scan — a finished order must not keep
+  // reading the empty table.
+  const handsFree      = !!settings.autoScan && !handsFreePaused && remaining > 0;
   const passCount      = roster.filter(r => r.scanned === "pass").length;
   const offRosterFlags = log.filter(l => l.status === S_FLAGGED && l.match?.offRoster && !l.resolution).length;   // typed jerseys that are not on the roster have no row
   const flagCount      = roster.filter(r => r.scanned === "flag").length + offRosterFlags;
@@ -1147,7 +1152,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setNewRosters([]);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setNewRosters([]); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false);
   }, []);
 
@@ -1248,7 +1253,7 @@ export default function App() {
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
   const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHandover;
   useEffect(() => {
-    if (!cameraOn || inputMode !== "camera" || !settings.autoScan) return;
+    if (!cameraOn || inputMode !== "camera" || !handsFree) { gateRef.current.disarm(); return; }   // paused, or nothing left in the order: never scan the empty table
     const id = setInterval(() => {
       const gate = gateRef.current;
       if (modalOpen) { if (gate.armed) { gate.disarm(); setArmed(false); } return; }   // never scan behind a dialog
@@ -1261,7 +1266,7 @@ export default function App() {
       else if (!gate.armed) setArmed(false);
     }, 200);
     return () => clearInterval(id);
-  }, [cameraOn, inputMode, settings.autoScan, overlay, scanning, modalOpen, doTriggerScan, stopCamera]);
+  }, [cameraOn, inputMode, handsFree, overlay, scanning, modalOpen, doTriggerScan, stopCamera]);
 
   // A roster the supervisor sends while an order is running: say so quietly.
   // It is offered on the order screen when this order ends or on New order.
@@ -1281,9 +1286,9 @@ export default function App() {
   }, [sessionStarted]);
 
   const armAutoScan = useCallback(() => {
-    if (!settings.autoScan || !cameraOn || inputMode !== "camera" || modalOpen) return;
+    if (!handsFree || !cameraOn || inputMode !== "camera" || modalOpen) return;
     gateRef.current.arm(lastScanFrameRef.current); setArmed(true);
-  }, [settings.autoScan, cameraOn, inputMode, modalOpen]);
+  }, [handsFree, cameraOn, inputMode, modalOpen]);
 
   // Closing a dialog (complete modal, settings, supervisor view) hands the table
   // back to the operator: re-arm, so the next placement scans without B. The
@@ -1291,9 +1296,15 @@ export default function App() {
   // not scan again. `autoScan` overrides the setting when Settings just saved it.
   const closeDialog = useCallback((hide, autoScan = settings.autoScan) => {
     hide();
-    if (overlay || !autoScan || !cameraOn || inputMode !== "camera") return;
+    if (overlay || !autoScan || handsFreePaused || remaining === 0 || !cameraOn || inputMode !== "camera") return;
     gateRef.current.arm(lastScanFrameRef.current); setArmed(true);
-  }, [overlay, settings.autoScan, cameraOn, inputMode]);
+  }, [overlay, settings.autoScan, handsFreePaused, remaining, cameraOn, inputMode]);
+  // Pause/resume hands-free from the camera panel: the camera stays on and B still scans.
+  const toggleHandsFree = () => {
+    if (!handsFreePaused) { gateRef.current.disarm(); setArmed(false); setHandsFreePaused(true); return; }
+    setHandsFreePaused(false);
+    if (settings.autoScan && cameraOn && inputMode === "camera" && !modalOpen && !overlay && remaining > 0) { gateRef.current.arm(lastScanFrameRef.current); setArmed(true); }
+  };
 
   // ── Photo upload ──────────────────────────────────────────────────────────
   const handlePhotoUpload = useCallback((e) => {
@@ -1631,8 +1642,8 @@ export default function App() {
                     {cameraOn && !scanning && (
                       <>
                         <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,0.55)", padding: "3px 9px", borderRadius: 20 }}>
-                          <div style={{ width: 7, height: 7, borderRadius: "50%", background: armed ? "#f59e0b" : "#22c55e", boxShadow: `0 0 5px ${armed ? "#f59e0b" : "#22c55e"}` }} />
-                          <span style={{ fontSize: 10, color: "#e2e8f0" }}>{armed ? "Waiting for the next jersey…" : "Ready"}</span>
+                          <div style={{ width: 7, height: 7, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e"}` }} />
+                          <span style={{ fontSize: 10, color: "#e2e8f0" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? "Hands-free paused — B to scan" : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : "Ready"}</span>
                         </div>
                         <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.55)", color: "#94a3b8", fontSize: 10, padding: "3px 9px", borderRadius: 12, whiteSpace: "nowrap" }}>
                           Press <kbd style={{ background: "#1e293b", padding: "1px 4px", borderRadius: 3, fontSize: 10 }}>{keyLabel}</kbd> to scan
@@ -1644,7 +1655,9 @@ export default function App() {
                     {!cameraOn
                       ? <button onClick={startCamera} style={{ ...btnPri, flex: 1, fontSize: 15, padding: "12px" }}>Start Camera</button>
                       : <>
-                          <button onClick={stopCamera} style={{ ...btnGhost, width: 42 }}>■</button>
+                          <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 42 }}>■</button>
+                          {settings.autoScan && <button onClick={toggleHandsFree} title={handsFreePaused ? "Resume hands-free scanning" : "Pause hands-free — the camera stays on and B still scans"}
+                            style={{ ...btnGhost, padding: "0 12px", fontSize: 13, borderColor: handsFreePaused ? "#f59e0b" : undefined, color: handsFreePaused ? "#fcd34d" : undefined }}>{handsFreePaused ? "▶ Hands-free" : "⏸ Hands-free"}</button>}
                           <button onClick={() => { gateRef.current.disarm(); setArmed(false); doTriggerScan(); }} disabled={scanning}
                             style={{ ...btnPri, flex: 1, fontSize: 18, padding: "12px", opacity: scanning ? 0.4 : 1 }}>
                             {scanning ? "Reading…" : "⚡ SCAN"}
