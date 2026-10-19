@@ -1096,6 +1096,22 @@ export default function App() {
   const knownRosterIds = useRef(null);                 // what was already waiting when this order started
   const [showHandover, setShowHandover] = useState(false);   // another operator takes over; the order stays
   const [handsFreePaused, setHandsFreePaused] = useState(false);   // operator paused hands-free; camera stays on, B still scans
+  // Browser full screen (hides tabs and address bar). Browsers allow it only
+  // from a click, so it is a header button; F11 does the same in Chrome.
+  const [isFullscreen, setIsFullscreen] = useState(() => typeof document !== "undefined" && !!document.fullscreenElement);
+  useEffect(() => {
+    const on = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
+  const [fsHint, setFsHint] = useState(null);
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) { document.exitFullscreen?.().catch(() => {}); return; }
+    const p = document.documentElement.requestFullscreen?.();
+    if (!p) { setFsHint("Press F11 for full screen"); return; }
+    p.catch(() => setFsHint("The browser refused — press F11 instead"));
+    setTimeout(() => setFsHint(null), 6000);
+  };
   // Wide screen: the result screen takes the right half and the camera stays
   // where it is; on a narrow screen it still takes the whole display.
   const [wide, setWide] = useState(() => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 1000px)").matches : true));
@@ -1648,6 +1664,8 @@ export default function App() {
           {sessionStarted && <button onClick={startNewOrder} title="Finish this order and set up the next one — no PIN needed" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>New order</button>}
           {signedIn && sessionStarted && <button onClick={() => setShowHandover(true)} title="Another operator takes over this station — the order keeps going" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>Change operator</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>Sign out</button>}
+          <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>{isFullscreen ? "⤢ Exit full screen" : "⛶ Full screen"}</button>
+          {fsHint && <span style={{ fontSize: 11, color: "#fcd34d" }}>{fsHint}</span>}
           <button onClick={() => setShowSettings(true)} style={{ ...btnGhost, padding: "3px 9px" }}>⚙</button>
         </div>
       </div>
