@@ -44,7 +44,8 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
           // under the station until the supervisor marks them done.
           let carried = prev?.carried || [];
           if (prev && prev.orderNumber && body.orderNumber !== prev.orderNumber) {
-            const open = (prev.attention || []).filter(a => !a.resolution).map(a => ({ ...a, order: prev.orderNumber, key: `${prev.orderNumber}|${a.time}|${a.jersey}|${a.status}` }));
+            // Key without the order number: if the order is renamed twice the same jersey must not be listed twice.
+            const open = (prev.attention || []).filter(a => !a.resolution).map(a => ({ ...a, order: prev.orderNumber, key: `${a.time}|${a.jersey}|${a.status}` }));
             const seen = new Set(carried.map(c => c.key));
             carried = [...open.filter(c => !seen.has(c.key)), ...carried].slice(0, 50);
           }
