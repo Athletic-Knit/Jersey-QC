@@ -352,6 +352,7 @@ function SupervisorPanel({ operatorName, onClose }) {
   const downloadOrderSheet = (o) => hub.ledger().then(l => {
     const rec = (l.orders || []).find(x => x.station === o.station && x.order === o.order) || o;
     const rows = rec.rows || [];
+    if (!rows.length) { setMsg(`The hub has no jersey list for order ${o.order} on ${stationLabel(o.station)} — that station last reported before today's update, or the order was done before it. Press Export on the station for its sheet; reload the station page so future orders come through.`); return; }
     const log = (l.events || []).filter(e => e.station === rec.station && e.order === rec.order).map(e => ({ match: { _id: e.rowId }, reason: e.reason, resolution: e.resolution, operator: e.operator, timestamp: e.t }));
     exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "" }, displayColumns(rows), team => binFor(rec.bins, team));
   }).catch(() => setMsg("Could not fetch that order from the hub."));
@@ -511,7 +512,12 @@ function SupervisorPanel({ operatorName, onClose }) {
                     )}
                   </div>
                 </div>
-                <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2 }}>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong></div>
+                <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2, display: "flex", alignItems: "center", gap: 10 }}>
+                  <span>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong></span>
+                  {s.orderNumber && s.counts?.total > 0 && (
+                    <button onClick={() => downloadOrderSheet({ station: s.id, order: s.orderNumber, operator: s.operatorName })} title="Download this order's QC Results sheet: every jersey with its status, reason, inspector and time" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet</button>
+                  )}
+                </div>
                 <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: s.counts?.remaining === 0 ? "#22c55e" : "#3b82f6" }} /></div>
                 <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
                   {s.counts?.total > 0
