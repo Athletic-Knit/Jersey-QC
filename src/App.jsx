@@ -334,6 +334,110 @@ function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
   );
 }
 
+// ── Order view for the supervisor: the roster with every jersey's status, and
+// the order's log, read from the hub's day ledger. Works for finished orders
+// and for ones still running, without touching the station.
+function OrderView({ station, order, stationLabel, onClose, onDownload }) {
+  const [data, setData] = useState(null);     // { rec, events }
+  const [tab,  setTab]  = useState("roster");
+  const [err,  setErr]  = useState(null);
+  useEffect(() => {
+    let on = true;
+    const load = () => hub.ledger().then(l => {
+      if (!on) return;
+      const rec = (l.orders || []).find(x => x.station === station && x.order === order);
+      const events = (l.events || []).filter(e => e.station === station && e.order === order).sort((a, b) => String(b.t).localeCompare(String(a.t)));
+      setData({ rec, events });
+    }).catch(() => on && setErr("Could not fetch this order from the hub."));
+    load();
+    const t = setInterval(load, 5000);   // a running order keeps updating
+    return () => { on = false; clearInterval(t); };
+  }, [station, order]);
+  useEffect(() => { const h = e => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
+
+  const rec = data?.rec, events = data?.events || [], rows = rec?.rows || [];
+  const c = rec?.counts || {}; const total = c.total ?? rows.length; const done = total - (c.remaining ?? 0);
+  const latestByRow = new Map(); [...events].reverse().forEach(e => { if (e.rowId !== undefined && e.rowId !== null) latestByRow.set(e.rowId, e); });
+  const label = s => ({ pass: "PASS", flag: "FLAGGED", manual: "BY HAND", missing: "MISSING", short: "SHORT-SHIPPED" }[s] || "not scanned");
+  const colour = s => s === "pass" ? "#22c55e" : s === "flag" ? "#ef4444" : s === "manual" ? "#f59e0b" : s === "missing" || s === "short" ? "#f59e0b" : "#475569";
+  const evColour = s => s === "pass" ? "#22c55e" : s === "flagged" ? "#ef4444" : s === "manual" ? "#f59e0b" : s === "undo" ? "#f59e0b" : "#94a3b8";
+  const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+  const flaggedRows = rows.filter(r => r.scanned === "flag"), byHandRows = rows.filter(r => r.scanned === "manual");
+  const offRoster = events.filter(e => e.status === "flagged" && e.offRoster);
+  const th = { textAlign: "left", fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, padding: "6px 8px", borderBottom: "1px solid #21262d", position: "sticky", top: 0, background: "#0d1117" };
+  const td = { padding: "6px 8px", borderBottom: "1px solid #161b22", fontSize: 13, verticalAlign: "top" };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1900, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px, 100%)", height: "min(820px, 100%)", background: "#0d1117", border: "1px solid #334155", borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", color: "#e2e8f0" }}>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid #21262d", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>Order {order} <span style={{ fontWeight: 400, color: "#64748b", fontSize: 14 }}>· {stationLabel(station)} · {rec?.operator || "—"}</span></div>
+            <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
+              {rec ? <>{done} / {total} done · {c.pass ?? 0} pass · <span style={{ color: c.flag ? "#f87171" : undefined }}>{c.flag ?? 0} with supervisor</span> · <span style={{ color: c.manual ? "#fcd34d" : undefined }}>{c.manual ?? 0} by hand</span>{offRoster.length ? <> · <span style={{ color: "#f87171" }}>{offRoster.length} not on roster</span></> : null} · started {hm(rec.firstSeen)}{total > 0 && c.remaining === 0 ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(rec.lastSeen)}</span></> : <> · in progress</>}{rec.notes ? <> · notes: <span style={{ color: "#fcd34d" }}>{rec.notes}</span></> : null}</> : err || "Loading…"}
+            </div>
+          </div>
+          <button onClick={() => onDownload({ station, order, operator: rec?.operator })} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet (Excel)</button>
+          <button onClick={onClose} style={{ ...btnGhost, padding: "6px 12px" }}>✕ Close <Kbd light>Esc</Kbd></button>
+        </div>
+        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #21262d", flexShrink: 0 }}>
+          {[["roster", `Roster (${rows.length})`], ["problems", `Problems (${flaggedRows.length + byHandRows.length + offRoster.length})`], ["log", `Log (${events.length})`]].map(([id, t]) => (
+            <button key={id} onClick={() => setTab(id)} style={{ background: "transparent", border: 0, borderBottom: `2px solid ${tab === id ? "#3b82f6" : "transparent"}`, color: tab === id ? "#60a5fa" : "#94a3b8", padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t}</button>
+          ))}
+        </div>
+        <div style={{ flex: 1, overflow: "auto" }}>
+          {rec && !rows.length && <div style={{ padding: 24, color: "#fcd34d" }}>The hub has no jersey list for this order — the station reported it before today's update. The station's Export has the sheet; reload the station page so future orders come through.</div>}
+          {!rec && !err && <div style={{ padding: 24, color: "#64748b" }}>Loading…</div>}
+          {!rec && err && <div style={{ padding: 24, color: "#f87171" }}>{err}</div>}
+          {rec && rows.length > 0 && (tab === "roster" || tab === "problems") && (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr><th style={th}>Status</th><th style={th}>Name</th><th style={th}>Number</th><th style={th}>Team</th><th style={th}>Size</th><th style={th}>Bin</th><th style={th}>What happened</th><th style={th}>Inspector · time</th></tr></thead>
+              <tbody>
+                {(tab === "roster" ? rows : rows.filter(r => r.scanned === "flag" || r.scanned === "manual")).map((r, i) => {
+                  const e = latestByRow.get(r._id);
+                  return (
+                    <tr key={r._id ?? i} style={{ background: r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned === "manual" ? "rgba(245,158,11,0.07)" : "transparent" }}>
+                      <td style={{ ...td, color: colour(r.scanned), fontWeight: 700, whiteSpace: "nowrap" }}>{label(r.scanned)}</td>
+                      <td style={td}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{r.size || ""}</td>
+                      <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binFor(rec.bins, r.team) !== null ? `Bin ${binFor(rec.bins, r.team)}` : ""}</td>
+                      <td style={{ ...td, color: "#cbd5e1" }}>{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
+                      <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
+                    </tr>
+                  );
+                })}
+                {tab === "problems" && offRoster.map((e, i) => (
+                  <tr key={"off" + i} style={{ background: "rgba(239,68,68,0.07)" }}>
+                    <td style={{ ...td, color: "#ef4444", fontWeight: 700, whiteSpace: "nowrap" }}>NOT ON ROSTER</td>
+                    <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{e.size || ""}</td><td style={td}></td>
+                    <td style={{ ...td, color: "#cbd5e1" }}>{e.reason}{e.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
+                    <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
+                  </tr>
+                ))}
+                {tab === "problems" && flaggedRows.length + byHandRows.length + offRoster.length === 0 && <tr><td colSpan={8} style={{ ...td, color: "#22c55e", padding: 18 }}>No problems on this order — nothing went to the supervisor and nothing was entered by hand.</td></tr>}
+              </tbody>
+            </table>
+          )}
+          {rec && tab === "log" && (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr><th style={th}>Time</th><th style={th}>What</th><th style={th}>Jersey</th><th style={th}>Reason / note</th><th style={th}>Resolution</th><th style={th}>Inspector</th></tr></thead>
+              <tbody>
+                {events.map((e, i) => (
+                  <tr key={e.id ?? i}>
+                    <td style={{ ...td, color: "#64748b", whiteSpace: "nowrap" }}>{String(e.t).slice(11)}</td>
+                    <td style={{ ...td, color: evColour(e.status), fontWeight: 700, textTransform: "uppercase", fontSize: 11 }}>{e.status === "flagged" && e.offRoster ? "not on roster" : e.status === "undo" ? "un-checked" : e.status}</td>
+                    <td style={td}>#{e.number}{e.name ? ` · ${e.name}` : ""}{e.size ? ` · ${e.size}` : ""}</td>
+                    <td style={{ ...td, color: "#cbd5e1" }}>{e.reason}</td><td style={{ ...td, color: "#94a3b8" }}>{e.resolution}</td><td style={{ ...td, color: "#94a3b8" }}>{e.operator}</td>
+                  </tr>
+                ))}
+                {events.length === 0 && <tr><td colSpan={6} style={{ ...td, color: "#64748b", padding: 18 }}>No scans recorded for this order on the hub.</td></tr>}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Supervisor view: every station live, and rosters to send ─────────────────
 // "st-line2" (from ?station=line2) reads as "Line 2"; any other id as itself.
 const stationLabel = id => { const n = String(id || "").replace(/^st-/, ""); const m = n.match(/^line[-_ ]?(\d+)$/i); return m ? `Line ${m[1]}` : n || "station"; };
@@ -342,6 +446,7 @@ function SupervisorPanel({ operatorName, onClose }) {
   const [data,    setData]    = useState(() => ({ stations: [], now: Date.now() }));
   const [rosters, setRosters] = useState([]);
   const [orders,  setOrders]  = useState([]);     // every order any station worked today (from the hub's ledger)
+  const [openOrder, setOpenOrder] = useState(null);   // { station, order } shown in the order view
   useEffect(() => {
     const load = () => hub.ledger().then(l => setOrders(l.orders || [])).catch(() => {});
     load();
@@ -454,6 +559,7 @@ function SupervisorPanel({ operatorName, onClose }) {
           <button onClick={() => setBacklog(null)} style={{ background: "transparent", border: 0, color: "#fde68a", cursor: "pointer", fontSize: 15 }}>✕</button>
         </div>
       )}
+      {openOrder && <OrderView station={openOrder.station} order={openOrder.order} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} />}
       {alerts.length > 0 && (
         <div style={{ position: "absolute", top: 54, right: 16, width: 380, maxWidth: "calc(100% - 32px)", zIndex: 1900, display: "flex", flexDirection: "column", gap: 8 }}>
           {alerts.length > 3 && <div style={{ textAlign: "right", fontSize: 12, color: "#fca5a5" }}>{alerts.length - 3} more — see the cards</div>}
@@ -491,6 +597,7 @@ function SupervisorPanel({ operatorName, onClose }) {
                           {" · "}{finished ? <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(o.lastSeen)}</span> : `in progress · started ${hm(o.firstSeen)}`}
                         </div>
                       </div>
+                      <button onClick={() => setOpenOrder({ station: o.station, order: o.order })} title="Open this order: roster with statuses, problems, and the log" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
                       <button onClick={() => downloadOrderSheet(o)} title="The QC Results workbook for this order: every jersey with its status, reason, resolution, inspector and time" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet</button>
                     </div>
                   );
@@ -515,7 +622,7 @@ function SupervisorPanel({ operatorName, onClose }) {
                 <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2, display: "flex", alignItems: "center", gap: 10 }}>
                   <span>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong></span>
                   {s.orderNumber && s.counts?.total > 0 && (
-                    <button onClick={() => downloadOrderSheet({ station: s.id, order: s.orderNumber, operator: s.operatorName })} title="Download this order's QC Results sheet: every jersey with its status, reason, inspector and time" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet</button>
+                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber })} title="Open this order: every jersey with its status, what was flagged and why, and the log" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
                   )}
                 </div>
                 <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: s.counts?.remaining === 0 ? "#22c55e" : "#3b82f6" }} /></div>
