@@ -49,6 +49,7 @@ function statusColor(s) {
   if (s === S_PASS)    return "#22c55e";
   if (s === S_FLAGGED) return "#ef4444";
   if (s === S_MANUAL)  return "#94a3b8";
+  if (s === "undo")    return "#f59e0b";
   return "#64748b";
 }
 
@@ -580,7 +581,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, cancelKey, retryKey, byHandKey, stream, rotation }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, cancelKey, retryKey, byHandKey, stream, rotation, embedded }) {
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
   const isList  = mode === "pick" || mode === "close";
@@ -677,7 +678,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
   const hintLine = `${formatKey(confirmKey)} select · ${formatKey(cancelKey)} or ↓ next option · ↑ previous · ${formatKey(retryKey)} retry scan · ${formatKey(byHandKey)} enter by hand`;
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "none", padding: "20px 0", overflowY: "auto" }}>
+    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "none", padding: "20px 0", overflowY: "auto" }}>
 
       {/* ── GREEN ── */}
       {isGreen && match && (
@@ -854,7 +855,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
           <img src={state.scan.thumb} alt="" style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6 }} />
         </div>
       )}
-      {mode !== "manual" && mode !== "reasonText" && <LivePreview stream={stream} rotation={rotation} />}
+      {!embedded && mode !== "manual" && mode !== "reasonText" && <LivePreview stream={stream} rotation={rotation} />}
     </div>
   );
 }
@@ -1095,6 +1096,16 @@ export default function App() {
   const knownRosterIds = useRef(null);                 // what was already waiting when this order started
   const [showHandover, setShowHandover] = useState(false);   // another operator takes over; the order stays
   const [handsFreePaused, setHandsFreePaused] = useState(false);   // operator paused hands-free; camera stays on, B still scans
+  // Wide screen: the result screen takes the right half and the camera stays
+  // where it is; on a narrow screen it still takes the whole display.
+  const [wide, setWide] = useState(() => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 1000px)").matches : true));
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia("(min-width: 1000px)");
+    const on = e => setWide(e.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   const [showBinSetup,       setShowBinSetup]       = useState(false);
   const [showSupervisor,     setShowSupervisor]     = useState(false);
   const [binMap,             setBinMap]             = useState(null);
@@ -1529,6 +1540,23 @@ export default function App() {
     setRoster(prev => prev.map(r => r._id === id ? { ...r, scanned: mark } : r));
   }, []);
 
+  // Un-check a jersey that was confirmed by mistake: it goes back to Remaining
+  // and must be scanned again. The earlier log lines stay; a new line says who
+  // un-checked it, and any open flag or by-hand entry for it is closed so the
+  // supervisor's list drops it.
+  const unscan = useCallback((id) => {
+    const row = roster.find(r => r._id === id); if (!row || !row.scanned) return;
+    const was = { pass: "passed", manual: "entered by hand", flag: "with the supervisor", missing: "marked missing", short: "marked short-shipped" }[row.scanned] || row.scanned;
+    if (!window.confirm(`Un-check #${row.number}${row.name ? " · " + row.name : ""} (${was})?\n\nIt goes back to Remaining and must be scanned again.`)) return;
+    setRoster(prev => prev.map(r => r._id === id ? { ...r, scanned: false } : r));
+    const resolution = `Un-checked by ${operatorName || "operator"} — to be scanned again`;
+    setLog(prev => [
+      { id: Date.now(), match: { ...row, scanned: false }, status: "undo", reason: `Un-checked — was ${was}; scan it again`, ...stamp() },
+      ...prev.map(l => l.match?._id === id && (l.status === S_FLAGGED || l.status === S_MANUAL) && !l.resolution ? { ...l, resolution } : l),
+    ]);
+    setLastResult(r => (r?.match?._id === id ? null : r)); setLastConfirmed(c => (c?.match?._id === id ? null : c));
+  }, [roster, operatorName, stamp]);
+
   // ── Global keyboard: scan trigger only ───────────────────────────────────
   useEffect(() => {
     const onKey = (e) => {
@@ -1580,7 +1608,7 @@ export default function App() {
         <BinSetupModal entries={binEntries(roster, binMap)} onConfirm={() => setShowBinSetup(false)} />
       )}
 
-      {overlay && (
+      {overlay && !wide && (
         <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
           stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} />
       )}
@@ -1746,6 +1774,9 @@ export default function App() {
                   <span style={{ fontWeight: 700, fontSize: 13 }}>#{lastConfirmed.match?.number}{lastConfirmed.match?.name ? ` · ${lastConfirmed.match.name}` : ""}</span>
                   {lastConfirmed.match?.size && <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 700 }}>{lastConfirmed.match.size}</span>}
                   {binOf(lastConfirmed.match?.team) !== null && <span style={{ fontSize: 11, color: "#60a5fa", fontWeight: 700 }}>Bin {binOf(lastConfirmed.match?.team)}</span>}
+                  {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && r.scanned) && (
+                    <button onClick={() => unscan(lastConfirmed.match._id)} title="Wrong jersey? Un-check it — it goes back to Remaining and must be scanned again" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, borderColor: "#f59e0b", color: "#fcd34d" }}>↶ Undo — scan again</button>
+                  )}
                   <span style={{ fontSize: 10, color: "#475569", marginLeft: "auto" }}>{lastConfirmed.timestamp}</span>
                 </div>
               )}
@@ -1770,8 +1801,12 @@ export default function App() {
           )}
         </div>
 
-        {/* RIGHT: Info panel */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+        {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
+          {overlay && wide && (
+            <ScanOverlay key={overlayKey} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
+              stream={null} rotation={settings.rotation} />
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", borderBottom: "1px solid #21262d", flexShrink: 0 }}>
             {[
@@ -1837,14 +1872,14 @@ export default function App() {
                           ))}
                           {binMap && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{binOf(r.team) !== null ? `Bin ${binOf(r.team)}` : "—"}</td>}
                           <td style={{ ...tdSt, padding: "2px 6px" }}>
-                            {r.scanned !== "pass" && (
-                              <select value={["missing", "short"].includes(r.scanned) ? r.scanned : ""} onChange={e => markRow(r._id, e.target.value || false)}
-                                style={{ background: "#1e293b", color: "#94a3b8", border: "1px solid #334155", borderRadius: 4, fontSize: 10, padding: "2px 4px" }}>
-                                <option value="">—</option>
-                                <option value="missing">Missing</option>
-                                <option value="short">Short-shipped</option>
-                              </select>
-                            )}
+                            <select value={["missing", "short"].includes(r.scanned) ? r.scanned : ""}
+                              onChange={e => { const v = e.target.value; if (v === "unscan") unscan(r._id); else markRow(r._id, v || false); }}
+                              style={{ background: "#1e293b", color: "#94a3b8", border: "1px solid #334155", borderRadius: 4, fontSize: 10, padding: "2px 4px" }}>
+                              <option value="">—</option>
+                              {(!r.scanned || ["missing", "short"].includes(r.scanned))
+                                ? <><option value="missing">Missing</option><option value="short">Short-shipped</option></>
+                                : <option value="unscan">Un-check — scan again</option>}
+                            </select>
                           </td>
                         </tr>
                       ))}

@@ -57,7 +57,7 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
           const done  = doneOf(body.counts);
           const sameOrder = !!prev && prev.orderNumber === body.orderNumber;
           const day = prev?.day?.date === today ? { ...prev.day } : { date: today, done: 0 };
-          day.done += Math.max(0, done - (sameOrder ? doneOf(prev.counts) : 0));
+          day.done = Math.max(0, day.done + (sameOrder ? done - doneOf(prev.counts) : done));   // an un-checked jersey takes one off again
           let history = (sameOrder && prev.history) || [];
           history = [...history, { t: now, done }].filter(h => now - h.t <= 20 * 60000).slice(-300);
           const first = history[0], span = now - first.t;
