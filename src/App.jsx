@@ -237,6 +237,26 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   );
 }
 
+// ── Live camera window on the result screens, so the next jersey can be lined
+// up while the green/yellow/red screen is still up. Same stream, second <video>.
+function LivePreview({ stream, rotation }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const v = ref.current; if (!v || !stream) return;
+    v.srcObject = stream; v.play().catch(() => {});
+    return () => { v.srcObject = null; };
+  }, [stream]);
+  if (!stream) return null;
+  return (
+    <div style={{ position: "absolute", bottom: 12, right: 12, width: "clamp(220px, 26vw, 380px)", borderRadius: 10, overflow: "hidden", border: "2px solid rgba(255,255,255,0.35)", background: "#000", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
+      <div style={{ aspectRatio: "4 / 3", overflow: "hidden" }}>
+        <video ref={ref} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", transform: `rotate(${rotation || 0}deg)`, display: "block" }} />
+      </div>
+      <div style={{ position: "absolute", top: 6, left: 8, fontSize: 11, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.55)", padding: "2px 7px", borderRadius: 10 }}>● Live — line up the next jersey</div>
+    </div>
+  );
+}
+
 // ── A defect the reason list does not cover: the operator types it ───────────
 function ReasonTextForm({ match, onSubmit, onBack }) {
   const [text, setText] = useState("");
@@ -534,7 +554,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, cancelKey, retryKey, byHandKey }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, cancelKey, retryKey, byHandKey, stream, rotation }) {
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
   const isList  = mode === "pick" || mode === "close";
@@ -804,10 +824,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
       )}
 
       {state.scan?.thumb && mode !== "done" && (
-        <div style={{ position: "absolute", bottom: 12, right: 12, opacity: 0.35 }}>
+        <div title="What the camera read" style={{ position: "absolute", bottom: 12, left: 12, opacity: 0.45 }}>
           <img src={state.scan.thumb} alt="" style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6 }} />
         </div>
       )}
+      {mode !== "manual" && mode !== "reasonText" && <LivePreview stream={stream} rotation={rotation} />}
     </div>
   );
 }
@@ -1531,7 +1552,8 @@ export default function App() {
       )}
 
       {overlay && (
-        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey} />
+        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
+          stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} />
       )}
 
       {showSettings && (
