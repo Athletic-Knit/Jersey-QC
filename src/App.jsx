@@ -409,7 +409,13 @@ function SupervisorPanel({ operatorName, onClose }) {
               <div key={s.id} style={{ ...card, padding: 14, border: `1px solid ${stale ? "#334155" : s.counts?.flag ? "#ef4444" : "#21262d"}`, opacity: stale ? 0.6 : 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <div style={{ fontWeight: 800, fontSize: 17 }}><span style={{ color: "#60a5fa" }}>{stationLabel(s.id)}</span> · {s.operatorName || "—"}</div>
-                  <div style={{ fontSize: 11, color: stale ? "#f87171" : "#22c55e" }}>{stale ? `last seen ${fmtMin(Math.round(age(s) / 60))} ago` : "● live"}</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <div style={{ fontSize: 11, color: stale ? "#f87171" : "#22c55e" }}>{stale ? `last seen ${fmtMin(Math.round(age(s) / 60))} ago` : "● live"}</div>
+                    {(stale || (s.counts?.total > 0 && s.counts?.remaining === 0)) && (
+                      <button onClick={() => { if (window.confirm(`Remove ${stationLabel(s.id)} · ${s.operatorName || "—"} from the board? It comes back by itself if that station reports again.`)) hub.removeStation(s.id).then(refresh).catch(() => setMsg("Could not update the hub.")); }}
+                        title="Take this card off the board" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11 }}>Remove</button>
+                    )}
+                  </div>
                 </div>
                 <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2 }}>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong></div>
                 <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: s.counts?.remaining === 0 ? "#22c55e" : "#3b82f6" }} /></div>
