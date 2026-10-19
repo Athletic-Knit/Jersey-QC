@@ -155,7 +155,9 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   // Rosters the supervisor has sent to the hub, if a hub is running.
   useEffect(() => {
     let on = true;
-    hub.rosters().then(r => { if (on) setHubRosters(r.rosters || []); }).catch(() => {});
+    // Only rosters sent to this station, or to any station.
+    const mine = stationId();
+    hub.rosters().then(r => { if (on) setHubRosters((r.rosters || []).filter(x => !x.forStation || x.forStation === mine)); }).catch(() => {});
     return () => { on = false; };
   }, []);
 
@@ -204,7 +206,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
               {hubRosters.map(r => (
                 <button key={r.id} onClick={() => pickRoster(r)}
                   style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "#22c55e" : "#334155", color: picked?.id === r.id ? "#fff" : "#94a3b8", background: picked?.id === r.id ? "rgba(34,197,94,0.12)" : "transparent" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#64748b" }}>· {r.rowCount} jerseys · {r.fileName}</span></div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#64748b" }}>· {r.rowCount} jerseys · {r.fileName}</span>{r.forStation && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>{r.by ? `sent by ${r.by} · ` : ""}{new Date(r.createdAt).toLocaleString()}</div>
                 </button>
               ))}
@@ -333,6 +335,7 @@ function SupervisorPanel({ operatorName, onClose }) {
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [file,    setFile]    = useState(null);
+  const [target,  setTarget]  = useState("");     // station id to send the roster to; "" = any station may take it
   const [msg,     setMsg]     = useState(null);
   const [alerts,  setAlerts]  = useState([]);     // "needs you" items not yet acknowledged here
   const [backlog, setBacklog] = useState(null);   // what was already open when this view opened
@@ -390,8 +393,9 @@ function SupervisorPanel({ operatorName, onClose }) {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const rows = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (!rows.length) { setMsg("No valid rows in that file."); return; }
-      await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), fileName: file.name, rows, by: operatorName });
-      setMsg(`Sent ${file.name} — ${rows.length} jerseys for order ${order.trim() || "—"}. Stations see it on their order screen.`);
+      await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), fileName: file.name, rows, by: operatorName, forStation: target });
+      const to = target ? `${stationLabel(target)} only` : "every station";
+      setMsg(`Sent ${file.name} — ${rows.length} jerseys for order ${order.trim()} to ${to}. It shows on the order screen there.`);
       setFile(null); setOrder(""); setNotes(""); refresh();
     } catch (e) { setMsg("Could not send: " + e.message); }
   };
@@ -505,7 +509,17 @@ function SupervisorPanel({ operatorName, onClose }) {
           })}
         </div>
         <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid #21262d", padding: 14, overflowY: "auto" }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Send a roster to the stations</div>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Send a roster</div>
+          <div style={{ marginBottom: 10 }}>
+            <label style={labelSt}>Send to</label>
+            <select value={target} onChange={e => setTarget(e.target.value)} style={{ ...inputSt, fontSize: 13 }}>
+              <option value="">Any station — first to take it</option>
+              {data.stations.slice().sort((a, b) => stationLabel(a.id).localeCompare(stationLabel(b.id), undefined, { numeric: true })).map(s => (
+                <option key={s.id} value={s.id}>{stationLabel(s.id)} · {s.operatorName || "—"}{age(s) > 30 ? " (not reporting)" : ""}</option>
+              ))}
+            </select>
+            {data.stations.length === 0 && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Stations appear here once they have signed in and started once today.</div>}
+          </div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order number</label><input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
           <div style={{ marginBottom: 12 }}>
@@ -519,7 +533,7 @@ function SupervisorPanel({ operatorName, onClose }) {
           {rosters.map(r => (
             <div key={r.id} style={{ ...card, padding: "8px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#64748b" }}>· {r.rowCount}</span></div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#64748b" }}>· {r.rowCount}</span>{r.forStation ? <span style={{ fontWeight: 600, color: "#60a5fa", marginLeft: 6 }}>→ {stationLabel(r.forStation)}</span> : <span style={{ fontWeight: 400, color: "#64748b", marginLeft: 6 }}>· any station</span>}</div>
                 <div style={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.fileName} · {new Date(r.createdAt).toLocaleTimeString()}</div>
               </div>
               <button onClick={() => hub.removeRoster(r.id).then(refresh).catch(() => {})} style={{ ...btnGhost, padding: "2px 8px", fontSize: 11 }}>Remove</button>
@@ -1293,8 +1307,9 @@ export default function App() {
   // It is offered on the order screen when this order ends or on New order.
   useEffect(() => {
     if (!sessionStarted) { knownRosterIds.current = null; return; }
+    const mine = stationId();
     const check = () => hub.rosters().then(r => {
-      const list = r.rosters || [];
+      const list = (r.rosters || []).filter(x => !x.forStation || x.forStation === mine);   // sent to this station, or to any
       if (knownRosterIds.current === null) { knownRosterIds.current = new Set(list.map(x => x.id)); return; }
       const fresh = list.filter(x => !knownRosterIds.current.has(x.id));
       if (!fresh.length) return;
@@ -1603,7 +1618,7 @@ export default function App() {
 
       {sessionStarted && newRosters.length > 0 && (
         <div style={{ background: "rgba(59,130,246,0.12)", borderBottom: "1px solid rgba(59,130,246,0.4)", padding: "6px 16px", fontSize: 12, color: "#bfdbfe", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <span>📋 <strong>{newRosters.map(r => `Order ${r.orderNumber || "—"} from ${r.by || "the supervisor"} (${r.rowCount} jerseys)`).join(" · ")}</strong> is waiting for you — it is offered when this order ends, or on New order.</span>
+          <span>📋 <strong>{newRosters.map(r => `Order ${r.orderNumber || "—"} from ${r.by || "the supervisor"} (${r.rowCount} ${r.rowCount === 1 ? "jersey" : "jerseys"}${r.forStation ? ", for this station" : ""})`).join(" · ")}</strong> is waiting for you — it is offered when this order ends, or on New order.</span>
           <button onClick={() => setNewRosters([])} title="Hide" style={{ background: "transparent", border: 0, color: "#bfdbfe", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>✕</button>
         </div>
       )}
