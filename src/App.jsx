@@ -8,7 +8,7 @@ import { playTone } from "./lib/audio.js";
 import { readJersey } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { hub, stationId, snapshotOf } from "./lib/hub.js";
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, CHECKLIST, REASONS, ROLES, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
 
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
 
@@ -144,9 +144,24 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
 }
 
 // ── Order setup (every order; no PIN) ─────────────────────────────────────────
+// ECHL / ECHL replica / Sublimated as buttons; "" = not set.
+function JerseyTypePicker({ value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {JERSEY_TYPES.map(t => (
+        <button key={t.id} type="button" onClick={() => onChange(value === t.id ? "" : t.id)} title={t.hint}
+          style={{ ...btnGhost, padding: "6px 12px", fontSize: 13, borderColor: value === t.id ? "#60a5fa" : "#30363d", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "#93c5fd" : "#cbd5e1", fontWeight: value === t.id ? 700 : 400 }}>
+          {t.label} <span style={{ fontSize: 11, color: "#64748b", fontWeight: 400 }}>· {t.construction}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, onSupervisor }) {
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
+  const [jerseyType, setJerseyType] = useState("");
   const [file,    setFile]    = useState(null);
   const [error,   setError]   = useState(null);
   const [loading, setLoading] = useState(false);
@@ -172,7 +187,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     try {
       const full = await hub.roster(summary.id);
       setPicked(full); setFile(null); setError(null);
-      setOrder(full.orderNumber || ""); setNotes(full.notes || "");
+      setOrder(full.orderNumber || ""); setNotes(full.notes || ""); setJerseyType(full.jerseyType || "");
     } catch (e) { setError("Could not fetch that roster: " + e.message); }
   };
 
@@ -181,11 +196,11 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     if (!file && !picked) { setError("Upload a roster file, or pick one the supervisor sent."); return; }
     setLoading(true);
     try {
-      if (picked) { onStart({ roster: picked.rows, orderNumber: order.trim(), notes: notes.trim(), rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})` }); return; }
+      if (picked) { onStart({ roster: picked.rows, orderNumber: order.trim(), notes: notes.trim(), jerseyType, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})` }); return; }
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); return; }
-      onStart({ roster: parsed, orderNumber: order.trim(), notes: notes.trim(), rosterFile: file.name });
+      onStart({ roster: parsed, orderNumber: order.trim(), notes: notes.trim(), jerseyType, rosterFile: file.name });
     } catch (err) {
       setError("Failed to parse roster: " + err.message);
       setLoading(false);
@@ -216,7 +231,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
               {hubRosters.map(r => (
                 <button key={r.id} onClick={() => pickRoster(r)}
                   style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "#22c55e" : "#334155", color: picked?.id === r.id ? "#fff" : "#94a3b8", background: picked?.id === r.id ? "rgba(34,197,94,0.12)" : "transparent" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#64748b" }}>· {r.rowCount} jerseys · {r.fileName}</span>{r.forStation && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#64748b" }}>· {r.rowCount} jerseys · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}</span>{r.forStation && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>{r.by ? `sent by ${r.by} · ` : ""}{new Date(r.createdAt).toLocaleString()}</div>
                 </button>
               ))}
@@ -230,6 +245,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order notes <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. sponsor logo left sleeve · captain C on #19" rows={2} style={{ ...inputSt, resize: "vertical", fontSize: 13 }} />
+          <label style={{ ...labelSt, marginTop: 10 }}>Jersey type <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}>— sets the "not right" menu and the reports</span></label>
+          <JerseyTypePicker value={jerseyType} onChange={setJerseyType} />
         </div>
         <div style={{ marginBottom: 18 }}>
           <label style={labelSt}>{hubRosters.length ? "Or a roster file" : "Roster file"}</label>
@@ -382,13 +399,13 @@ function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto 
       <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px, 100%)", height: "min(820px, 100%)", background: "#0d1117", border: "1px solid #334155", borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", color: "#e2e8f0" }}>
         <div style={{ padding: "12px 16px", borderBottom: "1px solid #21262d", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>Order {order} <span style={{ fontWeight: 400, color: "#64748b", fontSize: 14 }}>· {stationLabel(station)} · {rec?.operator || "—"}</span></div>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>Order {order} <span style={{ fontWeight: 400, color: "#64748b", fontSize: 14 }}>· {stationLabel(station)} · {rec?.operator || "—"}{rec?.jerseyType ? <span style={{ color: "#93c5fd" }}> · {jerseyTypeLabel(rec.jerseyType)}</span> : null}</span></div>
             <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
               {rec ? <>{done} / {total} done · {c.pass ?? 0} pass · <span style={{ color: c.flag ? "#f87171" : undefined }}>{c.flag ?? 0} with supervisor</span> · <span style={{ color: c.manual ? "#fcd34d" : undefined }}>{c.manual ?? 0} by hand</span>{offRoster.length ? <> · <span style={{ color: "#f87171" }}>{offRoster.length} not on roster</span></> : null} · started {hm(rec.firstSeen)}{total > 0 && c.remaining === 0 ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(rec.lastSeen)}</span></> : <> · in progress</>}{rec.notes ? <> · notes: <span style={{ color: "#fcd34d" }}>{rec.notes}</span></> : null}</> : err || "Loading…"}
             </div>
           </div>
           <button onClick={() => onDownload({ station, order, operator: rec?.operator })} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet (Excel)</button>
-          {events.some(e => e.status === "flagged") && <button onClick={() => exportDamageReportXLSX(buildDamageRows(events, { stationLabel }), { name: order, title: `Damage report — order ${order}` }).catch(e => setErr(e.message))} title="Every flagged jersey of this order with its photo" style={{ ...btnGhost, padding: "6px 12px", borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>}
+          {events.some(e => e.status === "flagged") && <button onClick={() => exportDamageReportXLSX(buildDamageRows(events, { stationLabel, typeLabel: jerseyTypeLabel }), { name: order, title: `Damage report — order ${order}` }).catch(e => setErr(e.message))} title="Every flagged jersey of this order with its photo" style={{ ...btnGhost, padding: "6px 12px", borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>}
           <button onClick={onClose} style={{ ...btnGhost, padding: "6px 12px" }}>✕ Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #21262d", flexShrink: 0 }}>
@@ -473,10 +490,11 @@ function SupervisorPanel({ operatorName, onClose }) {
     const rows = rec.rows || [];
     if (!rows.length) { setMsg(`The hub has no jersey list for order ${o.order} on ${stationLabel(o.station)} — that station last reported before today's update, or the order was done before it. Press Export on the station for its sheet; reload the station page so future orders come through.`); return; }
     const log = (l.events || []).filter(e => e.station === rec.station && e.order === rec.order).map(e => ({ match: { _id: e.rowId }, reason: e.reason, resolution: e.resolution, operator: e.operator, timestamp: e.t }));
-    exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "" }, displayColumns(rows), team => binFor(rec.bins, team));
+    exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "", jerseyType: jerseyTypeLabel(rec.jerseyType) }, displayColumns(rows), team => binFor(rec.bins, team));
   }).catch(() => setMsg("Could not fetch that order from the hub."));
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
+  const [jerseyType, setJerseyType] = useState("");
   const [file,    setFile]    = useState(null);
   const [target,  setTarget]  = useState("");     // station id to send the roster to; "" = any station may take it
   const [msg,     setMsg]     = useState(null);
@@ -542,10 +560,10 @@ function SupervisorPanel({ operatorName, onClose }) {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const rows = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (!rows.length) { setMsg("No valid rows in that file."); return; }
-      await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), fileName: file.name, rows, by: operatorName, forStation: target });
+      await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), jerseyType, fileName: file.name, rows, by: operatorName, forStation: target });
       const to = target ? `${stationLabel(target)} only` : "every station";
       setMsg(`Sent ${file.name} — ${rows.length} jerseys for order ${order.trim()} to ${to}. It shows on the order screen there.`);
-      setFile(null); setOrder(""); setNotes(""); refresh();
+      setFile(null); setOrder(""); setNotes(""); setJerseyType(""); refresh();
     } catch (e) { setMsg("Could not send: " + e.message); }
   };
 
@@ -703,7 +721,7 @@ function SupervisorPanel({ operatorName, onClose }) {
         <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid #21262d", padding: 14, overflowY: "auto" }}>
           <button onClick={() => hub.ledger().then(l => exportDaySheetXLSX(l, stationLabel)).catch(() => setMsg("Could not fetch the day's scans from the hub."))}
             title="One Excel file for the whole day, every station: jerseys per hour, time per jersey, flags, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 8, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {todayTotal} {todayTotal === 1 ? "jersey" : "jerseys"} so far</button>
-          <button onClick={() => hub.ledger().then(l => exportDamageReportXLSX(buildDamageRows(l.events || [], { stationLabel }), { name: "day_" + (l.date || ""), title: `Damage report — ${l.date || "today"}, every station` })).catch(e => setMsg(e.message || "Could not fetch the day's flags from the hub."))}
+          <button onClick={() => hub.ledger().then(l => exportDamageReportXLSX(buildDamageRows(l.events || [], { stationLabel, typeLabel: jerseyTypeLabel }), { name: "day_" + (l.date || ""), title: `Damage report — ${l.date || "today"}, every station` })).catch(e => setMsg(e.message || "Could not fetch the day's flags from the hub."))}
             title="Every flagged jersey today, every station, with its photo" style={{ ...bigBtn, fontSize: 13, marginBottom: 16, background: "transparent", border: "1px solid #ef4444", color: "#f87171" }}>⬇ Damage report (Excel, with photos)</button>
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Send a roster</div>
           <div style={{ marginBottom: 10 }}>
@@ -718,6 +736,7 @@ function SupervisorPanel({ operatorName, onClose }) {
           </div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order number</label><input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Jersey type</label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Roster file</label>
             <div onClick={() => fileRef.current.click()} style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${file ? "#22c55e" : "#334155"}`, background: "#1e293b", color: file ? "#22c55e" : "#64748b", fontSize: 13, cursor: "pointer" }}>{file ? "✓ " + file.name : "📂 Choose CSV or Excel…"}</div>
@@ -764,7 +783,8 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, cancelKey, retryKey, byHandKey, stream, rotation, embedded }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", confirmKey, cancelKey, retryKey, byHandKey, stream, rotation, embedded }) {
+  const reasons = reasonsFor(jerseyType);
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
   const isList  = mode === "pick" || mode === "close";
@@ -801,11 +821,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue — next jersey", primary: true, run: actions.continueManual }];
     if (mode === "manual")     return [];
     if (mode === "duplicate")  return [{ id: "skip", label: "✓ Already done — skip", primary: true, hint: "nothing is recorded", run: actions.skipDuplicate }, retry, { id: "dup", label: "🚩 Log it as a duplicate", run: actions.flagDuplicate }];
-    if (mode === "reasons")    return [...REASONS.map(r => ({ id: r.id, label: r.label, hint: r.route, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
+    if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, hint: r.route, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") return [{ id: "cont", label: "✓ Continue — next jersey", primary: true, run: actions.continueSupervisor }];
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [mode, isList, candidates, actions, state.typed]);
+  }, [mode, isList, candidates, actions, state.typed, reasons]);
 
   const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
   const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
@@ -1005,6 +1025,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
         <>
           <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 4 }}>✎</div>
           <div style={{ fontSize: "clamp(28px, 4.5vw, 44px)", fontWeight: 900, color: accent, marginBottom: 6, textAlign: "center" }}>What's wrong with it?</div>
+          {jerseyType && <div style={{ fontSize: 14, color: "#a78bfa", marginBottom: 6 }}>{jerseyTypeLabel(jerseyType)} jersey · {jerseyTypeOf(jerseyType)?.construction}</div>}
           {match && <div style={{ fontSize: 18, color: "#c4b5fd", marginBottom: 14 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}</div>}
           <div style={{ width: "100%", maxWidth: 640, padding: "0 24px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 8 }}>
             {options.map((o, i) => {
@@ -1259,6 +1280,7 @@ export default function App() {
   const [orderNumber,        setOrderNumber]        = useState("");
   const [operatorName,       setOperatorName]       = useState(() => savedSignIn?.name || "");
   const [notes,              setNotes]              = useState("");
+  const [jerseyType,         setJerseyType]         = useState("");   // echl | echl_replica | sublimated | "" 
   const [cameraOn,           setCameraOn]           = useState(false);
   const [cameras,            setCameras]            = useState([]);
   const [scanning,           setScanning]           = useState(false);
@@ -1345,8 +1367,8 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, log, binMap, firstScanTime });
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, log, binMap, firstScanTime]);
+    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime });
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -1361,11 +1383,11 @@ export default function App() {
   useEffect(() => {
     if (!signedIn || (role === "supervisor" && !sessionStarted)) return;
     const id = stationId();
-    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", notes, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap })).then(() => setHubOk(true)).catch(() => setHubOk(false));
+    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", notes, jerseyType, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap })).then(() => setHubOk(true)).catch(() => setHubOk(false));
     send();
     const t = setInterval(send, 5000);
     return () => clearInterval(t);
-  }, [signedIn, sessionStarted, operatorName, role, orderNumber, notes, rosterFile, roster, log, lastConfirmed, binMap]);
+  }, [signedIn, sessionStarted, operatorName, role, orderNumber, notes, jerseyType, rosterFile, roster, log, lastConfirmed, binMap]);
 
   // Open the complete modal once every row is accounted for (after at least one scan).
   useEffect(() => {
@@ -1389,7 +1411,7 @@ export default function App() {
   const resumeSession = useCallback(() => {
     const s = savedSession;
     setRole(s.role || ""); setRoster(s.roster); setRosterFile(s.rosterFile || null);
-    setOrderNumber(s.orderNumber || ""); setOperatorName(s.operatorName || ""); setNotes(s.notes || "");
+    setOrderNumber(s.orderNumber || ""); setOperatorName(s.operatorName || ""); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null);
     setSignedIn(true); saveSignIn({ role: s.role || "", name: s.operatorName || "" });
     setSessionStarted(true); setResumeDecided(true);
@@ -1806,7 +1828,7 @@ export default function App() {
   }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, sessionStarted, scanKey, doTriggerScan]);
 
   const overlayKey = overlay ? `${overlay.mode}:${overlay.scan?.id}:${(overlay.candidates || []).map(c => c._id).join(",")}` : "";
-  const exportMeta = { orderNumber, operatorName, notes };
+  const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType) };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -1829,10 +1851,10 @@ export default function App() {
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
         <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onSupervisor={() => setShowSupervisor(true)}
-          onStart={({ roster, orderNumber, notes, rosterFile }) => {
+          onStart={({ roster, orderNumber, notes, jerseyType, rosterFile }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile);
-            setOrderNumber(orderNumber); setNotes(notes);
+            setOrderNumber(orderNumber); setNotes(notes); setJerseyType(jerseyType || "");
             setSessionStarted(true); setResumeDecided(true);
           }} />
       )}
@@ -1842,7 +1864,7 @@ export default function App() {
       )}
 
       {overlay && !wide && (
-        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
+        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
           stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} />
       )}
 
@@ -1888,9 +1910,10 @@ export default function App() {
         </div>
       </div>
 
-      {notes && (
-        <div style={{ background: "rgba(245,158,11,0.10)", borderBottom: "1px solid rgba(245,158,11,0.35)", padding: "6px 16px", fontSize: 12, color: "#fcd34d", flexShrink: 0 }}>
-          <strong>Order notes:</strong> {notes}
+      {(notes || jerseyType) && (
+        <div style={{ background: "rgba(245,158,11,0.10)", borderBottom: "1px solid rgba(245,158,11,0.35)", padding: "6px 16px", fontSize: 12, color: "#fcd34d", flexShrink: 0, display: "flex", gap: 14, alignItems: "center" }}>
+          {jerseyType && <span style={{ border: "1px solid #60a5fa", color: "#93c5fd", borderRadius: 999, padding: "1px 10px", fontWeight: 700, whiteSpace: "nowrap" }}>{jerseyTypeLabel(jerseyType)} · {jerseyTypeOf(jerseyType)?.construction}</span>}
+          {notes && <span><strong>Order notes:</strong> {notes}</span>}
         </div>
       )}
 
@@ -2040,7 +2063,7 @@ export default function App() {
         {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && wide && (
-            <ScanOverlay key={overlayKey} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
+            <ScanOverlay key={overlayKey} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
               stream={null} rotation={settings.rotation} />
           )}
 
@@ -2076,7 +2099,7 @@ export default function App() {
                     {rosterComplete ? "✅ Export" : "⬇ Export"}
                   </button>
                   {log.some(l => l.status === S_FLAGGED) && (
-                    <button onClick={() => exportDamageReportXLSX(buildDamageRows(log, { operatorName, orderNumber }), { name: orderNumber || "order", title: `Damage report — order ${orderNumber || "—"}` }).catch(e => setError(e.message))}
+                    <button onClick={() => exportDamageReportXLSX(buildDamageRows(log, { operatorName, orderNumber, jerseyType, typeLabel: jerseyTypeLabel }), { name: orderNumber || "order", title: `Damage report — order ${orderNumber || "—"}${jerseyType ? " · " + jerseyTypeLabel(jerseyType) : ""}` }).catch(e => setError(e.message))}
                       title="Every flagged jersey of this order with its photo, as Excel" style={{ ...btnGhost, padding: "3px 10px", fontSize: 11, borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>
                   )}
                 </>

@@ -39,7 +39,7 @@ describe("roster sheet", () => {
     ];
     const log = [{ match: { _id: 1 }, reason: "Stitching", resolution: "Rejected — sent back", operator: "Cooper", timestamp: "t1" }];
     const sheet = buildRosterSheet(roster, log, { orderNumber: "25" }, ["name", "number", "team", "size"], () => 1);
-    const body = sheet.slice(6);
+    const body = sheet.slice(7);   // 5 meta rows (incl. Jersey Type), a blank, the header
     expect(body.map(r => r[0])).toEqual(["PASS", "FLAGGED", "MISSING", "NOT SCANNED"]);
     expect(body[1].slice(6, 9)).toEqual(["Stitching", "Rejected — sent back", "Cooper"]);
   });

@@ -4,13 +4,13 @@
 // tested; only exportDamageReportXLSX touches the browser.
 import { safeFilename, localDateStamp } from "./export.js";
 
-export const DAMAGE_COLUMNS = ["Date", "Time", "Station", "Order", "Operator", "Number", "Name", "Team / colour", "Size", "Status", "Reason", "Resolution", "Photo"];
+export const DAMAGE_COLUMNS = ["Date", "Time", "Station", "Order", "Jersey type", "Operator", "Number", "Name", "Team / colour", "Size", "Status", "Reason", "Resolution", "Photo"];
 
 // Events as the hub ledger or a station log holds them → one row per flagged
 // jersey, newest last. Accepts both shapes: ledger events ({ t, station,
 // order, number, name, ... }) and station log entries ({ timestamp, match,
 // detected, ... }).
-export function buildDamageRows(events, { stationLabel = id => id, operatorName = "", orderNumber = "" } = {}) {
+export function buildDamageRows(events, { stationLabel = id => id, operatorName = "", orderNumber = "", jerseyType = "", typeLabel = t => t } = {}) {
   const rows = [];
   for (const e of events || []) {
     const status = e.status;
@@ -21,6 +21,7 @@ export function buildDamageRows(events, { stationLabel = id => id, operatorName 
       date: t.slice(0, 10), time: t.slice(11, 19),
       station: e.station ? stationLabel(e.station) : "",
       order: e.order ?? orderNumber ?? "",
+      type: typeLabel(e.jerseyType || jerseyType || "") || "",
       operator: e.operator || operatorName || "",
       number: e.number ?? m?.number ?? d?.number ?? "",
       name: e.name ?? m?.name ?? d?.name ?? "",
@@ -78,10 +79,10 @@ export function buildDamageWorkbook(rows, { title = "Damage report" } = {}, XL) 
   ws.addRow(DAMAGE_COLUMNS);
   ws.getRow(2).font = { bold: true };
   ws.getRow(2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
-  const widths = [11, 9, 10, 10, 14, 8, 16, 14, 8, 14, 32, 24, Math.ceil(PHOTO_W / 7)];
+  const widths = [11, 9, 10, 10, 13, 14, 8, 16, 14, 8, 14, 32, 24, Math.ceil(PHOTO_W / 7)];
   widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   rows.forEach((r, i) => {
-    const row = ws.addRow([r.date, r.time, r.station, r.order, r.operator, r.number, r.name, r.team, r.size, r.status, r.reason, r.resolution, r.photo ? "" : "no photo"]);
+    const row = ws.addRow([r.date, r.time, r.station, r.order, r.type, r.operator, r.number, r.name, r.team, r.size, r.status, r.reason, r.resolution, r.photo ? "" : "no photo"]);
     row.alignment = { vertical: "top", wrapText: true };
     if (r.photo) {
       row.height = PHOTO_H * 0.75 + 6;

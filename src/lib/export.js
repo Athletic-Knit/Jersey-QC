@@ -36,6 +36,7 @@ export function buildRosterSheet(roster, log, meta, columns, binOf = () => null)
     ["Order Number", meta.orderNumber || "—"],
     ["Operator",     meta.operatorName || "—"],
     ["Export Date",  localTimeStamp()],
+    ["Jersey Type",  meta.jerseyType || ""],
     ["Order Notes",  meta.notes || ""],
     [],
     ["Status", ...columns.map(cap), "Bin", "Reason", "Resolution", "Inspected By", "Time"],
@@ -135,9 +136,9 @@ export function buildDaySheets(ledger, stationLabel = id => id) {
   const orderRows = orders.map(o => {
     const evs = events.filter(e => e.station === o.station && e.order === o.order);
     const s = summarise(evs); const c = o.counts || {};
-    return [stationLabel(o.station), o.order, o.operator || "", c.total ?? "", s.passed, s.byHand, s.flagged + s.offRoster, c.remaining ?? "", hhmm(s.first), hhmm(s.last), s.activeMin, s.perHour ?? "", o.rosterFile || ""];
+    return [stationLabel(o.station), o.order, o.jerseyType || "", o.operator || "", c.total ?? "", s.passed, s.byHand, s.flagged + s.offRoster, c.remaining ?? "", hhmm(s.first), hhmm(s.last), s.activeMin, s.perHour ?? "", o.rosterFile || ""];
   });
-  const ordersSheet = [["Station", "Order", "Operator", "Jerseys in order", "Passed", "By hand", "To supervisor", "Still remaining", "First scan", "Last scan", "Active minutes", "Jerseys per active hour", "Roster file"], ...orderRows];
+  const ordersSheet = [["Station", "Order", "Jersey type", "Operator", "Jerseys in order", "Passed", "By hand", "To supervisor", "Still remaining", "First scan", "Last scan", "Active minutes", "Jerseys per active hour", "Roster file"], ...orderRows];
   const reasons = {};
   events.filter(e => e.status === "flagged").forEach(e => { const k = e.offRoster ? "Not on the roster" : (e.reason || "—"); reasons[k] = (reasons[k] || 0) + 1; });
   const flagsSheet = [["Reason", "Jerseys"], ...Object.entries(reasons).sort((a, b) => b[1] - a[1]), [], ["Time", "Station", "Operator", "Order", "Jersey", "Reason", "Resolution"],

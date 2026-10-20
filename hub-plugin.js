@@ -9,7 +9,7 @@
 //   GET    /api/hub/ledger?date=YYYY-MM-DD   every scan event and order of that day (default today) — the day sheet
 //   GET    /api/hub/rosters             rosters waiting for stations (summaries)
 //   GET    /api/hub/rosters/:id         one roster, with rows
-//   POST   /api/hub/rosters             { orderNumber, notes, fileName, rows, by }
+//   POST   /api/hub/rosters             { orderNumber, notes, jerseyType, fileName, rows, by }
 //   DELETE /api/hub/rosters/:id
 import fs from "node:fs";
 import path from "node:path";
@@ -35,7 +35,7 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
     req.on("end", () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } });
     req.on("error", reject);
   });
-  const summary = r => ({ id: r.id, orderNumber: r.orderNumber, notes: r.notes, fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt });
+  const summary = r => ({ id: r.id, orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt });
 
   async function handle(req, res) {
     const parts = new URL(req.url, "http://hub").pathname.split("/").filter(Boolean);
@@ -80,7 +80,7 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
             // The order record keeps the latest roster with each jersey's status, so the
             // supervisor can download the order's QC Results sheet at any time.
             const ok = `${id}|${body.orderNumber}`; const o = dayLed.orders[ok] || { station: id, order: body.orderNumber, operator: body.operatorName, firstSeen: now };
-            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null };
+            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", jerseyType: body.jerseyType || o.jerseyType || "", rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null };
           }
           Object.keys(led).sort().slice(0, -14).forEach(d => delete led[d]);   // keep two weeks
           state.stations[id] = { ...rest, id, carried, day, history, rate, etaMin, updatedAt: now }; save(); return json(res, 200, { ok: true });
@@ -105,7 +105,7 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
           if (!Array.isArray(body.rows) || body.rows.length === 0) return json(res, 400, { error: "rows required" });
           const newId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
           // forStation: a station id ("st-line1") when the supervisor sends it to one station; "" = any station may take it.
-          state.rosters[newId] = { id: newId, orderNumber: String(body.orderNumber ?? ""), notes: String(body.notes ?? ""), fileName: String(body.fileName ?? ""), rows: body.rows, by: String(body.by ?? ""), forStation: String(body.forStation ?? ""), createdAt: Date.now() };
+          state.rosters[newId] = { id: newId, orderNumber: String(body.orderNumber ?? ""), notes: String(body.notes ?? ""), jerseyType: String(body.jerseyType ?? ""), fileName: String(body.fileName ?? ""), rows: body.rows, by: String(body.by ?? ""), forStation: String(body.forStation ?? ""), createdAt: Date.now() };
           save();
           return json(res, 200, { id: newId });
         }

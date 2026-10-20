@@ -39,10 +39,10 @@ export const hub = {
 // newest few flagged jerseys (each ~40 KB); the hub keeps a photo once it has
 // seen it, so older flags keep theirs without being re-sent every 5 s.
 const PHOTOS_PER_REPORT = 6;   // the newest log entries that carry their photo in each 5-second report
-export function snapshotOf({ operatorName, role, orderNumber, notes, rosterFile, roster, log, lastConfirmed, binMap }) {
+export function snapshotOf({ operatorName, role, orderNumber, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   return {
-    operatorName, role, orderNumber, notes, rosterFile,
+    operatorName, role, orderNumber, notes, jerseyType, rosterFile,
     // The roster with each jersey's status, so the supervisor can download an
     // order's QC Results sheet without the station. Bins travel with it.
     rows: roster.map(r => ({ ...r, scanned: r.scanned || false })),
@@ -53,7 +53,7 @@ export function snapshotOf({ operatorName, role, orderNumber, notes, rosterFile,
     // ledger — the end-of-day sheet is built from these across all stations.
     events: log.slice(0, 400).map((l, i) => {
       const ev = {
-        id: l.id, t: l.timestamp, status: l.status, order: orderNumber, operator: l.operator || operatorName, rowId: l.match?._id,
+        id: l.id, t: l.timestamp, status: l.status, order: orderNumber, jerseyType, operator: l.operator || operatorName, rowId: l.match?._id,
         number: l.match?.number ?? l.detected?.number ?? "", name: l.match?.name ?? l.detected?.name ?? "", size: l.match?.size ?? "", team: l.match?.team ?? "",
         offRoster: !!l.match?.offRoster, reason: l.reason || "", resolution: l.resolution || "",
       };

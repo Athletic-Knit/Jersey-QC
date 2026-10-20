@@ -26,7 +26,11 @@ describe("damage report rows", () => {
     expect(rows[1]).toMatchObject({ order: "41", operator: "Sam", name: "RINE", team: "green", photo: "data:image/jpeg;base64,BBB" });
   });
   it("has a column for every field", () => {
-    expect(DAMAGE_COLUMNS.length).toBe(13);
+    expect(DAMAGE_COLUMNS.length).toBe(14);
+  });
+  it("carries the jersey type, from the event or the order, through a label", () => {
+    const rows = buildDamageRows([{ id: 1, t: "2026-10-20 09:00:00", status: "flagged", jerseyType: "sublimated" }, { id: 2, t: "2026-10-20 09:01:00", status: "flagged" }], { jerseyType: "echl", typeLabel: t => ({ echl: "ECHL", sublimated: "Sublimated" })[t] || "" });
+    expect(rows.map(r => r.type)).toEqual(["Sublimated", "ECHL"]);
   });
 });
 

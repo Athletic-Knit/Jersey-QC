@@ -25,6 +25,45 @@ export const REASONS = [
   { id: "other",            label: "Something else — type it",     route: "Supervisor decides", custom: true },   // free text, for what the list does not cover
 ];
 
+// What the order is made of. ECHL and ECHL replica jerseys have the names,
+// numbers and crests stitched on as twill; sublimated jerseys have them
+// printed into the fabric. What can go wrong differs, so the "not right" menu
+// follows the type, and the type lands in every report row.
+export const JERSEY_TYPES = [
+  { id: "echl",         label: "ECHL",         construction: "stitched",   hint: "twill names, numbers and crests, fully stitched" },
+  { id: "echl_replica", label: "ECHL replica", construction: "stitched",   hint: "stitched, replica spec" },
+  { id: "sublimated",   label: "Sublimated",   construction: "sublimated", hint: "names, numbers and graphics printed into the fabric" },
+];
+export const jerseyTypeOf = id => JERSEY_TYPES.find(t => t.id === id) || null;
+export const jerseyTypeLabel = id => jerseyTypeOf(id)?.label || "";
+
+const R = Object.fromEntries(REASONS.map(r => [r.id, r]));
+export const REASONS_BY_CONSTRUCTION = {
+  stitched: [
+    R.wrong_decoration,
+    { id: "logo",       label: "Missing, wrong or crooked crest or logo", route: "Supervisor → pink slip → decoration" },
+    { id: "twill",      label: "Twill lifting, peeling or torn",           route: "Supervisor → pink slip → decoration" },
+    { id: "stitching",  label: "Loose, missing or broken stitching",      route: "Supervisor → stitcher" },
+    { id: "seam",       label: "Seam, hem or construction",                route: "Supervisor → stitcher" },
+    R.cleaning, R.mark, R.other,
+  ],
+  sublimated: [
+    R.wrong_decoration,
+    { id: "logo",       label: "Missing, wrong or misplaced logo",         route: "Supervisor → full remake" },
+    { id: "print",      label: "Print error — ghosting, fading, misaligned", route: "Supervisor → full remake" },
+    { id: "colour",     label: "Colour off, bleeding or streaked",         route: "Supervisor → full remake" },
+    { id: "fabric",     label: "Fabric flaw, snag or hole",                route: "Supervisor → full remake" },
+    { id: "seam",       label: "Seam, hem or construction",                route: "Supervisor → stitcher" },
+    R.cleaning, R.mark, R.other,
+  ],
+};
+// The "not right" menu for an order: by its type, or the general list when
+// the type was not set.
+export function reasonsFor(jerseyType) {
+  const t = jerseyTypeOf(jerseyType);
+  return t ? REASONS_BY_CONSTRUCTION[t.construction] : REASONS;
+}
+
 // Role gate. This is a convenience gate so a passer-by cannot use a station,
 // NOT security: anything in the browser bundle can be read by anyone on the
 // network. Real sign-in arrives with the roster server. Set PINs in .env.local:
