@@ -121,6 +121,7 @@ const soleOpen = (direct, cands) => {
  * `read` carries what the camera said about its own read:
  *   nameComplete   false when letters were covered or cut off ("SAMU" of SAMUEL)
  *   numberComplete false when part of the number was covered or cut off
+ *   laidFlat       false when the jersey was folded, bunched or partly covered
  *   position       "left" | "centre" | "right" — where the number sat on the back
  *   obstruction    the model's words for what was in the way
  *   colour, trim   the jersey body colour and its second colour, as seen
@@ -138,7 +139,7 @@ export function findMatches(roster, name, number, read = {}) {
   const typed      = read.typed === true;
   const position   = typed ? "" : String(read.position || "");
   const partialName = !typed && !!nName && read.nameComplete === false;
-  const partialNum  = !typed && !!nNumRaw && read.numberComplete === false;
+  const partialNum  = !typed && !!nNumRaw && (read.numberComplete === false || read.laidFlat === false);
   const offCentre   = !typed && !!nNumRaw && nNumRaw.length === 1 && (position === "left" || position === "right");
   const suspect     = partialName || partialNum || offCentre;
 
@@ -164,7 +165,7 @@ export function findMatches(roster, name, number, read = {}) {
     const shown = String(name ?? "").trim();
     const why = [];
     if (partialName) why.push(`name read as "${shown}…" and looks cut off`);
-    if (partialNum)  why.push(`#${nNum} looks covered or cut off`);
+    if (partialNum)  why.push(read.numberComplete === false ? `#${nNum} looks covered or cut off` : `the jersey is not laid flat — a digit may be under a fold`);
     else if (offCentre) why.push(`#${nNum} sits ${position} of centre — a digit may be hidden`);
     if (!nName && !partialNum && !offCentre) why.push("no name was read");
     const what = read.obstruction ? ` (${String(read.obstruction).trim()})` : "";

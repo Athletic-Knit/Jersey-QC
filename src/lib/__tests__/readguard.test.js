@@ -71,6 +71,24 @@ describe("green needs a name and a number", () => {
   });
 });
 
+describe("folded jersey", () => {
+  it("#5 read off a jersey the model says is not flat, while #35 is open → yellow with #35 offered", () => {
+    const r = [row(0, "", "35", "yellow"), row(1, "", "5", "black"), row(2, "", "40", "blue")];
+    const m = findMatches(r, "", "5", { laidFlat: false, numberComplete: true });
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual(expect.arrayContaining([0, 1]));
+    expect(m.reason).toMatch(/not laid flat/);
+  });
+  it("same read, nothing a fold could hide → green", () => {
+    const r = [row(0, "", "5", "black"), row(1, "", "40", "blue")];
+    expect(findMatches(r, "", "5", { laidFlat: false }).type).toBe("exact");
+  });
+  it("a flat jersey with a complete number is unaffected", () => {
+    const r = [row(0, "", "35", "yellow"), row(1, "", "5", "black")];
+    expect(findMatches(r, "", "5", { laidFlat: true, numberComplete: true }).type).toBe("exact");
+  });
+});
+
 describe("no alternative, no yellow", () => {
   it("one #4 with no name on the roster, clean read → green", () => {
     const r = [row(0, "", "4"), row(1, "Nguyen", "23")];

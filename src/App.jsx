@@ -1480,14 +1480,14 @@ export default function App() {
     const readOne = async (b64, url) => {
       // Send a smaller frame than the camera gives: same read, faster answer.
       const sendB64 = await frameForUpload(url, SEND_MAX_PX).catch(() => b64);
-      const r = await readJersey({ base64: sendB64, apiKey: CLAUDE_API_KEY, model: MODEL, effort: EFFORT, thinking: THINKING });
-      console.log(`Read #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"} (${r.jersey_colour || "?"}${r.trim_colour ? "/" + r.trim_colour : ""}; sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
+      const r = await readJersey({ base64: sendB64, apiKey: CLAUDE_API_KEY, model: MODEL, effort: EFFORT, thinking: THINKING, orderNumbers: roster.filter(x => !isDone(x)).map(x => x.number) });
+      console.log(`Read #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"}${r.laid_flat ? "" : " [not flat]"} (${r.jersey_colour || "?"}${r.trim_colour ? "/" + r.trim_colour : ""}; sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
       return r;
     };
     const matchOf = d => (!d.name && !d.number) ? null : findMatches(roster, d.name, d.number, {
       nameComplete: d.name_complete, numberComplete: d.number_complete,
       position: d.number_position, obstruction: d.obstruction,
-      colour: d.jersey_colour, trim: d.trim_colour,
+      colour: d.jersey_colour, trim: d.trim_colour, laidFlat: d.laid_flat,
     });
 
     let detected = { name: "", number: "" };
@@ -1986,7 +1986,7 @@ export default function App() {
                           <span style={{ fontSize: 10, color: "#e2e8f0" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? "Hands-free paused — B to scan" : !settings.autoScan ? "Hands-free off — B to scan" : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : "Ready"}</span>
                         </div>
                         <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.55)", color: "#94a3b8", fontSize: 10, padding: "3px 9px", borderRadius: 12, whiteSpace: "nowrap" }}>
-                          Press <kbd style={{ background: "#1e293b", padding: "1px 4px", borderRadius: 3, fontSize: 10 }}>{keyLabel}</kbd> to scan
+                          Lay it flat, fully open, no folds · Press <kbd style={{ background: "#1e293b", padding: "1px 4px", borderRadius: 3, fontSize: 10 }}>{keyLabel}</kbd> to scan
                         </div>
                       </>
                     )}

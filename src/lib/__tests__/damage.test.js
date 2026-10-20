@@ -34,6 +34,16 @@ describe("damage report rows", () => {
   });
 });
 
+describe("order numbers hint", () => {
+  it("lists the open numbers once, sorted, and says never to pick from the list", async () => {
+    const { orderNumbersHint } = await import("../vision.js");
+    const h = orderNumbersHint(["40", "5", "35", "5", "", null, "22"]);
+    expect(h).toMatch(/Numbers on this order: 5, 22, 35, 40\./);
+    expect(h).toMatch(/never pick from this list/);
+    expect(orderNumbersHint([])).toBe("");
+  });
+});
+
 describe("jersey box from the model", () => {
   it("accepts fractions, scales percentages, rejects nonsense", () => {
     expect(normBox([0.1, 0.2, 0.9, 0.95])).toEqual([0.1, 0.2, 0.9, 0.95]);

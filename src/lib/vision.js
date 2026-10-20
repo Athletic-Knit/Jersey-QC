@@ -16,17 +16,16 @@ export const DEFAULT_THINKING = "off";   // "adaptive" | "off"
 export const PROMPT = `This is a quality-control photo from a sports-jersey factory. It usually shows the BACK of a jersey laid flat, but it may show only a loose name plate or number patch lying on the table before it is sewn on. The text may be sideways or upside down: read it as it would read with the jersey the right way up, so an upside-down 40 is "40", never "04", and an upside-down 61 is "61", never "19".
 Read these fields:
 - "name": the player name, printed in block capitals, if any. Ignore team names, sponsor logos and wordmarks; those are not the player name. In this block lettering, G has a horizontal bar and C does not; O is round and Q has a tail; B is closed and 8 is a digit. Copy the letters exactly as printed, including apostrophes and hyphens.
-- "number": the LARGE player number, if any. Jerseys also carry a smaller copy of the same number on each sleeve, and folded sleeves can sit right beside the back number: IGNORE sleeve numbers. A player number is 1 or 2 digits (00 to 99). Never return 3 or more digits.
-- "sleeve_numbers": any numbers you can see on the sleeves, as a list, so they are not confused with the back number.
-- "jersey_box": the smallest box around the whole jersey (or the loose plate) you read, as four fractions of the picture [left, top, right, bottom] between 0 and 1, e.g. [0.05, 0.1, 0.9, 0.95]. The photo kept for the supervisor is cropped to this box.
+- "number": the LARGE player number, if any. Jerseys also carry a smaller copy of the same number on each sleeve, and folded sleeves can sit right beside the back number: IGNORE sleeve numbers and never merge them into the back number. A player number is 1 or 2 digits (00 to 99). Never return 3 or more digits.
 - "jersey_colour": the main colour of the jersey body, the fabric around the number, in one or two plain words ("black", "white", "red", "navy blue", "forest green", "grey"). Not the colour of the number itself.
 - "trim_colour": the second most visible colour on the jersey (stripes, shoulders, number outline), one or two words, or "" if none.
-- "obstruction": look closely at the fabric immediately left and right of the digits and around the name before you answer the next fields. A few words saying what, if anything, covers, overlaps or cuts off the name or number, for example "hand over the right digit", "folded sleeve over the name", "cut off at the top of the picture". "" when nothing does.
+- "obstruction": look closely at the fabric immediately left and right of the digits and around the name before you answer the next fields. At most five words saying what, if anything, covers, overlaps or cuts off the name or number, for example "hand over the right digit", "folded sleeve over the name", "cut off at the top of the picture". "" when nothing does.
+- "laid_flat": true when the back of the jersey is fully open and lying flat so the whole name and number area is in plain view. false when the jersey is folded over itself, bunched, crumpled, has a sleeve or another garment lying across its back, or the number area is only partly showing. A folded jersey can hide a whole digit with no visible edge, so be strict: any fold line crossing or touching the number area means false.
 - "number_position": where the number you read sits across the width of the jersey back, judged against the jersey's own centre line (midway between its two sleeves), not the centre of the picture: "left", "centre" or "right". A one-digit number whose centre is clearly off that line is "left" or "right".
 - "name_complete": true when the whole name is visible from its first letter to its last. false when any letters are covered (a hand, a fold, a tag, another garment), cut off by the edge of the picture, or unreadable, so the "name" you return may be only part of the word. If only part of a name is readable, still return the letters you can read.
 - "number_complete": true when every digit of the back number is wholly visible. false when any part of a digit could be covered or cut off (a hand, a fold, a tag, another garment, the edge of the picture). This is about the digits only: the jersey body, sleeves or collar running out of the picture does not matter if the digits themselves are whole. Back numbers are centred on the jersey: a single digit sitting clearly to the left or right of the jersey's centre line usually means a second digit is hidden, so return false.
 Return ONLY valid JSON, no markdown, no commentary:
-{"name":"NAME","number":"##","sleeve_numbers":["##"],"jersey_box":[0.05,0.1,0.9,0.95],"jersey_colour":"black","trim_colour":"red","obstruction":"","number_position":"centre","name_complete":true,"number_complete":true}
+{"name":"NAME","number":"##","jersey_colour":"black","trim_colour":"red","obstruction":"","laid_flat":true,"number_position":"centre","name_complete":true,"number_complete":true}
 If more than one jersey or plate is in the picture, read the largest or most central one and ignore the others.
 Never leave a field empty because you are unsure, and never decide that an item is "only a sample" or "not a real name": whatever letters are printed, return them. A person checks every read against the order, so a near-miss is far more useful than nothing. Do not explain; output the JSON only. Use "" only for a field that is truly not in the picture. A name plate with no number is a valid read: return the name and "" for the number.`;
 
@@ -48,6 +47,7 @@ function parseModelText(data) {
     sleeve_numbers: Array.isArray(obj.sleeve_numbers) ? obj.sleeve_numbers.map(str).filter(Boolean) : [],
     name_complete: obj.name_complete !== false,
     number_complete: obj.number_complete !== false,
+    laid_flat: obj.laid_flat !== false,
     number_position: normPosition(obj.number_position),
     jersey_box: normBox(obj.jersey_box),
     jersey_colour: str(obj.jersey_colour).toLowerCase(),
@@ -88,7 +88,17 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
  * Calls the Anthropic Messages API through the dev proxy with a timeout and a
  * single retry on network errors / rate limits. Throws with a readable message.
  */
-export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort = DEFAULT_EFFORT, thinking = DEFAULT_THINKING, timeoutMs = 25000, retries = 1, fetchImpl = globalThis.fetch }) {
+// The order's numbers, as a line for the prompt: with them the model can tell
+// that a lone "5" right of centre on an order that has #35 is probably a 35
+// with the 3 under a fold — the check a person would make. Kept short.
+export function orderNumbersHint(numbers) {
+  const list = [...new Set((numbers || []).map(n => String(n ?? "").trim()).filter(Boolean))].sort((a, b) => Number(a) - Number(b)).slice(0, 120);
+  if (!list.length) return "";
+  return `\nNumbers on this order: ${list.join(", ")}. Read what is printed, never pick from this list — but if the number you read is one digit and a two-digit number on this order contains that digit, look hard at the fabric beside the digit: a fold can hide the other digit with no visible edge. If that is possible, set number_complete to false and put "second digit may be under a fold" in obstruction.`;
+}
+
+export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort = DEFAULT_EFFORT, thinking = DEFAULT_THINKING, orderNumbers = null, timeoutMs = 25000, retries = 1, fetchImpl = globalThis.fetch }) {
+  const hint = orderNumbersHint(orderNumbers).trim();
   // Current-generation models think before answering (adaptive thinking is on
   // by default) and need room for it; older ones take a plain token cap.
   // thinking "off" turns it off where the model allows: Haiku 5.5 accepts
@@ -115,9 +125,13 @@ export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort
         },
         body: JSON.stringify({
           ...request,
+          // The fixed instructions come first and are cached on the server
+          // (cache_control): every scan after the first reads them at a tenth
+          // of the input price. The image and the order's numbers follow.
           messages: [{ role: "user", content: [
+            { type: "text", text: PROMPT, cache_control: { type: "ephemeral" } },
             { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
-            { type: "text", text: PROMPT },
+            { type: "text", text: hint || "Read the jersey now." },
           ] }],
         }),
       });
