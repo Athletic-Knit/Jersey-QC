@@ -7,6 +7,8 @@ import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
+import { useGestures } from "./useGestures.js";
+import { GestureBadge, GestureLegend } from "./GestureBadge.jsx";
 import { hub, stationId, snapshotOf } from "./lib/hub.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
 
@@ -268,7 +270,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
 
 // ── Live camera window on the result screens, so the next jersey can be lined
 // up while the green/yellow/red screen is still up. Same stream, second <video>.
-function LivePreview({ stream, rotation }) {
+function LivePreview({ stream, rotation, badge }) {
   const ref = useRef(null);
   useEffect(() => {
     const v = ref.current; if (!v || !stream) return;
@@ -282,6 +284,7 @@ function LivePreview({ stream, rotation }) {
         <video ref={ref} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", transform: `rotate(${rotation || 0}deg)`, display: "block" }} />
       </div>
       <div style={{ position: "absolute", top: 6, left: 8, fontSize: 11, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.55)", padding: "2px 7px", borderRadius: 10 }}>● Live — line up the next jersey</div>
+      {badge && <div style={{ position: "absolute", bottom: 6, left: 6 }}>{badge}</div>}
     </div>
   );
 }
@@ -783,7 +786,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", confirmKey, cancelKey, retryKey, byHandKey, stream, rotation, embedded }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", confirmKey, cancelKey, retryKey, byHandKey, stream, rotation, embedded, badge }) {
   const reasons = reasonsFor(jerseyType);
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
@@ -1059,7 +1062,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           <img src={state.scan.thumb} alt="" style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6 }} />
         </div>
       )}
-      {!embedded && mode !== "manual" && mode !== "reasonText" && <LivePreview stream={stream} rotation={rotation} />}
+      {!embedded && mode !== "manual" && mode !== "reasonText" && <LivePreview stream={stream} rotation={rotation} badge={badge} />}
     </div>
   );
 }
@@ -1172,6 +1175,36 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
             <input type="checkbox" checked={!!temp.autoScan} onChange={e => setTemp(t => ({ ...t, autoScan: e.target.checked }))} />
             Hands-free: after a confirm, scan the next jersey when it is placed and still
           </label>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <div style={labelSt}>Answer the result screen with</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[[false, "⌨️ Keys or pedals", "Normal"], [true, "✋ Hand gestures", "Camera"]].map(([on, label, sub]) => (
+              <button key={String(on)} onClick={() => setTemp(t => ({ ...t, gestures: on }))}
+                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, cursor: "pointer", textAlign: "left", border: `1px solid ${!!temp.gestures === on ? "#3b82f6" : "#334155"}`, background: !!temp.gestures === on ? "rgba(59,130,246,0.14)" : "#1e293b", color: !!temp.gestures === on ? "#e2e8f0" : "#94a3b8" }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>{sub}</div>
+              </button>
+            ))}
+          </div>
+          {!temp.gestures && <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>The keys above, or a foot pedal / knee switch programmed to send them.</div>}
+          {temp.gestures && (
+            <>
+              <GestureLegend settings={temp} formatKey={formatKey} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <div style={{ fontSize: 12, color: "#94a3b8", width: 120, flexShrink: 0 }}>Hold for</div>
+                <input type="number" min={200} max={3000} step={100} value={temp.gestureHoldMs ?? 600} onChange={e => setTemp(t => ({ ...t, gestureHoldMs: Number(e.target.value) || 600 }))} style={{ ...selSt, width: 90 }} />
+                <span style={{ fontSize: 11, color: "#64748b" }}>ms before it fires</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                <div style={{ fontSize: 12, color: "#94a3b8", width: 120, flexShrink: 0 }}>Then wait</div>
+                <input type="number" min={500} max={5000} step={100} value={temp.gestureCooldownMs ?? 1500} onChange={e => setTemp(t => ({ ...t, gestureCooldownMs: Number(e.target.value) || 1500 }))} style={{ ...selSt, width: 90 }} />
+                <span style={{ fontSize: 11, color: "#64748b" }}>ms before the next one</span>
+              </div>
+              <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>Gestures are read only while a result is on screen, and only after your hand has left the picture once — so placing and removing jerseys can never trigger anything. Scanning stays hands-free (or the Scan key). The model downloads once (about 8 MB) and runs on this PC; nothing is sent anywhere.</div>
+            </>
+          )}
         </div>
 
         {problems.length > 0 && (
@@ -1334,6 +1367,10 @@ export default function App() {
   // and the order still has jerseys to scan — a finished order must not keep
   // reading the empty table.
   const handsFree      = !!settings.autoScan && !handsFreePaused && remaining > 0;
+  // Hand gestures answer the result screens: the recogniser runs only while one is up, so hands
+  // placing or removing a jersey are never read. Each fire is a synthetic keydown of the configured key.
+  const gestures = useGestures({ enabled: !!settings.gestures && cameraOn && inputMode === "camera" && !!overlay, videoRef, settings, busy: scanning });
+  const gestureBadge = settings.gestures && cameraOn && inputMode === "camera" ? <GestureBadge status={gestures.status} error={gestures.error} loading={gestures.loading} settings={settings} formatKey={formatKey} /> : null;
   const passCount      = roster.filter(r => r.scanned === "pass").length;
   const offRosterFlags = log.filter(l => l.status === S_FLAGGED && l.match?.offRoster && !l.resolution).length;   // typed jerseys that are not on the roster have no row
   const flagCount      = roster.filter(r => r.scanned === "flag").length + offRosterFlags;
@@ -1865,7 +1902,7 @@ export default function App() {
 
       {overlay && !wide && (
         <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
-          stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} />
+          stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} badge={gestureBadge} />
       )}
 
       {showSettings && (
@@ -1979,6 +2016,7 @@ export default function App() {
                         <div style={{ color: "#fff", fontWeight: 700, background: "rgba(0,0,0,0.6)", padding: "8px 20px", borderRadius: 20 }}>⏳ Reading…</div>
                       </div>
                     )}
+                    {gestureBadge && <div style={{ position: "absolute", top: 8, left: 8 }}>{gestureBadge}</div>}
                     {cameraOn && !scanning && (
                       <>
                         <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,0.55)", padding: "3px 9px", borderRadius: 20 }}>
