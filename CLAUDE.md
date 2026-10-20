@@ -28,6 +28,8 @@ A React/Vite web app for quality-control scanning of sports jerseys in a manufac
 | Variable | Purpose |
 |---|---|
 | `VITE_CLAUDE_API_KEY` | Anthropic API key — **never hardcode this** |
+| `VITE_CLAUDE_MODEL` | Optional model override (default `claude-haiku-5-5`) |
+| `VITE_CLAUDE_EFFORT` | Optional `low` / `medium` / `high` (default `medium`) |
 
 Create a `.env.local` file (already gitignored via `*.local`):
 ```

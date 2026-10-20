@@ -7,7 +7,7 @@ import { playTone } from "./lib/audio.js";
 import { readJersey } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { hub, stationId, snapshotOf } from "./lib/hub.js";
-import { MODEL, CHECKLIST, REASONS, ROLES, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
+import { MODEL, EFFORT, CHECKLIST, REASONS, ROLES, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
 
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
 
@@ -1435,7 +1435,7 @@ export default function App() {
     let detected = { name: "", number: "" };
     let apiError = null;
     try {
-      const r = await readJersey({ base64, apiKey: CLAUDE_API_KEY, model: MODEL });
+      const r = await readJersey({ base64, apiKey: CLAUDE_API_KEY, model: MODEL, effort: EFFORT });
       detected = r;
       console.log(`Read #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"} (sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
     } catch (e) {

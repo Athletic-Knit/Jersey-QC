@@ -1,7 +1,11 @@
 // ── Floor configuration ───────────────────────────────────────────────────────
-import { DEFAULT_MODEL } from "./lib/vision.js";
+import { DEFAULT_MODEL, DEFAULT_EFFORT } from "./lib/vision.js";
 
 export const MODEL = import.meta.env.VITE_CLAUDE_MODEL || DEFAULT_MODEL;
+// low | medium | high — how long the model thinks about each frame. Measured
+// 20 Oct on 9 frames × 5 runs: low false-alarms on clean jerseys (2/10 ok),
+// medium 10/10 clean and 29/35 covered at ~4 s, high 10/10 and 32/35 at ~5 s.
+export const EFFORT = import.meta.env.VITE_CLAUDE_EFFORT || DEFAULT_EFFORT;
 
 // Shown on every green screen. Zero taps when the jersey is good.
 export const CHECKLIST = ["name & number", "size tag", "logos", "seams", "spots & threads"];
