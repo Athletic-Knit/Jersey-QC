@@ -2,12 +2,12 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
-import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, shrinkDataUrl, downscaleImage } from "./lib/persist.js";
+import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, shrinkDataUrl, downscaleImage, frameForUpload } from "./lib/persist.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { hub, stationId, snapshotOf } from "./lib/hub.js";
-import { MODEL, EFFORT, CHECKLIST, REASONS, ROLES, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, CHECKLIST, REASONS, ROLES, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
 
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
 
@@ -1435,7 +1435,9 @@ export default function App() {
     let detected = { name: "", number: "" };
     let apiError = null;
     try {
-      const r = await readJersey({ base64, apiKey: CLAUDE_API_KEY, model: MODEL, effort: EFFORT });
+      // Send a smaller frame than the camera gives: same read, faster answer.
+      const sendB64 = await frameForUpload(dataUrl, SEND_MAX_PX).catch(() => base64);
+      const r = await readJersey({ base64: sendB64, apiKey: CLAUDE_API_KEY, model: MODEL, effort: EFFORT, thinking: THINKING });
       detected = r;
       console.log(`Read #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"} (sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
     } catch (e) {

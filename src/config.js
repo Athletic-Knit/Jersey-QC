@@ -1,11 +1,14 @@
 // ── Floor configuration ───────────────────────────────────────────────────────
-import { DEFAULT_MODEL, DEFAULT_EFFORT } from "./lib/vision.js";
+import { DEFAULT_MODEL, DEFAULT_EFFORT, DEFAULT_THINKING } from "./lib/vision.js";
 
 export const MODEL = import.meta.env.VITE_CLAUDE_MODEL || DEFAULT_MODEL;
-// low | medium | high — how long the model thinks about each frame. Measured
-// 20 Oct on 9 frames × 5 runs: low false-alarms on clean jerseys (2/10 ok),
-// medium 10/10 clean and 29/35 covered at ~4 s, high 10/10 and 32/35 at ~5 s.
-export const EFFORT = import.meta.env.VITE_CLAUDE_EFFORT || DEFAULT_EFFORT;
+// Effort (low | medium | high) and thinking ("off" | "adaptive") for the read.
+// The measured trade-offs are in src/lib/vision.js next to the defaults.
+export const EFFORT   = import.meta.env.VITE_CLAUDE_EFFORT   || DEFAULT_EFFORT;
+export const THINKING = import.meta.env.VITE_CLAUDE_THINKING || DEFAULT_THINKING;
+// Longest side of the frame sent to the model, in pixels. 800 reads as well as
+// full resolution and answers ~0.6 s sooner than a 1280 px frame.
+export const SEND_MAX_PX = Number(import.meta.env.VITE_SEND_MAX_PX) || 800;
 
 // Shown on every green screen. Zero taps when the jersey is good.
 export const CHECKLIST = ["name & number", "size tag", "logos", "seams", "spots & threads"];

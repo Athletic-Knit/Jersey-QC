@@ -1,10 +1,17 @@
 // ── The read: one image in, { name, number } out ──────────────────────────────
-// Haiku 5.5 at medium effort: it sees a covered or cut-off digit (Haiku 4.5
-// did not, 0 of 6 tries on a real frame), costs a tenth per token, and takes
-// about two seconds longer per scan. Low effort false-alarms on a jersey whose
-// body runs out of the picture, so medium.
-export const DEFAULT_MODEL = "claude-haiku-5-5";
-export const DEFAULT_EFFORT = "medium";
+// Sonnet 5.5 with thinking off, low effort. Measured 20 Oct on 9 frames (2
+// clean, 7 with a digit covered by a fold, hand, fabric or the picture edge),
+// 5 runs each, through this function:
+//   Haiku 4.5              clean 10/10  covered 16/35   0.8 s   $1.66 per 1000
+//   Haiku 5.5 thinking     clean 10/10  covered 29/35   4.1 s   $0.47   (medium)
+//   Haiku 5.5 no thinking  clean  0/10  covered 35/35   1.2 s   $0.21   (flags every clean jersey)
+//   Sonnet 5.5 no thinking clean 10/10  covered 35/35   1.5 s   $4.09   (724 px frame)
+// Haiku 4.5 does not see a fold; Haiku 5.5 only sees it while thinking, which
+// is slow. Sonnet sees it without thinking. Time is ~1.5 s one at a time at
+// an 800 px frame (2.1 s at 1280 px), so the app downscales before sending.
+export const DEFAULT_MODEL = "claude-sonnet-5-5";
+export const DEFAULT_EFFORT = "low";
+export const DEFAULT_THINKING = "off";   // "adaptive" | "off"
 
 export const PROMPT = `This is a quality-control photo from a sports-jersey factory. It usually shows the BACK of a jersey laid flat, but it may show only a loose name plate or number patch lying on the table before it is sewn on. The text may be sideways or upside down: read it in whatever orientation it is.
 Read these fields:
@@ -62,12 +69,17 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
  * Calls the Anthropic Messages API through the dev proxy with a timeout and a
  * single retry on network errors / rate limits. Throws with a readable message.
  */
-export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort = DEFAULT_EFFORT, timeoutMs = 25000, retries = 1, fetchImpl = globalThis.fetch }) {
+export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort = DEFAULT_EFFORT, thinking = DEFAULT_THINKING, timeoutMs = 25000, retries = 1, fetchImpl = globalThis.fetch }) {
   // Current-generation models think before answering (adaptive thinking is on
   // by default) and need room for it; older ones take a plain token cap.
-  const thinks = /^claude-(haiku|sonnet|opus|fable)-5/.test(model);
-  const request = { model, max_tokens: thinks ? 4000 : 200 };
-  if (thinks && effort) request.output_config = { effort };
+  // thinking "off" turns it off where the model allows: Haiku 5.5 accepts
+  // {type:"disabled"} at effort high or below; Sonnet 5.5 uses "between_tools".
+  const gen5 = /^claude-(haiku|sonnet|opus|fable)-5/.test(model);
+  const off = thinking === "off" && gen5;
+  const request = { model, max_tokens: gen5 && !off ? 4000 : 300 };
+  if (gen5 && effort) request.output_config = { effort };
+  if (off && /^claude-haiku-5/.test(model))  request.thinking = { type: "disabled" };
+  if (off && /^claude-sonnet-5/.test(model)) request.thinking = { type: "between_tools" };
   let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ac = new AbortController();

@@ -41,6 +41,23 @@ export function shrinkDataUrl(dataUrl, maxW = 160) {
 }
 
 // Downscale an uploaded photo so a 12 MP phone picture fits the API limits.
+// The frame as sent to the model: longest side at most maxSide, as base64 JPEG.
+export function frameForUpload(dataUrl, maxSide = 800, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, maxSide / Math.max(img.width, img.height));
+      if (s === 1) { resolve(dataUrl.split(",")[1]); return; }
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL("image/jpeg", quality).split(",")[1]);
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
 export function downscaleImage(img, maxW = 1280) {
   const s = Math.min(1, maxW / img.width);
   const c = document.createElement("canvas");

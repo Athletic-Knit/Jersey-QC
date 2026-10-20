@@ -21,15 +21,17 @@ A React/Vite web app for quality-control scanning of sports jerseys in a manufac
 - React 19, Vite 8 (ESM)
 - Single component file: `src/App.jsx` (~900+ lines, all inline styles, dark GitHub-like theme)
 - SheetJS loaded from CDN (`https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js`) for Excel read/write
-- Anthropic API (Claude Haiku 5.5 `claude-haiku-5-5`, medium effort; override with `VITE_CLAUDE_MODEL`) called **directly from the browser** via `fetch("/api/anthropic/v1/messages")` — requires a Vite dev proxy or a hosting proxy in production
+- Anthropic API (Claude Sonnet 5.5 `claude-sonnet-5-5`, thinking off, low effort, 800 px frame; overrides below) called **directly from the browser** via `fetch("/api/anthropic/v1/messages")` — requires a Vite dev proxy or a hosting proxy in production
 
 ## Environment variables
 
 | Variable | Purpose |
 |---|---|
 | `VITE_CLAUDE_API_KEY` | Anthropic API key — **never hardcode this** |
-| `VITE_CLAUDE_MODEL` | Optional model override (default `claude-haiku-5-5`) |
-| `VITE_CLAUDE_EFFORT` | Optional `low` / `medium` / `high` (default `medium`) |
+| `VITE_CLAUDE_MODEL` | Optional model override (default `claude-sonnet-5-5`) |
+| `VITE_CLAUDE_EFFORT` | Optional `low` / `medium` / `high` (default `low`) |
+| `VITE_CLAUDE_THINKING` | Optional `off` / `adaptive` (default `off`) |
+| `VITE_SEND_MAX_PX` | Longest side of the frame sent to the model (default `800`) |
 
 Create a `.env.local` file (already gitignored via `*.local`):
 ```
