@@ -6,8 +6,12 @@ Read these fields:
 - "name": the player name, printed in block capitals, if any. Ignore team names, sponsor logos and wordmarks; those are not the player name. In this block lettering, G has a horizontal bar and C does not; O is round and Q has a tail; B is closed and 8 is a digit. Copy the letters exactly as printed, including apostrophes and hyphens.
 - "number": the LARGE player number, if any. Jerseys also carry a smaller copy of the same number on each sleeve, and folded sleeves can sit right beside the back number: IGNORE sleeve numbers. A player number is 1 or 2 digits (00 to 99). Never return 3 or more digits.
 - "sleeve_numbers": any numbers you can see on the sleeves, as a list, so they are not confused with the back number.
+- "name_complete": true when the whole name is visible from its first letter to its last. false when any letters are covered (a hand, a fold, a tag, another garment), cut off by the edge of the picture, or unreadable, so the "name" you return may be only part of the word. If only part of a name is readable, still return the letters you can read.
+- "number_complete": true when the whole number is visible. false when any part of it could be covered or cut off (a hand, a fold, a tag, the edge of the picture). Back numbers are centred on the jersey: a single digit sitting clearly to the left or right of the jersey's centre line usually means a second digit is hidden, so return false.
+- "number_position": where the number you read sits across the width of the jersey back: "left", "centre" or "right".
+- "obstruction": a few words saying what, if anything, covers or cuts off the name or number, for example "hand over the right digit", "folded sleeve over the name", "cut off at the top of the picture". "" when nothing does.
 Return ONLY valid JSON, no markdown, no commentary:
-{"name":"NAME","number":"##","sleeve_numbers":["##"]}
+{"name":"NAME","number":"##","sleeve_numbers":["##"],"name_complete":true,"number_complete":true,"number_position":"centre","obstruction":""}
 If more than one jersey or plate is in the picture, read the largest or most central one and ignore the others.
 Never leave a field empty because you are unsure, and never decide that an item is "only a sample" or "not a real name": whatever letters are printed, return them. A person checks every read against the order, so a near-miss is far more useful than nothing. Do not explain; output the JSON only. Use "" only for a field that is truly not in the picture. A name plate with no number is a valid read: return the name and "" for the number.`;
 
@@ -21,12 +25,30 @@ function parseModelText(data) {
   let obj;
   try { obj = JSON.parse(body); } catch { throw new Error(`could not parse model output as JSON: ${raw.slice(0, 120)}`); }
   // The model may hand back a JSON integer; everything downstream wants strings.
+  // The completeness fields default to "complete" when the model leaves them
+  // out, so an older or terser answer never turns into a false alarm.
   return {
     name: str(obj.name),
     number: str(obj.number),
     sleeve_numbers: Array.isArray(obj.sleeve_numbers) ? obj.sleeve_numbers.map(str).filter(Boolean) : [],
+    name_complete: obj.name_complete !== false,
+    number_complete: obj.number_complete !== false,
+    number_position: normPosition(obj.number_position),
+    obstruction: str(obj.obstruction),
   };
 }
+
+// "center", "Centre", "middle" → "centre"; "left"/"right" as is; anything else → "".
+export function normPosition(v) {
+  const s = str(v).toLowerCase();
+  if (/cent|middle|mid/.test(s)) return "centre";
+  if (/left/.test(s)) return "left";
+  if (/right/.test(s)) return "right";
+  return "";
+}
+
+// Export the parser for tests.
+export { parseModelText };
 
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504, 529]);
 const sleep = ms => new Promise(r => setTimeout(r, ms));

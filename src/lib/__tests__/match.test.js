@@ -23,7 +23,8 @@ describe("findMatches: exact and ambiguity", () => {
   it("yellow when the number is shared and no name was read", () => {
     const m = findMatches(roster, "", "7");
     expect(m.type).toBe("pick");
-    expect(m.candidates.map(c => c._id)).toEqual([0, 1]);
+    expect(m.candidates.map(c => c._id).slice(0, 2)).toEqual([0, 1]);
+    expect(m.candidates.map(c => c._id)).toContain(4);      // #77: a hidden digit would make 7 from it
   });
   it("yellow for colour-only twins, never green", () => {
     const m = findMatches(roster, "", "35");

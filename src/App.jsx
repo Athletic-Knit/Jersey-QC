@@ -895,7 +895,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, confirmKey, can
             {state.reason}
           </div>
           <div style={{ fontSize: 16, color: "#a8a29e", marginBottom: 14, textAlign: "center" }}>
-            Read: #{detected?.number || "?"}{detected?.name ? ` · ${detected.name}` : ""}
+            Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}
             {primary !== HEADLINE_FIELDS && <span style={{ marginLeft: 12, color: accent }}>· differs by {primary.map(cap).join(" and ")}</span>}
           </div>
           <div style={{ width: "100%", maxWidth: 760, padding: "0 24px", boxSizing: "border-box", maxHeight: "48vh", overflowY: "auto" }}>
@@ -1437,7 +1437,7 @@ export default function App() {
     try {
       const r = await readJersey({ base64, apiKey: CLAUDE_API_KEY, model: MODEL });
       detected = r;
-      console.log(`Read #${r.number} ${r.name} (sleeves: ${r.sleeve_numbers.join(",") || "—"}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
+      console.log(`Read #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"} (sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
     } catch (e) {
       apiError = e.message;
     }
@@ -1451,11 +1451,14 @@ export default function App() {
     if (apiError) { showFlag("API error: " + apiError, "SCAN FAILED"); return; }
     if (!detected.name && !detected.number) { showFlag("No name or number could be read. Check the jersey is in frame, flat, and lit.", "COULD NOT READ"); return; }
 
-    const m = findMatches(roster, detected.name, detected.number);
+    const m = findMatches(roster, detected.name, detected.number, {
+      nameComplete: detected.name_complete, numberComplete: detected.number_complete,
+      position: detected.number_position, obstruction: detected.obstruction,
+    });
     if (m.type === "exact")          setOverlay({ mode: "confirm", scan: scanObj, match: m.match });
     else if (m.type === "duplicate") { setOverlay({ mode: "duplicate", scan: scanObj, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.size ? " · " + m.match.size : ""} already passed this session.` }); playTone("flag"); }
     else if (m.type === "pick" || m.type === "close") { setOverlay({ mode: m.type, scan: scanObj, candidates: m.candidates, reason: m.reason }); }
-    else showFlag(`"${detected.name || "?"}" #${detected.number || "?"} is not on this roster.`, "NOT FOUND");
+    else showFlag(`"${detected.name || "?"}" #${detected.number || "?"} is not on this roster.${m.reason ? ` Camera: ${m.reason}.` : ""}`, "NOT FOUND");
   }, [roster, firstScanTime]);
 
   // ── Camera scan trigger ───────────────────────────────────────────────────
@@ -1668,7 +1671,7 @@ export default function App() {
     manualSubmit({ number, name, size, team }) {
       const o = overlay; if (!o) return;
       const typed = { number, name, size, team };
-      const m = findMatches(roster, name, number);
+      const m = findMatches(roster, name, number, { typed: true });
       if (m.type === "duplicate") { setOverlay({ mode: "duplicate", scan: o.scan, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""} already passed this session.` }); playTone("flag"); return; }
       if (m.type === "exact") { commitTyped(o, typed, m.match); return; }
       if (m.type === "pick" || m.type === "close") {

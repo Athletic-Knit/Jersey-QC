@@ -1,5 +1,5 @@
 // ── Matching: what the operator sees for a read { name, number } ─────────────
-import { norm, normNum, nameMatches, editDistance } from "./text.js";
+import { norm, normNum, nameMatches, nameWords, editDistance } from "./text.js";
 
 // A row counts as done when it passed, or was entered by hand (awaiting the
 // supervisor's sign-off). A flagged row is out for repair and comes back with a
@@ -48,10 +48,31 @@ function nearNumbers(nNum, roster) {
   });
 }
 
+// Roster numbers a hidden digit would make from a shorter read: "4" → 40, 14, 44.
+// Only longer numbers that contain the read; a one-digit substitution is not a
+// hidden digit (that is nearNumbers' job).
+function hiddenDigitNumbers(nNum, roster) {
+  if (!nNum) return [];
+  return roster.filter(r => { const rn = normNum(r.number); return rn.length > nNum.length && isPlausibleNumber(rn) && rn.includes(nNum); });
+}
+
 function nearNames(nName, roster) {
   if (nName.length < 3) return [];
   const tol = nName.length >= 6 ? 2 : 1;
   return roster.filter(r => { const rn = norm(r.name); return rn && rn !== nName && editDistance(rn, nName) <= tol; });
+}
+
+// Rows whose name starts with a fragment the camera could only partly read
+// ("SAMU" → Samuel; "MACD" → MacDonald): any word of the roster name, or the
+// whole normalised name, begins with the fragment.
+function prefixNames(fragment, roster) {
+  if (fragment.length < 2) return [];
+  return roster.filter(r => {
+    const rn = norm(r.name);
+    if (!rn) return false;
+    if (rn.startsWith(fragment)) return true;
+    return nameWords(r.name).some(w => w.startsWith(fragment));
+  });
 }
 
 const single = rows => rows.length === 1
@@ -65,13 +86,29 @@ const single = rows => rows.length === 1
  *   { type: "pick",      candidates, reason }     several plausible rows
  *   { type: "close",     candidates, reason }     nothing exact; nearest rows
  *   { type: "none" }
- * Never auto-confirms while there is any ambiguity, and never while the number
- * read disagrees with the row the name points at.
+ *
+ * `read` carries what the camera said about its own read:
+ *   nameComplete   false when letters were covered or cut off ("SAMU" of SAMUEL)
+ *   numberComplete false when part of the number was covered or cut off
+ *   position       "left" | "centre" | "right" — where the number sat on the back
+ *   obstruction    the model's words for what was in the way
+ *   typed          true when the operator typed the values (no camera doubt)
+ *
+ * Green needs a name AND a number that both agree with one row, read in full.
+ * A number with no name on a roster that has names is yellow: the name may be
+ * hidden, and so may a digit. A partial or off-centre read is never green.
+ * Number-only rosters stay green on a clean, complete, centred read.
  */
-export function findMatches(roster, name, number) {
+export function findMatches(roster, name, number, read = {}) {
   const nName      = norm(name);
   const nNumRaw    = normNum(number);
   const numberOnly = isNumberOnlyRoster(roster);
+  const typed      = read.typed === true;
+  const position   = typed ? "" : String(read.position || "");
+  const partialName = !typed && !!nName && read.nameComplete === false;
+  const partialNum  = !typed && !!nNumRaw && read.numberComplete === false;
+  const offCentre   = !typed && !!nNumRaw && nNumRaw.length === 1 && (position === "left" || position === "right");
+  const suspect     = partialName || partialNum || offCentre;
 
   // Misread guard: 3+ digits cannot be a jersey number.
   if (nNumRaw && !isPlausibleNumber(nNumRaw)) {
@@ -83,12 +120,39 @@ export function findMatches(roster, name, number) {
   const nNum = nNumRaw;
 
   const byNum  = nNum ? roster.filter(r => normNum(r.number) === nNum) : [];
-  const byName = nName && !numberOnly ? roster.filter(r => nameMatches(nName, r.name)) : [];
-  const byBoth = byNum.filter(r => nameMatches(nName, r.name));
+  const byName = nName && !numberOnly
+    ? (partialName ? prefixNames(nName, roster) : roster.filter(r => nameMatches(nName, r.name)))
+    : [];
+  const byBoth = byNum.filter(r => byName.includes(r));
+
+  // The camera doubts its own read: part of the name or number was covered,
+  // cut off, or the number sat off-centre (a digit hidden). Never green. Offer
+  // every row the read could be a piece of, and say what was wrong.
+  if (suspect) {
+    const shown = String(name ?? "").trim();
+    const why = [];
+    if (partialName) why.push(`name read as "${shown}…" and looks cut off`);
+    if (partialNum)  why.push(`#${nNum} looks covered or cut off`);
+    else if (offCentre) why.push(`#${nNum} sits ${position} of centre — a digit may be hidden`);
+    if (!nName && !partialNum && !offCentre) why.push("no name was read");
+    const what = read.obstruction ? ` (${String(read.obstruction).trim()})` : "";
+    const cands = dedupe([...byBoth, ...byName, ...byNum, ...hiddenDigitNumbers(nNum, roster), ...nearNumbers(nNum, roster), ...(partialName ? [] : nearNames(nName, roster))]);
+    if (cands.length) return { type: "pick", candidates: cands, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?` };
+    return { type: "none", reason: `${why.join("; ")}${what}` };
+  }
 
   // Name and number both agree.
   if (byBoth.length >= 1) {
     return single(byBoth) || { type: "pick", candidates: byBoth, reason: "Same name and number on more than one row — check size and team" };
+  }
+
+  // A number with no name, on a roster that has names: the name may be hidden
+  // or out of frame, and so may a digit. Green needs both. The operator sees
+  // the #4 row first, then rows a hidden digit would make (#40, #14).
+  if (byNum.length >= 1 && nName === "" && !numberOnly && !typed) {
+    const cands = dedupe([...byNum, ...hiddenDigitNumbers(nNum, roster)]);
+    if (cands.length === 1 && isDone(cands[0])) return { type: "duplicate", match: cands[0] };
+    return { type: "pick", candidates: cands, reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?` };
   }
 
   // The name points at one row, the number at another: a digit was misread
