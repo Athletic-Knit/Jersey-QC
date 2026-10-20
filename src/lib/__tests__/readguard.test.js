@@ -36,6 +36,11 @@ describe("green needs a name and a number", () => {
     expect(m.type).toBe("pick");
     expect(ids(m)[0]).toBe(0);
   });
+  it("mixed roster: a row with no name of its own goes green on a clean number read", () => {
+    const r = [row(0, "Samuel", "40"), row(1, "", "54"), row(2, "", "7")];
+    expect(findMatches(r, "", "54")).toMatchObject({ type: "exact", match: { _id: 1 } });
+    expect(findMatches(r, "", "40").type).toBe("pick");          // Samuel's name was not read
+  });
   it("number-only roster still goes green on a clean read", () => {
     const r = [row(0, "", "40"), row(1, "", "4")];
     expect(findMatches(r, "", "4")).toMatchObject({ type: "exact", match: { _id: 1 } });

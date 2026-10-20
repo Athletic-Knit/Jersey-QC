@@ -146,10 +146,12 @@ export function findMatches(roster, name, number, read = {}) {
     return single(byBoth) || { type: "pick", candidates: byBoth, reason: "Same name and number on more than one row — check size and team" };
   }
 
-  // A number with no name, on a roster that has names: the name may be hidden
-  // or out of frame, and so may a digit. Green needs both. The operator sees
-  // the #4 row first, then rows a hidden digit would make (#40, #14).
-  if (byNum.length >= 1 && nName === "" && !numberOnly && !typed) {
+  // A number with no name, where the row it points at HAS a name: the name may
+  // be hidden or out of frame, and so may a digit. Green needs both. The
+  // operator sees the #4 row first, then rows a hidden digit would make (#40,
+  // #14). A row with no name of its own (a mixed roster) has nothing to read
+  // and stays green on a clean number.
+  if (byNum.length >= 1 && nName === "" && !typed && byNum.some(r => norm(r.name))) {
     const cands = dedupe([...byNum, ...hiddenDigitNumbers(nNum, roster)]);
     if (cands.length === 1 && isDone(cands[0])) return { type: "duplicate", match: cands[0] };
     return { type: "pick", candidates: cands, reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?` };
