@@ -21,7 +21,7 @@ A React/Vite web app for quality-control scanning of sports jerseys in a manufac
 - React 19, Vite 8 (ESM)
 - Single component file: `src/App.jsx` (~900+ lines, all inline styles, dark GitHub-like theme)
 - SheetJS loaded from CDN (`https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js`) for Excel read/write
-- Anthropic API (Claude Haiku `claude-haiku-4-5-20251001`) called **directly from the browser** via `fetch("/api/anthropic/v1/messages")` — requires a Vite dev proxy or a hosting proxy in production
+- Anthropic API (Claude Haiku 5.5 `claude-haiku-5-5`, medium effort; override with `VITE_CLAUDE_MODEL`) called **directly from the browser** via `fetch("/api/anthropic/v1/messages")` — requires a Vite dev proxy or a hosting proxy in production
 
 ## Environment variables
 

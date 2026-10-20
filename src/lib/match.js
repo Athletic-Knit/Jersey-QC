@@ -136,7 +136,12 @@ export function findMatches(roster, name, number, read = {}) {
     else if (offCentre) why.push(`#${nNum} sits ${position} of centre — a digit may be hidden`);
     if (!nName && !partialNum && !offCentre) why.push("no name was read");
     const what = read.obstruction ? ` (${String(read.obstruction).trim()})` : "";
-    const cands = dedupe([...byBoth, ...byName, ...byNum, ...hiddenDigitNumbers(nNum, roster), ...nearNumbers(nNum, roster), ...(partialName ? [] : nearNames(nName, roster))]);
+    // A covered digit makes the model guess it ("35" read as 55 or 75), so a
+    // partial two-digit read also offers each digit on its own and every
+    // one-digit substitution; a partial one-digit read offers what a hidden
+    // digit would make.
+    const guessed = partialNum ? subNumberCandidates(nNum, roster) : [];
+    const cands = dedupe([...byBoth, ...byName, ...byNum, ...hiddenDigitNumbers(nNum, roster), ...nearNumbers(nNum, roster), ...guessed, ...(partialName ? [] : nearNames(nName, roster))]);
     if (cands.length) return { type: "pick", candidates: cands, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?` };
     return { type: "none", reason: `${why.join("; ")}${what}` };
   }

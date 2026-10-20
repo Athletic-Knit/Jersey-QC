@@ -68,6 +68,15 @@ describe("the camera doubts its read", () => {
     expect(m.reason).toMatch(/covered or cut off/);
     expect(m.reason).toMatch(/hand over the right digit/);
   });
+  it("covered 3 of #35 read as a guessed 55 or 75, flagged incomplete → yellow with #35 and #5 offered", () => {
+    const r = [row(0, "", "35"), row(1, "", "5"), row(2, "", "40"), row(3, "", "12")];
+    for (const guess of ["55", "75", "35", "5"]) {
+      const m = findMatches(r, "", guess, { numberComplete: false });
+      expect(m.type).toBe("pick");
+      expect(ids(m)).toEqual(expect.arrayContaining([0, 1]));
+      expect(ids(m)).not.toContain(3);
+    }
+  });
   it("number-only roster, single digit sitting left of centre → yellow, not green", () => {
     const r = [row(0, "", "40"), row(1, "", "4")];
     const m = findMatches(r, "", "4", { position: "left" });

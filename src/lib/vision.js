@@ -1,5 +1,10 @@
 // ── The read: one image in, { name, number } out ──────────────────────────────
-export const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+// Haiku 5.5 at medium effort: it sees a covered or cut-off digit (Haiku 4.5
+// did not, 0 of 6 tries on a real frame), costs a tenth per token, and takes
+// about two seconds longer per scan. Low effort false-alarms on a jersey whose
+// body runs out of the picture, so medium.
+export const DEFAULT_MODEL = "claude-haiku-5-5";
+export const DEFAULT_EFFORT = "medium";
 
 export const PROMPT = `This is a quality-control photo from a sports-jersey factory. It usually shows the BACK of a jersey laid flat, but it may show only a loose name plate or number patch lying on the table before it is sewn on. The text may be sideways or upside down: read it in whatever orientation it is.
 Read these fields:
@@ -7,7 +12,7 @@ Read these fields:
 - "number": the LARGE player number, if any. Jerseys also carry a smaller copy of the same number on each sleeve, and folded sleeves can sit right beside the back number: IGNORE sleeve numbers. A player number is 1 or 2 digits (00 to 99). Never return 3 or more digits.
 - "sleeve_numbers": any numbers you can see on the sleeves, as a list, so they are not confused with the back number.
 - "name_complete": true when the whole name is visible from its first letter to its last. false when any letters are covered (a hand, a fold, a tag, another garment), cut off by the edge of the picture, or unreadable, so the "name" you return may be only part of the word. If only part of a name is readable, still return the letters you can read.
-- "number_complete": true when the whole number is visible. false when any part of it could be covered or cut off (a hand, a fold, a tag, the edge of the picture). Back numbers are centred on the jersey: a single digit sitting clearly to the left or right of the jersey's centre line usually means a second digit is hidden, so return false.
+- "number_complete": true when every digit of the back number is wholly visible. false when any part of a digit could be covered or cut off (a hand, a fold, a tag, another garment, the edge of the picture). This is about the digits only: the jersey body, sleeves or collar running out of the picture does not matter if the digits themselves are whole. Back numbers are centred on the jersey: a single digit sitting clearly to the left or right of the jersey's centre line usually means a second digit is hidden, so return false.
 - "number_position": where the number you read sits across the width of the jersey back: "left", "centre" or "right".
 - "obstruction": a few words saying what, if anything, covers or cuts off the name or number, for example "hand over the right digit", "folded sleeve over the name", "cut off at the top of the picture". "" when nothing does.
 Return ONLY valid JSON, no markdown, no commentary:
@@ -57,7 +62,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
  * Calls the Anthropic Messages API through the dev proxy with a timeout and a
  * single retry on network errors / rate limits. Throws with a readable message.
  */
-export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, timeoutMs = 25000, retries = 1, fetchImpl = globalThis.fetch }) {
+export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort = DEFAULT_EFFORT, timeoutMs = 25000, retries = 1, fetchImpl = globalThis.fetch }) {
+  // Current-generation models think before answering (adaptive thinking is on
+  // by default) and need room for it; older ones take a plain token cap.
+  const thinks = /^claude-(haiku|sonnet|opus|fable)-5/.test(model);
+  const request = { model, max_tokens: thinks ? 4000 : 200 };
+  if (thinks && effort) request.output_config = { effort };
   let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ac = new AbortController();
@@ -73,7 +83,7 @@ export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, timeou
           "anthropic-dangerous-direct-browser-access": "true",
         },
         body: JSON.stringify({
-          model, max_tokens: 200,
+          ...request,
           messages: [{ role: "user", content: [
             { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
             { type: "text", text: PROMPT },
