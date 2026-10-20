@@ -1137,7 +1137,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
   const selSt = { ...inputSt, padding: "6px 10px", fontSize: 13 };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2200, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 12, border: "1px solid #21262d", padding: 24, width: 400, maxWidth: "92vw", maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14 }}>⚙ Settings</div>
 
@@ -1260,7 +1260,7 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, onExport, onDismiss }
   ].filter(s => s.value > 0 || s.label === "Passed");
   const open = count("flag") + offRosterFlags + count("manual") + count("missing") + count("short");
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: `2px solid ${open ? "#f59e0b" : "#22c55e"}`, padding: 40, maxWidth: 520, width: "90vw", textAlign: "center" }}>
         <div style={{ fontSize: 56, marginBottom: 12 }}>{open ? "📋" : "🎉"}</div>
         <div style={{ fontSize: 28, fontWeight: 900, color: open ? "#f59e0b" : "#22c55e", marginBottom: 8 }}>{open ? "Every jersey accounted for" : "Order Complete!"}</div>
