@@ -190,7 +190,15 @@ export function findMatches(roster, name, number, read = {}) {
 
   // Name is on the roster; the number is not.
   if (byName.length >= 1) {
-    if (!nNum) return single(byName) || { type: "pick", candidates: byName, reason: "Name matches more than one row" };
+    if (!nNum) {
+      // Typed by the operator: the name alone is their word. From the camera a
+      // name with no number is half a read (the number under a fold, or the
+      // name plate of a different jersey): yellow, never green.
+      if (typed) return single(byName) || { type: "pick", candidates: byName, reason: "Name matches more than one row" };
+      if (byName.length === 1 && isDone(byName[0])) return { type: "duplicate", match: byName[0] };
+      const nums = [...new Set(byName.map(r => r.number))].join(" / ");
+      return { type: "pick", candidates: byName, reason: `Read "${String(name).trim()}" but no number — is #${nums} hidden or out of frame? Is it this jersey?` };
+    }
     return { type: "pick", candidates: dedupe([...byName, ...nearNumbers(nNum, roster)]), reason: `Name matches #${[...new Set(byName.map(r => r.number))].join(" / ")} but the number read as #${nNum}` };
   }
 

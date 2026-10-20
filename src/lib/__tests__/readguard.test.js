@@ -28,6 +28,26 @@ describe("green needs a name and a number", () => {
     const r = [row(0, "Smith", "9", "T", "A-L", { scanned: "pass" })];
     expect(findMatches(r, "", "9").type).toBe("duplicate");
   });
+  it("name read, no number → yellow with that row, never green (number under a fold)", () => {
+    const r = [row(0, "Stephenson", "22"), row(1, "", "5")];
+    const m = findMatches(r, "STEPHENSON", "");
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual([0]);
+    expect(m.reason).toMatch(/#22/);
+  });
+  it("name from one jersey, number from another on top → yellow with both rows", () => {
+    const r = [row(0, "Stephenson", "22"), row(1, "", "5")];
+    const m = findMatches(r, "STEPHENSON", "5");
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual(expect.arrayContaining([0, 1]));
+  });
+  it("name read, no number, that row already passed → duplicate", () => {
+    const r = [row(0, "Stephenson", "22", "T", "A-L", { scanned: "pass" })];
+    expect(findMatches(r, "STEPHENSON", "").type).toBe("duplicate");
+  });
+  it("typed name alone is still green", () => {
+    expect(findMatches([row(0, "Stephenson", "22")], "Stephenson", "", { typed: true }).type).toBe("exact");
+  });
   it("typed by the operator: number alone is still green (no camera doubt)", () => {
     expect(findMatches(named, "", "4", { typed: true })).toMatchObject({ type: "exact", match: { _id: 1 } });
   });
