@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { findMatches } from "../match.js";
 import { parseModelText, normPosition } from "../vision.js";
+import { colourFamilies, narrowByColour } from "../colour.js";
 
 const row = (i, name, number, team = "T", size = "A-L", extra = {}) => ({ _id: i, name, number, team, size, scanned: false, ...extra });
 
@@ -114,6 +115,58 @@ describe("no alternative, no yellow", () => {
     expect(findMatches(r, "", "4", { numberComplete: false }).soft).toBe(true);
     expect(findMatches(r, "", "4").soft).toBe(true);
     expect(findMatches(r, "SAMUEL", "4").soft).toBeUndefined();
+  });
+});
+
+describe("colour settles same-number rows", () => {
+  // Order 41 on the floor: numbers repeat across colours, the team column is the colour.
+  const order41 = () => [
+    row(0, "", "1", "red", "A-M"), row(1, "", "1", "red", "A-S"), row(2, "", "1", "yellow", "A-L"),
+    row(3, "", "31", "green", "A-S"), row(4, "", "31", "green", "A-XL"), row(5, "Rine", "31", "green", "A-3XL"), row(6, "Donnelly", "31", "red", "A-M"),
+    row(7, "", "35", "yellow", "A-S"), row(8, "", "35", "yellow", "A-S"),
+    row(9, "", "40", "blue", "A-XL"), row(10, "Hunter", "22", "red", "Y-XL"), row(11, "Stephenson", "22", "yellow", "A-L"),
+  ];
+  it("#1 on a yellow jersey → green on the yellow row", () => {
+    expect(findMatches(order41(), "", "1", { colour: "yellow" })).toMatchObject({ type: "exact", match: { _id: 2 } });
+  });
+  it("#1 on a red jersey → pick between the two red sizes, red rows first, says what it saw", () => {
+    const m = findMatches(order41(), "", "1", { colour: "red", trim: "white" });
+    expect(m.type).toBe("pick");
+    expect(ids(m).slice(0, 2)).toEqual([0, 1]);
+    expect(m.reason).toMatch(/looks red/);
+  });
+  it("#1 red once red A-S has passed → green on red A-M", () => {
+    const r = order41(); r[1].scanned = "pass";
+    expect(findMatches(r, "", "1", { colour: "red" })).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+  it("colour words map to families: scarlet is red, sky blue is blue, teal meets blue and green", () => {
+    expect(colourFamilies("scarlet")).toEqual(["red"]);
+    expect(colourFamilies("sky blue")).toEqual(["blue"]);
+    expect(colourFamilies("Ravens")).toEqual([]);
+    const rows = [row(0, "", "7", "teal"), row(1, "", "7", "red")];
+    expect(narrowByColour(rows, { colour: "blue" }).rows.map(r => r._id)).toEqual([0]);
+    expect(narrowByColour(rows, { colour: "green" }).rows.map(r => r._id)).toEqual([0]);
+  });
+  it("colour that agrees with no row never rules anything out", () => {
+    const m = findMatches(order41(), "", "1", { colour: "purple" });
+    expect(m.type).toBe("pick");
+    expect(ids(m).length).toBe(3);
+  });
+  it("team names that are not colours leave the pick as it was", () => {
+    const r = [row(0, "", "7", "Ravens"), row(1, "", "7", "Wolves")];
+    expect(findMatches(r, "", "7", { colour: "black" }).type).toBe("pick");
+  });
+  it("trim colour breaks a tie when the body colour does not", () => {
+    const r = [row(0, "", "7", "white"), row(1, "", "7", "navy")];
+    expect(findMatches(r, "", "7", { colour: "silver", trim: "navy blue" })).toMatchObject({ type: "exact", match: { _id: 1 } });
+  });
+  it("a nameless read on #22 (two named rows) on a yellow jersey → green on Stephenson", () => {
+    expect(findMatches(order41(), "", "22", { colour: "yellow" })).toMatchObject({ type: "exact", match: { _id: 11 } });
+  });
+  it("parser lower-cases the colour fields and defaults them empty", () => {
+    const wrap = obj => ({ content: [{ type: "text", text: JSON.stringify(obj) }] });
+    expect(parseModelText(wrap({ number: "1", jersey_colour: "Navy Blue", trim_colour: "White" }))).toMatchObject({ jersey_colour: "navy blue", trim_colour: "white" });
+    expect(parseModelText(wrap({ number: "1" }))).toMatchObject({ jersey_colour: "", trim_colour: "" });
   });
 });
 

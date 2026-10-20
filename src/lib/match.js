@@ -1,5 +1,6 @@
 // ── Matching: what the operator sees for a read { name, number } ─────────────
 import { norm, normNum, nameMatches, nameWords, editDistance } from "./text.js";
+import { narrowByColour } from "./colour.js";
 
 // A row counts as done when it passed, or was entered by hand (awaiting the
 // supervisor's sign-off). A flagged row is out for repair and comes back with a
@@ -92,6 +93,17 @@ const lastOpen = rows => {
 // piece of. If `direct` is open and no other candidate is, the jersey can only
 // be `direct`: green. Contradictions never come here — a name pointing at one
 // row and a number at another is evidence, not a gap.
+// Several rows carry the same read and differ by colour or size. The colour
+// the camera saw narrows them; one open row left is green. Otherwise the
+// agreeing rows lead the list and the reason says what was seen.
+function sameReadRows(rows, read, reason) {
+  const { rows: agree, narrowed } = narrowByColour(rows, read);
+  const sure = single(agree) || lastOpen(agree);
+  if (sure) return sure;
+  const seen = narrowed && read.colour ? ` — the jersey looks ${String(read.colour).trim()}` : "";
+  return { type: "pick", candidates: dedupe([...agree, ...rows]), reason: reason + seen };
+}
+
 const soleOpen = (direct, cands) => {
   if (!direct || isDone(direct)) return null;
   const open = cands.filter(r => !isDone(r));
@@ -111,6 +123,7 @@ const soleOpen = (direct, cands) => {
  *   numberComplete false when part of the number was covered or cut off
  *   position       "left" | "centre" | "right" — where the number sat on the back
  *   obstruction    the model's words for what was in the way
+ *   colour, trim   the jersey body colour and its second colour, as seen
  *   typed          true when the operator typed the values (no camera doubt)
  *
  * Green needs a name AND a number that both agree with one row, read in full.
@@ -174,7 +187,7 @@ export function findMatches(roster, name, number, read = {}) {
 
   // Name and number both agree.
   if (byBoth.length >= 1) {
-    return single(byBoth) || lastOpen(byBoth) || { type: "pick", candidates: byBoth, reason: "Same name and number on more than one row — check size and team" };
+    return single(byBoth) || lastOpen(byBoth) || sameReadRows(byBoth, read, "Same name and number on more than one row — check size and team");
   }
 
   // A number with no name, where the row it points at HAS a name: the name may
@@ -185,7 +198,11 @@ export function findMatches(roster, name, number, read = {}) {
   if (byNum.length >= 1 && nName === "" && !typed && byNum.some(r => norm(r.name))) {
     const cands = dedupe([...byNum, ...hiddenDigitNumbers(nNum, roster)]);
     if (cands.length === 1 && isDone(cands[0])) return { type: "duplicate", match: cands[0] };
-    return soleOpen(byNum.length === 1 ? byNum[0] : null, cands) || { type: "pick", candidates: cands, reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?`, soft: true };
+    const sure = soleOpen(byNum.length === 1 ? byNum[0] : null, cands);
+    if (sure) return sure;
+    // Several rows with this number: let the colour settle it.
+    if (byNum.length > 1) { const c = narrowByColour(byNum, read); const s2 = c.narrowed ? soleOpen(c.rows.length === 1 ? c.rows[0] : null, cands.filter(r => !byNum.includes(r) || c.rows.includes(r))) : null; if (s2) return s2; }
+    return { type: "pick", candidates: cands, reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?`, soft: true };
   }
 
   // The name points at one row, the number at another: a digit was misread
@@ -198,7 +215,7 @@ export function findMatches(roster, name, number, read = {}) {
 
   // Number read; no name read, or a number-only roster.
   if (byNum.length >= 1 && (nName === "" || numberOnly)) {
-    return single(byNum) || lastOpen(byNum) || { type: "pick", candidates: byNum, reason: "More than one row with this number — check size and team" };
+    return single(byNum) || lastOpen(byNum) || sameReadRows(byNum, read, "More than one row with this number — check size and team");
   }
 
   // Number is on the roster but the name read agrees with no row.
