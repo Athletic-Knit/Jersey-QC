@@ -25,3 +25,4 @@ dist-ssr
 vite.config.js.bak
 vite.config.diag.js
 data/
+public/sim

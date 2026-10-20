@@ -480,7 +480,9 @@ function SupervisorPanel({ operatorName, onClose }) {
   const [file,    setFile]    = useState(null);
   const [target,  setTarget]  = useState("");     // station id to send the roster to; "" = any station may take it
   const [msg,     setMsg]     = useState(null);
-  const [alerts,  setAlerts]  = useState([]);     // "needs you" items not yet acknowledged here
+  const [alerts,  setAlerts]  = useState([]);     // toasts for flags that just happened; each shows ~12 s
+  const TOAST_MS = 12000;
+  useEffect(() => { const t = setInterval(() => setAlerts(a => a.some(x => Date.now() - x.at > TOAST_MS) ? a.filter(x => Date.now() - x.at <= TOAST_MS) : a), 1000); return () => clearInterval(t); }, []);
   const [bigPhoto, setBigPhoto] = useState(null); // a flag photo shown large
   const [backlog, setBacklog] = useState(null);   // what was already open when this view opened
   const [hubDown, setHubDown] = useState(null);   // when the hub stopped answering, or null
@@ -505,9 +507,12 @@ function SupervisorPanel({ operatorName, onClose }) {
         const items = keys.size + d.stations.reduce((n, s) => n + (s.carried || []).length, 0);
         setBacklog(items ? { items, stations: stations.length } : null);
       }
-      seenRef.current = keys;
+      // Remember every key ever announced, not just the ones in this report: a
+      // station that drops out for a reload and comes back must not re-announce
+      // the same flag, and an alert already on screen is never added twice.
+      if (!seenRef.current) seenRef.current = keys; else keys.forEach(k => seenRef.current.add(k));
       if (fresh.length) {
-        setAlerts(prev => [...fresh.reverse(), ...prev].slice(0, 50));
+        setAlerts(prev => [...fresh.reverse().filter(f => !prev.some(p => p.key === f.key)), ...prev].slice(0, 50));
         playTone("flag");
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
           try {
@@ -545,6 +550,7 @@ function SupervisorPanel({ operatorName, onClose }) {
   };
 
   const age = s => Math.round((data.now - s.updatedAt) / 1000);
+  const openCount = data.stations.reduce((n, s) => n + (s.attention || []).filter(a => !a.resolution).length + (s.carried || []).length, 0);
   const pct = s => s.counts?.total ? Math.round(((s.counts.total - s.counts.remaining) / s.counts.total) * 100) : 0;
   const todayStr   = data.today || new Date().toLocaleDateString("en-CA");
   const todayTotal = data.stations.reduce((n, s) => n + (s.day?.date === todayStr ? s.day.done : 0), 0);
@@ -554,11 +560,10 @@ function SupervisorPanel({ operatorName, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 1800, display: "flex", flexDirection: "column", color: "#e2e8f0", fontFamily: "system-ui,sans-serif" }}>
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {alerts.length > 0 && <Pill color="#ef4444">{alerts.length} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {data.stations.length} {data.stations.length === 1 ? "station" : "stations"} live</div></div>
+        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="#ef4444">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {data.stations.length} {data.stations.length === 1 ? "station" : "stations"} live</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {desktop === "denied" && <span style={{ fontSize: 16 }} title="Desktop alerts are blocked — allow notifications for this site in the browser's address bar">🔕</span>}
           {desktop === "default" && <button onClick={enableDesktop} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#f59e0b", color: "#fcd34d" }}>🔔 Turn on alerts</button>}
-          {alerts.length > 0 && <button onClick={() => setAlerts([])} style={{ ...btnGhost, padding: "6px 12px" }}>Mark all seen</button>}
           <button onClick={onClose} style={{ ...btnGhost, padding: "6px 14px" }}>← Back to scanning</button>
         </div>
       </div>
@@ -578,8 +583,8 @@ function SupervisorPanel({ operatorName, onClose }) {
       {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
       {alerts.length > 0 && (
         <div style={{ position: "absolute", top: 54, right: 16, width: 380, maxWidth: "calc(100% - 32px)", zIndex: 1900, display: "flex", flexDirection: "column", gap: 8 }}>
-          {alerts.length > 3 && <div style={{ textAlign: "right", fontSize: 12, color: "#fca5a5" }}>{alerts.length - 3} more — see the cards</div>}
-          {alerts.slice(0, 3).map(a => (
+          {alerts.length > 2 && <div style={{ textAlign: "right", fontSize: 12, color: "#fca5a5" }}>{alerts.length - 2} more just now — see the cards</div>}
+          {alerts.slice(0, 2).map(a => (
             <div key={a.key} role="alert" style={{ background: a.status === "manual" ? "#3b2a06" : "#4a0d0d", border: `1px solid ${a.status === "manual" ? "#f59e0b" : "#ef4444"}`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 24px rgba(0,0,0,0.55)", color: "#fff", fontSize: 13 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                 <div style={{ fontWeight: 800 }}>{a.status === "manual" ? "✍" : "🛑"} {a.station} · {a.operator}</div>
@@ -592,7 +597,7 @@ function SupervisorPanel({ operatorName, onClose }) {
               <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 3 }}>{a.status === "manual" ? "Entered by hand — needs your sign-off" : "Jersey is on its way to you"} · {a.time}</div>
             </div>
           ))}
-          {alerts.length > 1 && <button onClick={() => setAlerts([])} style={{ ...btnGhost, alignSelf: "flex-end", padding: "4px 10px", fontSize: 11 }}>Mark all seen</button>}
+          {alerts.length > 1 && <button onClick={() => setAlerts([])} style={{ ...btnGhost, alignSelf: "flex-end", padding: "4px 10px", fontSize: 11 }}>Dismiss all</button>}
         </div>
       )}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
@@ -1291,16 +1296,9 @@ export default function App() {
     p.catch(() => setFsHint("The browser refused — press F11 instead"));
     setTimeout(() => setFsHint(null), 6000);
   };
-  // Wide screen: the result screen takes the right half and the camera stays
-  // where it is; on a narrow screen it still takes the whole display.
-  const [wide, setWide] = useState(() => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 1000px)").matches : true));
-  useEffect(() => {
-    if (!window.matchMedia) return;
-    const mq = window.matchMedia("(min-width: 1000px)");
-    const on = e => setWide(e.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
+  // The result screen always takes the right half and the camera stays where
+  // it is, whatever the screen size: one layout to learn, on every PC.
+  const wide = true;
   const [showBinSetup,       setShowBinSetup]       = useState(false);
   const [showSupervisor,     setShowSupervisor]     = useState(false);
   const [binMap,             setBinMap]             = useState(null);

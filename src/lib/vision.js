@@ -13,7 +13,7 @@ export const DEFAULT_MODEL = "claude-sonnet-5-5";
 export const DEFAULT_EFFORT = "low";
 export const DEFAULT_THINKING = "off";   // "adaptive" | "off"
 
-export const PROMPT = `This is a quality-control photo from a sports-jersey factory. It usually shows the BACK of a jersey laid flat, but it may show only a loose name plate or number patch lying on the table before it is sewn on. The text may be sideways or upside down: read it in whatever orientation it is.
+export const PROMPT = `This is a quality-control photo from a sports-jersey factory. It usually shows the BACK of a jersey laid flat, but it may show only a loose name plate or number patch lying on the table before it is sewn on. The text may be sideways or upside down: read it as it would read with the jersey the right way up, so an upside-down 40 is "40", never "04", and an upside-down 61 is "61", never "19".
 Read these fields:
 - "name": the player name, printed in block capitals, if any. Ignore team names, sponsor logos and wordmarks; those are not the player name. In this block lettering, G has a horizontal bar and C does not; O is round and Q has a tail; B is closed and 8 is a digit. Copy the letters exactly as printed, including apostrophes and hyphens.
 - "number": the LARGE player number, if any. Jerseys also carry a smaller copy of the same number on each sleeve, and folded sleeves can sit right beside the back number: IGNORE sleeve numbers. A player number is 1 or 2 digits (00 to 99). Never return 3 or more digits.

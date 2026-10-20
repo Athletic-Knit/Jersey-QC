@@ -58,6 +58,18 @@ const PHOTO_W = 180, PHOTO_H = 135;   // 4:3 at 180 px wide; row height is in po
  */
 export async function exportDamageReportXLSX(rows, { name = "all", title = "Damage report" } = {}, ExcelJS = null) {
   const XL = ExcelJS || await loadExcelJS();
+  const wb = buildDamageWorkbook(rows, { title }, XL);
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `damage_${safeFilename(name)}_${localDateStamp()}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+// The workbook itself, for the browser download above or a Node script.
+export function buildDamageWorkbook(rows, { title = "Damage report" } = {}, XL) {
   const wb = new XL.Workbook();
   wb.creator = "Jersey QC Scanner";
   const ws = wb.addWorksheet("Damage report", { views: [{ state: "frozen", ySplit: 2 }] });
@@ -80,11 +92,5 @@ export async function exportDamageReportXLSX(rows, { name = "all", title = "Dama
       }
     }
   });
-  const buf = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `damage_${safeFilename(name)}_${localDateStamp()}.xlsx`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  return wb;
 }
