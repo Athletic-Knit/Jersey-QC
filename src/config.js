@@ -87,7 +87,4 @@ export const DEFAULT_SETTINGS = {
   rotation: 180,          // 0 | 90 | 180 | 270 — how the camera is mounted
   cameraId: "",           // "" = browser default
   autoScan: true,         // hands-free: scan when the jersey changes and settles
-  gestures: false,        // answer result screens with a hand gesture to the camera (thumbs up = select, thumbs down = next, ...)
-  gestureHoldMs: 600,     // a gesture must be held this long before it fires
-  gestureCooldownMs: 1500,// and nothing fires for this long afterwards
 };
