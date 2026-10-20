@@ -28,12 +28,12 @@ describe("green needs a name and a number", () => {
     const r = [row(0, "Smith", "9", "T", "A-L", { scanned: "pass" })];
     expect(findMatches(r, "", "9").type).toBe("duplicate");
   });
-  it("name read, no number → yellow with that row, never green (number under a fold)", () => {
-    const r = [row(0, "Stephenson", "22"), row(1, "", "5")];
+  it("name read, no number, two Stephensons open → yellow between them", () => {
+    const r = [row(0, "Stephenson", "22", "A"), row(1, "Stephenson", "9", "B")];
     const m = findMatches(r, "STEPHENSON", "");
     expect(m.type).toBe("pick");
-    expect(ids(m)).toEqual([0]);
-    expect(m.reason).toMatch(/#22/);
+    expect(ids(m)).toEqual([0, 1]);
+    expect(m.reason).toMatch(/#22 \/ 9/);
   });
   it("name from one jersey, number from another on top → yellow with both rows", () => {
     const r = [row(0, "Stephenson", "22"), row(1, "", "5")];
@@ -59,11 +59,61 @@ describe("green needs a name and a number", () => {
   it("mixed roster: a row with no name of its own goes green on a clean number read", () => {
     const r = [row(0, "Samuel", "40"), row(1, "", "54"), row(2, "", "7")];
     expect(findMatches(r, "", "54")).toMatchObject({ type: "exact", match: { _id: 1 } });
-    expect(findMatches(r, "", "40").type).toBe("pick");          // Samuel's name was not read
+    expect(findMatches(r, "", "40")).toMatchObject({ type: "exact", match: { _id: 0 } });   // Samuel's name not read, but no other row could be #40
+    const r2 = [...r, row(3, "", "4")];
+    expect(findMatches(r2, "", "4").type).toBe("exact");                              // clean, complete read of the nameless #4: green
+    expect(findMatches(r2, "", "4", { numberComplete: false }).type).toBe("pick");    // doubtful read: #40 is open, so ask
   });
   it("number-only roster still goes green on a clean read", () => {
     const r = [row(0, "", "40"), row(1, "", "4")];
     expect(findMatches(r, "", "4")).toMatchObject({ type: "exact", match: { _id: 1 } });
+  });
+});
+
+describe("no alternative, no yellow", () => {
+  it("one #4 with no name on the roster, clean read → green", () => {
+    const r = [row(0, "", "4"), row(1, "Nguyen", "23")];
+    expect(findMatches(r, "", "4")).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+  it("two #4 rows with no name → yellow", () => {
+    const r = [row(0, "", "4", "red"), row(1, "", "4", "blue")];
+    expect(findMatches(r, "", "4").type).toBe("pick");
+  });
+  it("#4 read flagged covered, and no other open row a hidden digit could make → green on #4", () => {
+    const r = [row(0, "Evanovich", "4"), row(1, "Nguyen", "23")];
+    expect(findMatches(r, "", "4", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+  it("same read while #40 is still open → yellow", () => {
+    const r = [row(0, "Evanovich", "4"), row(1, "Samuel", "40")];
+    expect(findMatches(r, "", "4", { numberComplete: false }).type).toBe("pick");
+  });
+  it("same read once #40 has passed → green on #4", () => {
+    const r = [row(0, "Evanovich", "4"), row(1, "Samuel", "40", "T", "A-L", { scanned: "pass" })];
+    expect(findMatches(r, "", "4", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+  it("#4 read, no name, Evanovich the only open candidate → green", () => {
+    const r = [row(0, "Evanovich", "4"), row(1, "Nguyen", "23")];
+    expect(findMatches(r, "", "4")).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+  it("SAMU… with #40 and one Samuel → green", () => {
+    const r = [row(0, "Samuel", "40"), row(1, "Nguyen", "23")];
+    expect(findMatches(r, "SAMU", "40", { nameComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+  it("STEPHENSON with no number and one Stephenson → green; with #5 read as well → yellow (contradiction)", () => {
+    const r = [row(0, "Stephenson", "22"), row(1, "", "5")];
+    expect(findMatches(r, "STEPHENSON", "")).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches(r, "STEPHENSON", "5").type).toBe("pick");
+    expect(findMatches(r, "STEPHENSON", "5", { numberComplete: false }).type).toBe("pick");
+  });
+  it("the direct row already passed while the alternative is open → still yellow, never green on the alternative", () => {
+    const r = [row(0, "Evanovich", "4", "T", "A-L", { scanned: "pass" }), row(1, "Samuel", "40")];
+    expect(findMatches(r, "", "4", { numberComplete: false }).type).toBe("pick");
+  });
+  it("doubtful results carry soft: true for the second look; contradictions do not", () => {
+    const r = [row(0, "Evanovich", "4"), row(1, "Samuel", "40")];
+    expect(findMatches(r, "", "4", { numberComplete: false }).soft).toBe(true);
+    expect(findMatches(r, "", "4").soft).toBe(true);
+    expect(findMatches(r, "SAMUEL", "4").soft).toBeUndefined();
   });
 });
 
@@ -96,18 +146,19 @@ describe("same number on several rows", () => {
 });
 
 describe("the camera doubts its read", () => {
-  it("name cut off: SAMU… with #40 → yellow with Samuel, says the name looks cut off", () => {
-    const m = findMatches(named, "SAMU", "40", { nameComplete: false });
+  it("name cut off: SAMU… with #40 and two Samu… rows → yellow, says the name looks cut off", () => {
+    const r = [...named, row(9, "Samuels", "40", "B")];
+    const m = findMatches(r, "SAMU", "40", { nameComplete: false });
     expect(m.type).toBe("pick");
-    expect(ids(m)[0]).toBe(0);
+    expect(ids(m)).toEqual(expect.arrayContaining([0, 9]));
     expect(m.reason).toMatch(/"SAMU…"/);
     expect(m.reason).toMatch(/cut off/);
   });
   it("name fragment matches a word of a two-word roster name", () => {
-    const r = [row(0, "Jordan Blake", "10")];
+    const r = [row(0, "Jordan Blake", "10"), row(1, "Blair", "10")];
     const m = findMatches(r, "BLA", "10", { nameComplete: false });
     expect(m.type).toBe("pick");
-    expect(ids(m)).toEqual([0]);
+    expect(ids(m)).toEqual([0, 1]);
   });
   it("number covered: #4 flagged incomplete, no name → yellow with #4, #40, #14 and the model's words", () => {
     const m = findMatches(named, "", "4", { numberComplete: false, obstruction: "hand over the right digit" });

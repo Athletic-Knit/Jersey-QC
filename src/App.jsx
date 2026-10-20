@@ -1424,7 +1424,7 @@ export default function App() {
   }, [settings.cameraId, stopCamera]);
 
   // ── Core scan ─────────────────────────────────────────────────────────────
-  const doRunScan = useCallback(async (base64, dataUrl) => {
+  const doRunScan = useCallback(async (base64, dataUrl, recapture = null) => {
     const version = rosterVersion.current;
     if (!firstScanTime) setFirstScanTime(Date.now());
     gateRef.current.disarm(); setArmed(false);
@@ -1432,31 +1432,52 @@ export default function App() {
     setThumb(dataUrl);
     playTone("scan");
 
+    const readOne = async (b64, url) => {
+      // Send a smaller frame than the camera gives: same read, faster answer.
+      const sendB64 = await frameForUpload(url, SEND_MAX_PX).catch(() => b64);
+      const r = await readJersey({ base64: sendB64, apiKey: CLAUDE_API_KEY, model: MODEL, effort: EFFORT, thinking: THINKING });
+      console.log(`Read #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"} (sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
+      return r;
+    };
+    const matchOf = d => (!d.name && !d.number) ? null : findMatches(roster, d.name, d.number, {
+      nameComplete: d.name_complete, numberComplete: d.number_complete,
+      position: d.number_position, obstruction: d.obstruction,
+    });
+
     let detected = { name: "", number: "" };
     let apiError = null;
+    let m = null;
     try {
-      // Send a smaller frame than the camera gives: same read, faster answer.
-      const sendB64 = await frameForUpload(dataUrl, SEND_MAX_PX).catch(() => base64);
-      const r = await readJersey({ base64: sendB64, apiKey: CLAUDE_API_KEY, model: MODEL, effort: EFFORT, thinking: THINKING });
-      detected = r;
-      console.log(`Read #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"} (sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
+      detected = await readOne(base64, dataUrl);
+      m = matchOf(detected);
+      // A doubtful first look (part of the read missing, nothing contradicting)
+      // is often a hand still in the frame or a jersey not yet settled. Take a
+      // fresh frame and read again before showing anything; the second answer
+      // stands unless it is worse. Only from the live camera, and only once.
+      if (recapture && (m === null || m.soft) && version === rosterVersion.current) {
+        await new Promise(r => setTimeout(r, 700));
+        const again = recapture();
+        if (again) {
+          console.log("[second look] first read was doubtful — reading a fresh frame");
+          const d2 = await readOne(again.base64, again.dataUrl);
+          const m2 = matchOf(d2);
+          if (m2 && (m2.type === "exact" || m2.type === "duplicate" || !m2.soft || m === null)) { detected = d2; m = m2; dataUrl = again.dataUrl; }
+        }
+      }
     } catch (e) {
       apiError = e.message;
     }
 
     if (version !== rosterVersion.current) { setScanning(false); return; }   // roster changed mid-flight
     setScanning(false);
+    setThumb(dataUrl);
     const smallThumb = await shrinkDataUrl(dataUrl);
     const scanObj  = { id: Date.now(), detected, thumb: dataUrl, smallThumb };
     const showFlag = (reason, title) => { setOverlay({ mode: "flag", scan: scanObj, reason, title }); playTone("flag"); };
 
     if (apiError) { showFlag("API error: " + apiError, "SCAN FAILED"); return; }
-    if (!detected.name && !detected.number) { showFlag("No name or number could be read. Check the jersey is in frame, flat, and lit.", "COULD NOT READ"); return; }
+    if (m === null) { showFlag("No name or number could be read. Check the jersey is in frame, flat, and lit.", "COULD NOT READ"); return; }
 
-    const m = findMatches(roster, detected.name, detected.number, {
-      nameComplete: detected.name_complete, numberComplete: detected.number_complete,
-      position: detected.number_position, obstruction: detected.obstruction,
-    });
     if (m.type === "exact")          setOverlay({ mode: "confirm", scan: scanObj, match: m.match });
     else if (m.type === "duplicate") { setOverlay({ mode: "duplicate", scan: scanObj, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.size ? " · " + m.match.size : ""} already passed this session.` }); playTone("flag"); }
     else if (m.type === "pick" || m.type === "close") { setOverlay({ mode: m.type, scan: scanObj, candidates: m.candidates, reason: m.reason }); }
@@ -1464,15 +1485,15 @@ export default function App() {
   }, [roster, firstScanTime]);
 
   // ── Camera scan trigger ───────────────────────────────────────────────────
-  const doTriggerScan = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || scanning || !cameraOn || roster.length === 0 || inputMode !== "camera") return;
-    const video = videoRef.current;
-    if (!video.videoWidth) { setError("Camera is still starting — try again in a second."); return; }
-    // A dead track leaves the last frame frozen on screen; never scan that.
+  // The current camera frame as { base64, dataUrl }, rotated as the settings
+  // say; null when the camera is not live. Used for the scan and for the
+  // second look.
+  const captureFrame = useCallback(() => {
+    const video = videoRef.current, canvas = canvasRef.current;
+    if (!video || !canvas || !video.videoWidth) return null;
     const track = streamRef.current?.getVideoTracks?.()[0];
-    if (!track || track.readyState !== "live") { setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); return; }
+    if (!track || track.readyState !== "live") return null;
     lastScanFrameRef.current = sampleFrame(video, motionCanvasRef.current);
-    const canvas = canvasRef.current;
     const w = video.videoWidth, h = video.videoHeight;
     const rot = Number(settings.rotation) || 0, swap = rot === 90 || rot === 270;
     canvas.width = swap ? h : w; canvas.height = swap ? w : h;
@@ -1482,8 +1503,19 @@ export default function App() {
     ctx.rotate(rot * Math.PI / 180);
     ctx.drawImage(video, -w / 2, -h / 2, w, h);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    doRunScan(dataUrl.split(",")[1], dataUrl);
-  }, [scanning, cameraOn, roster.length, inputMode, settings.rotation, doRunScan, stopCamera]);
+    return { base64: dataUrl.split(",")[1], dataUrl };
+  }, [settings.rotation]);
+
+  const doTriggerScan = useCallback(() => {
+    if (!videoRef.current || !canvasRef.current || scanning || !cameraOn || roster.length === 0 || inputMode !== "camera") return;
+    const video = videoRef.current;
+    if (!video.videoWidth) { setError("Camera is still starting — try again in a second."); return; }
+    // A dead track leaves the last frame frozen on screen; never scan that.
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (!track || track.readyState !== "live") { setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); return; }
+    const f = captureFrame();
+    if (f) doRunScan(f.base64, f.dataUrl, captureFrame);
+  }, [scanning, cameraOn, roster.length, inputMode, captureFrame, doRunScan, stopCamera]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
   const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHandover;

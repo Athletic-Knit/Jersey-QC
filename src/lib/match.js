@@ -87,6 +87,17 @@ const lastOpen = rows => {
   return open.length === 1 ? { type: "exact", match: open[0] } : null;
 };
 
+// A doubt only matters when another open row could be the answer. `direct` is
+// the row the read itself points at; `cands` every row the read could be a
+// piece of. If `direct` is open and no other candidate is, the jersey can only
+// be `direct`: green. Contradictions never come here — a name pointing at one
+// row and a number at another is evidence, not a gap.
+const soleOpen = (direct, cands) => {
+  if (!direct || isDone(direct)) return null;
+  const open = cands.filter(r => !isDone(r));
+  return open.length === 1 && open[0] === direct ? { type: "exact", match: direct } : null;
+};
+
 /**
  * Returns one of:
  *   { type: "exact",     match }                  one row, nothing to question
@@ -150,8 +161,15 @@ export function findMatches(roster, name, number, read = {}) {
     // digit would make.
     const guessed = partialNum ? subNumberCandidates(nNum, roster) : [];
     const cands = dedupe([...byBoth, ...byName, ...byNum, ...hiddenDigitNumbers(nNum, roster), ...nearNumbers(nNum, roster), ...guessed, ...(partialName ? [] : nearNames(nName, roster))]);
-    if (cands.length) return { type: "pick", candidates: cands, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?` };
-    return { type: "none", reason: `${why.join("; ")}${what}` };
+    // Name and number pointing at different rows is a contradiction: always ask.
+    const contradiction = byName.length >= 1 && byNum.length >= 1 && byBoth.length === 0;
+    if (!contradiction) {
+      const direct = byBoth[0] || (byName.length === 1 && byNum.length === 0 ? byName[0] : null) || (byNum.length === 1 && byName.length === 0 ? byNum[0] : null);
+      const sure = soleOpen(direct, cands);
+      if (sure) return sure;
+    }
+    if (cands.length) return { type: "pick", candidates: cands, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true };
+    return { type: "none", reason: `${why.join("; ")}${what}`, soft: true };
   }
 
   // Name and number both agree.
@@ -167,7 +185,7 @@ export function findMatches(roster, name, number, read = {}) {
   if (byNum.length >= 1 && nName === "" && !typed && byNum.some(r => norm(r.name))) {
     const cands = dedupe([...byNum, ...hiddenDigitNumbers(nNum, roster)]);
     if (cands.length === 1 && isDone(cands[0])) return { type: "duplicate", match: cands[0] };
-    return { type: "pick", candidates: cands, reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?` };
+    return soleOpen(byNum.length === 1 ? byNum[0] : null, cands) || { type: "pick", candidates: cands, reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?`, soft: true };
   }
 
   // The name points at one row, the number at another: a digit was misread
@@ -197,7 +215,7 @@ export function findMatches(roster, name, number, read = {}) {
       if (typed) return single(byName) || { type: "pick", candidates: byName, reason: "Name matches more than one row" };
       if (byName.length === 1 && isDone(byName[0])) return { type: "duplicate", match: byName[0] };
       const nums = [...new Set(byName.map(r => r.number))].join(" / ");
-      return { type: "pick", candidates: byName, reason: `Read "${String(name).trim()}" but no number — is #${nums} hidden or out of frame? Is it this jersey?` };
+      return soleOpen(byName.length === 1 ? byName[0] : null, byName) || { type: "pick", candidates: byName, reason: `Read "${String(name).trim()}" but no number — is #${nums} hidden or out of frame? Is it this jersey?`, soft: true };
     }
     return { type: "pick", candidates: dedupe([...byName, ...nearNumbers(nNum, roster)]), reason: `Name matches #${[...new Set(byName.map(r => r.number))].join(" / ")} but the number read as #${nNum}` };
   }
