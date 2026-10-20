@@ -47,6 +47,34 @@ describe("green needs a name and a number", () => {
   });
 });
 
+describe("same number on several rows", () => {
+  const three = () => [row(0, "", "1", "red", "A-M"), row(1, "", "1", "red", "A-S"), row(2, "", "1", "yellow", "A-L")];
+  it("all open → pick", () => {
+    expect(findMatches(three(), "", "1").type).toBe("pick");
+  });
+  it("two of three passed → the last open row is green", () => {
+    const r = three(); r[1].scanned = "pass"; r[2].scanned = "manual";
+    expect(findMatches(r, "", "1")).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+  it("one of three passed → still a pick between the two open", () => {
+    const r = three(); r[1].scanned = "pass";
+    const m = findMatches(r, "", "1");
+    expect(m.type).toBe("pick");
+  });
+  it("all three passed → pick with every row disabled (already done)", () => {
+    const r = three(); r.forEach(x => { x.scanned = "pass"; });
+    expect(findMatches(r, "", "1").type).toBe("pick");
+  });
+  it("same name and number twice, one passed → green on the other", () => {
+    const r = [row(0, "Smith", "9", "A", "A-L", { scanned: "pass" }), row(1, "Smith", "9", "B", "A-M")];
+    expect(findMatches(r, "SMITH", "9")).toMatchObject({ type: "exact", match: { _id: 1 } });
+  });
+  it("a flagged (out for repair) row still counts as open", () => {
+    const r = three(); r[1].scanned = "pass"; r[2].scanned = "flag";
+    expect(findMatches(r, "", "1").type).toBe("pick");
+  });
+});
+
 describe("the camera doubts its read", () => {
   it("name cut off: SAMU… with #40 → yellow with Samuel, says the name looks cut off", () => {
     const m = findMatches(named, "SAMU", "40", { nameComplete: false });

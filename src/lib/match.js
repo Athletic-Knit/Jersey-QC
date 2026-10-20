@@ -79,6 +79,14 @@ const single = rows => rows.length === 1
   ? (isDone(rows[0]) ? { type: "duplicate", match: rows[0] } : { type: "exact", match: rows[0] })
   : null;
 
+// Several rows carry the same read (two teams with a #1, three colours of #35).
+// While more than one is still open the operator picks; once every other one
+// has passed, the last open row is the only jersey it can be: green.
+const lastOpen = rows => {
+  const open = rows.filter(r => !isDone(r));
+  return open.length === 1 ? { type: "exact", match: open[0] } : null;
+};
+
 /**
  * Returns one of:
  *   { type: "exact",     match }                  one row, nothing to question
@@ -148,7 +156,7 @@ export function findMatches(roster, name, number, read = {}) {
 
   // Name and number both agree.
   if (byBoth.length >= 1) {
-    return single(byBoth) || { type: "pick", candidates: byBoth, reason: "Same name and number on more than one row — check size and team" };
+    return single(byBoth) || lastOpen(byBoth) || { type: "pick", candidates: byBoth, reason: "Same name and number on more than one row — check size and team" };
   }
 
   // A number with no name, where the row it points at HAS a name: the name may
@@ -172,7 +180,7 @@ export function findMatches(roster, name, number, read = {}) {
 
   // Number read; no name read, or a number-only roster.
   if (byNum.length >= 1 && (nName === "" || numberOnly)) {
-    return single(byNum) || { type: "pick", candidates: byNum, reason: "More than one row with this number — check size and team" };
+    return single(byNum) || lastOpen(byNum) || { type: "pick", candidates: byNum, reason: "More than one row with this number — check size and team" };
   }
 
   // Number is on the roster but the name read agrees with no row.
