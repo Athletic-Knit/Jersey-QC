@@ -35,7 +35,10 @@ export const hub = {
   ledger:        date           => call(`/api/hub/ledger${date ? "?date=" + encodeURIComponent(date) : ""}`),   // every scan event of a day, all stations
 };
 
-// What a station tells the hub: small, no images.
+// What a station tells the hub: small. The only images are the photos of the
+// newest few flagged jerseys (each ~40 KB); the hub keeps a photo once it has
+// seen it, so older flags keep theirs without being re-sent every 5 s.
+const PHOTOS_PER_REPORT = 6;   // the newest log entries that carry their photo in each 5-second report
 export function snapshotOf({ operatorName, role, orderNumber, notes, rosterFile, roster, log, lastConfirmed, binMap }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   return {
@@ -48,11 +51,15 @@ export function snapshotOf({ operatorName, role, orderNumber, notes, rosterFile,
     lastScan: lastConfirmed ? { time: lastConfirmed.timestamp, text: `#${lastConfirmed.match?.number ?? "?"}${lastConfirmed.match?.name ? " " + lastConfirmed.match.name : ""}` } : null,
     // Every scan event of this order, compact (no images), for the hub's day
     // ledger — the end-of-day sheet is built from these across all stations.
-    events: log.slice(0, 400).map(l => ({
-      id: l.id, t: l.timestamp, status: l.status, order: orderNumber, operator: l.operator || operatorName, rowId: l.match?._id,
-      number: l.match?.number ?? l.detected?.number ?? "", name: l.match?.name ?? l.detected?.name ?? "", size: l.match?.size ?? "", team: l.match?.team ?? "",
-      offRoster: !!l.match?.offRoster, reason: l.reason || "", resolution: l.resolution || "",
-    })),
-    attention: log.filter(l => l.status === "flagged" || l.status === "manual").slice(0, 25).map(l => ({ time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "" })),
+    events: log.slice(0, 400).map((l, i) => {
+      const ev = {
+        id: l.id, t: l.timestamp, status: l.status, order: orderNumber, operator: l.operator || operatorName, rowId: l.match?._id,
+        number: l.match?.number ?? l.detected?.number ?? "", name: l.match?.name ?? l.detected?.name ?? "", size: l.match?.size ?? "", team: l.match?.team ?? "",
+        offRoster: !!l.match?.offRoster, reason: l.reason || "", resolution: l.resolution || "",
+      };
+      if (l.status === "flagged" && l.photo && i < PHOTOS_PER_REPORT) ev.photo = l.photo;
+      return ev;
+    }),
+    attention: log.filter(l => l.status === "flagged" || l.status === "manual").slice(0, 25).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(i < 3 && l.photo ? { photo: l.photo } : {}) })),
   };
 }

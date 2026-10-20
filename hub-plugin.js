@@ -18,10 +18,16 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
   let state = { stations: {}, rosters: {} };
   try { state = { ...state, ...JSON.parse(fs.readFileSync(file, "utf8")) }; } catch { /* first run */ }
 
-  const save = () => {
+  // Writes are coalesced: with flag photos in the ledger the file is a few MB,
+  // and every station reports every 5 s.
+  let saveTimer = null;
+  const writeNow = () => {
+    saveTimer = null;
     try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(state)); }
     catch (e) { console.error("[hub] could not save:", e.message); }
   };
+  const save = () => { if (!saveTimer) saveTimer = setTimeout(writeNow, 1500); };
+  globalThis.process?.on?.("exit", () => { if (saveTimer) { clearTimeout(saveTimer); writeNow(); } });   // flush a pending write when the dev server stops
   const json = (res, code, body) => { res.statusCode = code; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(body)); };
   const readBody = req => new Promise((resolve, reject) => {
     let s = "";
@@ -68,7 +74,8 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
           // event (same id) updates in place — a resolution added later lands too.
           const { events = [], rows = [], bins = null, ...rest } = body;
           const led = (state.ledger ||= {}); const dayLed = (led[today] ||= { events: {}, orders: {} });
-          events.forEach(ev => { if (ev && ev.id !== undefined) dayLed.events[`${id}|${ev.id}`] = { ...ev, station: id }; });
+          // A photo arrives with the first few reports after a flag; keep it when later reports leave it out.
+          events.forEach(ev => { if (ev && ev.id !== undefined) { const k = `${id}|${ev.id}`; const old = dayLed.events[k]; dayLed.events[k] = { ...ev, station: id, ...(ev.photo ? {} : old?.photo ? { photo: old.photo } : {}) }; } });
           if (body.orderNumber) {
             // The order record keeps the latest roster with each jersey's status, so the
             // supervisor can download the order's QC Results sheet at any time.

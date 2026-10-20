@@ -2,7 +2,8 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
-import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, shrinkDataUrl, downscaleImage, frameForUpload } from "./lib/persist.js";
+import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl } from "./lib/persist.js";
+import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
@@ -337,7 +338,17 @@ function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
 // ── Order view for the supervisor: the roster with every jersey's status, and
 // the order's log, read from the hub's day ledger. Works for finished orders
 // and for ones still running, without touching the station.
-function OrderView({ station, order, stationLabel, onClose, onDownload }) {
+// A flag photo, large, until a click or Esc.
+function PhotoLightbox({ src, onClose }) {
+  useEffect(() => { const h = e => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
+      <img src={src} alt="Flagged jersey" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8, boxShadow: "0 12px 48px rgba(0,0,0,0.8)" }} />
+    </div>
+  );
+}
+
+function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto = () => {} }) {
   const [data, setData] = useState(null);     // { rec, events }
   const [tab,  setTab]  = useState("roster");
   const [err,  setErr]  = useState(null);
@@ -377,6 +388,7 @@ function OrderView({ station, order, stationLabel, onClose, onDownload }) {
             </div>
           </div>
           <button onClick={() => onDownload({ station, order, operator: rec?.operator })} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet (Excel)</button>
+          {events.some(e => e.status === "flagged") && <button onClick={() => exportDamageReportXLSX(buildDamageRows(events, { stationLabel }), { name: order, title: `Damage report — order ${order}` }).catch(e => setErr(e.message))} title="Every flagged jersey of this order with its photo" style={{ ...btnGhost, padding: "6px 12px", borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>}
           <button onClick={onClose} style={{ ...btnGhost, padding: "6px 12px" }}>✕ Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #21262d", flexShrink: 0 }}>
@@ -390,7 +402,7 @@ function OrderView({ station, order, stationLabel, onClose, onDownload }) {
           {!rec && err && <div style={{ padding: 24, color: "#f87171" }}>{err}</div>}
           {rec && rows.length > 0 && (tab === "roster" || tab === "problems") && (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr><th style={th}>Status</th><th style={th}>Name</th><th style={th}>Number</th><th style={th}>Team</th><th style={th}>Size</th><th style={th}>Bin</th><th style={th}>What happened</th><th style={th}>Inspector · time</th></tr></thead>
+              <thead><tr><th style={th}>Status</th><th style={th}>Name</th><th style={th}>Number</th><th style={th}>Team</th><th style={th}>Size</th><th style={th}>Bin</th><th style={th}>What happened</th><th style={th}>Inspector · time</th>{tab === "problems" && <th style={th}>Photo</th>}</tr></thead>
               <tbody>
                 {(tab === "roster" ? rows : rows.filter(r => r.scanned === "flag" || r.scanned === "manual")).map((r, i) => {
                   const e = latestByRow.get(r._id);
@@ -401,6 +413,7 @@ function OrderView({ station, order, stationLabel, onClose, onDownload }) {
                       <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binFor(rec.bins, r.team) !== null ? `Bin ${binFor(rec.bins, r.team)}` : ""}</td>
                       <td style={{ ...td, color: "#cbd5e1" }}>{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                       <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
+                      {tab === "problems" && <td style={td}>{e?.photo && <img src={e.photo} alt="" onClick={() => onPhoto(e.photo)} title="Click to enlarge" style={{ width: 80, height: 60, objectFit: "cover", borderRadius: 4, cursor: "zoom-in" }} />}</td>}
                     </tr>
                   );
                 })}
@@ -410,9 +423,10 @@ function OrderView({ station, order, stationLabel, onClose, onDownload }) {
                     <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{e.size || ""}</td><td style={td}></td>
                     <td style={{ ...td, color: "#cbd5e1" }}>{e.reason}{e.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                     <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
+                    <td style={td}>{e.photo && <img src={e.photo} alt="" onClick={() => onPhoto(e.photo)} title="Click to enlarge" style={{ width: 80, height: 60, objectFit: "cover", borderRadius: 4, cursor: "zoom-in" }} />}</td>
                   </tr>
                 ))}
-                {tab === "problems" && flaggedRows.length + byHandRows.length + offRoster.length === 0 && <tr><td colSpan={8} style={{ ...td, color: "#22c55e", padding: 18 }}>No problems on this order — nothing went to the supervisor and nothing was entered by hand.</td></tr>}
+                {tab === "problems" && flaggedRows.length + byHandRows.length + offRoster.length === 0 && <tr><td colSpan={9} style={{ ...td, color: "#22c55e", padding: 18 }}>No problems on this order — nothing went to the supervisor and nothing was entered by hand.</td></tr>}
               </tbody>
             </table>
           )}
@@ -467,6 +481,7 @@ function SupervisorPanel({ operatorName, onClose }) {
   const [target,  setTarget]  = useState("");     // station id to send the roster to; "" = any station may take it
   const [msg,     setMsg]     = useState(null);
   const [alerts,  setAlerts]  = useState([]);     // "needs you" items not yet acknowledged here
+  const [bigPhoto, setBigPhoto] = useState(null); // a flag photo shown large
   const [backlog, setBacklog] = useState(null);   // what was already open when this view opened
   const [hubDown, setHubDown] = useState(null);   // when the hub stopped answering, or null
   const [desktop, setDesktop] = useState(() => (typeof Notification === "undefined" ? "unsupported" : Notification.permission));
@@ -483,7 +498,7 @@ function SupervisorPanel({ operatorName, onClose }) {
         if (a.resolution) return;
         const k = `${s.id}|${a.time}|${a.jersey}|${a.status}`;
         keys.add(k);
-        if (seenRef.current && !seenRef.current.has(k)) fresh.push({ key: k, at: Date.now(), station: stationLabel(s.id), operator: s.operatorName || "—", status: a.status, jersey: a.jersey, reason: a.reason, time: a.time });
+        if (seenRef.current && !seenRef.current.has(k)) fresh.push({ key: k, at: Date.now(), station: stationLabel(s.id), operator: s.operatorName || "—", status: a.status, jersey: a.jersey, reason: a.reason, time: a.time, photo: a.photo || null });
       }));
       if (!seenRef.current) {
         const stations = d.stations.filter(s => keys.size && [...keys].some(k => k.startsWith(s.id + "|")) || (s.carried || []).length);
@@ -559,7 +574,8 @@ function SupervisorPanel({ operatorName, onClose }) {
           <button onClick={() => setBacklog(null)} style={{ background: "transparent", border: 0, color: "#fde68a", cursor: "pointer", fontSize: 15 }}>✕</button>
         </div>
       )}
-      {openOrder && <OrderView station={openOrder.station} order={openOrder.order} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} />}
+      {openOrder && <OrderView station={openOrder.station} order={openOrder.order} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}
+      {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
       {alerts.length > 0 && (
         <div style={{ position: "absolute", top: 54, right: 16, width: 380, maxWidth: "calc(100% - 32px)", zIndex: 1900, display: "flex", flexDirection: "column", gap: 8 }}>
           {alerts.length > 3 && <div style={{ textAlign: "right", fontSize: 12, color: "#fca5a5" }}>{alerts.length - 3} more — see the cards</div>}
@@ -569,7 +585,10 @@ function SupervisorPanel({ operatorName, onClose }) {
                 <div style={{ fontWeight: 800 }}>{a.status === "manual" ? "✍" : "🛑"} {a.station} · {a.operator}</div>
                 <button onClick={() => dismiss(a.key)} title="Dismiss" style={{ background: "transparent", border: 0, color: "#94a3b8", cursor: "pointer", fontSize: 15, lineHeight: 1 }}>✕</button>
               </div>
-              <div style={{ marginTop: 3 }}><strong>{a.jersey}</strong> — {a.reason}</div>
+              <div style={{ marginTop: 3, display: "flex", gap: 10, alignItems: "flex-start" }}>
+                {a.photo && <img src={a.photo} alt="" onClick={() => setBigPhoto(a.photo)} title="Click to enlarge" style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6, cursor: "zoom-in", flexShrink: 0, border: "1px solid rgba(255,255,255,0.25)" }} />}
+                <div><strong>{a.jersey}</strong> — {a.reason}</div>
+              </div>
               <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 3 }}>{a.status === "manual" ? "Entered by hand — needs your sign-off" : "Jersey is on its way to you"} · {a.time}</div>
             </div>
           ))}
@@ -651,9 +670,12 @@ function SupervisorPanel({ operatorName, onClose }) {
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#f87171", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Needs you ({s.attention.length})</div>
                     {s.attention.length > 3 && <div style={{ fontSize: 11, color: "#64748b", marginBottom: 3 }}>newest three — the rest are in the station's log</div>}
                     {s.attention.slice(0, 3).map((a, i) => (
-                      <div key={i} style={{ fontSize: 12, marginBottom: 3 }}>
-                        <span style={{ color: a.status === "manual" ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>{a.status === "manual" ? "✍" : "🛑"} {a.jersey}</span>
-                        <span style={{ color: "#94a3b8" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
+                      <div key={i} style={{ fontSize: 12, marginBottom: 3, display: "flex", gap: 8, alignItems: "flex-start" }}>
+                        {a.photo && <img src={a.photo} alt="" onClick={() => setBigPhoto(a.photo)} title="Click to enlarge" style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 4, cursor: "zoom-in", flexShrink: 0 }} />}
+                        <div>
+                          <span style={{ color: a.status === "manual" ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>{a.status === "manual" ? "✍" : "🛑"} {a.jersey}</span>
+                          <span style={{ color: "#94a3b8" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -675,7 +697,9 @@ function SupervisorPanel({ operatorName, onClose }) {
         </div>
         <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid #21262d", padding: 14, overflowY: "auto" }}>
           <button onClick={() => hub.ledger().then(l => exportDaySheetXLSX(l, stationLabel)).catch(() => setMsg("Could not fetch the day's scans from the hub."))}
-            title="One Excel file for the whole day, every station: jerseys per hour, time per jersey, flags, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 16, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {todayTotal} {todayTotal === 1 ? "jersey" : "jerseys"} so far</button>
+            title="One Excel file for the whole day, every station: jerseys per hour, time per jersey, flags, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 8, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {todayTotal} {todayTotal === 1 ? "jersey" : "jerseys"} so far</button>
+          <button onClick={() => hub.ledger().then(l => exportDamageReportXLSX(buildDamageRows(l.events || [], { stationLabel }), { name: "day_" + (l.date || ""), title: `Damage report — ${l.date || "today"}, every station` })).catch(e => setMsg(e.message || "Could not fetch the day's flags from the hub."))}
+            title="Every flagged jersey today, every station, with its photo" style={{ ...bigBtn, fontSize: 13, marginBottom: 16, background: "transparent", border: "1px solid #ef4444", color: "#f87171" }}>⬇ Damage report (Excel, with photos)</button>
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Send a roster</div>
           <div style={{ marginBottom: 10 }}>
             <label style={labelSt}>Send to</label>
@@ -1244,6 +1268,7 @@ export default function App() {
   const [error,              setError]              = useState(null);
   const [xlsxReady,          setXlsxReady]          = useState(!!window.XLSX);
   const [showSettings,       setShowSettings]       = useState(false);
+  const [bigPhoto,           setBigPhoto]           = useState(null);    // a flag photo from the log, shown large
   const [showRosterComplete, setShowRosterComplete] = useState(false);
   const [hubOk, setHubOk] = useState(null);       // did the last progress report reach the hub? null = never tried
   const [newRosters, setNewRosters] = useState([]);   // rosters the supervisor sent while this order was running
@@ -1473,7 +1498,9 @@ export default function App() {
     setScanning(false);
     setThumb(dataUrl);
     const smallThumb = await shrinkDataUrl(dataUrl);
-    const scanObj  = { id: Date.now(), detected, thumb: dataUrl, smallThumb };
+    // The photo a flag will carry to the supervisor: the frame cropped to the jersey.
+    const photo = await cropDataUrl(dataUrl, detected.jersey_box, 640);
+    const scanObj  = { id: Date.now(), detected, thumb: dataUrl, smallThumb, photo };
     const showFlag = (reason, title) => { setOverlay({ mode: "flag", scan: scanObj, reason, title }); playTone("flag"); };
 
     if (apiError) { showFlag("API error: " + apiError, "SCAN FAILED"); return; }
@@ -1643,7 +1670,7 @@ export default function App() {
       const typedRow = { number, name, team, size, offRoster: true };   // no _id: never a roster row
       const label  = `#${number || "?"}${name ? " " + name : ""}${team ? " (" + team + ")" : ""}`;
       const reason = `Not on the roster — operator typed ${label}`;
-      const entry  = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, match: typedRow, status: S_FLAGGED, reason, ...stamp() };
+      const entry  = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: typedRow, status: S_FLAGGED, reason, ...stamp() };
       setLog(prev => [entry, ...prev]); setLastResult(entry);
       setOverlay({ mode: "supervisor", scan: o.scan, match: typedRow, reason: "This jersey is not on the order's roster. Nothing was added — take it to the supervisor to check against the order paper.", route: "Supervisor → check the order" });
       playTone("flag");
@@ -1667,7 +1694,7 @@ export default function App() {
       const o = overlay; if (!o) return;
       if (r.inPlace) { setOverlay({ ...(o.returnTo || { mode: "flag", scan: o.scan }), note: r.label }); return; }
       if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it
-      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, match: o.match || null, status: S_FLAGGED, reason: r.label, reasonId: r.id, ...stamp() };
+      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: r.label, reasonId: r.id, ...stamp() };
       if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
       setLog(prev => [entry, ...prev]); setLastResult(entry);
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: r.label, route: r.route });
@@ -1676,7 +1703,7 @@ export default function App() {
     reasonSubmit(text) {
       const o = overlay; if (!o) return;
       const label = String(text || "").trim(); if (!label) return;
-      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, match: o.match || null, status: S_FLAGGED, reason: label, reasonId: "other", ...stamp() };
+      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: label, reasonId: "other", ...stamp() };
       if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
       setLog(prev => [entry, ...prev]); setLastResult(entry);
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: label, route: "Supervisor decides" });
@@ -1684,13 +1711,13 @@ export default function App() {
     },
     flagContinue() {
       const o = overlay; if (!o?.scan) return;
-      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, match: null, status: S_FLAGGED, reason: o.reason || "Flagged by operator", ...stamp() };
+      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: null, status: S_FLAGGED, reason: o.reason || "Flagged by operator", ...stamp() };
       setLog(prev => [entry, ...prev]); setLastResult(entry); setOverlay(null); playTone("flag"); armAutoScan();
     },
     skipDuplicate() { setOverlay(null); armAutoScan(); },
     flagDuplicate() {
       const o = overlay; if (!o?.scan) return;
-      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, match: o.match || null, status: S_FLAGGED, reason: "Duplicate — scanned again after passing", ...stamp() };
+      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: "Duplicate — scanned again after passing", ...stamp() };
       setLog(prev => [entry, ...prev]); setLastResult(entry); setOverlay(null); playTone("flag"); armAutoScan();
     },
     continueSupervisor() { setOverlay(null); armAutoScan(); },
@@ -1824,6 +1851,7 @@ export default function App() {
       {showSettings && (
         <SettingsPanel settings={settings} cameras={cameras} onSave={setSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
       )}
+      {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
 
       {showRosterComplete && (
         <RosterCompleteModal roster={roster} offRosterFlags={offRosterFlags}
@@ -2049,6 +2077,10 @@ export default function App() {
                     style={{ ...btnPri, padding: "3px 10px", fontSize: 11, background: rosterComplete ? "#22c55e" : "#3b82f6" }}>
                     {rosterComplete ? "✅ Export" : "⬇ Export"}
                   </button>
+                  {log.some(l => l.status === S_FLAGGED) && (
+                    <button onClick={() => exportDamageReportXLSX(buildDamageRows(log, { operatorName, orderNumber }), { name: orderNumber || "order", title: `Damage report — order ${orderNumber || "—"}` }).catch(e => setError(e.message))}
+                      title="Every flagged jersey of this order with its photo, as Excel" style={{ ...btnGhost, padding: "3px 10px", fontSize: 11, borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>
+                  )}
                 </>
               )}
             </div>
@@ -2111,7 +2143,7 @@ export default function App() {
                 : log.map(l => (
                   <div key={l.id} style={{ ...card, borderLeft: `3px solid ${statusColor(l.status)}`, padding: "10px 12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                      {l.thumb && <img src={l.thumb} alt="" style={{ width: 48, height: 36, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
+                      {(l.photo || l.thumb) && <img src={l.photo || l.thumb} alt="" title={l.photo ? "Photo kept for the supervisor — click to enlarge" : ""} onClick={l.photo ? () => setBigPhoto(l.photo) : undefined} style={{ width: l.photo ? 72 : 48, height: l.photo ? 54 : 36, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: l.photo ? "zoom-in" : "default", border: l.photo ? "1px solid #ef4444" : "none" }} />}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ fontSize: 11, fontWeight: 700, color: statusColor(l.status), textTransform: "uppercase", letterSpacing: 1 }}>{l.status}</span>
                         <div style={{ fontWeight: 700, fontSize: 14, marginTop: 1 }}>Read: #{l.detected?.number || "?"} · {l.detected?.name || "—"}</div>
