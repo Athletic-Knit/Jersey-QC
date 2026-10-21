@@ -35,6 +35,13 @@ if errorlevel 1 (
   echo.
 )
 
+rem ---- Voice commands need the speech model once (41 MB, kept out of git). ----
+if not exist "public\models\vosk-model-small-en-us-0.15.tar.gz" (
+  echo    Downloading the voice model once ^(41 MB^)...
+  if not exist "public\models" mkdir "public\models"
+  curl -sL -o "public\models\vosk-model-small-en-us-0.15.tar.gz" https://ccoreilly.github.io/vosk-browser/models/vosk-model-small-en-us-0.15.tar.gz
+)
+
 if not exist "node_modules" (
   echo    First run - installing dependencies...
   call npm install

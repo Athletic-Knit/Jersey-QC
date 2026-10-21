@@ -8,6 +8,9 @@ import { playTone } from "./lib/audio.js";
 import { readJersey } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
+import { useVoice } from "./useVoice.js";
+import { VoiceBadge, VoiceLegend } from "./VoiceBadge.jsx";
+import { speak } from "./lib/voice.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
 
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
@@ -904,8 +907,23 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (e.code === cancelKey || e.code === "ArrowDown") { e.preventDefault(); lastKeyRef.current = Date.now(); move(1); return; }
       if (e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
     };
+    // Voice: the same moves as the keys. "pick:N" is the Nth option on the
+    // screen (rows first on a list), so "two" picks the second row.
+    const onVoice = (e) => {
+      const c = e.detail?.command; if (!c || mode === "done") return;
+      if (mode === "manual" || mode === "reasonText") return;        // typing
+      const by = id => { const o = options.find(x => x.id === id); if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } };
+      if (c === "retry")    { by("retry"); return; }
+      if (c === "manual")   { by("manual"); return; }
+      if (c === "notright") { by("notright"); return; }
+      if (c === "select")   { const o = options[selectedIdx]; if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } return; }
+      if (c === "down")     { lastKeyRef.current = Date.now(); move(1); return; }
+      const m = /^pick:(\d)$/.exec(c);
+      if (m) { const o = options[Number(m[1]) - 1]; if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("jerseyqc:voice", onVoice);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("jerseyqc:voice", onVoice); };
   }, [options, selectedIdx, mode, confirmKey, cancelKey, retryKey, byHandKey, actions]);
 
   // A bumped mouse never overrides a key press made in the last moment.
@@ -1148,7 +1166,7 @@ function ResultCard({ result, onResolve }) {
 }
 
 // ── Settings panel ────────────────────────────────────────────────────────────
-function SettingsPanel({ settings, cameras, onSave, onClose }) {
+function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
   const [temp,      setTemp]      = useState(settings);
   const [listening, setListening] = useState(null);
 
@@ -1220,6 +1238,38 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
             <input type="checkbox" checked={!!temp.autoScan} onChange={e => setTemp(t => ({ ...t, autoScan: e.target.checked }))} />
             Hands-free: after a confirm, scan the next jersey when it is placed and still
           </label>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <div style={labelSt}>Answer the result screen with</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[[false, "⌨️ Keys or pedals", "Normal"], [true, "🎤 Voice", "Headset"]].map(([on, label, sub]) => (
+              <button key={String(on)} onClick={() => setTemp(t => ({ ...t, voice: on }))}
+                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, cursor: "pointer", textAlign: "left", border: `1px solid ${!!temp.voice === on ? "#3b82f6" : "#334155"}`, background: !!temp.voice === on ? "rgba(59,130,246,0.14)" : "#1e293b", color: !!temp.voice === on ? "#e2e8f0" : "#94a3b8" }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>{sub}</div>
+              </button>
+            ))}
+          </div>
+          {!temp.voice && <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>The keys above, or a foot pedal programmed to send them.</div>}
+          {temp.voice && (
+            <>
+              <VoiceLegend />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <div style={{ fontSize: 12, color: "#94a3b8", width: 120, flexShrink: 0 }}>Microphone</div>
+                <select value={temp.micId || ""} onChange={e => setTemp(t => ({ ...t, micId: e.target.value }))} style={{ ...selSt, flex: 1 }}>
+                  <option value="">Browser default</option>
+                  {mics.map(m => <option key={m.deviceId} value={m.deviceId}>{m.label || `Microphone ${m.deviceId.slice(0, 6)}`}</option>)}
+                </select>
+              </div>
+              {mics.length === 0 && <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>Turn voice on and save once to list the microphones; a headset with a boom mic works best.</div>}
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: "#94a3b8", cursor: "pointer" }}>
+                <input type="checkbox" checked={temp.voiceSpeak !== false} onChange={e => setTemp(t => ({ ...t, voiceSpeak: e.target.checked }))} />
+                Read the result back through the headset ("40, bin 2")
+              </label>
+              <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>Runs on this PC: the ~40 MB model loads once, then nothing leaves the machine. It only knows these words, so talk is ignored. Commands work only while a result is on screen.</div>
+            </>
+          )}
         </div>
 
         {problems.length > 0 && (
@@ -1344,6 +1394,7 @@ export default function App() {
   const [xlsxReady,          setXlsxReady]          = useState(!!window.XLSX);
   const [showSettings,       setShowSettings]       = useState(false);
   const [bigPhoto,           setBigPhoto]           = useState(null);    // a flag photo from the log, shown large
+  const [mics,               setMics]               = useState([]);
   const [showRosterComplete, setShowRosterComplete] = useState(false);
   const [hubOk, setHubOk] = useState(null);       // did the last progress report reach the hub? null = never tried
   const [newRosters, setNewRosters] = useState([]);   // rosters the supervisor sent while this order was running
@@ -1382,6 +1433,27 @@ export default function App() {
   // and the order still has jerseys to scan — a finished order must not keep
   // reading the empty table.
   const handsFree      = !!settings.autoScan && !handsFreePaused && remaining > 0;
+
+  // Voice commands: the headset listens all shift; a command fires only while a
+  // result screen is up and nothing is scanning. Each fire acts on the screen
+  // like the matching key would.
+  const voice = useVoice({ enabled: !!settings.voice && signedIn && sessionStarted, active: !!overlay && !scanning, deviceId: settings.micId || "" });
+  const voiceUp = voice.status !== null;   // once the mic is open the device list carries names
+  useEffect(() => {
+    if (!settings.voice || !signedIn) return;
+    navigator.mediaDevices?.enumerateDevices?.().then(devs => setMics(devs.filter(d => d.kind === "audioinput"))).catch(() => {});
+  }, [settings.voice, signedIn, voiceUp]);
+  // What the headset says when a result screen appears.
+  useEffect(() => {
+    if (!settings.voice || settings.voiceSpeak === false || !overlay) return;
+    const m = overlay.match, mode = overlay.mode;
+    if (mode === "confirm" && m) { const b = binFor(binMap, m.team); speak(`${m.number}${m.name ? ", " + m.name : ""}${b !== null ? ", bin " + b : ""}`); }
+    else if (mode === "pick" || mode === "close") speak("check it, which jersey");
+    else if (mode === "flag") speak(overlay.title === "COULD NOT READ" ? "could not read" : overlay.title === "SCAN FAILED" ? "scan failed" : "not found");
+    else if (mode === "duplicate") speak("already done");
+    else if (mode === "supervisor") speak("go to supervisor");
+    else if (mode === "reasons") speak("what is wrong");
+  }, [overlay?.mode, overlay?.match?._id]);   // eslint-disable-line react-hooks/exhaustive-deps
   const passCount      = roster.filter(r => r.scanned === "pass").length;
   const offRosterFlags = log.filter(l => l.status === S_FLAGGED && l.match?.offRoster && !l.resolution).length;   // typed jerseys that are not on the roster have no row
   const flagCount      = roster.filter(r => r.scanned === "flag").length + offRosterFlags;
@@ -1511,7 +1583,7 @@ export default function App() {
       if (videoRef.current) videoRef.current.srcObject = stream;
       stream.getVideoTracks().forEach(t => { t.onended = () => { setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); }; });
       setCameraOn(true);
-      try { const devs = await navigator.mediaDevices.enumerateDevices(); setCameras(devs.filter(d => d.kind === "videoinput")); } catch { /* no device list; the dropdown stays on default */ }
+      try { const devs = await navigator.mediaDevices.enumerateDevices(); setCameras(devs.filter(d => d.kind === "videoinput")); setMics(devs.filter(d => d.kind === "audioinput")); } catch { /* no device list; the dropdown stays on default */ }
     } catch (e) {
       setError(e?.name === "OverconstrainedError" ? "That camera is not available — choose another in Settings." : "Camera access denied. Click the camera icon in your browser's address bar.");
     }
@@ -1918,7 +1990,7 @@ export default function App() {
       )}
 
       {showSettings && (
-        <SettingsPanel settings={settings} cameras={cameras} onSave={setSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
+        <SettingsPanel settings={settings} cameras={cameras} mics={mics} onSave={setSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
       )}
       {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
 
@@ -2030,6 +2102,7 @@ export default function App() {
                     )}
                     {cameraOn && !scanning && (
                       <>
+                        {settings.voice && <div style={{ position: "absolute", top: 8, left: 8 }}><VoiceBadge status={voice.status} error={voice.error} loading={voice.loading} active={!!overlay && !scanning} /></div>}
                         <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,0.55)", padding: "3px 9px", borderRadius: 20 }}>
                           <div style={{ width: 7, height: 7, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e"}` }} />
                           <span style={{ fontSize: 10, color: "#e2e8f0" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? "Hands-free paused — B to scan" : !settings.autoScan ? "Hands-free off — B to scan" : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : "Ready"}</span>

@@ -77,7 +77,7 @@ Expected columns (case-insensitive, auto-detected):
 - All state lives in the top-level `App` component; no external state management
 - `findMatches()` handles exact, conflict (same number, different players), close/fuzzy matching
 - Keyboard shortcuts (scan/confirm/cancel keys) are fully configurable via Settings panel
-- Designed for use with a barcode scanner or foot pedal mapped to keyboard keys
+- Designed for use with a barcode scanner or foot pedal mapped to keyboard keys; optional voice commands (Vosk in-browser, `src/lib/voice.js`, model in `public/models/`, downloaded by the launcher)
 - Audio feedback: ascending tone = pass, descending = flag, short beep = scan trigger
 - `exportRosterXLSX()` writes status + all roster columns to Excel; `exportLogCSV()` writes the scan event log
 
