@@ -719,6 +719,10 @@ function SupervisorPanel({ operatorName, onClose }) {
                 </div>
                 <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2, display: "flex", alignItems: "center", gap: 10 }}>
                   <span>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong></span>
+                  {s.counts?.total > 0 && !stale && (
+                    <button onClick={() => { const n = window.prompt(`Order number for ${stationLabel(s.id)} · ${s.operatorName || "—"}:`, /^\d+$/.test(s.orderNumber || "") ? s.orderNumber : ""); if (n && n.trim()) hub.setOrder(s.id, { orderNumber: n.trim(), by: operatorName }).then(() => { setMsg(`${stationLabel(s.id)} takes order number ${n.trim()} on its next report.`); refresh(); }).catch(() => setMsg("Could not update the hub.")); }}
+                      title="Give the order running on this station its number (only the supervisor can)" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11 }}>{s.orderNumber && s.setOrder ? `→ ${s.setOrder.orderNumber}…` : "Set number"}</button>
+                  )}
                   {s.orderNumber && s.counts?.total > 0 && (
                     <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber })} title="Open this order: every jersey with its status, what was flagged and why, and the log" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
                   )}
@@ -1404,6 +1408,7 @@ export default function App() {
   const [showRosterComplete, setShowRosterComplete] = useState(false);
   const [hubOk, setHubOk] = useState(null);       // did the last progress report reach the hub? null = never tried
   const [newRosters, setNewRosters] = useState([]);   // rosters the supervisor sent while this order was running
+  const [orderSetBy, setOrderSetBy] = useState(null); // { orderNumber, by } — the supervisor named this order from the board
   const knownRosterIds = useRef(null);                 // what was already waiting when this order started
   const [showHandover, setShowHandover] = useState(false);   // another operator takes over; the order stays
   const [handsFreePaused, setHandsFreePaused] = useState(false);   // operator paused hands-free; camera stays on, B still scans
@@ -1516,7 +1521,13 @@ export default function App() {
   useEffect(() => {
     if (!signedIn || (role === "supervisor" && !sessionStarted)) return;
     const id = stationId();
-    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", notes, jerseyType, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap })).then(() => setHubOk(true)).catch(() => setHubOk(false));
+    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", notes, jerseyType, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap }))
+      .then(r => {
+        setHubOk(true);
+        // The supervisor named this order from the board: take the number; the next report confirms it.
+        if (sessionStarted && r?.setOrder?.orderNumber && r.setOrder.orderNumber !== orderNumber) { setOrderNumber(r.setOrder.orderNumber); setOrderSetBy(r.setOrder); }
+      })
+      .catch(() => setHubOk(false));
     send();
     const t = setInterval(send, 5000);
     return () => clearInterval(t);
@@ -1560,7 +1571,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setNewRosters([]); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false);
   }, []);
 
@@ -2053,6 +2064,12 @@ export default function App() {
         </div>
       )}
 
+      {sessionStarted && orderSetBy && (
+        <div style={{ background: "rgba(34,197,94,0.12)", borderBottom: "1px solid rgba(34,197,94,0.4)", padding: "6px 16px", fontSize: 12, color: "#bbf7d0", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <span>🔢 <strong>{orderSetBy.by || "The supervisor"} set this order's number to {orderSetBy.orderNumber}.</strong> Reports and the board use it from now on.</span>
+          <button onClick={() => setOrderSetBy(null)} title="Hide" style={{ background: "transparent", border: 0, color: "#bbf7d0", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>✕</button>
+        </div>
+      )}
       {sessionStarted && newRosters.length > 0 && (
         <div style={{ background: "rgba(59,130,246,0.12)", borderBottom: "1px solid rgba(59,130,246,0.4)", padding: "6px 16px", fontSize: 12, color: "#bfdbfe", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <span>📋 <strong>{newRosters.map(r => `Order ${r.orderNumber || "—"} from ${r.by || "the supervisor"} (${r.rowCount} ${r.rowCount === 1 ? "jersey" : "jerseys"}${r.forStation ? ", for this station" : ""})`).join(" · ")}</strong> is waiting for you — it is offered when this order ends, or on New order.</span>

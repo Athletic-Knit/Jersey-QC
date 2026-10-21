@@ -43,14 +43,18 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
     try {
       if (kind === "stations") {
         if (req.method === "GET" && !id) return json(res, 200, { now: Date.now(), today: new Date().toLocaleDateString("en-CA"), stations: Object.values(state.stations).map(s => Object.fromEntries(Object.entries(s).filter(([k]) => k !== "history"))).sort((a, b) => b.updatedAt - a.updatedAt) });   // history stays on the hub
-        if (req.method === "POST" && id) {
+        if (req.method === "POST" && id && parts.length === 2) {   // a station report
           const body = await readBody(req);
           const prev = state.stations[id];
           // The station moved to another order: its unresolved items are still
           // physically on their way to the supervisor, so they stay listed
           // under the station until the supervisor marks them done.
           let carried = prev?.carried || [];
-          if (prev && prev.orderNumber && body.orderNumber !== prev.orderNumber) {
+          // The supervisor renamed the running order from the board: the station
+          // now reports the new number. Same order, so nothing is carried and the
+          // day tally continues; the record under the old name goes.
+          const renamed = !!prev?.setOrder && body.orderNumber === prev.setOrder.orderNumber;
+          if (prev && prev.orderNumber && body.orderNumber !== prev.orderNumber && !renamed) {
             // Key without the order number: if the order is renamed twice the same jersey must not be listed twice.
             const open = (prev.attention || []).filter(a => !a.resolution).map(a => ({ ...a, order: prev.orderNumber, key: `${a.time}|${a.jersey}|${a.status}` }));
             const seen = new Set(carried.map(c => c.key));
@@ -62,7 +66,7 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
           const today = new Date(now).toLocaleDateString("en-CA");            // YYYY-MM-DD, local
           const doneOf = c => Math.max(0, (c?.total || 0) - (c?.remaining || 0));
           const done  = doneOf(body.counts);
-          const sameOrder = !!prev && prev.orderNumber === body.orderNumber;
+          const sameOrder = !!prev && (prev.orderNumber === body.orderNumber || renamed);
           const day = prev?.day?.date === today ? { ...prev.day } : { date: today, done: 0 };
           day.done = Math.max(0, day.done + (sameOrder ? done - doneOf(prev.counts) : done));   // an un-checked jersey takes one off again
           let history = (sameOrder && prev.history) || [];
@@ -76,6 +80,7 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
           const led = (state.ledger ||= {}); const dayLed = (led[today] ||= { events: {}, orders: {} });
           // A photo arrives with the first few reports after a flag; keep it when later reports leave it out.
           events.forEach(ev => { if (ev && ev.id !== undefined) { const k = `${id}|${ev.id}`; const old = dayLed.events[k]; dayLed.events[k] = { ...ev, station: id, ...(ev.photo ? {} : old?.photo ? { photo: old.photo } : {}) }; } });
+          if (renamed && prev.orderNumber) delete dayLed.orders[`${id}|${prev.orderNumber}`];
           if (body.orderNumber) {
             // The order record keeps the latest roster with each jersey's status, so the
             // supervisor can download the order's QC Results sheet at any time.
@@ -83,7 +88,18 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
             dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", jerseyType: body.jerseyType || o.jerseyType || "", rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null };
           }
           Object.keys(led).sort().slice(0, -14).forEach(d => delete led[d]);   // keep two weeks
-          state.stations[id] = { ...rest, id, carried, day, history, rate, etaMin, updatedAt: now }; save(); return json(res, 200, { ok: true });
+          const setOrder = renamed ? undefined : prev?.setOrder;          // pending until the station reports it
+          state.stations[id] = { ...rest, id, carried, day, history, rate, etaMin, updatedAt: now, ...(setOrder ? { setOrder } : {}) }; save();
+          return json(res, 200, { ok: true, ...(setOrder ? { setOrder } : {}) });
+        }
+        // The supervisor gives a station's running order its number from the board.
+        if (req.method === "POST" && id && parts[2] === "order") {
+          const body = await readBody(req);
+          const s = state.stations[id]; if (!s) return json(res, 404, { error: "no such station" });
+          const orderNumber = String(body.orderNumber ?? "").trim(); if (!orderNumber) return json(res, 400, { error: "order number required" });
+          s.setOrder = { orderNumber, by: String(body.by ?? ""), at: Date.now() }; save();
+          console.log(`[hub] ${new Date().toLocaleTimeString()} ${id}: supervisor set the order number to ${orderNumber}`);
+          return json(res, 200, { ok: true });
         }
         if (req.method === "DELETE" && id && parts[2] === "carried") {
           const key = new URL(req.url, "http://hub").searchParams.get("key");

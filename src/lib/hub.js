@@ -51,6 +51,7 @@ export const hub = {
   report:        (id, snapshot) => call(`/api/hub/stations/${id}`, { method: "POST", body: JSON.stringify(snapshot) }),
   stations:      ()             => call("/api/hub/stations"),
   removeStation: id             => call(`/api/hub/stations/${id}`, { method: "DELETE" }),
+  setOrder:      (id, body)     => call(`/api/hub/stations/${id}/order`, { method: "POST", body: JSON.stringify(body) }),   // supervisor names a station's running order
   clearCarried:  (id, key)      => call(`/api/hub/stations/${id}/carried?key=${encodeURIComponent(key)}`, { method: "DELETE" }),
   rosters:       ()             => call("/api/hub/rosters"),
   roster:        id             => call(`/api/hub/rosters/${id}`),
