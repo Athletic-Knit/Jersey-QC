@@ -914,6 +914,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       const c = e.detail?.command; if (!c || mode === "done") return;
       if (mode === "manual" || mode === "reasonText") return;        // typing
       if (c === "notright") { const o = options.find(x => x.id === "notright"); if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } return; }
+      if (c === "retry")    { const o = options.find(x => x.id === "retry");    if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } return; }
       if (c === "select")   { const o = options[selectedIdx]; if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } }
     };
     window.addEventListener("keydown", onKey);

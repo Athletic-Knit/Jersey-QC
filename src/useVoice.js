@@ -37,7 +37,7 @@ export function useVoice({ enabled, active, deviceId }) {
         clearTimeout(flashTimer); flashTimer = setTimeout(() => setStatus(s => (s ? { ...s, flash: false } : s)), 900);
       },
     }).then(r => { if (gone) r.stop(); else runner = r; });
-    if (import.meta.env.DEV) window.__voice = word => window.dispatchEvent(new CustomEvent("jerseyqc:voice", { detail: { command: ({ scan: "scan", next: "select", flag: "notright", "not right": "notright" })[word] || word, word } }));
+    if (import.meta.env.DEV) window.__voice = word => window.dispatchEvent(new CustomEvent("jerseyqc:voice", { detail: { command: ({ scan: "scan", next: "select", flag: "notright", "not right": "notright", again: "retry", retry: "retry" })[word] || word, word } }));
     return () => { gone = true; runner?.stop(); clearTimeout(flashTimer); setStatus(null); if (import.meta.env.DEV) delete window.__voice; };
   }, [enabled, deviceId]);
 
