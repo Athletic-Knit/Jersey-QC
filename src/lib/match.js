@@ -54,7 +54,7 @@ function oneLookAlikeOff(a, b) {
 // guess and any digit may stand in ("35" guessed as 55 or 75 still finds #35).
 // `side`: 0 or 1 when the model said which digit was covered (left/first,
 // right/second), so only that digit may vary; null = either.
-function nearNumbers(nNum, roster, { anyDigit = false, side = null } = {}) {
+function nearNumbers(nNum, roster, { anyDigit = false, side = null, sameLength = false } = {}) {
   if (!nNum) return [];
   const differsAt = (a, b) => { const d = []; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d.push(i); return d; };
   return roster.filter(r => {
@@ -65,6 +65,7 @@ function nearNumbers(nNum, roster, { anyDigit = false, side = null } = {}) {
       const d = differsAt(rn, nNum);
       return d.length === 1 && (side === null || d[0] === side);
     }
+    if (sameLength) return false;
     if (nNum.length < rn.length)   return editDistance(rn, nNum) <= 1;
     return rn.length === 1 && nNum === rn + rn;
   });
@@ -101,14 +102,6 @@ const single = rows => rows.length === 1
   ? (isDone(rows[0]) ? { type: "duplicate", match: rows[0] } : { type: "exact", match: rows[0] })
   : null;
 
-// Several rows carry the same read (two teams with a #1, three colours of #35).
-// While more than one is still open the operator picks; once every other one
-// has passed, the last open row is the only jersey it can be: green.
-const lastOpen = rows => {
-  const open = rows.filter(r => !isDone(r));
-  return open.length === 1 ? { type: "exact", match: open[0] } : null;
-};
-
 // A doubt only matters when another open row could be the answer. `direct` is
 // the row the read itself points at; `cands` every row the read could be a
 // piece of. If `direct` is open and no other candidate is, the jersey can only
@@ -117,10 +110,24 @@ const lastOpen = rows => {
 // Several rows carry the same read and differ by colour or size. The colour
 // the camera saw narrows them; one open row left is green. Otherwise the
 // agreeing rows lead the list and the reason says what was seen.
-function sameReadRows(rows, read, reason) {
-  const { rows: agree, narrowed, strong } = narrowByColour(rows, read);
-  const sure = strong ? (single(agree) || lastOpen(agree)) : null;
+// The one rule for rows that all carry the read (same number, or same name and
+// number): EVERY open one competes, whether or not it has a name — a nameless
+// read may be a named jersey with its name out of frame. Only a body-colour
+// mismatch may eliminate a competitor. When exactly one survives, it is green
+// if it is `eligible` (a row with a name only when its name was read).
+function settleTwins(rows, eligible, read) {
+  const open = rows.filter(r => !isDone(r));
+  if (!open.length) return null;
+  const { rows: agree, strong } = narrowByColour(open, read);
+  const survivors = strong ? agree : open;
+  if (survivors.length !== 1) return null;
+  return eligible.includes(survivors[0]) ? { type: "exact", match: survivors[0] } : null;
+}
+
+function sameReadRows(rows, read, reason, eligible = rows) {
+  const sure = settleTwins(rows, eligible, read);
   if (sure) return sure;
+  const { rows: agree, narrowed } = narrowByColour(rows, read);
   const seen = narrowed && read.colour ? ` — the jersey looks ${String(read.colour).trim()}` : "";
   return { type: "pick", candidates: dedupe([...agree, ...rows]), reason: reason + seen };
 }
@@ -206,7 +213,7 @@ export function findMatches(roster, name, number, read = {}) {
     // under a hand is the #31), so it also offers the rows one digit away.
     const obs = String(read.obstruction || "").toLowerCase();
     const side = /\b(left|first)\b/.test(obs) ? 0 : /\b(right|second|last)\b/.test(obs) ? 1 : null;
-    const guessedDigit = partialNum && read.numberComplete === false && nNum.length === 2 ? nearNumbers(nNum, roster, { anyDigit: true, side }) : [];
+    const guessedDigit = partialNum && read.numberComplete === false && nNum.length === 2 ? nearNumbers(nNum, roster, { anyDigit: true, side, sameLength: true }) : [];
     const cands = exact.length
       ? dedupe([...exact, ...hidden, ...guessedDigit])
       : dedupe([...hidden, ...(nNum.length === 1 && hidden.length ? [] : nearNumbers(nNum, roster, { anyDigit: partialNum })), ...(partialNum ? subNumberCandidates(nNum, roster) : []), ...(partialName ? [] : nearNames(nName, roster))]);   // a covered lone digit with hidden-digit rows to offer needs no substitutions
@@ -215,18 +222,27 @@ export function findMatches(roster, name, number, read = {}) {
     if (!contradiction) {
       // A row with a name is only ever "direct" when its name was read: a
       // nameless read on a named row is never green, however few rows there are.
-      const direct = byBoth[0] || (byName.length === 1 && byNum.length === 0 ? byName[0] : null) || (byNum.length === 1 && byName.length === 0 && !norm(byNum[0].name) ? byNum[0] : null);
+      // …and a row reached through its name is only "direct" when the number
+      // read is that row's number or nothing was read: a cut-short "Ngu" with a
+      // misread #36 is not the #34 Nguyen, it is a question.
+      // A cut-short name ("Mar…") settles only through the exact number (byBoth):
+      // with no number read it is two missing pieces, not a match.
+      const direct = byBoth[0]
+        || (!partialName && byName.length === 1 && byNum.length === 0 && (!nNum || normNum(byName[0].number) === nNum) ? byName[0] : null)
+        || (byNum.length === 1 && byName.length === 0 && !norm(byNum[0].name) ? byNum[0] : null);
       const sure = soleOpen(direct, cands);
       if (sure) return sure;
       // Several rows carry the read (same number, different colour or size):
       // the colour seen, then "every other one has passed", settle it the
       // same way they do for a clean read — as long as no hidden-digit row is
       // still open to compete.
-      if (exact.length > 1 && !hidden.some(r => !isDone(r))) {
-        const pool = nName ? exact : exact.filter(r => !norm(r.name));   // no name read → only nameless rows can be chosen
-        const { rows: agree, strong } = narrowByColour(pool, read);
-        const sure2 = strong ? (single(agree) || lastOpen(agree)) : lastOpen(pool);
-        if (sure2 && sure2.type === "exact") return sure2;
+      // Twins must carry the number that was read: "Bro" with #64 never settles
+      // on #98 Brown. Any other open candidate (a different number reached by
+      // name, a hidden-digit row) keeps it a question.
+      const sameNum = nNum ? exact.filter(r => normNum(r.number) === nNum) : exact;
+      if ((nNum || !partialName) && sameNum.length > 1 && !cands.some(r => !sameNum.includes(r) && !isDone(r))) {   // a cut-short name with no number never settles
+        const sure2 = settleTwins(sameNum, nName ? sameNum.filter(r => byName.includes(r)) : sameNum.filter(r => !norm(r.name)), read);   // eligible: the name read fits, or no name to read
+        if (sure2) return sure2;
       }
     }
     if (cands.length) return { type: "pick", candidates: cands, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true };
@@ -235,7 +251,7 @@ export function findMatches(roster, name, number, read = {}) {
 
   // Name and number both agree.
   if (byBoth.length >= 1) {
-    return single(byBoth) || lastOpen(byBoth) || sameReadRows(byBoth, read, "Same name and number on more than one row — check size and team");
+    return single(byBoth) || sameReadRows(byBoth, read, "Same name and number on more than one row — check size and team");
   }
 
   // A number with no name, where the row it points at HAS a name: the name may
@@ -253,10 +269,8 @@ export function findMatches(roster, name, number, read = {}) {
     // among rows with NO name, and only on the body colour. A row with a name
     // needs its name read before it can be green; a nameless read that lands
     // on "DONNELLY" because the jersey's trim is red is exactly the wrong green.
-    if (byNum.length > 1) {
-      const nameless = byNum.filter(r => !norm(r.name));
-      const c = nameless.length ? narrowByColour(nameless, read) : { rows: [], narrowed: false, strong: false };
-      const s2 = c.strong ? soleOpen(c.rows.length === 1 ? c.rows[0] : null, cands.filter(r => !byNum.includes(r) || c.rows.includes(r))) : null;
+    if (byNum.length > 1 && !cands.some(r => !byNum.includes(r) && !isDone(r))) {   // no open hidden-digit row competing
+      const s2 = settleTwins(byNum, byNum.filter(r => !norm(r.name)), read);
       if (s2) return s2;
     }
     return { type: "pick", candidates: cands, reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?`, soft: true };
@@ -272,7 +286,7 @@ export function findMatches(roster, name, number, read = {}) {
 
   // Number read; no name read, or a number-only roster.
   if (byNum.length >= 1 && (nName === "" || numberOnly)) {
-    return single(byNum) || lastOpen(byNum) || sameReadRows(byNum, read, "More than one row with this number — check size and team");
+    return single(byNum) || sameReadRows(byNum, read, "More than one row with this number — check size and team", nName === "" ? byNum.filter(r => !norm(r.name)) : byNum);
   }
 
   // Number is on the roster but the name read agrees with no row.
