@@ -94,7 +94,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 export function orderNumbersHint(numbers) {
   const list = [...new Set((numbers || []).map(n => String(n ?? "").trim()).filter(Boolean))].sort((a, b) => Number(a) - Number(b)).slice(0, 120);
   if (!list.length) return "";
-  return `\nNumbers on this order: ${list.join(", ")}. Read what is printed, never pick from this list — but if the number you read is one digit and a two-digit number on this order contains that digit, look hard at the fabric beside the digit: a fold can hide the other digit with no visible edge. If that is possible, set number_complete to false and put "second digit may be under a fold" in obstruction.`;
+  return `\nNumbers on this order: ${list.join(", ")}. Read what is printed, never pick from this list — but if the number you read is one digit and a two-digit number on this order contains that digit, look hard at the fabric beside the digit: a fold can hide the other digit with no visible edge. If that is possible, set number_complete to false and put "second digit may be under a fold" in obstruction. Answer with the JSON object only.`;
 }
 
 export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort = DEFAULT_EFFORT, thinking = DEFAULT_THINKING, orderNumbers = null, timeoutMs = 25000, retries = 1, fetchImpl = globalThis.fetch }) {
@@ -131,7 +131,7 @@ export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort
           messages: [{ role: "user", content: [
             { type: "text", text: PROMPT, cache_control: { type: "ephemeral" } },
             { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
-            { type: "text", text: hint || "Read the jersey now." },
+            { type: "text", text: (hint || "Read the jersey now.") + (attempt > 0 ? " Reply with ONLY the JSON object, no words before or after it." : "") },
           ] }],
         }),
       });
@@ -150,7 +150,8 @@ export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort
       lastErr = e;
       const timedOut = e.name === "AbortError";
       const network  = e instanceof TypeError;               // fetch() itself failed
-      const retryable = timedOut || network || RETRYABLE.has(e.status);
+      const notJson  = /could not parse model output|returned no text/.test(e.message);   // the model talked instead of answering; ask once more, firmly
+      const retryable = timedOut || network || notJson || RETRYABLE.has(e.status);
       if (timedOut) lastErr = new Error(`no answer after ${Math.round(timeoutMs / 1000)} s — check the network`);
       if (network)  lastErr = new Error("could not reach the server — is it running, and is the network up?");
       if (!retryable || attempt === retries) break;

@@ -1,0 +1,1454 @@
+[
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 626,
+  "read": "#40",
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 504,
+  "read": "#40",
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1484,
+  "read": "#40",
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1605,
+  "read": "#40",
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 577,
+  "read": "#40",
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 1420,
+  "read": "#40",
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 562,
+  "read": "#54",
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1467,
+  "read": "#54",
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 491,
+  "read": "#54",
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 532,
+  "read": "#54",
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1437,
+  "read": "#54",
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 519,
+  "read": "#07",
+  "screen": "RED not found",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 1563,
+  "read": "#54",
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 561,
+  "read": "#07",
+  "screen": "RED not found",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 2090,
+  "read": "#40",
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1601,
+  "read": "#40",
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 529,
+  "read": "#07",
+  "screen": "RED not found",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 1224,
+  "read": "#40",
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 512,
+  "read": "#4",
+  "screen": "GREEN #4 T",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 511,
+  "read": "#4",
+  "screen": "GREEN #4 T",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1483,
+  "read": "#4?",
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1452,
+  "read": "#4?",
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 578,
+  "read": "#4",
+  "screen": "GREEN #4 T",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 570,
+  "read": "#5",
+  "screen": "GREEN #5 black",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 2174,
+  "read": "#55?",
+  "screen": "YELLOW [#35 #5 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1450,
+  "read": "#55?",
+  "screen": "YELLOW [#35 #5 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 3122,
+  "read": "#4?",
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 510,
+  "read": "#5",
+  "screen": "GREEN #5 black",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 501,
+  "read": "#5",
+  "screen": "GREEN #5 black",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 529,
+  "read": "#4",
+  "screen": "YELLOW [#5 #40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1105,
+  "read": "#4?",
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 547,
+  "read": "#4",
+  "screen": "YELLOW [#5 #40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1177,
+  "read": "#4?",
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 2559,
+  "read": "#55?",
+  "screen": "YELLOW [#35 #5 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 479,
+  "read": "#4",
+  "screen": "YELLOW [#5 #40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 1035,
+  "read": "#4?",
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 483,
+  "read": "#0",
+  "screen": "YELLOW [#40 #4]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1353,
+  "read": "#0?",
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 634,
+  "read": "#0",
+  "screen": "YELLOW [#40 #4]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 499,
+  "read": "#0",
+  "screen": "YELLOW [#40 #4]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 1274,
+  "read": "#0?",
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 511,
+  "read": "#5",
+  "screen": "GREEN #5 black",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1245,
+  "read": "#5?",
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 2801,
+  "read": "#0?",
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 547,
+  "read": "#50",
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 524,
+  "read": "#5",
+  "screen": "GREEN #5 black",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1176,
+  "read": "#5?",
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 1383,
+  "read": "#5?",
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 515,
+  "read": "#10",
+  "screen": "YELLOW [#40 #14]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 488,
+  "read": "#0",
+  "screen": "YELLOW [#40 #4]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1169,
+  "read": "#40?",
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1064,
+  "read": "#40?",
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 581,
+  "read": "#0",
+  "screen": "YELLOW [#40 #4]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 1248,
+  "read": "#40?",
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 586,
+  "read": "#5 STEPHENSON",
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1478,
+  "read": "#5 STEPHENSON",
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 637,
+  "read": "#5 STEPHENSON",
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 598,
+  "read": "#5 STEPHENSON",
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1527,
+  "read": "#5? STEPHENSON",
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 496,
+  "read": "#0",
+  "screen": "YELLOW [#40 #40 #70 #60 #4]",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 1483,
+  "read": "#5 STEPHENSON",
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 528,
+  "read": "#0",
+  "screen": "YELLOW [#40 #40 #70 #60 #4]",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1463,
+  "read": "#0?",
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1280,
+  "read": "#0?",
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 564,
+  "read": "#0",
+  "screen": "YELLOW [#40 #40 #70 #60 #4]",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 488,
+  "read": "#54",
+  "screen": "YELLOW [#54 #54 #54]",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1199,
+  "read": "#54",
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 1885,
+  "read": "#0?",
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 1155,
+  "read": "#54",
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 534,
+  "read": "#54",
+  "screen": "YELLOW [#54 #54 #54]",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 508,
+  "read": "#54",
+  "screen": "YELLOW [#54 #54 #54]",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 1145,
+  "read": "#54",
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 0,
+  "which": "demo",
+  "ms": 556,
+  "read": "#54",
+  "screen": "YELLOW [#54 #54]",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 1,
+  "which": "demo",
+  "ms": 490,
+  "read": "#54",
+  "screen": "YELLOW [#54 #54]",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 0,
+  "which": "now",
+  "ms": 1893,
+  "read": "#54",
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 2,
+  "which": "demo",
+  "ms": 508,
+  "read": "#54",
+  "screen": "YELLOW [#54 #54]",
+  "ok": false
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 1,
+  "which": "now",
+  "ms": 2157,
+  "read": "#54",
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 2,
+  "which": "now",
+  "ms": 2118,
+  "read": "#54",
+  "screen": "GREEN #54 white",
+  "ok": true
+ }
+]

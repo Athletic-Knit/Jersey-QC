@@ -83,6 +83,26 @@ describe("folded jersey", () => {
     const r = [row(0, "", "5", "black"), row(1, "", "40", "blue")];
     expect(findMatches(r, "", "5", { laidFlat: false }).type).toBe("exact");
   });
+  it("'not flat' on a complete TWO-digit read changes nothing: a fold cannot add a third digit", () => {
+    const r = [row(0, "", "54", "blue"), row(1, "", "5", "black"), row(2, "", "40", "blue")];
+    expect(findMatches(r, "", "54", { laidFlat: false, numberComplete: true })).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+  it("doubtful read, three rows of that number, two passed → green on the last", () => {
+    const r = [row(0, "", "54", "blue", "A-L"), row(1, "", "54", "blue", "A-S", { scanned: "pass" }), row(2, "", "54", "red", "A-M", { scanned: "pass" })];
+    expect(findMatches(r, "", "54", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+  it("doubtful read, two rows of that number in different colours → the colour seen decides", () => {
+    const r = [row(0, "", "54", "white"), row(1, "", "54", "red")];
+    expect(findMatches(r, "", "54", { numberComplete: false, colour: "white" })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches(r, "", "54", { numberComplete: false }).type).toBe("pick");
+  });
+  it("a read of 0 with no #0 row offers hidden-digit rows, never #4", () => {
+    const r = [row(0, "", "40"), row(1, "", "70"), row(2, "", "4"), row(3, "", "60")];
+    const m = findMatches(r, "", "0", { numberComplete: false });
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual(expect.arrayContaining([0, 1, 3]));
+    expect(ids(m)).not.toContain(2);
+  });
   it("a flat jersey with a complete number is unaffected", () => {
     const r = [row(0, "", "35", "yellow"), row(1, "", "5", "black")];
     expect(findMatches(r, "", "5", { laidFlat: true, numberComplete: true }).type).toBe("exact");

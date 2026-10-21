@@ -33,17 +33,31 @@ export function subNumberCandidates(read, roster) {
   return dedupe(out);
 }
 
+// Digits a camera read can mistake for each other on block numerals. A "0"
+// is never a misread "4": they share nothing, so #4 is not offered for a 0.
+const CONFUSABLE = { "0": "689", "1": "7", "2": "7", "3": "8", "4": "", "5": "6", "6": "058", "7": "12", "8": "0369", "9": "068" };
+const lookAlike = (a, b) => a === b || (CONFUSABLE[a] || "").includes(b);
+// Same length, exactly one digit wrong, and that digit a look-alike.
+function oneLookAlikeOff(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { if (!lookAlike(a[i], b[i])) return false; diff++; }
+  return diff === 1;
+}
+
 // Roster numbers a misread could have come from — never a plain substring:
-//   same length, one digit wrong      6↔9, 1↔7, 3↔8   ("19" near "10")
-//   read is missing a digit           a fold hid one   ("1"  near "19")
-//   read is the roster digit doubled  sleeve merge     ("88" near "8")
-// "10" is NOT near "1" or "100"; "56" is NOT near "6".
-function nearNumbers(nNum, roster) {
+//   same length, one look-alike digit wrong   6↔9, 1↔7, 3↔8   ("19" near "10")
+//   read is missing a digit (a fold hid one)  a look-alike or a hidden digit ("1" near "19")
+//   read is the roster digit doubled          sleeve merge     ("88" near "8")
+// "10" is NOT near "1" or "100"; "56" is NOT near "6"; "0" is NOT near "4".
+// `anyDigit`: the read had a covered digit, so the model's digit there is a
+// guess and any digit may stand in ("35" guessed as 55 or 75 still finds #35).
+function nearNumbers(nNum, roster, { anyDigit = false } = {}) {
   if (!nNum) return [];
   return roster.filter(r => {
     const rn = normNum(r.number);
     if (!rn || rn === nNum || !isPlausibleNumber(rn)) return false;
-    if (rn.length === nNum.length) return editDistance(rn, nNum) <= 1;
+    if (rn.length === nNum.length) return anyDigit ? editDistance(rn, nNum) <= 1 : oneLookAlikeOff(rn, nNum);
     if (nNum.length < rn.length)   return editDistance(rn, nNum) <= 1;
     return rn.length === 1 && nNum === rn + rn;
   });
@@ -139,7 +153,10 @@ export function findMatches(roster, name, number, read = {}) {
   const typed      = read.typed === true;
   const position   = typed ? "" : String(read.position || "");
   const partialName = !typed && !!nName && read.nameComplete === false;
-  const partialNum  = !typed && !!nNumRaw && (read.numberComplete === false || read.laidFlat === false);
+  // A fold can hide a digit, so "not laid flat" makes a ONE-digit read doubtful
+  // (5 may be 35); it cannot add a third digit to a two-digit read, so a
+  // complete two-digit number on a rumpled jersey is still that number.
+  const partialNum  = !typed && !!nNumRaw && (read.numberComplete === false || (read.laidFlat === false && nNumRaw.length === 1));
   const offCentre   = !typed && !!nNumRaw && nNumRaw.length === 1 && (position === "left" || position === "right");
   const suspect     = partialName || partialNum || offCentre;
 
@@ -180,13 +197,22 @@ export function findMatches(roster, name, number, read = {}) {
     const hidden = nNum.length === 1 ? hiddenDigitNumbers(nNum, roster) : [];
     const cands = exact.length
       ? dedupe([...exact, ...hidden])
-      : dedupe([...hidden, ...nearNumbers(nNum, roster), ...(partialNum ? subNumberCandidates(nNum, roster) : []), ...(partialName ? [] : nearNames(nName, roster))]);
+      : dedupe([...hidden, ...(nNum.length === 1 && hidden.length ? [] : nearNumbers(nNum, roster, { anyDigit: partialNum })), ...(partialNum ? subNumberCandidates(nNum, roster) : []), ...(partialName ? [] : nearNames(nName, roster))]);   // a covered lone digit with hidden-digit rows to offer needs no substitutions
     // Name and number pointing at different rows is a contradiction: always ask.
     const contradiction = byName.length >= 1 && byNum.length >= 1 && byBoth.length === 0;
     if (!contradiction) {
       const direct = byBoth[0] || (byName.length === 1 && byNum.length === 0 ? byName[0] : null) || (byNum.length === 1 && byName.length === 0 ? byNum[0] : null);
       const sure = soleOpen(direct, cands);
       if (sure) return sure;
+      // Several rows carry the read (same number, different colour or size):
+      // the colour seen, then "every other one has passed", settle it the
+      // same way they do for a clean read — as long as no hidden-digit row is
+      // still open to compete.
+      if (exact.length > 1 && !hidden.some(r => !isDone(r))) {
+        const { rows: agree } = narrowByColour(exact, read);
+        const sure2 = single(agree) || lastOpen(agree);
+        if (sure2 && sure2.type === "exact") return sure2;
+      }
     }
     if (cands.length) return { type: "pick", candidates: cands, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true };
     return { type: "none", reason: `${why.join("; ")}${what}`, soft: true };
