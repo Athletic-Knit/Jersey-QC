@@ -825,7 +825,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   const head = primary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")).filter(Boolean).join(" · ");
   const sub  = [...secondary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")), ...extraCols.map(k => c[k] ? `${cap(k)}: ${c[k]}` : "")].filter(Boolean).join(" · ");
   return (
-    <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover}
+    <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover} data-sel={selected ? "1" : undefined}
       style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", marginBottom: 8, borderRadius: 14, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1 }}>
       <div>
         <span style={{ fontSize: "clamp(22px, 3vw, 30px)", fontWeight: 900, color: disabled ? "#64748b" : "#fff" }}>{head || "—"}</span>
@@ -926,6 +926,13 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   // A bumped mouse never overrides a key press made in the last moment.
   const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) setSelectedIdx(i); }, []);
 
+  // The highlighted option follows the key down a long list: the list scrolls
+  // so the row the Select key would take is always on screen.
+  useEffect(() => {
+    if (Date.now() - lastKeyRef.current > 800) return;          // moved by the mouse: it is already in view
+    document.querySelector('[data-sel="1"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedIdx]);
+
   const binNum  = match ? binFor(binMap, match.team) : null;
   const hasSize = !!(match?.size);
   const extras  = match ? extraCols.filter(k => match[k]).map(k => `${cap(k)}: ${match[k]}`) : [];
@@ -933,7 +940,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const OptionButton = ({ o, i }) => {
     const sel = i === selectedIdx;
     return (
-      <button onClick={o.run} onMouseEnter={() => hover(i)}
+      <button onClick={o.run} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
         style={{ padding: "12px 22px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.18)"}`, background: o.primary ? accent : "transparent", color: o.primary ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
         <span>{o.label} {o.id === "retry" ? <Kbd light>{formatKey(retryKey)}</Kbd> : o.id === "manual" ? <Kbd light>{formatKey(byHandKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
         {o.hint && <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.7 }}>{o.hint}</span>}
