@@ -253,7 +253,9 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); return; }
-      onStart({ roster: parsed, orderNumber: order.trim(), notes: notes.trim(), jerseyType, rosterFile: file.name });
+      // A file loaded at the station has no supervisor number: the file's name
+      // identifies the order so the hub still records it and the board can open it.
+      onStart({ roster: parsed, orderNumber: order.trim() || file.name.replace(/\.[^.]+$/, ""), notes: notes.trim(), jerseyType, rosterFile: file.name });
     } catch (err) {
       setError("Failed to parse roster: " + err.message);
       setLoading(false);
@@ -294,7 +296,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           <label style={labelSt}>Order number{!canSupervise && <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}> — set by the supervisor</span>}</label>
           {canSupervise
             ? <input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" autoFocus onKeyDown={onEnter} style={inputSt} />
-            : <div title="Only the supervisor can set the order number" style={{ ...inputSt, color: order ? "#e2e8f0" : "#64748b", cursor: "not-allowed", userSelect: "none" }}>{order || (picked || file ? "No order number" : "Pick the order the supervisor sent")}</div>}
+            : <div title="Only the supervisor can set the order number" style={{ ...inputSt, color: order ? "#e2e8f0" : "#64748b", cursor: "not-allowed", userSelect: "none" }}>{order || (file ? file.name.replace(/\.[^.]+$/, "") + " (file name — no supervisor number)" : "Pick the order the supervisor sent")}</div>}
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order notes <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
