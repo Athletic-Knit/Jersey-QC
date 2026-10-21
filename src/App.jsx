@@ -100,20 +100,35 @@ const urlStation = () => { try { return new URLSearchParams(window.location.sear
 // the saved order, the sign-in and the hub id all follow the station.
 const goToStation = id => { const u = new URL(window.location.href); u.searchParams.set("station", id); window.location.href = u.toString(); };
 
+// Sign-in is two steps: the role, then — for an inspector — which station.
+// Each inspection station has its own PIN; packer and supervisor have a role
+// PIN. The page's ?station= says where it is: station1..3 for inspectors,
+// "packing" for the packer, "supervisor" for the supervisor's board.
+const ROLE_CHOICES = ROLES.filter(r => r.id !== "admin");
+const roleOfStation = id => stationOf(id) ? "inspector" : id === "packing" ? "packer" : id === "supervisor" ? "supervisor" : "";
+const pageFor = (role, station) => role === "inspector" ? station : role === "packer" ? "packing" : "supervisor";
+
 function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + title: hand the station to another operator without losing the order
   const here = urlStation();
-  const choices = [...STATIONS.map(s => ({ id: s.id, label: s.label, pin: s.pin, role: "inspector" })), { id: "supervisor", label: "Supervisor", pin: ROLES.find(r => r.id === "supervisor").pin, role: "supervisor" }];
-  const [choice, setChoice] = useState(choices.find(c => c.id === here)?.id || (initial?.role === "supervisor" ? "supervisor" : choices[0].id));
+  const [role,    setRole]    = useState(roleOfStation(here) || initial?.role || "inspector");
+  const [station, setStation] = useState(stationOf(here) ? here : STATIONS[0].id);
   const [pin,   setPin]   = useState("");
   const [name,  setName]  = useState(initial?.name || "");
   const [error, setError] = useState(null);
-  const pick = c => { setChoice(c.id); if (c.id !== here && !onCancel) goToStation(c.id); };   // a new sign-in may move the page; a take-over keeps the station
+  const roleDef = ROLES.find(r => r.id === role);
+  const stDef   = stationOf(station);
+  const pinOwner = role === "inspector" ? stDef : roleDef;      // whose PIN opens this page
+  const target   = pageFor(role, station);                      // where the page should be for this choice
+  // A new sign-in moves the page to the chosen station or board (reload, so the
+  // saved order, the sign-in and the hub id follow); a take-over keeps it.
+  const pickRole    = r  => { setRole(r.id); const t = pageFor(r.id, station); if (r.id !== "inspector" && t !== here && !onCancel) goToStation(t); };
+  const pickStation = id => { setStation(id); if (id !== here && !onCancel) goToStation(id); };
 
   const submit = () => {
-    const c = choices.find(x => x.id === choice);
-    if (PIN_REQUIRED && pin !== c.pin) { setError("Wrong PIN for " + c.label + "."); return; }
+    if (PIN_REQUIRED && pin !== pinOwner.pin) { setError("Wrong PIN for " + pinOwner.label + "."); return; }
     if (!name.trim()) { setError("Please enter your name."); return; }
-    onSignIn({ role: c.role, name: name.trim(), station: c.id });
+    if (target !== here && !onCancel) { goToStation(target); return; }
+    onSignIn({ role, name: name.trim(), station: target });
   };
   const onEnter = e => { if (e.key === "Enter") submit(); };
 
@@ -124,17 +139,30 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         <div style={{ fontWeight: 900, fontSize: 22, textAlign: "center", marginBottom: 2 }}>Jersey QC Scanner</div>
         <div style={{ fontSize: 13, color: "#64748b", textAlign: "center", marginBottom: 22 }}>{title || "Sign in once per shift"}</div>
         <div style={{ marginBottom: 12 }}>
-          <label style={labelSt}>{onCancel ? "Station" : "Where are you?"}</label>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
-            {choices.map(c => (
-              <button key={c.id} onClick={() => pick(c)} disabled={!!onCancel && c.id !== choice}
-                style={{ ...btnGhost, padding: "8px 4px", fontSize: 12, borderColor: choice === c.id ? "#3b82f6" : "#334155", color: choice === c.id ? "#fff" : "#94a3b8", background: choice === c.id ? "rgba(59,130,246,0.18)" : "transparent", opacity: onCancel && c.id !== choice ? 0.4 : 1 }}>
-                {c.label}
+          <label style={labelSt}>Role</label>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${ROLE_CHOICES.length},1fr)`, gap: 6 }}>
+            {ROLE_CHOICES.map(r => (
+              <button key={r.id} onClick={() => pickRole(r)} disabled={!!onCancel && r.id !== role}
+                style={{ ...btnGhost, padding: "8px 4px", fontSize: 12, borderColor: role === r.id ? "#3b82f6" : "#334155", color: role === r.id ? "#fff" : "#94a3b8", background: role === r.id ? "rgba(59,130,246,0.18)" : "transparent", opacity: onCancel && r.id !== role ? 0.4 : 1 }}>
+                {r.label}
               </button>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>Each station has its own PIN. The supervisor's board shows this page as {choices.find(x => x.id === choice)?.label}.</div>
         </div>
+        {role === "inspector" && (
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelSt}>Which station?</label>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${STATIONS.length},1fr)`, gap: 6 }}>
+              {STATIONS.map(s => (
+                <button key={s.id} onClick={() => pickStation(s.id)} disabled={!!onCancel && s.id !== station}
+                  style={{ ...btnGhost, padding: "8px 4px", fontSize: 12, borderColor: station === s.id ? "#60a5fa" : "#334155", color: station === s.id ? "#fff" : "#94a3b8", background: station === s.id ? "rgba(96,165,250,0.16)" : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>Each station has its own PIN. The supervisor's board shows this page as {stDef?.label}.</div>
+          </div>
+        )}
         {PIN_REQUIRED && (
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>PIN</label>
@@ -481,7 +509,7 @@ function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto 
 
 // ── Supervisor view: every station live, and rosters to send ─────────────────
 // "st-line2" (from ?station=line2) reads as "Line 2"; any other id as itself.
-const stationLabel = id => { const n = String(id || "").replace(/^st-/, ""); const st = stationOf(n); if (st) return st.label; const m = n.match(/^line[-_ ]?(\d+)$/i); return m ? `Line ${m[1]}` : n || "station"; };
+const stationLabel = id => { const n = String(id || "").replace(/^st-/, ""); const st = stationOf(n); if (st) return st.label; if (n === "packing") return "Packing"; const m = n.match(/^line[-_ ]?(\d+)$/i); return m ? `Line ${m[1]}` : n || "station"; };
 
 function SupervisorPanel({ operatorName, onClose }) {
   const [data,    setData]    = useState(() => ({ stations: [], now: Date.now() }));
