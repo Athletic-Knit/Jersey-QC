@@ -1425,7 +1425,7 @@ export default function App() {
   // it is, whatever the screen size: one layout to learn, on every PC.
   const wide = true;
   const [showBinSetup,       setShowBinSetup]       = useState(false);
-  const [showSupervisor,     setShowSupervisor]     = useState(false);
+  const [showSupervisor,     setShowSupervisor]     = useState(() => (savedSignIn?.role === "supervisor" || savedSignIn?.role === "admin") && !savedSession);
   const [binMap,             setBinMap]             = useState(null);
   const [firstScanTime,      setFirstScanTime]      = useState(null);
   const [now,                setNow]                = useState(() => Date.now());
@@ -1970,7 +1970,7 @@ export default function App() {
 
       {!showResume && !signedIn && (
         <SignInModal initial={savedSignIn}
-          onSignIn={({ role, name }) => { setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name }); setResumeDecided(true); }} />
+          onSignIn={({ role, name }) => { setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name }); setResumeDecided(true); if (role === "supervisor" || role === "admin") setShowSupervisor(true); }} />
       )}
 
       {showHandover && (
