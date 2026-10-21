@@ -52,12 +52,19 @@ function oneLookAlikeOff(a, b) {
 // "10" is NOT near "1" or "100"; "56" is NOT near "6"; "0" is NOT near "4".
 // `anyDigit`: the read had a covered digit, so the model's digit there is a
 // guess and any digit may stand in ("35" guessed as 55 or 75 still finds #35).
-function nearNumbers(nNum, roster, { anyDigit = false } = {}) {
+// `side`: 0 or 1 when the model said which digit was covered (left/first,
+// right/second), so only that digit may vary; null = either.
+function nearNumbers(nNum, roster, { anyDigit = false, side = null } = {}) {
   if (!nNum) return [];
+  const differsAt = (a, b) => { const d = []; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d.push(i); return d; };
   return roster.filter(r => {
     const rn = normNum(r.number);
     if (!rn || rn === nNum || !isPlausibleNumber(rn)) return false;
-    if (rn.length === nNum.length) return anyDigit ? editDistance(rn, nNum) <= 1 : oneLookAlikeOff(rn, nNum);
+    if (rn.length === nNum.length) {
+      if (!anyDigit) return oneLookAlikeOff(rn, nNum);
+      const d = differsAt(rn, nNum);
+      return d.length === 1 && (side === null || d[0] === side);
+    }
     if (nNum.length < rn.length)   return editDistance(rn, nNum) <= 1;
     return rn.length === 1 && nNum === rn + rn;
   });
@@ -197,7 +204,9 @@ export function findMatches(roster, name, number, read = {}) {
     const hidden = nNum.length === 1 ? hiddenDigitNumbers(nNum, roster) : [];
     // A COVERED two-digit read is a guess at the hidden digit ("21" with the 3
     // under a hand is the #31), so it also offers the rows one digit away.
-    const guessedDigit = partialNum && read.numberComplete === false && nNum.length === 2 ? nearNumbers(nNum, roster, { anyDigit: true }) : [];
+    const obs = String(read.obstruction || "").toLowerCase();
+    const side = /\b(left|first)\b/.test(obs) ? 0 : /\b(right|second|last)\b/.test(obs) ? 1 : null;
+    const guessedDigit = partialNum && read.numberComplete === false && nNum.length === 2 ? nearNumbers(nNum, roster, { anyDigit: true, side }) : [];
     const cands = exact.length
       ? dedupe([...exact, ...hidden, ...guessedDigit])
       : dedupe([...hidden, ...(nNum.length === 1 && hidden.length ? [] : nearNumbers(nNum, roster, { anyDigit: partialNum })), ...(partialNum ? subNumberCandidates(nNum, roster) : []), ...(partialName ? [] : nearNames(nName, roster))]);   // a covered lone digit with hidden-digit rows to offer needs no substitutions

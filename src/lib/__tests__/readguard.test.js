@@ -142,7 +142,7 @@ describe("no alternative, no yellow", () => {
     expect(m.type).toBe("pick");
     expect(ids(m)).toEqual([0]);
     // the 3 of #31 under a hand, guessed as 21 and flagged covered: Leach AND the #31 rows are offered
-    const m2 = findMatches(r, "", "21", { numberComplete: false, colour: "white", trim: "red" });
+    const m2 = findMatches(r, "", "21", { numberComplete: false, obstruction: "hand over the left digit", colour: "white", trim: "red" });
     expect(m2.type).toBe("pick");
     expect(ids(m2)).toEqual(expect.arrayContaining([0, 2]));
     expect(findMatches(r, "LEACH", "21")).toMatchObject({ type: "exact", match: { _id: 0 } });   // with the name read: green
@@ -296,11 +296,20 @@ describe("the camera doubts its read", () => {
       expect(ids(m)).not.toContain(3);
     }
   });
-  it("a doubtful read of a number that IS on the roster lists only that number's rows", () => {
+  it("a doubtful (not flat) read of a number that IS on the roster lists only that number's rows", () => {
     const r = [row(0, "", "30", "red"), row(1, "", "30", "blue"), row(2, "", "31"), row(3, "", "70"), row(4, "", "60"), row(5, "", "3")];
-    const m = findMatches(r, "", "30", { numberComplete: false });
+    const m = findMatches(r, "", "30", { laidFlat: false });
     expect(m.type).toBe("pick");
     expect(ids(m)).toEqual([0, 1]);
+  });
+  it("a COVERED read adds neighbours on the covered side only: left digit covered → 70, 60, not 31", () => {
+    const r = [row(0, "", "30", "red"), row(1, "", "30", "blue"), row(2, "", "31"), row(3, "", "70"), row(4, "", "60"), row(5, "", "3")];
+    const m = findMatches(r, "", "30", { numberComplete: false, obstruction: "hand over the left digit" });
+    expect(ids(m)).toEqual(expect.arrayContaining([0, 1, 3, 4]));
+    expect(ids(m)).not.toContain(2);
+    const m2 = findMatches(r, "", "30", { numberComplete: false, obstruction: "second digit may be under a fold" });
+    expect(ids(m2)).toEqual(expect.arrayContaining([0, 1, 2]));
+    expect(ids(m2)).not.toContain(3);
   });
   it("a doubtful single-digit read still offers the rows a hidden digit would make, and nothing else", () => {
     const r = [row(0, "", "5"), row(1, "", "35"), row(2, "", "50"), row(3, "", "6"), row(4, "", "70")];
