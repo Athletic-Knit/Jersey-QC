@@ -11,6 +11,7 @@ import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { useVoice } from "./useVoice.js";
 import { VoiceBadge, VoiceLegend } from "./VoiceBadge.jsx";
 import { speak } from "./lib/voice.js";
+const SECOND_LOOK = false;
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
 
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
@@ -907,19 +908,13 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (e.code === cancelKey || e.code === "ArrowDown") { e.preventDefault(); lastKeyRef.current = Date.now(); move(1); return; }
       if (e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
     };
-    // Voice: the same moves as the keys. "pick:N" is the Nth option on the
-    // screen (rows first on a list), so "two" picks the second row.
+    // Voice on a result screen: "next" selects what is highlighted (the mouse
+    // moves the highlight, voice never does); "flag" opens the reasons.
     const onVoice = (e) => {
       const c = e.detail?.command; if (!c || mode === "done") return;
       if (mode === "manual" || mode === "reasonText") return;        // typing
-      const by = id => { const o = options.find(x => x.id === id); if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } };
-      if (c === "retry")    { by("retry"); return; }
-      if (c === "manual")   { by("manual"); return; }
-      if (c === "notright") { by("notright"); return; }
-      if (c === "select")   { const o = options[selectedIdx]; if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } return; }
-      if (c === "down")     { lastKeyRef.current = Date.now(); move(1); return; }
-      const m = /^pick:(\d)$/.exec(c);
-      if (m) { const o = options[Number(m[1]) - 1]; if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } }
+      if (c === "notright") { const o = options.find(x => x.id === "notright"); if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } return; }
+      if (c === "select")   { const o = options[selectedIdx]; if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("jerseyqc:voice", onVoice);
@@ -1438,6 +1433,13 @@ export default function App() {
   // result screen is up and nothing is scanning. Each fire acts on the screen
   // like the matching key would.
   const voice = useVoice({ enabled: !!settings.voice && signedIn && sessionStarted, active: !!overlay && !scanning, deviceId: settings.micId || "" });
+  // "scan" by voice: only when no result screen is up, exactly like the Scan key.
+  const triggerRef = useRef(null);
+  useEffect(() => {
+    const h = e => { if (e.detail?.command === "scan" && !overlay && !scanning) triggerRef.current?.(); };
+    window.addEventListener("jerseyqc:voice", h);
+    return () => window.removeEventListener("jerseyqc:voice", h);
+  }, [overlay, scanning]);
   const voiceUp = voice.status !== null;   // once the mic is open the device list carries names
   useEffect(() => {
     if (!settings.voice || !signedIn) return;
@@ -1617,11 +1619,10 @@ export default function App() {
     try {
       detected = await readOne(base64, dataUrl);
       m = matchOf(detected);
-      // A doubtful first look (part of the read missing, nothing contradicting)
-      // is often a hand still in the frame or a jersey not yet settled. Take a
-      // fresh frame and read again before showing anything; the second answer
-      // stands unless it is worse. Only from the live camera, and only once.
-      if (recapture && (m === null || m.soft) && version === rosterVersion.current) {
+      // Second look, off by default: a doubtful first read used to be re-shot
+      // 0.7 s later before anything showed, which turned a 1.5 s yellow into a
+      // 4 s one. The operator can say "scan" or press R instead.
+      if (SECOND_LOOK && recapture && (m === null || m.soft) && version === rosterVersion.current) {
         await new Promise(r => setTimeout(r, 700));
         const again = recapture();
         if (again) {
@@ -1685,6 +1686,7 @@ export default function App() {
     const f = captureFrame();
     if (f) doRunScan(f.base64, f.dataUrl, captureFrame);
   }, [scanning, cameraOn, roster.length, inputMode, captureFrame, doRunScan, stopCamera]);
+  useEffect(() => { triggerRef.current = doTriggerScan; }, [doTriggerScan]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
   const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHandover;

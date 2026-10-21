@@ -7,59 +7,58 @@
 // Partial results stream as the operator speaks, so a word fires ~100–200 ms
 // after it is said — nothing waits for end-of-sentence.
 //
-//   "next"   select the highlighted option   (green: confirm)
-//   "down"   move to the next option
-//   "again"  retry the scan                  (nothing recorded)
-//   "flag"   not right — open the reasons
-//   "type"   enter by hand
-//   "one" … "five"  pick option 1–5 on a list (rows first, then the buttons)
+//   "scan"       take the picture (when no result screen is up) — same as the Scan key
+//   "next"       select the highlighted option (green: confirm)
+//   "flag" / "not right"   not right — open the reasons
 //
-// Words were chosen to sound unlike each other; "yes"/"no"/"go" were avoided.
+// Three commands only, on purpose: the fewer words the recogniser knows, the
+// less there is to confuse, and everything else is a mouse click. Voice never
+// moves the highlight, so what the operator sees highlighted is what "next"
+// picks. A grammar entry may be a phrase ("not right").
 //
 // Misfire guards (createVoiceGate, pure, unit-tested):
-//   only while a result screen is up (the hook gates firing; listening never stops)
-//   a command must stand alone or end the utterance ("ok next" fires, "next door" does not)
-//   cooldown after each fire; the same word cannot fire twice from one utterance
+//   a command must END what was said ("ok next" fires, "next door" does not)
+//   cooldown after each fire; the same command cannot fire twice from one utterance
 
 export const COMMAND_WORDS = {
-  next: "select", down: "down", again: "retry", flag: "notright", type: "manual",
-  one: "pick:1", two: "pick:2", three: "pick:3", four: "pick:4", five: "pick:5",
+  "scan": "scan",
+  "next": "select",
+  "flag": "notright",
+  "not right": "notright",
 };
 export const COMMAND_INFO = [
-  { word: "next",  action: "Select / confirm" },
-  { word: "down",  action: "Next option" },
-  { word: "again", action: "Retry scan" },
-  { word: "flag",  action: "Not right — reasons" },
-  { word: "type",  action: "Enter by hand" },
-  { word: "one … five", action: "Pick option 1–5" },
+  { word: "scan",  action: "Take the picture (no screen up)" },
+  { word: "next",  action: "Select the highlighted option" },
+  { word: "flag",  action: "Not right — open the reasons (\"not right\" works too)" },
 ];
 export const GRAMMAR = JSON.stringify([...Object.keys(COMMAND_WORDS), "[unk]"]);
+const PHRASES = Object.keys(COMMAND_WORDS).map(p => ({ phrase: p, tokens: p.split(" "), cmd: COMMAND_WORDS[p] })).sort((a, b) => b.tokens.length - a.tokens.length);
 export const MODEL_URL = "/models/vosk-model-small-en-us-0.15.tar.gz";
 
 /**
  * Pure. Feed every partial and final transcript: hear(text, t, final) returns
  * the command that fires on this call, or null. Vosk partials grow across an
- * utterance ("next", "next next"); only tokens not yet handled are considered,
- * and only the LAST token of the text can fire, so a command inside a longer
- * phrase is ignored.
+ * utterance ("not", "not right"); a command fires when the text ENDS with one
+ * of the phrases and that phrase starts after the last fire in this
+ * utterance, so "not right" fires once when its second word lands, and a
+ * command buried inside a longer phrase is ignored.
  */
 export function createVoiceGate({ cooldownMs = 700 } = {}) {
-  let handled = 0, lastFireAt = -Infinity, lastWord = null;
+  let firedEnd = 0, lastFireAt = -Infinity, lastCmd = null;
   return {
-    reset() { handled = 0; },
+    reset() { firedEnd = 0; },
     hear(text, t, final = false) {
       const tokens = String(text || "").trim().split(/\s+/).filter(Boolean);
       let fired = null;
-      if (tokens.length > handled) {
-        const last = tokens[tokens.length - 1];
-        const cmd = COMMAND_WORDS[last] || null;
-        const fresh = tokens.length === handled + 1;                 // exactly one new token, and it is a command on its own
-        if (cmd && fresh && t - lastFireAt >= cooldownMs && !(last === lastWord && t - lastFireAt < 1500)) {
-          fired = cmd; lastFireAt = t; lastWord = last;
-        }
-        handled = tokens.length;
+      for (const p of PHRASES) {
+        const n = p.tokens.length;
+        if (tokens.length < n || tokens.length - n < firedEnd) continue;
+        if (tokens.slice(-n).join(" ") !== p.phrase) continue;
+        if (t - lastFireAt >= cooldownMs && !(p.cmd === lastCmd && t - lastFireAt < 1500)) { fired = p.cmd; lastFireAt = t; lastCmd = p.cmd; }
+        firedEnd = tokens.length;                       // this phrase is spent either way
+        break;
       }
-      if (final) handled = 0;
+      if (final) firedEnd = 0;
       return fired;
     },
   };
