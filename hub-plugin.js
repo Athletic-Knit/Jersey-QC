@@ -133,5 +133,34 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
     }
   }
 
-  return { name: "jersey-hub", configureServer(server) { server.middlewares.use("/api/hub", (req, res) => { handle(req, res); }); } };
+  // An address typed without https:// sends plain HTTP to the TLS port. Node
+  // reports that as a TLS client error; answer it on the raw socket with a
+  // redirect to the same address over https, instead of a blank page.
+  const redirectPlainHttp = httpServer => {
+    httpServer?.on?.("tlsClientError", (err, tlsSocket) => {
+      if (err?.code !== "ERR_SSL_HTTP_REQUEST") return;
+      const raw = tlsSocket?._parent || tlsSocket;
+      try {
+        const a = String(raw.localAddress || "").replace(/^::ffff:/, "");            // IPv4 arrives as ::ffff:192.168.0.189
+        const host = a === "::1" ? "localhost" : a.includes(":") ? `[${a}]` : a;
+        const to = `https://${host}:${raw.localPort}/`;
+        raw.write(`HTTP/1.1 302 Found
+Location: ${to}
+Content-Type: text/html
+Connection: close
+
+<a href="${to}">Use ${to}</a>
+`);
+        raw.end();
+      } catch { /* the socket is already gone */ }
+    });
+  };
+
+  return {
+    name: "jersey-hub",
+    configureServer(server) {
+      server.middlewares.use("/api/hub", (req, res) => { handle(req, res); });
+      redirectPlainHttp(server.httpServer);
+    },
+  };
 }
