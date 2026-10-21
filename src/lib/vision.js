@@ -9,7 +9,13 @@
 // Haiku 4.5 does not see a fold; Haiku 5.5 only sees it while thinking, which
 // is slow. Sonnet sees it without thinking. Time is ~1.5 s one at a time at
 // an 800 px frame (2.1 s at 1280 px), so the app downscales before sending.
-export const DEFAULT_MODEL = "claude-sonnet-5-5";
+// 21 Oct, edge-case simulation (tools/edge-sim-models.mjs, 13 floor scenarios,
+// real frames, today's prompt + matcher): Haiku 5.5 without thinking got
+// 130/130 — every fold, hand and cut-off caught, every clean jersey green —
+// at a median 1.0 s, the same result as Sonnet 5.5 at 1.9 s and a tenth of
+// the price. The order's numbers in the prompt and the matcher rules do the
+// work; the bigger model is not needed. Haiku 4.5 misses upside-down numbers.
+export const DEFAULT_MODEL = "claude-haiku-5-5";
 export const DEFAULT_EFFORT = "low";
 export const DEFAULT_THINKING = "off";   // "adaptive" | "off"
 

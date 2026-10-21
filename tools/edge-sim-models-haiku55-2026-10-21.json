@@ -1,0 +1,3462 @@
+[
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 926,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 980,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1013,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1519,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1489,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 885,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 959,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1005,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 971,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #40, nameless row",
+   "frame": "f40_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 3951,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 764,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 920,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 733,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 767,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 912,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1188,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 2022,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1624,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 871,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "clean #54, nameless row",
+   "frame": "f54_clean.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 706,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 984,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 986,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 920,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 975,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 966,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 878,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 971,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 985,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1014,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1037,
+  "read": "#4?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "upside-down #40",
+   "frame": "f40_upsidedown.jpg",
+   "roster": "nameless",
+   "expect": {
+    "colour": "green",
+    "pick": "40"
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1518,
+  "read": "#40",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #40 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1386,
+  "read": "#4?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 673,
+  "read": "#4?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 666,
+  "read": "#4?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1238,
+  "read": "#4?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 727,
+  "read": "#4?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 759,
+  "read": "#4?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 749,
+  "read": "#4?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 727,
+  "read": "#4?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "DEMO BREAK: 0 of #40 covered, #4 on roster",
+   "frame": "f40_cover0_fabric.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "4",
+     "40"
+    ]
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 689,
+  "read": "#4?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#4 #40 #14 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 710,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 645,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 756,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 785,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 898,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 794,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 628,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 705,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 913,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1010,
+  "read": "#4?",
+  "flagged": true,
+  "covered": false,
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "real fold: 3 of #35 under sleeve, #5 on roster",
+   "frame": "f35_fold_real.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "35"
+    ]
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1070,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1481,
+  "read": "#4?",
+  "flagged": true,
+  "covered": false,
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 895,
+  "read": "#4?",
+  "flagged": true,
+  "covered": false,
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1035,
+  "read": "#4?",
+  "flagged": true,
+  "covered": false,
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 987,
+  "read": "#4?",
+  "flagged": true,
+  "covered": false,
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 934,
+  "read": "#4?",
+  "flagged": true,
+  "covered": false,
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 883,
+  "read": "#4?",
+  "flagged": true,
+  "covered": false,
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1045,
+  "read": "#4?",
+  "flagged": true,
+  "covered": false,
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 927,
+  "read": "#4?",
+  "flagged": true,
+  "covered": false,
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "fabric over 5 of #54",
+   "frame": "f54_cover5_fabric.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 948,
+  "read": "#4?",
+  "flagged": true,
+  "covered": false,
+  "screen": "YELLOW [#40 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1162,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1163,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1209,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1140,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1132,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1289,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1145,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1142,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1129,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1077,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #40",
+   "frame": "f40_cover4_hand.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1720,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1619,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1026,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 951,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 2060,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 943,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 956,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1069,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 956,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "hand over 4 of #54",
+   "frame": "f54_cover4_hand.jpg",
+   "roster": "fold35",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "54"
+    ]
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1564,
+  "read": "#5?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#5 #35 #54]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1032,
+  "read": "#40?",
+  "flagged": true,
+  "covered": true,
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1448,
+  "read": "#40?",
+  "flagged": true,
+  "covered": true,
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1170,
+  "read": "#40?",
+  "flagged": true,
+  "covered": true,
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 966,
+  "read": "#40?",
+  "flagged": true,
+  "covered": true,
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1052,
+  "read": "#40?",
+  "flagged": true,
+  "covered": true,
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 967,
+  "read": "#40?",
+  "flagged": true,
+  "covered": true,
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1124,
+  "read": "#40?",
+  "flagged": true,
+  "covered": true,
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1624,
+  "read": "#40?",
+  "flagged": true,
+  "covered": true,
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 966,
+  "read": "#40?",
+  "flagged": true,
+  "covered": true,
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "4 of #40 cut off at picture edge",
+   "frame": "f40_edge_cut4.jpg",
+   "roster": "demo",
+   "expect": {
+    "colour": "yellow-or-green-40",
+    "has": [
+     "40"
+    ]
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1067,
+  "read": "#40?",
+  "flagged": true,
+  "covered": true,
+  "screen": "GREEN #40 T",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1068,
+  "read": "#5? STEPHENSON",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1052,
+  "read": "#5? STEPHENSON",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1142,
+  "read": "#5? STEPHENSON",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1096,
+  "read": "#5? STEPHENSON",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1089,
+  "read": "#5? STEPHENSON",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1626,
+  "read": "#5? STEPHENSON",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 986,
+  "read": "#5? STEPHENSON",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1014,
+  "read": "#5? STEPHENSON",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 987,
+  "read": "#5? STEPHENSON",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1060,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "two jerseys: STEPHENSON over a #5",
+   "frame": "frame_two.jpg",
+   "roster": "two",
+   "expect": {
+    "colour": "yellow",
+    "has": [
+     "22",
+     "5"
+    ]
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1646,
+  "read": "#5? STEPHENSON",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#22 #5]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 998,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1019,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1009,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 960,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 980,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1056,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1026,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1033,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "covered lone 0 (of #40); rows 40,40,41,70,60,4 open",
+   "frame": "f40_cover4_fabric.jpg",
+   "roster": "thirty",
+   "expect": {
+    "colour": "yellow",
+    "only": [
+     "40",
+     "70",
+     "60"
+    ]
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1033,
+  "read": "#0?",
+  "flagged": true,
+  "covered": true,
+  "screen": "YELLOW [#40 #40 #70 #60]",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1130,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1132,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1305,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1119,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 2102,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1093,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1209,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 2177,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1335,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "three #54 rows, two passed → the last",
+   "frame": "f54_clean.jpg",
+   "roster": "last",
+   "expect": {
+    "colour": "green",
+    "pick": "54"
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 1358,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 blue",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 0,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 917,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 1,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 909,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 2,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 906,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 3,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 882,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 4,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 887,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 7,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 926,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 8,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 886,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 5,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 2837,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 9,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 891,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 white",
+  "ok": true
+ },
+ {
+  "s": {
+   "id": "#54 white jersey, white and red rows",
+   "frame": "f54_clean.jpg",
+   "roster": "colour",
+   "expect": {
+    "colour": "green",
+    "pick": "54",
+    "team": "white"
+   }
+  },
+  "i": 6,
+  "which": "haiku-5.5 no-think",
+  "cfg": {
+   "id": "haiku-5.5 no-think",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "thinking": "off"
+  },
+  "ms": 5629,
+  "read": "#54",
+  "flagged": false,
+  "covered": false,
+  "screen": "GREEN #54 white",
+  "ok": true
+ }
+]
