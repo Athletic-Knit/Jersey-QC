@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { JERSEY_TYPES, reasonsFor, jerseyTypeLabel, REASONS } from "../../config.js";
+import { JERSEY_TYPES, reasonsFor, jerseyTypeLabel, REASONS, STATIONS, stationOf, ROLES } from "../../config.js";
+
+describe("stations", () => {
+  it("three stations, each with its own PIN, none equal to the supervisor's", () => {
+    expect(STATIONS.map(s => s.label)).toEqual(["Station 1", "Station 2", "Station 3"]);
+    const pins = STATIONS.map(s => s.pin);
+    expect(new Set(pins).size).toBe(3);
+    expect(pins).not.toContain(ROLES.find(r => r.id === "supervisor").pin);
+    expect(stationOf("station2").label).toBe("Station 2");
+    expect(stationOf("line1")).toBeNull();
+  });
+});
 
 describe("jersey types and their reason menus", () => {
   it("three types: two stitched, one sublimated", () => {

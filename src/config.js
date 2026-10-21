@@ -78,6 +78,17 @@ export const ROLES = [
 ];
 export const PIN_REQUIRED = (env.VITE_PIN_REQUIRED ?? "true") !== "false";
 
+// The scanning stations. An operator picks their station at sign-in and
+// enters that station's PIN; the page then runs as ?station=station1 so the
+// supervisor's board, the saved order and the hub all know it as "Station 1".
+// Set PINs in .env.local: VITE_PIN_STATION1=…  VITE_PIN_STATION2=…  VITE_PIN_STATION3=…
+export const STATIONS = [
+  { id: "station1", label: "Station 1", pin: env.VITE_PIN_STATION1 || "1001" },
+  { id: "station2", label: "Station 2", pin: env.VITE_PIN_STATION2 || "1002" },
+  { id: "station3", label: "Station 3", pin: env.VITE_PIN_STATION3 || "1003" },
+];
+export const stationOf = id => STATIONS.find(s => s.id === id) || null;
+
 export const DEFAULT_SETTINGS = {
   scanKey: "KeyB",        // take a picture (only when no screen is open)
   confirmKey: "Enter",    // select the highlighted option on any screen

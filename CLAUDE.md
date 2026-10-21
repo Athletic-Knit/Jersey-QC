@@ -32,6 +32,7 @@ A React/Vite web app for quality-control scanning of sports jerseys in a manufac
 | `VITE_CLAUDE_EFFORT` | Optional `low` / `medium` / `high` (default `low`) |
 | `VITE_CLAUDE_THINKING` | Optional `off` / `adaptive` (default `off`) |
 | `VITE_SEND_MAX_PX` | Longest side of the frame sent to the model (default `800`) |
+| `VITE_PIN_STATION1` / `2` / `3` | Station PINs (defaults `1001`, `1002`, `1003`); `VITE_PIN_SUPERVISOR` default `3333` |
 
 Create a `.env.local` file (already gitignored via `*.local`):
 ```

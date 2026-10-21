@@ -9,12 +9,13 @@ echo.
 echo    SUPERVISOR (this PC):
 echo      https://localhost:5173/?station=supervisor
 echo.
-echo    OPERATOR (other PCs - use the address of the
+echo    STATIONS (other PCs - use the address of the
 echo    network they are on; Wi-Fi laptops use the Wi-Fi line):
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' } | ForEach-Object { '      ' + $_.InterfaceAlias.PadRight(14) + ' https://' + $_.IPAddress + ':5173/?station=line1' }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' } | ForEach-Object { '      ' + $_.InterfaceAlias.PadRight(14) + ' https://' + $_.IPAddress + ':5173/' }"
 echo.
-echo    Second station: change line1 to line2 in the link.
-echo    PINs: Inspector 1111 - Supervisor 3333.
+echo    The operator picks Station 1, 2 or 3 at sign-in.
+echo    PINs: Station 1 = 1001, Station 2 = 1002, Station 3 = 1003,
+echo    Supervisor = 3333  (change them in .env.local).
 echo    Other PCs see a certificate warning once:
 echo    Advanced, then Proceed. Then allow the camera.
 echo.
