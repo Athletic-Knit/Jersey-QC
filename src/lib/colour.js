@@ -40,10 +40,12 @@ export function rowColourText(row) {
 
 /**
  * Narrow candidate rows to the ones whose colour agrees with what the camera
- * saw. Returns { rows, narrowed }: `rows` are the agreeing rows (body colour
- * first, then trim colour) or every row unchanged when the read has no usable
- * colour, no row names a colour, or nothing agrees — colour only ever helps,
- * it never rules a jersey out.
+ * saw. Returns { rows, narrowed, strong }: `rows` are the agreeing rows or
+ * every row unchanged when the read has no usable colour, no row names a
+ * colour, or nothing agrees — colour only ever helps, it never rules a jersey
+ * out. `strong` is true only when the BODY colour agreed: trim colour (a red
+ * stripe on a white jersey) may order a list but must never decide a green —
+ * a white #31 with red trim is not the "red" #31.
  */
 export function narrowByColour(rows, read = {}) {
   const main = colourFamilies(read.colour), trim = colourFamilies(read.trim);
@@ -54,6 +56,6 @@ export function narrowByColour(rows, read = {}) {
     return { r, score };
   });
   const best = Math.max(0, ...scored.map(s => s.score));
-  if (best === 0) return { rows, narrowed: false };
-  return { rows: scored.filter(s => s.score === best).map(s => s.r), narrowed: true };
+  if (best === 0) return { rows, narrowed: false, strong: false };
+  return { rows: scored.filter(s => s.score === best).map(s => s.r), narrowed: true, strong: best === 2 };
 }

@@ -194,12 +194,28 @@ describe("colour settles same-number rows", () => {
     const r = [row(0, "", "7", "Ravens"), row(1, "", "7", "Wolves")];
     expect(findMatches(r, "", "7", { colour: "black" }).type).toBe("pick");
   });
-  it("trim colour breaks a tie when the body colour does not", () => {
+  it("trim colour orders the list but never decides a green", () => {
     const r = [row(0, "", "7", "white"), row(1, "", "7", "navy")];
-    expect(findMatches(r, "", "7", { colour: "silver", trim: "navy blue" })).toMatchObject({ type: "exact", match: { _id: 1 } });
+    const m = findMatches(r, "", "7", { colour: "silver", trim: "navy blue" });
+    expect(m.type).toBe("pick");
+    expect(ids(m)[0]).toBe(1);
   });
-  it("a nameless read on #22 (two named rows) on a yellow jersey → green on Stephenson", () => {
-    expect(findMatches(order41(), "", "22", { colour: "yellow" })).toMatchObject({ type: "exact", match: { _id: 11 } });
+  it("the floor case: white #31 with red trim, no name read; rows green, green, RINE green, DONNELLY red → never green on Donnelly", () => {
+    const r = [row(0, "", "31", "green", "A-S"), row(1, "", "31", "green", "A-XL"), row(2, "Rine", "31", "green", "A-3XL"), row(3, "Donnelly", "31", "red", "A-M")];
+    const m = findMatches(r, "", "31", { colour: "white", trim: "red" });
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual(expect.arrayContaining([0, 1, 2, 3]));
+    const m2 = findMatches(r, "", "31", { colour: "red", trim: "white" });   // even a red body: Donnelly has a name that was not read
+    expect(m2.type).toBe("pick");
+  });
+  it("a nameless read with two nameless rows of that number in different body colours → the body colour decides", () => {
+    const r = [row(0, "", "31", "green"), row(1, "", "31", "white"), row(2, "Donnelly", "31", "red")];
+    expect(findMatches(r, "", "31", { colour: "white", trim: "red" })).toMatchObject({ type: "exact", match: { _id: 1 } });
+  });
+  it("a nameless read on #22 (two NAMED rows) on a yellow jersey → still yellow: a named row needs its name read", () => {
+    const m = findMatches(order41(), "", "22", { colour: "yellow" });
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual(expect.arrayContaining([10, 11]));
   });
   it("parser lower-cases the colour fields and defaults them empty", () => {
     const wrap = obj => ({ content: [{ type: "text", text: JSON.stringify(obj) }] });

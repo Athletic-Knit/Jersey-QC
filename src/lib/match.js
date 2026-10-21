@@ -111,8 +111,8 @@ const lastOpen = rows => {
 // the camera saw narrows them; one open row left is green. Otherwise the
 // agreeing rows lead the list and the reason says what was seen.
 function sameReadRows(rows, read, reason) {
-  const { rows: agree, narrowed } = narrowByColour(rows, read);
-  const sure = single(agree) || lastOpen(agree);
+  const { rows: agree, narrowed, strong } = narrowByColour(rows, read);
+  const sure = strong ? (single(agree) || lastOpen(agree)) : null;
   if (sure) return sure;
   const seen = narrowed && read.colour ? ` — the jersey looks ${String(read.colour).trim()}` : "";
   return { type: "pick", candidates: dedupe([...agree, ...rows]), reason: reason + seen };
@@ -209,8 +209,9 @@ export function findMatches(roster, name, number, read = {}) {
       // same way they do for a clean read — as long as no hidden-digit row is
       // still open to compete.
       if (exact.length > 1 && !hidden.some(r => !isDone(r))) {
-        const { rows: agree } = narrowByColour(exact, read);
-        const sure2 = single(agree) || lastOpen(agree);
+        const pool = nName ? exact : exact.filter(r => !norm(r.name));   // no name read → only nameless rows can be chosen
+        const { rows: agree, strong } = narrowByColour(pool, read);
+        const sure2 = strong ? (single(agree) || lastOpen(agree)) : lastOpen(pool);
         if (sure2 && sure2.type === "exact") return sure2;
       }
     }
@@ -233,8 +234,16 @@ export function findMatches(roster, name, number, read = {}) {
     if (cands.length === 1 && isDone(cands[0])) return { type: "duplicate", match: cands[0] };
     const sure = soleOpen(byNum.length === 1 ? byNum[0] : null, cands);
     if (sure) return sure;
-    // Several rows with this number: let the colour settle it.
-    if (byNum.length > 1) { const c = narrowByColour(byNum, read); const s2 = c.narrowed ? soleOpen(c.rows.length === 1 ? c.rows[0] : null, cands.filter(r => !byNum.includes(r) || c.rows.includes(r))) : null; if (s2) return s2; }
+    // Several rows with this number: the colour seen may settle it — but only
+    // among rows with NO name, and only on the body colour. A row with a name
+    // needs its name read before it can be green; a nameless read that lands
+    // on "DONNELLY" because the jersey's trim is red is exactly the wrong green.
+    if (byNum.length > 1) {
+      const nameless = byNum.filter(r => !norm(r.name));
+      const c = nameless.length ? narrowByColour(nameless, read) : { rows: [], narrowed: false, strong: false };
+      const s2 = c.strong ? soleOpen(c.rows.length === 1 ? c.rows[0] : null, cands.filter(r => !byNum.includes(r) || c.rows.includes(r))) : null;
+      if (s2) return s2;
+    }
     return { type: "pick", candidates: cands, reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?`, soft: true };
   }
 
