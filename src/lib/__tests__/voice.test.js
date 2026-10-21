@@ -6,7 +6,6 @@ describe("voice vocabulary", () => {
     expect(new Set(Object.values(COMMAND_WORDS))).toEqual(new Set(["scan", "select", "notright", "retry"]));
     expect(COMMAND_WORDS["not right"]).toBe("notright");
     expect(COMMAND_WORDS["again"]).toBe("retry");
-    expect(COMMAND_WORDS["retry"]).toBe("retry");
     const g = JSON.parse(GRAMMAR);
     expect(g.at(-1)).toBe("[unk]");
     expect(g.length).toBe(Object.keys(COMMAND_WORDS).length + 1);
@@ -58,13 +57,11 @@ describe("createVoiceGate", () => {
     g.hear("next", 1450, true);
     expect(g.hear("next", 2700)).toBe("select");
   });
-  it("scan fires on its own word; again and retry both retry", () => {
+  it("scan fires on its own word; again retries", () => {
     const g = createVoiceGate();
     expect(g.hear("scan", 1000)).toBe("scan");
     g.hear("scan", 1100, true);
     expect(g.hear("again", 2000)).toBe("retry");
-    g.hear("again", 2100, true);
-    expect(g.hear("retry", 4000)).toBe("retry");
   });
   it("unknown words never fire", () => {
     const g = createVoiceGate();

@@ -10,7 +10,7 @@
 //   "scan"       take the picture (when no result screen is up) — same as the Scan key
 //   "next"       select the highlighted option (green: confirm)
 //   "flag" / "not right"   not right — open the reasons
-//   "again" / "retry"      retry the scan (nothing recorded)
+//   "again"                retry the scan (nothing recorded)
 //
 // Four commands only, on purpose: the fewer words the recogniser knows, the
 // less there is to confuse, and everything else is a mouse click. Voice never
@@ -27,13 +27,12 @@ export const COMMAND_WORDS = {
   "flag": "notright",
   "not right": "notright",
   "again": "retry",
-  "retry": "retry",
 };
 export const COMMAND_INFO = [
   { word: "scan",  action: "Take the picture (no screen up)" },
   { word: "next",  action: "Select the highlighted option" },
   { word: "flag",  action: "Not right — open the reasons (\"not right\" works too)" },
-  { word: "again", action: "Retry the scan, nothing recorded (\"retry\" works too)" },
+  { word: "again", action: "Retry the scan, nothing recorded" },
 ];
 export const GRAMMAR = JSON.stringify([...Object.keys(COMMAND_WORDS), "[unk]"]);
 const PHRASES = Object.keys(COMMAND_WORDS).map(p => ({ phrase: p, tokens: p.split(" "), cmd: COMMAND_WORDS[p] })).sort((a, b) => b.tokens.length - a.tokens.length);
