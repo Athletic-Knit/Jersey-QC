@@ -80,6 +80,7 @@ export function snapshotOf({ operatorName, role, orderNumber, notes, jerseyType 
         id: l.id, t: l.timestamp, status: l.status, order: orderNumber, jerseyType, operator: l.operator || operatorName, rowId: l.match?._id,
         number: l.match?.number ?? l.detected?.number ?? "", name: l.match?.name ?? l.detected?.name ?? "", size: l.match?.size ?? "", team: l.match?.team ?? "",
         offRoster: !!l.match?.offRoster, reason: l.reason || "", resolution: l.resolution || "",
+        read: l.detected ? `#${l.detected.number || "?"}${l.detected.number_complete === false ? "?" : ""}${l.detected.name ? " " + l.detected.name : ""}${l.detected.laid_flat === false ? " [not flat]" : ""}` : "",
       };
       if (l.status === "flagged" && l.photo && i < PHOTOS_PER_REPORT) ev.photo = l.photo;
       return ev;

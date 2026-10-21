@@ -60,7 +60,7 @@ describe("green needs a name and a number", () => {
   it("mixed roster: a row with no name of its own goes green on a clean number read", () => {
     const r = [row(0, "Samuel", "40"), row(1, "", "54"), row(2, "", "7")];
     expect(findMatches(r, "", "54")).toMatchObject({ type: "exact", match: { _id: 1 } });
-    expect(findMatches(r, "", "40")).toMatchObject({ type: "exact", match: { _id: 0 } });   // Samuel's name not read, but no other row could be #40
+    expect(findMatches(r, "", "40").type).toBe("pick");                                    // Samuel has a name and it was not read: never green
     const r2 = [...r, row(3, "", "4")];
     expect(findMatches(r2, "", "4").type).toBe("exact");                              // clean, complete read of the nameless #4: green
     expect(findMatches(r2, "", "4", { numberComplete: false }).type).toBe("pick");    // doubtful read: #40 is open, so ask
@@ -118,21 +118,34 @@ describe("no alternative, no yellow", () => {
     const r = [row(0, "", "4", "red"), row(1, "", "4", "blue")];
     expect(findMatches(r, "", "4").type).toBe("pick");
   });
-  it("#4 read flagged covered, and no other open row a hidden digit could make → green on #4", () => {
+  it("#4 read flagged covered on a NAMED row, no name read → yellow even with nothing else to offer", () => {
     const r = [row(0, "Evanovich", "4"), row(1, "Nguyen", "23")];
+    const m = findMatches(r, "", "4", { numberComplete: false });
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual([0]);
+  });
+  it("#4 read flagged covered on a NAMELESS row, nothing else open → green", () => {
+    const r = [row(0, "", "4", "red"), row(1, "Nguyen", "23")];
     expect(findMatches(r, "", "4", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
   });
   it("same read while #40 is still open → yellow", () => {
     const r = [row(0, "Evanovich", "4"), row(1, "Samuel", "40")];
     expect(findMatches(r, "", "4", { numberComplete: false }).type).toBe("pick");
   });
-  it("same read once #40 has passed → green on #4", () => {
+  it("same read once #40 has passed → still yellow: Evanovich has a name that was not read", () => {
     const r = [row(0, "Evanovich", "4"), row(1, "Samuel", "40", "T", "A-L", { scanned: "pass" })];
-    expect(findMatches(r, "", "4", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches(r, "", "4", { numberComplete: false }).type).toBe("pick");
   });
-  it("#4 read, no name, Evanovich the only open candidate → green", () => {
-    const r = [row(0, "Evanovich", "4"), row(1, "Nguyen", "23")];
-    expect(findMatches(r, "", "4")).toMatchObject({ type: "exact", match: { _id: 0 } });
+  it("the floor case: a nameless read of #21 where #21 is LEACH → yellow with Leach, never green", () => {
+    const r = [row(0, "Leach", "21", "red", "A-XL"), row(1, "", "70", "blue"), row(2, "Donnelly", "31", "red")];
+    const m = findMatches(r, "", "21", { colour: "white", trim: "red" });
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual([0]);
+    // the 3 of #31 under a hand, guessed as 21 and flagged covered: Leach AND the #31 rows are offered
+    const m2 = findMatches(r, "", "21", { numberComplete: false, colour: "white", trim: "red" });
+    expect(m2.type).toBe("pick");
+    expect(ids(m2)).toEqual(expect.arrayContaining([0, 2]));
+    expect(findMatches(r, "LEACH", "21")).toMatchObject({ type: "exact", match: { _id: 0 } });   // with the name read: green
   });
   it("SAMU… with #40 and one Samuel → green", () => {
     const r = [row(0, "Samuel", "40"), row(1, "Nguyen", "23")];

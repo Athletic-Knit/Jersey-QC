@@ -195,13 +195,18 @@ export function findMatches(roster, name, number, read = {}) {
     // digit on its own ("35" guessed as 55 or 75 still finds #35 and #5).
     const exact = dedupe([...byBoth, ...byName, ...byNum]);
     const hidden = nNum.length === 1 ? hiddenDigitNumbers(nNum, roster) : [];
+    // A COVERED two-digit read is a guess at the hidden digit ("21" with the 3
+    // under a hand is the #31), so it also offers the rows one digit away.
+    const guessedDigit = partialNum && read.numberComplete === false && nNum.length === 2 ? nearNumbers(nNum, roster, { anyDigit: true }) : [];
     const cands = exact.length
-      ? dedupe([...exact, ...hidden])
+      ? dedupe([...exact, ...hidden, ...guessedDigit])
       : dedupe([...hidden, ...(nNum.length === 1 && hidden.length ? [] : nearNumbers(nNum, roster, { anyDigit: partialNum })), ...(partialNum ? subNumberCandidates(nNum, roster) : []), ...(partialName ? [] : nearNames(nName, roster))]);   // a covered lone digit with hidden-digit rows to offer needs no substitutions
     // Name and number pointing at different rows is a contradiction: always ask.
     const contradiction = byName.length >= 1 && byNum.length >= 1 && byBoth.length === 0;
     if (!contradiction) {
-      const direct = byBoth[0] || (byName.length === 1 && byNum.length === 0 ? byName[0] : null) || (byNum.length === 1 && byName.length === 0 ? byNum[0] : null);
+      // A row with a name is only ever "direct" when its name was read: a
+      // nameless read on a named row is never green, however few rows there are.
+      const direct = byBoth[0] || (byName.length === 1 && byNum.length === 0 ? byName[0] : null) || (byNum.length === 1 && byName.length === 0 && !norm(byNum[0].name) ? byNum[0] : null);
       const sure = soleOpen(direct, cands);
       if (sure) return sure;
       // Several rows carry the read (same number, different colour or size):
@@ -232,8 +237,9 @@ export function findMatches(roster, name, number, read = {}) {
   if (byNum.length >= 1 && nName === "" && !typed && byNum.some(r => norm(r.name))) {
     const cands = dedupe([...byNum, ...hiddenDigitNumbers(nNum, roster)]);
     if (cands.length === 1 && isDone(cands[0])) return { type: "duplicate", match: cands[0] };
-    const sure = soleOpen(byNum.length === 1 ? byNum[0] : null, cands);
-    if (sure) return sure;
+    // No "sole candidate" shortcut here: every row in byNum that could be
+    // green has a name, and that name was not read. The floor showed what the
+    // shortcut does — a nameless #21 passed as LEACH.
     // Several rows with this number: the colour seen may settle it — but only
     // among rows with NO name, and only on the body colour. A row with a name
     // needs its name read before it can be green; a nameless read that lands
