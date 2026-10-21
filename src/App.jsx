@@ -7,7 +7,7 @@ import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
-import { hub, stationId, snapshotOf } from "./lib/hub.js";
+import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
 
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
@@ -115,6 +115,15 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const [pin,   setPin]   = useState("");
   const [name,  setName]  = useState(initial?.name || "");
   const [error, setError] = useState(null);
+  // Which stations are live right now, and from where: refreshed every 5 s.
+  const [use, setUse] = useState({});
+  useEffect(() => {
+    let on = true;
+    const load = () => hub.stations().then(a => { if (on) setUse(stationUse(a)); }).catch(() => {});
+    load(); const t = setInterval(load, 5000);
+    return () => { on = false; clearInterval(t); };
+  }, []);
+  const busyBy = id => { const u = use["st-" + id]; return u && u.live && !u.mine ? (u.operator || "someone") : ""; };
   const roleDef = ROLES.find(r => r.id === role);
   const stDef   = stationOf(station);
   const pinOwner = role === "inspector" ? stDef : roleDef;      // whose PIN opens this page
@@ -127,6 +136,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const submit = () => {
     if (PIN_REQUIRED && pin !== pinOwner.pin) { setError("Wrong PIN for " + pinOwner.label + "."); return; }
     if (!name.trim()) { setError("Please enter your name."); return; }
+    if (role === "inspector" && !onCancel && busyBy(station)) { setError(`${stDef.label} is in use by ${busyBy(station)} on another PC. Pick a free station — or use Change operator on that PC to take it over.`); return; }
     if (target !== here && !onCancel) { goToStation(target); return; }
     onSignIn({ role, name: name.trim(), station: target });
   };
@@ -153,14 +163,14 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Which station?</label>
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${STATIONS.length},1fr)`, gap: 6 }}>
-              {STATIONS.map(s => (
-                <button key={s.id} onClick={() => pickStation(s.id)} disabled={!!onCancel && s.id !== station}
-                  style={{ ...btnGhost, padding: "8px 4px", fontSize: 12, borderColor: station === s.id ? "#60a5fa" : "#334155", color: station === s.id ? "#fff" : "#94a3b8", background: station === s.id ? "rgba(96,165,250,0.16)" : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
-                  {s.label}
+              {STATIONS.map(s => { const by = busyBy(s.id); return (
+                <button key={s.id} onClick={() => pickStation(s.id)} disabled={!!onCancel && s.id !== station} title={by ? `In use by ${by} on another PC` : ""}
+                  style={{ ...btnGhost, padding: "8px 4px", fontSize: 12, borderColor: station === s.id ? (by ? "#ef4444" : "#60a5fa") : by ? "#7f1d1d" : "#334155", color: station === s.id ? "#fff" : by ? "#f87171" : "#94a3b8", background: station === s.id ? (by ? "rgba(239,68,68,0.14)" : "rgba(96,165,250,0.16)") : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
+                  {s.label}{by && <div style={{ fontSize: 10, fontWeight: 400, color: "#f87171", marginTop: 2 }}>in use · {by}</div>}
                 </button>
-              ))}
+              ); })}
             </div>
-            <div style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>Each station has its own PIN. The supervisor's board shows this page as {stDef?.label}.</div>
+            <div style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>{busyBy(station) ? <span style={{ color: "#f87171" }}>{stDef?.label} is in use by {busyBy(station)} on another PC right now.</span> : <>Each station has its own PIN. The supervisor's board shows this page as {stDef?.label}.</>}</div>
           </div>
         )}
         {PIN_REQUIRED && (
@@ -1478,6 +1488,7 @@ export default function App() {
     if (log.length > 0 && !window.confirm(`Sign out? Export first if you need the ${log.length} scans from order ${orderNumber || "—"}.`)) return;
     resetOrder();
     clearSignIn();
+    hub.removeStation(stationId()).catch(() => {});   // free the station on the board at once, not after it goes stale
     setSignedIn(false); setRole(""); setOperatorName("");
   }, [log.length, orderNumber, resetOrder]);
 

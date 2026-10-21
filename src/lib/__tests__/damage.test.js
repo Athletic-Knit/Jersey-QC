@@ -34,6 +34,22 @@ describe("damage report rows", () => {
   });
 });
 
+describe("station use from a hub answer", () => {
+  it("live from another browser = in use; own browser or stale = free", async () => {
+    const { stationUse } = await import("../hub.js");
+    const now = 1_000_000;
+    const a = { now, stations: [
+      { id: "st-station1", operatorName: "Shiv",    updatedAt: now - 3000,  browserId: "b-other" },
+      { id: "st-station2", operatorName: "Mansuri", updatedAt: now - 3000,  browserId: "b-me" },
+      { id: "st-station3", operatorName: "Old",     updatedAt: now - 60000, browserId: "b-other" },
+    ] };
+    const u = stationUse(a, "b-me");
+    expect(u["st-station1"]).toMatchObject({ live: true,  mine: false, operator: "Shiv" });
+    expect(u["st-station2"]).toMatchObject({ live: true,  mine: true });
+    expect(u["st-station3"]).toMatchObject({ live: false, mine: false });
+  });
+});
+
 describe("order numbers hint", () => {
   it("lists the open numbers once, sorted, and says never to pick from the list", async () => {
     const { orderNumbersHint } = await import("../vision.js");

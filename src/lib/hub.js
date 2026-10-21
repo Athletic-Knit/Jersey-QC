@@ -2,6 +2,30 @@
 // The hub is optional: every call fails quietly if it is not there, and the
 // station keeps working from files.
 const STATION_KEY = "jerseyqc.station.v1";
+const BROWSER_KEY = "jerseyqc.browser.v1";
+
+// This browser's own id, made once. It rides along in every report so a
+// station can tell "live from this PC" (fine to sign back in) from "live
+// from another PC" (someone else is on it).
+export function browserId() {
+  try {
+    let id = localStorage.getItem(BROWSER_KEY);
+    if (!id) { id = "b-" + Math.random().toString(36).slice(2, 10); localStorage.setItem(BROWSER_KEY, id); }
+    return id;
+  } catch { return "b-local"; }
+}
+
+// How long after its last report a station still counts as live (it reports every 5 s).
+export const LIVE_MS = 20000;
+
+// From a hub /stations answer: { "st-station1": { operator, live, mine } … }.
+// `live` = reported within LIVE_MS; `mine` = from this browser.
+export function stationUse(answer, me = browserId()) {
+  const now = answer?.now || Date.now();
+  const out = {};
+  for (const s of answer?.stations || []) out[s.id] = { operator: s.operatorName || "", live: now - (s.updatedAt || 0) < LIVE_MS, mine: !s.browserId || s.browserId === me };
+  return out;
+}
 
 // A station is normally identified per browser (stored once). `?station=line2`
 // in the URL names it instead — a fixed label on a floor PC's shortcut, or
@@ -42,7 +66,7 @@ const PHOTOS_PER_REPORT = 6;   // the newest log entries that carry their photo 
 export function snapshotOf({ operatorName, role, orderNumber, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   return {
-    operatorName, role, orderNumber, notes, jerseyType, rosterFile,
+    operatorName, role, orderNumber, notes, jerseyType, rosterFile, browserId: browserId(),
     // The roster with each jersey's status, so the supervisor can download an
     // order's QC Results sheet without the station. Bins travel with it.
     rows: roster.map(r => ({ ...r, scanned: r.scanned || false })),
