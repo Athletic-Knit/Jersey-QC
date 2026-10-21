@@ -243,9 +243,10 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     } catch (e) { setError("Could not fetch that roster: " + e.message); }
   };
 
+  const canSupervise = role === "supervisor" || role === "admin";
   const handleStart = async () => {
-    if (!order.trim()) { setError("Please enter an order number."); return; }
-    if (!file && !picked) { setError("Upload a roster file, or pick one the supervisor sent."); return; }
+    if (canSupervise && !order.trim()) { setError("Please enter an order number."); return; }
+    if (!file && !picked) { setError(canSupervise ? "Upload a roster file, or pick one the supervisor sent." : "Pick the order the supervisor sent, or load a roster file."); return; }
     setLoading(true);
     try {
       if (picked) { onStart({ roster: picked.rows, orderNumber: order.trim(), notes: notes.trim(), jerseyType, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})` }); return; }
@@ -259,7 +260,6 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     }
   };
   const onEnter = e => { if (e.key === "Enter") handleStart(); };
-  const canSupervise = role === "supervisor" || role === "admin";
 
   return (
     <div style={modalBg}>
@@ -291,8 +291,10 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           </div>
         )}
         <div style={{ marginBottom: 12 }}>
-          <label style={labelSt}>Order number</label>
-          <input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" autoFocus onKeyDown={onEnter} style={inputSt} />
+          <label style={labelSt}>Order number{!canSupervise && <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}> — set by the supervisor</span>}</label>
+          {canSupervise
+            ? <input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" autoFocus onKeyDown={onEnter} style={inputSt} />
+            : <div title="Only the supervisor can set the order number" style={{ ...inputSt, color: order ? "#e2e8f0" : "#64748b", cursor: "not-allowed", userSelect: "none" }}>{order || (picked || file ? "No order number" : "Pick the order the supervisor sent")}</div>}
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order notes <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
@@ -2013,9 +2015,11 @@ export default function App() {
               </div>
             )}
           </div>
-          <input value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder="Order number…"
-            onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
-            style={{ padding: "4px 9px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 12, width: 140 }} />
+          {canSupervise
+            ? <input value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder="Order number…"
+                onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
+                style={{ padding: "4px 9px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 12, width: 140 }} />
+            : <div title="Only the supervisor can change the order number" style={{ padding: "4px 9px", borderRadius: 6, border: "1px solid #21262d", background: "#0d1117", color: orderNumber ? "#e2e8f0" : "#64748b", fontSize: 12, fontWeight: 700, userSelect: "none" }}>Order {orderNumber || "—"}</div>}
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <Pill color="#22c55e">{passCount} Pass</Pill>
