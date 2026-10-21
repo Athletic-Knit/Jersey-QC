@@ -2,14 +2,13 @@ import { describe, it, expect } from "vitest";
 import { createVoiceGate, COMMAND_WORDS, GRAMMAR, COMMAND_INFO } from "../voice.js";
 
 describe("voice vocabulary", () => {
-  it("four commands: scan, select, not right, retry (with second spellings); the grammar ends with [unk]", () => {
-    expect(new Set(Object.values(COMMAND_WORDS))).toEqual(new Set(["scan", "select", "notright", "retry"]));
-    expect(COMMAND_WORDS["not right"]).toBe("notright");
+  it("three commands: scan, select, retry; the grammar ends with [unk]", () => {
+    expect(new Set(Object.values(COMMAND_WORDS))).toEqual(new Set(["scan", "select", "retry"]));
     expect(COMMAND_WORDS["again"]).toBe("retry");
     const g = JSON.parse(GRAMMAR);
     expect(g.at(-1)).toBe("[unk]");
     expect(g.length).toBe(Object.keys(COMMAND_WORDS).length + 1);
-    expect(COMMAND_INFO.length).toBe(4);
+    expect(COMMAND_INFO.length).toBe(3);
   });
 });
 
@@ -32,22 +31,14 @@ describe("createVoiceGate", () => {
     const g = createVoiceGate({ cooldownMs: 700 });
     expect(g.hear("scan", 1000)).toBe("scan");
     g.hear("scan", 1200, true);
-    expect(g.hear("flag", 1400)).toBeNull();           // 400 ms after the last fire
-    g.hear("flag", 1450, true);
-    expect(g.hear("flag", 1800)).toBe("notright");     // 800 ms after
+    expect(g.hear("again", 1400)).toBeNull();          // 400 ms after the last fire
+    g.hear("again", 1450, true);
+    expect(g.hear("again", 1800)).toBe("retry");       // 800 ms after
   });
-  it("a phrase fires once, when its last word lands", () => {
+  it("words outside the list, like 'not right', never fire", () => {
     const g = createVoiceGate();
-    expect(g.hear("not", 1000)).toBeNull();
-    expect(g.hear("not right", 1100)).toBe("notright");
-    expect(g.hear("not right", 1200)).toBeNull();
-    expect(g.hear("not right", 1300, true)).toBeNull();
-    expect(g.hear("[unk] not right", 3000)).toBe("notright");   // "it's not right"
-  });
-  it("'not right' is never heard as 'next'", () => {
-    const g = createVoiceGate();
-    expect(g.hear("not", 1000)).toBeNull();
-    expect(g.hear("not right", 1050)).toBe("notright");
+    expect(g.hear("[unk]", 1000)).toBeNull();
+    expect(g.hear("[unk] [unk]", 1100)).toBeNull();
   });
   it("the same word said twice quickly is one command; after 1.5 s it is two", () => {
     const g = createVoiceGate({ cooldownMs: 300 });

@@ -238,14 +238,32 @@ describe("the camera doubts its read", () => {
     expect(m.reason).toMatch(/covered or cut off/);
     expect(m.reason).toMatch(/hand over the right digit/);
   });
-  it("covered 3 of #35 read as a guessed 55 or 75, flagged incomplete → yellow with #35 and #5 offered", () => {
+  it("covered 3 of #35 guessed as 55 or 75 (not on the roster) → yellow with #35 and #5, nothing unrelated", () => {
     const r = [row(0, "", "35"), row(1, "", "5"), row(2, "", "40"), row(3, "", "12")];
-    for (const guess of ["55", "75", "35", "5"]) {
+    for (const guess of ["55", "75"]) {
       const m = findMatches(r, "", guess, { numberComplete: false });
       expect(m.type).toBe("pick");
       expect(ids(m)).toEqual(expect.arrayContaining([0, 1]));
       expect(ids(m)).not.toContain(3);
     }
+  });
+  it("a doubtful read of a number that IS on the roster lists only that number's rows", () => {
+    const r = [row(0, "", "30", "red"), row(1, "", "30", "blue"), row(2, "", "31"), row(3, "", "70"), row(4, "", "60"), row(5, "", "3")];
+    const m = findMatches(r, "", "30", { numberComplete: false });
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual([0, 1]);
+  });
+  it("a doubtful single-digit read still offers the rows a hidden digit would make, and nothing else", () => {
+    const r = [row(0, "", "5"), row(1, "", "35"), row(2, "", "50"), row(3, "", "6"), row(4, "", "70")];
+    const m = findMatches(r, "", "5", { numberComplete: false });
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual([0, 1, 2]);
+  });
+  it("name on the roster, number not: the name's row only", () => {
+    const r = [row(0, "Stephenson", "22"), row(1, "", "6"), row(2, "", "4")];
+    const m = findMatches(r, "STEPHENSON", "5");
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual([0]);
   });
   it("number-only roster, single digit sitting left of centre → yellow, not green", () => {
     const r = [row(0, "", "40"), row(1, "", "4")];

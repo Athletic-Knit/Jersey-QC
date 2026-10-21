@@ -909,11 +909,10 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
     };
     // Voice on a result screen: "next" selects what is highlighted (the mouse
-    // moves the highlight, voice never does); "flag" opens the reasons.
+    // moves the highlight, voice never does); "again" retries the scan.
     const onVoice = (e) => {
       const c = e.detail?.command; if (!c || mode === "done") return;
       if (mode === "manual" || mode === "reasonText") return;        // typing
-      if (c === "notright") { const o = options.find(x => x.id === "notright"); if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } return; }
       if (c === "retry")    { const o = options.find(x => x.id === "retry");    if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } return; }
       if (c === "select")   { const o = options[selectedIdx]; if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } }
     };

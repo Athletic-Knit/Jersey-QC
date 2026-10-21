@@ -9,10 +9,9 @@
 //
 //   "scan"       take the picture (when no result screen is up) — same as the Scan key
 //   "next"       select the highlighted option (green: confirm)
-//   "flag" / "not right"   not right — open the reasons
-//   "again"                retry the scan (nothing recorded)
+//   "again"      retry the scan (nothing recorded)
 //
-// Four commands only, on purpose: the fewer words the recogniser knows, the
+// Three commands only, on purpose: the fewer words the recogniser knows, the
 // less there is to confuse, and everything else is a mouse click. Voice never
 // moves the highlight, so what the operator sees highlighted is what "next"
 // picks. A grammar entry may be a phrase ("not right").
@@ -24,14 +23,11 @@
 export const COMMAND_WORDS = {
   "scan": "scan",
   "next": "select",
-  "flag": "notright",
-  "not right": "notright",
   "again": "retry",
 };
 export const COMMAND_INFO = [
   { word: "scan",  action: "Take the picture (no screen up)" },
   { word: "next",  action: "Select the highlighted option" },
-  { word: "flag",  action: "Not right — open the reasons (\"not right\" works too)" },
   { word: "again", action: "Retry the scan, nothing recorded" },
 ];
 export const GRAMMAR = JSON.stringify([...Object.keys(COMMAND_WORDS), "[unk]"]);

@@ -10,7 +10,7 @@ export function VoiceBadge({ status, error, loading, active }) {
   if (!status) return null;
   const { level = 0, heard = "", fired, flash, listening } = status;
   const color = flash ? "#22c55e" : active ? "#60a5fa" : "#64748b";
-  const text  = flash ? `"${fired}" ✓` : !listening ? "🎤 off" : heard ? `heard: ${heard}` : active ? "say next · flag · again" : "say scan";
+  const text  = flash ? `"${fired}" ✓` : !listening ? "🎤 off" : heard ? `heard: ${heard}` : active ? "say next · again" : "say scan";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(0,0,0,0.6)", padding: "4px 10px 4px 6px", borderRadius: 20, border: `1px solid ${flash ? color : "transparent"}`, maxWidth: 320 }}>
       <div title="microphone level" style={{ width: 6, height: 18, borderRadius: 3, background: "rgba(255,255,255,0.15)", position: "relative", flexShrink: 0 }}>

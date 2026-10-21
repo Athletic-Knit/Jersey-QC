@@ -169,12 +169,18 @@ export function findMatches(roster, name, number, read = {}) {
     else if (offCentre) why.push(`#${nNum} sits ${position} of centre — a digit may be hidden`);
     if (!nName && !partialNum && !offCentre) why.push("no name was read");
     const what = read.obstruction ? ` (${String(read.obstruction).trim()})` : "";
-    // A covered digit makes the model guess it ("35" read as 55 or 75), so a
-    // partial two-digit read also offers each digit on its own and every
-    // one-digit substitution; a partial one-digit read offers what a hidden
-    // digit would make.
-    const guessed = partialNum ? subNumberCandidates(nNum, roster) : [];
-    const cands = dedupe([...byBoth, ...byName, ...byNum, ...hiddenDigitNumbers(nNum, roster), ...nearNumbers(nNum, roster), ...guessed, ...(partialName ? [] : nearNames(nName, roster))]);
+    // What to offer. If the read points at rows on the roster, offer THOSE and
+    // only those — a #30 read never lists #31 or #70, they have nothing to do
+    // with it. The one addition is for a single-digit read: the two-digit rows
+    // a hidden digit would make (#4 → #40, #14), the case this guard exists
+    // for. Only when the read matches no row at all do the near misses come
+    // in: one-digit substitutions, and for a covered two-digit read, each
+    // digit on its own ("35" guessed as 55 or 75 still finds #35 and #5).
+    const exact = dedupe([...byBoth, ...byName, ...byNum]);
+    const hidden = nNum.length === 1 ? hiddenDigitNumbers(nNum, roster) : [];
+    const cands = exact.length
+      ? dedupe([...exact, ...hidden])
+      : dedupe([...hidden, ...nearNumbers(nNum, roster), ...(partialNum ? subNumberCandidates(nNum, roster) : []), ...(partialName ? [] : nearNames(nName, roster))]);
     // Name and number pointing at different rows is a contradiction: always ask.
     const contradiction = byName.length >= 1 && byNum.length >= 1 && byBoth.length === 0;
     if (!contradiction) {
@@ -235,7 +241,7 @@ export function findMatches(roster, name, number, read = {}) {
       const nums = [...new Set(byName.map(r => r.number))].join(" / ");
       return soleOpen(byName.length === 1 ? byName[0] : null, byName) || { type: "pick", candidates: byName, reason: `Read "${String(name).trim()}" but no number — is #${nums} hidden or out of frame? Is it this jersey?`, soft: true };
     }
-    return { type: "pick", candidates: dedupe([...byName, ...nearNumbers(nNum, roster)]), reason: `Name matches #${[...new Set(byName.map(r => r.number))].join(" / ")} but the number read as #${nNum}` };
+    return { type: "pick", candidates: byName, reason: `Name matches #${[...new Set(byName.map(r => r.number))].join(" / ")} but the number read as #${nNum}` };
   }
 
   // Nothing exact: nearest rows only.
