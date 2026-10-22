@@ -77,6 +77,53 @@ function Kbd({ light, children }) {
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
 // ── Resume modal ──────────────────────────────────────────────────────────────
+// ── Idle watch ───────────────────────────────────────────────────────────────
+// A station with no key, click, tap or scan for IDLE_AFTER_MIN minutes goes
+// red: "Idle for N min", ticking up every minute, until the operator does
+// anything. The screen never swallows that input — the key or tap that wakes
+// it still reaches the app — so a scan key wakes it and scans. Each spell is
+// handed back when it ends so the session keeps a record of idle time.
+const IDLE_AFTER_MIN = 3;
+function IdleWatch({ pulse, onSpell }) {
+  const lastActive = useRef(0);
+  const [idle, setIdle] = useState(null);                                  // { minutes, since } while the station is idle
+  const idleRef = useRef(0);
+  const spellStart = useRef(null);
+
+  useEffect(() => { lastActive.current = Date.now(); }, [pulse]);           // a scan or result counts as activity
+
+  useEffect(() => {
+    const wake = () => {
+      lastActive.current = Date.now();
+      if (idleRef.current) {
+        onSpell?.({ start: spellStart.current, end: Date.now(), minutes: idleRef.current });
+        idleRef.current = 0; spellStart.current = null; setIdle(null);
+      }
+    };
+    const evs = ["keydown", "pointerdown", "touchstart", "wheel"];
+    evs.forEach(e => window.addEventListener(e, wake, true));
+    const tick = setInterval(() => {
+      const min = Math.floor((Date.now() - lastActive.current) / 60000);
+      if (min >= IDLE_AFTER_MIN && min !== idleRef.current) {
+        if (!idleRef.current) { spellStart.current = lastActive.current; playTone("flag"); }
+        idleRef.current = min; setIdle({ minutes: min, since: spellStart.current });
+      }
+    }, 5000);
+    return () => { evs.forEach(e => window.removeEventListener(e, wake, true)); clearInterval(tick); };
+  }, [onSpell]);
+
+  if (!idle) return null;
+  const idleMin = idle.minutes;
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 2500, background: "#b91c1c", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", fontFamily: "system-ui,sans-serif", textAlign: "center", padding: 24 }}>
+      <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", opacity: 0.9 }}>Station idle</div>
+      <div style={{ fontSize: "clamp(64px, 18vw, 180px)", fontWeight: 900, lineHeight: 1, margin: "16px 0" }}>{idleMin} min</div>
+      <div style={{ fontSize: 22, fontWeight: 600 }}>Idle for {idleMin} {idleMin === 1 ? "minute" : "minutes"} — press any key or tap to continue</div>
+      <div style={{ fontSize: 14, marginTop: 18, opacity: 0.8 }}>Since {new Date(idle.since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · idle time is recorded for this order</div>
+    </div>
+  );
+}
+
 function ResumeModal({ session, onResume, onDiscard }) {
   const done = session.roster.filter(r => r.scanned && r.scanned !== false).length;
   return (
@@ -1418,6 +1465,7 @@ export default function App() {
   const [bigPhoto,           setBigPhoto]           = useState(null);    // a flag photo from the log, shown large
   const [mics,               setMics]               = useState([]);
   const [showRosterComplete, setShowRosterComplete] = useState(false);
+  const [idleSpells,         setIdleSpells]         = useState([]);      // { start, end, minutes } — the station sat untouched
   const [hubOk, setHubOk] = useState(null);       // did the last progress report reach the hub? null = never tried
   const [newRosters, setNewRosters] = useState([]);   // rosters the supervisor sent while this order was running
   const [orderSetBy, setOrderSetBy] = useState(null); // { orderNumber, by } — the supervisor named this order from the board
@@ -1517,8 +1565,8 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime });
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime]);
+    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells });
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -1557,7 +1605,7 @@ export default function App() {
     rosterVersion.current++;
     setRoster(parsed.map(r => ({ ...r, scanned: false })));
     setRosterFile(fileName);
-    if (!keepLog) { setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); }
+    if (!keepLog) { setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); setIdleSpells([]); }
     setThumb(null); setOverlay(null); setShowRosterComplete(false);
     const bins = buildBinMap(parsed, binMap || {});
     if (Object.keys(bins).length > 1) { setBinMap(bins); setShowBinSetup(true); }
@@ -1570,7 +1618,7 @@ export default function App() {
     const s = savedSession;
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
     setOrderNumber(s.orderNumber || ""); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
-    setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null);
+    setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []);
     setSessionStarted(true); setResumeDecided(true);
   }, [savedSession]);
 
@@ -1584,7 +1632,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setIdleSpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false);
   }, []);
 
@@ -1833,6 +1881,7 @@ export default function App() {
 
   // ── Overlay actions ───────────────────────────────────────────────────────
   const stamp = useCallback(() => ({ timestamp: localTimeStamp(), operator: operatorName }), [operatorName]);
+  const recordIdle = useCallback(spell => setIdleSpells(prev => [...prev, { ...spell, operator: operatorName }]), [operatorName]);
 
   const actions = useMemo(() => {
     // Commit a hand-typed jersey. On the roster: that row passes as MANUAL for
@@ -2009,6 +2058,8 @@ export default function App() {
       )}
 
       {showSupervisor && <SupervisorPanel operatorName={operatorName} onClose={() => closeDialog(() => setShowSupervisor(false))} />}
+
+      {sessionStarted && !showSupervisor && <IdleWatch pulse={log.length + (scanning ? 1 : 0)} onSpell={recordIdle} />}
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
         <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onSupervisor={() => setShowSupervisor(true)}
