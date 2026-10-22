@@ -85,7 +85,7 @@ function ResumeModal({ session, onResume, onDiscard }) {
         <div style={{ fontSize: 40, marginBottom: 8 }}>🔄</div>
         <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 6 }}>Resume order {session.orderNumber || "—"}?</div>
         <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 4 }}>
-          {done} of {session.roster.length} jerseys done · {session.log.length} scans · {session.operatorName || "unknown operator"}
+          {done} of {session.roster.length} jerseys done · {session.log.length} scans · started by {session.operatorName || "an unknown operator"}
         </div>
         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 24 }}>Saved {new Date(session.savedAt).toLocaleString()}</div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
@@ -1552,12 +1552,13 @@ export default function App() {
     else { setBinMap(null); setShowBinSetup(false); }
   }, [binMap]);
 
+  // The order belongs to the station, not to a person: whoever is signed in
+  // here now continues it under their own name.
   const resumeSession = useCallback(() => {
     const s = savedSession;
-    setRole(s.role || ""); setRoster(s.roster); setRosterFile(s.rosterFile || null);
-    setOrderNumber(s.orderNumber || ""); setOperatorName(s.operatorName || ""); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
+    setRoster(s.roster); setRosterFile(s.rosterFile || null);
+    setOrderNumber(s.orderNumber || ""); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null);
-    setSignedIn(true); saveSignIn({ role: s.role || "", name: s.operatorName || "" });
     setSessionStarted(true); setResumeDecided(true);
   }, [savedSession]);
 
@@ -1580,13 +1581,16 @@ export default function App() {
     resetOrder();
   }, [log.length, orderNumber, resetOrder]);
 
+  // Sign out leaves the station, not the order: an unfinished order stays saved
+  // on this PC and is offered to the next person who signs in here (a mistaken
+  // Sign out mid-order used to wipe it). The page reloads so nothing of the
+  // previous operator lingers in memory.
   const signOut = useCallback(() => {
-    if (log.length > 0 && !window.confirm(`Sign out? Export first if you need the ${log.length} scans from order ${orderNumber || "—"}.`)) return;
-    resetOrder();
+    if (sessionStarted && log.length > 0 && !window.confirm(`Sign out? Order ${orderNumber || "—"} stays on this station — the next person to sign in here can resume it.`)) return;
     clearSignIn();
     hub.removeStation(stationId()).catch(() => {});   // free the station on the board at once, not after it goes stale
-    setSignedIn(false); setRole(""); setOperatorName("");
-  }, [log.length, orderNumber, resetOrder]);
+    window.location.reload();
+  }, [sessionStarted, log.length, orderNumber]);
 
   // ── Camera ────────────────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -1979,12 +1983,12 @@ export default function App() {
   return (
     <div style={{ fontFamily: "system-ui,sans-serif", background: "#0d1117", height: "100vh", color: "#e2e8f0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-      {showResume && <ResumeModal session={savedSession} onResume={resumeSession} onDiscard={discardSession} />}
-
-      {!showResume && !signedIn && (
+      {!signedIn && (
         <SignInModal initial={savedSignIn}
-          onSignIn={({ role, name }) => { setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name }); setResumeDecided(true); if (role === "supervisor" || role === "admin") setShowSupervisor(true); }} />
+          onSignIn={({ role, name }) => { setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name }); if ((role === "supervisor" || role === "admin") && !showResume) setShowSupervisor(true); }} />
       )}
+
+      {signedIn && showResume && <ResumeModal session={savedSession} onResume={resumeSession} onDiscard={discardSession} />}
 
       {showHandover && (
         <SignInModal title="Hand this station to another operator — the order, roster and log stay as they are" initial={{ role }}
