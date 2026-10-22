@@ -81,6 +81,11 @@ Expected columns (case-insensitive, auto-detected):
 - Audio feedback: ascending tone = pass, descending = flag, short beep = scan trigger
 - `exportRosterXLSX()` writes status + all roster columns to Excel; `exportLogCSV()` writes the scan event log
 
+## Simulations
+
+- `SIM_ORDERS=3000 npx vitest run operator-sim` works thousands of whole orders through the real libraries (roster files with Excel quirks, a camera that hides and misreads digits, an operator who picks, types, flags, un-checks) and fails on a wrong green, a wrong "already passed", an unfinishable order, a lost session or a broken export. `SIM_TRACE=<order>` prints one order step by step.
+- `node tools/hub-stress.mjs https://localhost:5173 30` hits a RUNNING hub: three stations at 20x the real rate plus a polling supervisor, then every board action (send roster, set number, carried flags, remove, oversize body). Restore `data/hub.json` from a copy afterwards to keep the day sheet clean.
+
 ## Security note
 
 The API key was previously hardcoded in `src/App.jsx:4` and has been **revoked**. Always use `VITE_CLAUDE_API_KEY` from environment. GitHub push protection will block any future commit containing an Anthropic API key.
