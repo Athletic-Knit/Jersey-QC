@@ -31,7 +31,7 @@ globalThis.localStorage = {
 
 import { parseCSV, splitCSVLine, buildBinMap, binFor, displayColumns } from "../roster.js";
 import { findMatches, isDone } from "../match.js";
-import { norm, normNum } from "../text.js";
+import { norm, normNum, nameMatches } from "../text.js";
 import { buildRosterSheet, buildLogCSV, buildDaySheets, localTimeStamp } from "../export.js";
 import { snapshotOf } from "../hub.js";
 import { saveSession, loadSession, clearSession } from "../persist.js";
@@ -160,7 +160,7 @@ function workOrder(r, seed, k, stats, findings) {
   // The pile: every jersey once, in a random order, plus a stray from another
   // order and a jersey that gets scanned twice.
   let pile = shuffle(r, roster.map(x => ({ truth: x, extra: false })));
-  if (chance(r, 0.15)) { let stray, tries = 0; do { stray = { name: pick(r, LAST), number: String(Math.floor(r() * 100)), team: "other", size: "A-M", _id: -1 }; } while (++tries < 50 && roster.some(x => normNum(x.number) === normNum(stray.number) && (!x.name || norm(x.name) === norm(stray.name)))); if (tries < 50) pile.splice(Math.floor(r() * pile.length), 0, { truth: stray, extra: true }); }
+  if (chance(r, 0.15)) { let stray, tries = 0; do { stray = { name: pick(r, LAST), number: String(Math.floor(r() * 100)), team: "other", size: "A-M", _id: -1 }; } while (++tries < 50 && roster.some(x => normNum(x.number) === normNum(stray.number) && (!x.name || nameMatches(stray.name, x.name)))); if (tries < 50) pile.splice(Math.floor(r() * pile.length), 0, { truth: stray, extra: true }); }
   if (pile.length > 1 && chance(r, 0.2)) { const dup = pick(r, pile); pile.splice(Math.floor(r() * pile.length), 0, { ...dup, again: true }); }
 
   const byHand = (truth, why) => {

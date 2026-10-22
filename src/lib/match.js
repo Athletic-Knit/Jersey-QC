@@ -1,6 +1,6 @@
 // ── Matching: what the operator sees for a read { name, number } ─────────────
 import { norm, normNum, nameMatches, nameWords, editDistance } from "./text.js";
-import { narrowByColour, colourFamilies, rowColourText } from "./colour.js";
+import { narrowByColour } from "./colour.js";
 
 // A row counts as done when it passed, or was entered by hand (awaiting the
 // supervisor's sign-off). A flagged row is out for repair and comes back with a
@@ -121,11 +121,14 @@ function settleTwins(rows, eligible, read) {
   const { rows: agree, strong } = narrowByColour(open, read);
   const survivors = strong ? agree : open;
   if (survivors.length !== 1) return null;
-  // The last open twin is green only if the body colour seen does not say
-  // otherwise: a navy #0 read while the open #0 is the white one is the navy
-  // jersey scanned twice, not the white one.
-  const seen = colourFamilies(read.colour), own = colourFamilies(rowColourText(survivors[0]));
-  if (seen.length && own.length && !narrowByColour([survivors[0]], read).strong) return null;
+  // The last open twin is green unless the body colour seen points at one of
+  // its passed twins: a navy #0 read while the navy #0 has passed and the
+  // white #0 is open is the navy jersey scanned twice. When the colour seen
+  // matches no row at all (white jersey, roster says green and red), the
+  // roster's colour words are not describing these jerseys — floor rosters
+  // name teams, not fabric — and the last open twin stays green.
+  const byBody = narrowByColour(rows, read);
+  if (byBody.strong && !byBody.rows.includes(survivors[0])) return null;
   return eligible.includes(survivors[0]) ? { type: "exact", match: survivors[0] } : null;
 }
 

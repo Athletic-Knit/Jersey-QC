@@ -17,6 +17,14 @@ export default defineConfig({
         target: 'https://api.anthropic.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/anthropic/, ''),
+        // One line per model call in the server log: status and how long the
+        // answer took, so a slow or failed read can be traced after the fact.
+        configure: (proxy) => {
+          const stamp = () => new Date().toLocaleTimeString('en-CA', { hour12: false });
+          proxy.on('proxyReq', (_proxyReq, req) => { req.__t0 = Date.now(); });
+          proxy.on('proxyRes', (proxyRes, req) => console.log(`${stamp()} [anthropic] ${proxyRes.statusCode} in ${Date.now() - (req.__t0 || Date.now())} ms from ${req.socket?.remoteAddress || '?'}`));
+          proxy.on('error', (err, req) => console.log(`${stamp()} [anthropic] FAILED ${err.code || err.message} after ${Date.now() - (req?.__t0 || Date.now())} ms`));
+        },
       }
     }
   }

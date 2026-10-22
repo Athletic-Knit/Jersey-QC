@@ -1688,8 +1688,9 @@ export default function App() {
     const readOne = async (b64, url) => {
       // Send a smaller frame than the camera gives: same read, faster answer.
       const sendB64 = await frameForUpload(url, SEND_MAX_PX).catch(() => b64);
+      const t0 = Date.now();
       const r = await readJersey({ base64: sendB64, apiKey: CLAUDE_API_KEY, model: MODEL, effort: EFFORT, thinking: THINKING, orderNumbers: roster.filter(x => !isDone(x)).map(x => x.number) });
-      console.log(`Read #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"}${r.laid_flat ? "" : " [not flat]"} (${r.jersey_colour || "?"}${r.trim_colour ? "/" + r.trim_colour : ""}; sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
+      console.log(`Read in ${Date.now() - t0} ms: #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"}${r.laid_flat ? "" : " [not flat]"} (${r.jersey_colour || "?"}${r.trim_colour ? "/" + r.trim_colour : ""}; sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
       return r;
     };
     const matchOf = d => (!d.name && !d.number) ? null : findMatches(roster, d.name, d.number, {

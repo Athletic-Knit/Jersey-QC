@@ -221,6 +221,17 @@ describe("colour settles same-number rows", () => {
     const m2 = findMatches(r, "", "31", { colour: "red", trim: "white" });   // even a red body: Donnelly has a name that was not read
     expect(m2.type).toBe("pick");
   });
+  it("the floor case later in the order: every other #31 has passed, the jersey looks white, the roster says green → green on the last open row", () => {
+    const r = [row(0, "", "31", "green", "A-S"), row(1, "", "31", "green", "A-XL"), row(2, "Rine", "31", "green", "A-3XL"), row(3, "Donnelly", "31", "red", "A-M")];
+    r[0].scanned = "pass"; r[2].scanned = "pass"; r[3].scanned = "pass";
+    expect(findMatches(r, "", "31", { colour: "white", trim: "orange" })).toMatchObject({ type: "exact", match: { _id: 1 } });
+  });
+  it("the navy #0 scanned twice: navy has passed, white is open, the jersey looks navy → not green on the white one", () => {
+    const r = [row(0, "", "0", "navy"), row(1, "", "0", "white")];
+    r[0].scanned = "pass";
+    expect(findMatches(r, "", "0", { colour: "navy blue" }).type).not.toBe("exact");
+    expect(findMatches(r, "", "0", { colour: "white" })).toMatchObject({ type: "exact", match: { _id: 1 } });
+  });
   it("a nameless read with two nameless rows of that number in different body colours → the body colour decides", () => {
     const r = [row(0, "", "31", "green"), row(1, "", "31", "white"), row(2, "Donnelly", "31", "red")];
     expect(findMatches(r, "", "31", { colour: "white", trim: "red" })).toMatchObject({ type: "exact", match: { _id: 1 } });
