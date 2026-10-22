@@ -79,7 +79,7 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 // ── Resume modal ──────────────────────────────────────────────────────────────
 // ── Idle watch ───────────────────────────────────────────────────────────────
 // A station with no key, click, tap or scan for IDLE_AFTER_MIN minutes goes
-// red: "Idle for N min", ticking up every minute, until the operator does
+// amber: "Idle for N min", ticking up every minute, until the operator does
 // anything. The screen never swallows that input — the key or tap that wakes
 // it still reaches the app — so a scan key wakes it and scans. Each spell is
 // handed back when it ends so the session keeps a record of idle time.
@@ -105,7 +105,7 @@ function IdleWatch({ pulse, onSpell }) {
     const tick = setInterval(() => {
       const min = Math.floor((Date.now() - lastActive.current) / 60000);
       if (min >= IDLE_AFTER_MIN && min !== idleRef.current) {
-        if (!idleRef.current) { spellStart.current = lastActive.current; playTone("flag"); }
+        if (!idleRef.current) { spellStart.current = lastActive.current; playTone("scan"); }
         idleRef.current = min; setIdle({ minutes: min, since: spellStart.current });
       }
     }, 5000);
@@ -115,10 +115,10 @@ function IdleWatch({ pulse, onSpell }) {
   if (!idle) return null;
   const idleMin = idle.minutes;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 2500, background: "#b91c1c", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", fontFamily: "system-ui,sans-serif", textAlign: "center", padding: 24 }}>
-      <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", opacity: 0.9 }}>Station idle</div>
+    <div style={{ position: "fixed", inset: 0, zIndex: 2500, background: "#f59e0b", color: "#1c1917", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", fontFamily: "system-ui,sans-serif", textAlign: "center", padding: 24 }}>
+      <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", opacity: 0.9 }}>Taking a break?</div>
       <div style={{ fontSize: "clamp(64px, 18vw, 180px)", fontWeight: 900, lineHeight: 1, margin: "16px 0" }}>{idleMin} min</div>
-      <div style={{ fontSize: 22, fontWeight: 600 }}>Idle for {idleMin} {idleMin === 1 ? "minute" : "minutes"} — press any key or tap to continue</div>
+      <div style={{ fontSize: 22, fontWeight: 600 }}>Idle for {idleMin} {idleMin === 1 ? "minute" : "minutes"} — press any key or tap when you are back</div>
       <div style={{ fontSize: 14, marginTop: 18, opacity: 0.8 }}>Since {new Date(idle.since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · idle time is recorded for this order</div>
     </div>
   );
