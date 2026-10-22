@@ -86,6 +86,6 @@ export function snapshotOf({ operatorName, role, orderNumber, notes, jerseyType 
       if (l.status === "flagged" && l.photo && i < PHOTOS_PER_REPORT) ev.photo = l.photo;
       return ev;
     }),
-    attention: log.filter(l => l.status === "flagged" || l.status === "manual").slice(0, 25).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(i < 3 && l.photo ? { photo: l.photo } : {}) })),
+    attention: log.filter(l => l.status === "flagged" || l.status === "manual" || l.status === "missing" || l.status === "short").slice(0, 25).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(i < 3 && l.photo ? { photo: l.photo } : {}) })),
   };
 }

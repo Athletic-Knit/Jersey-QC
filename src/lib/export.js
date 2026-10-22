@@ -142,7 +142,7 @@ export function buildDaySheets(ledger, stationLabel = id => id) {
   const reasons = {};
   events.filter(e => e.status === "flagged").forEach(e => { const k = e.offRoster ? "Not on the roster" : (e.reason || "—"); reasons[k] = (reasons[k] || 0) + 1; });
   const flagsSheet = [["Reason", "Jerseys"], ...Object.entries(reasons).sort((a, b) => b[1] - a[1]), [], ["Time", "Station", "Operator", "Order", "Jersey", "Reason", "Resolution"],
-    ...events.filter(e => e.status === "flagged" || e.status === "manual").map(e => [e.t, stationLabel(e.station), e.operator, e.order, `#${e.number}${e.name ? " " + e.name : ""}`, e.reason, e.resolution])];
+    ...events.filter(e => e.status === "flagged" || e.status === "manual" || e.status === "missing" || e.status === "short").map(e => [e.t, stationLabel(e.station), e.operator, e.order, `#${e.number}${e.name ? " " + e.name : ""}`, e.reason, e.resolution])];
   const eventsSheet = [["Time", "Station", "Operator", "Order", "Status", "Number", "Name", "Size", "Team", "Camera read", "Reason", "Resolution"],
     ...events.map(e => [e.t, stationLabel(e.station), e.operator, e.order, e.status, e.number, e.name, e.size, e.team, e.read || "", e.reason, e.resolution])];
   return { summary, orders: ordersSheet, flags: flagsSheet, events: eventsSheet };

@@ -54,7 +54,7 @@ function statusColor(s) {
   if (s === S_PASS)    return "#22c55e";
   if (s === S_FLAGGED) return "#ef4444";
   if (s === S_MANUAL)  return "#94a3b8";
-  if (s === "undo")    return "#f59e0b";
+  if (s === "undo" || s === "missing" || s === "short") return "#f59e0b";
   return "#64748b";
 }
 
@@ -587,6 +587,11 @@ function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto 
 // "st-line2" (from ?station=line2) reads as "Line 2"; any other id as itself.
 const stationLabel = id => { const n = String(id || "").replace(/^st-/, ""); const st = stationOf(n); if (st) return st.label; if (n === "packing") return "Packing"; const m = n.match(/^line[-_ ]?(\d+)$/i); return m ? `Line ${m[1]}` : n || "station"; };
 
+// How an attention item looks on the board: by-hand and missing/short are
+// amber questions, a flag is a red stop.
+const attnIcon   = s => s === "manual" ? "✍" : s === "missing" ? "❓" : s === "short" ? "📦" : "🛑";
+const attnColour = s => (s === "manual" || s === "missing" || s === "short") ? "#f59e0b" : "#ef4444";
+const attnNote   = s => s === "manual" ? "Entered by hand — needs your sign-off" : s === "missing" ? "Not in the box — the operator marked it missing" : s === "short" ? "Marked short-shipped" : "Jersey is on its way to you";
 function SupervisorPanel({ operatorName, onClose }) {
   const [data,    setData]    = useState(() => ({ stations: [], now: Date.now() }));
   const [rosters, setRosters] = useState([]);
@@ -717,16 +722,16 @@ function SupervisorPanel({ operatorName, onClose }) {
         <div style={{ position: "absolute", top: 54, right: 16, width: 380, maxWidth: "calc(100% - 32px)", zIndex: 1900, display: "flex", flexDirection: "column", gap: 8 }}>
           {alerts.length > 2 && <div style={{ textAlign: "right", fontSize: 12, color: "#fca5a5" }}>{alerts.length - 2} more just now — see the cards</div>}
           {alerts.slice(0, 2).map(a => (
-            <div key={a.key} role="alert" style={{ background: a.status === "manual" ? "#3b2a06" : "#4a0d0d", border: `1px solid ${a.status === "manual" ? "#f59e0b" : "#ef4444"}`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 24px rgba(0,0,0,0.55)", color: "#fff", fontSize: 13 }}>
+            <div key={a.key} role="alert" style={{ background: attnColour(a.status) === "#f59e0b" ? "#3b2a06" : "#4a0d0d", border: `1px solid ${attnColour(a.status)}`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 24px rgba(0,0,0,0.55)", color: "#fff", fontSize: 13 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                <div style={{ fontWeight: 800 }}>{a.status === "manual" ? "✍" : "🛑"} {a.station} · {a.operator}</div>
+                <div style={{ fontWeight: 800 }}>{attnIcon(a.status)} {a.station} · {a.operator}</div>
                 <button onClick={() => dismiss(a.key)} title="Dismiss" style={{ background: "transparent", border: 0, color: "#94a3b8", cursor: "pointer", fontSize: 15, lineHeight: 1 }}>✕</button>
               </div>
               <div style={{ marginTop: 3, display: "flex", gap: 10, alignItems: "flex-start" }}>
                 {a.photo && <img src={a.photo} alt="" onClick={() => setBigPhoto(a.photo)} title="Click to enlarge" style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6, cursor: "zoom-in", flexShrink: 0, border: "1px solid rgba(255,255,255,0.25)" }} />}
                 <div><strong>{a.jersey}</strong> — {a.reason}</div>
               </div>
-              <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 3 }}>{a.status === "manual" ? "Entered by hand — needs your sign-off" : "Jersey is on its way to you"} · {a.time}</div>
+              <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 3 }}>{attnNote(a.status)} · {a.time}</div>
             </div>
           ))}
           {alerts.length > 1 && <button onClick={() => setAlerts([])} style={{ ...btnGhost, alignSelf: "flex-end", padding: "4px 10px", fontSize: 11 }}>Dismiss all</button>}
@@ -814,7 +819,7 @@ function SupervisorPanel({ operatorName, onClose }) {
                       <div key={i} style={{ fontSize: 12, marginBottom: 3, display: "flex", gap: 8, alignItems: "flex-start" }}>
                         {a.photo && <img src={a.photo} alt="" onClick={() => setBigPhoto(a.photo)} title="Click to enlarge" style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 4, cursor: "zoom-in", flexShrink: 0 }} />}
                         <div>
-                          <span style={{ color: a.status === "manual" ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>{a.status === "manual" ? "✍" : "🛑"} {a.jersey}</span>
+                          <span style={{ color: attnColour(a.status), fontWeight: 700 }}>{attnIcon(a.status)} {a.jersey}</span>
                           <span style={{ color: "#94a3b8" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
                         </div>
                       </div>
@@ -826,7 +831,7 @@ function SupervisorPanel({ operatorName, onClose }) {
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Still open from earlier orders</div>
                     {s.carried.map(c => (
                       <div key={c.key} style={{ fontSize: 12, marginBottom: 4, display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-                        <span><span style={{ color: c.status === "manual" ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>{c.status === "manual" ? "✍" : "🛑"} {c.jersey}</span><span style={{ color: "#94a3b8" }}> — order {c.order} · {c.reason}</span></span>
+                        <span><span style={{ color: attnColour(c.status), fontWeight: 700 }}>{attnIcon(c.status)} {c.jersey}</span><span style={{ color: "#94a3b8" }}> — order {c.order} · {c.reason}</span></span>
                         <button onClick={() => markCarriedDone(s.id, c.key)} title="Dealt with — remove from this list" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, flexShrink: 0 }}>Done</button>
                       </div>
                     ))}
@@ -2001,9 +2006,21 @@ export default function App() {
   }, [log]);
 
   // Manual marks on roster rows: missing / short-shipped / clear.
+  // Missing / short-shipped go to the log the moment they are marked, so the
+  // supervisor's board hears about it like a flag. Clearing the mark closes
+  // that line.
   const markRow = useCallback((id, mark) => {
+    const row = roster.find(r => r._id === id); if (!row) return;
     setRoster(prev => prev.map(r => r._id === id ? { ...r, scanned: mark } : r));
-  }, []);
+    const isMark = l => l.match?._id === id && (l.status === "missing" || l.status === "short") && !l.resolution;
+    if (mark === "missing" || mark === "short") {
+      const reason = mark === "missing" ? "Marked missing — not in the box" : "Marked short-shipped";
+      setLog(prev => [{ id: Date.now(), match: { ...row, scanned: mark }, status: mark, reason, ...stamp() }, ...prev.map(l => isMark(l) ? { ...l, resolution: "Mark changed" } : l)]);
+    } else {
+      const resolution = `Mark removed by ${operatorName || "operator"}`;
+      setLog(prev => prev.map(l => isMark(l) ? { ...l, resolution } : l));
+    }
+  }, [roster, operatorName, stamp]);
 
   // Un-check a jersey that was confirmed by mistake: it goes back to Remaining
   // and must be scanned again. The earlier log lines stay; a new line says who
@@ -2017,7 +2034,7 @@ export default function App() {
     const resolution = `Un-checked by ${operatorName || "operator"} — to be scanned again`;
     setLog(prev => [
       { id: Date.now(), match: { ...row, scanned: false }, status: "undo", reason: `Un-checked — was ${was}; scan it again`, ...stamp() },
-      ...prev.map(l => l.match?._id === id && (l.status === S_FLAGGED || l.status === S_MANUAL) && !l.resolution ? { ...l, resolution } : l),
+      ...prev.map(l => l.match?._id === id && (l.status === S_FLAGGED || l.status === S_MANUAL || l.status === "missing" || l.status === "short") && !l.resolution ? { ...l, resolution } : l),
     ]);
     setLastResult(r => (r?.match?._id === id ? null : r)); setLastConfirmed(c => (c?.match?._id === id ? null : c));
   }, [roster, operatorName, stamp]);
