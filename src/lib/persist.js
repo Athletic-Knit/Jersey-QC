@@ -35,6 +35,19 @@ export function loadSettings()  { return quiet(() => { const v = localStorage.ge
 export function saveSignIn(s)   { quiet(() => localStorage.setItem(SIGNIN_KEY, JSON.stringify(s))); }
 export function loadSignIn()    { return quiet(() => { const v = localStorage.getItem(SIGNIN_KEY); return v ? JSON.parse(v) : null; }) ?? null; }
 export function clearSignIn()   { quiet(() => localStorage.removeItem(SIGNIN_KEY)); }
+// The names used on this PC, newest first, so an operator taps theirs instead
+// of typing it. Per PC (not per station) and never cleared by Sign out.
+const NAMES_KEY = "jerseyqc_names";
+export function loadRecentNames() { return quiet(() => { const v = localStorage.getItem(NAMES_KEY); const a = v ? JSON.parse(v) : []; return Array.isArray(a) ? a : []; }) ?? []; }
+export function rememberName(name) {
+  const n = String(name || "").trim(); if (!n) return;
+  const rest = loadRecentNames().filter(x => x.toLowerCase() !== n.toLowerCase());
+  quiet(() => localStorage.setItem(NAMES_KEY, JSON.stringify([n, ...rest].slice(0, 8))));
+}
+export function forgetName(name) {
+  const n = String(name || "").trim().toLowerCase();
+  quiet(() => localStorage.setItem(NAMES_KEY, JSON.stringify(loadRecentNames().filter(x => x.toLowerCase() !== n))));
+}
 
 // Shrink a data URL to a small thumbnail. The log keeps hundreds of these;
 // full 1280×720 frames would hold 100 MB+ on a long order.

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
-import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl } from "./lib/persist.js";
+import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, loadRecentNames, rememberName, forgetName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey } from "./lib/vision.js";
@@ -118,6 +118,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const [station, setStation] = useState(stationOf(here) ? here : STATIONS[0].id);
   const [pin,   setPin]   = useState("");
   const [name,  setName]  = useState(initial?.name || "");
+  const [names, setNames] = useState(() => loadRecentNames());   // names used on this PC before
   const [error, setError] = useState(null);
   // Which stations are live right now, and from where: refreshed every 5 s.
   const [use, setUse] = useState({});
@@ -142,6 +143,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
     if (!name.trim()) { setError("Please enter your name."); return; }
     if (role === "inspector" && !onCancel && busyBy(station)) { setError(`${stDef.label} is in use by ${busyBy(station)} on another PC. Pick a free station — or use Change operator on that PC to take it over.`); return; }
     if (target !== here && !onCancel) { goToStation(target); return; }
+    rememberName(name);
     onSignIn({ role, name: name.trim(), station: target });
   };
   const onEnter = e => { if (e.key === "Enter") submit(); };
@@ -185,7 +187,17 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         )}
         <div style={{ marginBottom: 18 }}>
           <label style={labelSt}>Your name</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. John Smith" autoFocus={!PIN_REQUIRED} onKeyDown={onEnter} style={inputSt} />
+          {names.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {names.map(n => (
+                <span key={n} style={{ display: "inline-flex", alignItems: "center", borderRadius: 999, border: `1px solid ${name.trim().toLowerCase() === n.toLowerCase() ? "#60a5fa" : "#334155"}`, background: name.trim().toLowerCase() === n.toLowerCase() ? "rgba(96,165,250,0.15)" : "transparent" }}>
+                  <button type="button" onClick={() => setName(n)} title="Use this name" style={{ background: "transparent", border: 0, color: "#e2e8f0", cursor: "pointer", padding: "4px 4px 4px 12px", fontSize: 13, fontWeight: 600 }}>{n}</button>
+                  <button type="button" onClick={() => { forgetName(n); setNames(loadRecentNames()); }} title="Forget this name on this PC" style={{ background: "transparent", border: 0, color: "#64748b", cursor: "pointer", padding: "4px 10px 4px 4px", fontSize: 12, lineHeight: 1 }}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <input value={name} onChange={e => setName(e.target.value)} placeholder={names.length ? "or type a new name" : "e.g. John Smith"} autoFocus={!PIN_REQUIRED} onKeyDown={onEnter} style={inputSt} />
         </div>
         {error && <div style={errSt}>{error}</div>}
         <button onClick={submit} style={bigBtn}>{onCancel ? "Take over →" : "Sign in →"}</button>
