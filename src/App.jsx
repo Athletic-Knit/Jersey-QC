@@ -119,7 +119,6 @@ function IdleWatch({ pulse, onSpell }) {
     <div style={{ position: "fixed", inset: 0, zIndex: 2500, background: "#f59e0b", color: "#1c1917", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", fontFamily: "system-ui,sans-serif", textAlign: "center", padding: 24 }}>
       <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", opacity: 0.9 }}>Idle for</div>
       <div style={{ fontSize: "clamp(64px, 18vw, 180px)", fontWeight: 900, lineHeight: 1, margin: "16px 0" }}>{fmt(idle.minutes)}</div>
-      <div style={{ fontSize: 22, fontWeight: 600 }}>Scan the next jersey and this goes away</div>
     </div>
   );
 }
