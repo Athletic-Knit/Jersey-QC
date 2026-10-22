@@ -78,39 +78,45 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
 // ── Resume modal ──────────────────────────────────────────────────────────────
 // ── Idle watch ───────────────────────────────────────────────────────────────
-// The clock runs from the last scanned jersey and only the next scan stops
-// it. After IDLE_AFTER_MIN minutes without one the station shows an amber
-// "Idle for N min" that grows every minute. A key or tap hides it, but does
-// not reset anything: a minute later it is back with the total, so wiggling
-// the mouse buys nothing. The notice lets input through, so the scan key
-// still scans. Each spell is handed back when a scan ends it.
+// Two clocks. The notice appears when nobody has touched the station — no
+// key, click or tap — for IDLE_AFTER_MIN minutes, and any touch hides it
+// again; someone working a stubborn jersey never sees it. The number on it
+// is the other clock: minutes since the last scanned jersey, which only the
+// next scan resets. So a key press makes the notice go away, but the next
+// time the station sits untouched it is back with the whole time since that
+// last scan. Input passes through the notice, so the scan key still scans.
+// Each spell is handed back when a scan ends it.
 const IDLE_AFTER_MIN = 3;
 function IdleWatch({ pulse, onSpell }) {
   const lastScan = useRef(0);
-  const idleRef = useRef(0);
-  const [idle, setIdle] = useState(null);                                  // { minutes, since } while the notice is up
+  const lastTouch = useRef(0);
+  const shownMin = useRef(0);                                              // minutes on the notice now up, 0 when hidden
+  const [idle, setIdle] = useState(null);                                  // { minutes, since, pulse } while the notice is up
   const pulseRef = useRef(pulse);
   const onSpellRef = useRef(onSpell);
   useEffect(() => { onSpellRef.current = onSpell; }, [onSpell]);
 
   useEffect(() => {                                                        // a scan landed: the spell, if any, is over
     const now = Date.now();
-    if (idleRef.current >= IDLE_AFTER_MIN) onSpellRef.current?.({ start: lastScan.current, end: now, minutes: Math.round((now - lastScan.current) / 60000) });
-    lastScan.current = now; idleRef.current = 0; pulseRef.current = pulse;   // a notice from before this scan no longer renders
+    const min = lastScan.current ? Math.floor((now - lastScan.current) / 60000) : 0;
+    if (min >= IDLE_AFTER_MIN) onSpellRef.current?.({ start: lastScan.current, end: now, minutes: min });
+    lastScan.current = now; lastTouch.current = now; shownMin.current = 0; pulseRef.current = pulse;   // a notice from before this scan no longer renders
   }, [pulse]);
 
   useEffect(() => {
-    const hide = () => setIdle(null);                                      // hidden for now; the next minute brings it back
+    const touch = () => { lastTouch.current = Date.now(); if (shownMin.current) { shownMin.current = 0; setIdle(null); } };
     const evs = ["keydown", "pointerdown", "touchstart"];
-    evs.forEach(e => window.addEventListener(e, hide, true));
+    evs.forEach(e => window.addEventListener(e, touch, true));
     const tick = setInterval(() => {
-      const min = Math.floor((Date.now() - lastScan.current) / 60000);
-      if (min >= IDLE_AFTER_MIN && min !== idleRef.current) {
-        if (!idleRef.current) playTone("scan");
-        idleRef.current = min; setIdle({ minutes: min, since: lastScan.current, pulse: pulseRef.current });
+      const now = Date.now();
+      if (now - lastTouch.current < IDLE_AFTER_MIN * 60000) return;        // someone is working here
+      const min = Math.floor((now - lastScan.current) / 60000);
+      if (min !== shownMin.current) {
+        if (!shownMin.current) playTone("scan");
+        shownMin.current = min; setIdle({ minutes: min, since: lastScan.current, pulse: pulseRef.current });
       }
     }, 5000);
-    return () => { evs.forEach(e => window.removeEventListener(e, hide, true)); clearInterval(tick); };
+    return () => { evs.forEach(e => window.removeEventListener(e, touch, true)); clearInterval(tick); };
   }, []);
 
   if (!idle || idle.pulse !== pulse) return null;
@@ -2076,7 +2082,7 @@ export default function App() {
 
       {showSupervisor && <SupervisorPanel operatorName={operatorName} onClose={() => closeDialog(() => setShowSupervisor(false))} />}
 
-      {sessionStarted && !showSupervisor && <IdleWatch pulse={log.length} onSpell={recordIdle} />}
+      {sessionStarted && !showSupervisor && <IdleWatch pulse={log.filter(l => l.status === S_PASS || l.status === S_MANUAL || l.status === S_FLAGGED).length} onSpell={recordIdle} />}
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
         <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onSupervisor={() => setShowSupervisor(true)}
