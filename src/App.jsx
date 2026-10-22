@@ -85,7 +85,7 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 // the mouse buys nothing. The notice lets input through, so the scan key
 // still scans. Each spell is handed back when a scan ends it.
 const IDLE_AFTER_MIN = 3;
-function IdleWatch({ pulse, totalBefore = 0, onSpell }) {
+function IdleWatch({ pulse, onSpell }) {
   const lastScan = useRef(0);
   const idleRef = useRef(0);
   const [idle, setIdle] = useState(null);                                  // { minutes, since } while the notice is up
@@ -114,15 +114,12 @@ function IdleWatch({ pulse, totalBefore = 0, onSpell }) {
   }, []);
 
   if (!idle || idle.pulse !== pulse) return null;
-  const total = totalBefore + idle.minutes;
   const fmt = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 2500, background: "#f59e0b", color: "#1c1917", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", fontFamily: "system-ui,sans-serif", textAlign: "center", padding: 24 }}>
-      <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", opacity: 0.9 }}>Taking a break?</div>
+      <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", opacity: 0.9 }}>Idle for</div>
       <div style={{ fontSize: "clamp(64px, 18vw, 180px)", fontWeight: 900, lineHeight: 1, margin: "16px 0" }}>{fmt(idle.minutes)}</div>
-      <div style={{ fontSize: 22, fontWeight: 600 }}>No jersey scanned since {new Date(idle.since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} — scanning the next one clears this</div>
-      {total > idle.minutes && <div style={{ fontSize: 18, fontWeight: 700, marginTop: 14 }}>Idle this order so far: {fmt(total)}</div>}
-      <div style={{ fontSize: 14, marginTop: 18, opacity: 0.8 }}>Any key hides this for a minute · idle time is recorded for this order</div>
+      <div style={{ fontSize: 22, fontWeight: 600 }}>Scan the next jersey and this goes away</div>
     </div>
   );
 }
@@ -2062,7 +2059,7 @@ export default function App() {
 
       {showSupervisor && <SupervisorPanel operatorName={operatorName} onClose={() => closeDialog(() => setShowSupervisor(false))} />}
 
-      {sessionStarted && !showSupervisor && <IdleWatch pulse={log.length} totalBefore={idleSpells.reduce((n, x) => n + x.minutes, 0)} onSpell={recordIdle} />}
+      {sessionStarted && !showSupervisor && <IdleWatch pulse={log.length} onSpell={recordIdle} />}
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
         <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onSupervisor={() => setShowSupervisor(true)}
