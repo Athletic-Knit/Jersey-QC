@@ -77,7 +77,9 @@ export function parseCSV(text) {
   const clean = stripBOM(String(text ?? ""));
   const lines = clean.split(/\r?\n/).filter(l => l.trim() !== "");
   if (lines.length < 2) return [];
-  const delim = detectDelimiter(lines[0]);
+  // The delimiter is judged over the first lines together, not the first line
+  // alone: a title row above the header ("Order 4521 - Ravens") has none.
+  const delim = detectDelimiter(lines.slice(0, 15).join("\n"));
   return rowsToRoster(lines.map(l => splitCSVLine(l, delim)));
 }
 

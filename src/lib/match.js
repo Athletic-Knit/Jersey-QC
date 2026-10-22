@@ -1,6 +1,6 @@
 // ── Matching: what the operator sees for a read { name, number } ─────────────
 import { norm, normNum, nameMatches, nameWords, editDistance } from "./text.js";
-import { narrowByColour } from "./colour.js";
+import { narrowByColour, colourFamilies, rowColourText } from "./colour.js";
 
 // A row counts as done when it passed, or was entered by hand (awaiting the
 // supervisor's sign-off). A flagged row is out for repair and comes back with a
@@ -121,6 +121,11 @@ function settleTwins(rows, eligible, read) {
   const { rows: agree, strong } = narrowByColour(open, read);
   const survivors = strong ? agree : open;
   if (survivors.length !== 1) return null;
+  // The last open twin is green only if the body colour seen does not say
+  // otherwise: a navy #0 read while the open #0 is the white one is the navy
+  // jersey scanned twice, not the white one.
+  const seen = colourFamilies(read.colour), own = colourFamilies(rowColourText(survivors[0]));
+  if (seen.length && own.length && !narrowByColour([survivors[0]], read).strong) return null;
   return eligible.includes(survivors[0]) ? { type: "exact", match: survivors[0] } : null;
 }
 
@@ -161,6 +166,14 @@ const soleOpen = (direct, cands) => {
  * Number-only rosters stay green on a clean, complete, centred read.
  */
 export function findMatches(roster, name, number, read = {}) {
+  const m = findMatchesInner(roster, name, number, read);
+  // A list on which every row has already passed is not a choice: the jersey
+  // was scanned before (two #84 rows, both done). Say so.
+  if ((m.type === "pick" || m.type === "close") && m.candidates.length && m.candidates.every(isDone)) return { type: "duplicate", match: m.candidates[0] };
+  return m;
+}
+
+function findMatchesInner(roster, name, number, read = {}) {
   const nName      = norm(name);
   const nNumRaw    = normNum(number);
   const numberOnly = isNumberOnlyRoster(roster);
@@ -174,8 +187,9 @@ export function findMatches(roster, name, number, read = {}) {
   const offCentre   = !typed && !!nNumRaw && nNumRaw.length === 1 && (position === "left" || position === "right");
   const suspect     = partialName || partialNum || offCentre;
 
-  // Misread guard: 3+ digits cannot be a jersey number.
-  if (nNumRaw && !isPlausibleNumber(nNumRaw)) {
+  // Misread guard: 3+ digits cannot be a jersey number — unless the roster
+  // itself carries that number (a #104 exists on some orders).
+  if (nNumRaw && !isPlausibleNumber(nNumRaw) && !roster.some(r => normNum(r.number) === nNumRaw)) {
     const byName = nName && !numberOnly ? roster.filter(r => nameMatches(nName, r.name)) : [];
     const cands  = dedupe([...byName, ...subNumberCandidates(nNumRaw, roster)]);
     if (cands.length) return { type: "pick", candidates: cands, reason: `Read "${nNumRaw}" — sleeve numbers may have merged with the back number. Which jersey is this?` };

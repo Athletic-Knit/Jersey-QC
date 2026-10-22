@@ -251,9 +251,9 @@ describe("same number on several rows", () => {
     const m = findMatches(r, "", "1");
     expect(m.type).toBe("pick");
   });
-  it("all three passed → pick with every row disabled (already done)", () => {
+  it("all three passed → 'already passed', not a list with every row greyed out", () => {
     const r = three(); r.forEach(x => { x.scanned = "pass"; });
-    expect(findMatches(r, "", "1").type).toBe("pick");
+    expect(findMatches(r, "", "1").type).toBe("duplicate");
   });
   it("same name and number twice, one passed → green on the other", () => {
     const r = [row(0, "Smith", "9", "A", "A-L", { scanned: "pass" }), row(1, "Smith", "9", "B", "A-M")];

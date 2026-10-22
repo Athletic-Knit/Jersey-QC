@@ -27,7 +27,9 @@ export function nameWords(s) {
 
 // True when the read name agrees with the roster name: exact, or the read
 // name is one whole word of the roster name (shirt says BLAKE, roster says
-// Jordan Blake), or the other way round.
+// Jordan Blake), or the other way round, or the read name is the roster
+// name's last words (shirt says SMITH-JONES or DE LA CRUZ, roster says
+// Jamie Smith-Jones or Chris De La Cruz).
 export function nameMatches(read, roster) {
   const a = norm(read), b = norm(roster);
   if (!a || !b) return false;
@@ -35,6 +37,8 @@ export function nameMatches(read, roster) {
   const aw = nameWords(read), bw = nameWords(roster);
   if (aw.length === 1 && bw.includes(aw[0])) return true;
   if (bw.length === 1 && aw.includes(bw[0])) return true;
+  if (aw.length > 1 && bw.length > aw.length && bw.slice(-aw.length).join("") === aw.join("")) return true;
+  if (bw.length > 1 && aw.length > bw.length && aw.slice(-bw.length).join("") === bw.join("")) return true;
   return false;
 }
 
