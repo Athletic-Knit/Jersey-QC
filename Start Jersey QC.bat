@@ -47,6 +47,16 @@ if not exist "node_modules" (
   call npm install
 )
 
+rem ---- Already running (the log-on task, or another window)? Then only show the links. ----
+curl -sk -o nul https://localhost:5173/ 2>nul
+if not errorlevel 1 (
+  echo    The server is ALREADY RUNNING on this PC - nothing to start.
+  echo    Opening the supervisor page. This window can be closed.
+  start "" https://localhost:5173/?station=supervisor
+  pause
+  exit /b 0
+)
+
 echo    Starting... the supervisor page opens by itself in a few seconds.
 echo    KEEP THIS WINDOW OPEN. Close it to stop the server.
 echo.
