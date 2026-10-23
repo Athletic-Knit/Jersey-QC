@@ -1523,6 +1523,7 @@ export default function App() {
   const voice = useVoice({ enabled: !!settings.voice && signedIn && sessionStarted, active: !!overlay && !scanning, deviceId: settings.micId || "" });
   // "scan" by voice: only when no result screen is up, exactly like the Scan key.
   const triggerRef = useRef(null);
+  const armRef     = useRef(() => {});   // re-arm hands-free from inside a scan (set once armAutoScan exists)
   useEffect(() => {
     const h = e => { if (e.detail?.command === "scan" && !overlay && !scanning) triggerRef.current?.(); };
     window.addEventListener("jerseyqc:voice", h);
@@ -1690,7 +1691,7 @@ export default function App() {
   }, [settings.cameraId, stopCamera]);
 
   // ── Core scan ─────────────────────────────────────────────────────────────
-  const doRunScan = useCallback(async (base64, dataUrl, recapture = null) => {
+  const doRunScan = useCallback(async (base64, dataUrl, recapture = null, { auto = false } = {}) => {
     const version = rosterVersion.current;
     if (!firstScanTime) setFirstScanTime(Date.now());
     gateRef.current.disarm(); setArmed(false);
@@ -1745,6 +1746,15 @@ export default function App() {
     const showFlag = (reason, title) => { setOverlay({ mode: "flag", scan: scanObj, reason, title }); playTone("flag"); };
 
     if (apiError) { showFlag("API error: " + apiError, "SCAN FAILED"); return; }
+    // Hands-free looked at an empty table (the jersey was lifted, nothing put
+    // down yet). Remember what the table looks like so the gate waits through
+    // it from now on, and arm again: no screen, no tone, nothing in the log.
+    if (auto && detected.jersey_present === false) {
+      console.log("[hands-free] nothing on the table — learned it, waiting for a jersey");
+      gateRef.current.learnTable(lastScanFrameRef.current);
+      armRef.current();
+      return;
+    }
     if (m === null) { showFlag("No name or number could be read. Check the jersey is in frame, flat, and lit.", "COULD NOT READ"); return; }
 
     if (m.type === "exact")          setOverlay({ mode: "confirm", scan: scanObj, match: m.match });
@@ -1775,7 +1785,7 @@ export default function App() {
     return { base64: dataUrl.split(",")[1], dataUrl };
   }, [settings.rotation]);
 
-  const doTriggerScan = useCallback(() => {
+  const doTriggerScan = useCallback((opts = {}) => {
     if (!videoRef.current || !canvasRef.current || scanning || !cameraOn || roster.length === 0 || inputMode !== "camera") return;
     const video = videoRef.current;
     if (!video.videoWidth) { setError("Camera is still starting — try again in a second."); return; }
@@ -1783,7 +1793,7 @@ export default function App() {
     const track = streamRef.current?.getVideoTracks?.()[0];
     if (!track || track.readyState !== "live") { setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); return; }
     const f = captureFrame();
-    if (f) doRunScan(f.base64, f.dataUrl, captureFrame);
+    if (f) doRunScan(f.base64, f.dataUrl, captureFrame, { auto: opts?.auto === true });
   }, [scanning, cameraOn, roster.length, inputMode, captureFrame, doRunScan, stopCamera]);
   useEffect(() => { triggerRef.current = doTriggerScan; }, [doTriggerScan]);
 
@@ -1799,7 +1809,7 @@ export default function App() {
       const track = streamRef.current?.getVideoTracks?.()[0];
       if (!track || track.readyState !== "live") { gate.disarm(); setArmed(false); setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); return; }
       const frame = sampleFrame(videoRef.current, motionCanvasRef.current);
-      if (gate.tick(frame)) { setArmed(false); doTriggerScan(); }
+      if (gate.tick(frame)) { setArmed(false); doTriggerScan({ auto: true }); }
       else if (!gate.armed) setArmed(false);
     }, 200);
     return () => clearInterval(id);
@@ -1827,6 +1837,7 @@ export default function App() {
     if (!handsFree || !cameraOn || inputMode !== "camera" || modalOpen) return;
     gateRef.current.arm(lastScanFrameRef.current); setArmed(true);
   }, [handsFree, cameraOn, inputMode, modalOpen]);
+  useEffect(() => { armRef.current = armAutoScan; }, [armAutoScan]);
 
   // Closing a dialog (complete modal, settings, supervisor view) hands the table
   // back to the operator: re-arm, so the next placement scans without B. The

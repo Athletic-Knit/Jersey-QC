@@ -80,6 +80,7 @@ Expected columns (case-insensitive, auto-detected):
 - Keyboard shortcuts (scan/confirm/cancel keys) are fully configurable via Settings panel
 - Designed for use with a barcode scanner or foot pedal mapped to keyboard keys; optional voice commands (Vosk in-browser, `src/lib/voice.js`, model in `public/models/`, downloaded by the launcher)
 - Audio feedback: ascending tone = pass, descending = flag, short beep = scan trigger
+- Hands-free (`src/lib/motion.js`): after a confirm the gate waits for the picture to change and then sit still (~0.8 s); a still picture that is neither the jersey just scanned nor the empty table scans. Works for one jersey placed at a time and for a stack lifted jersey by jersey. The empty table is learned, not guessed: the read returns `jersey_present`, and a hands-free read of an empty table is silent (no screen, tone or log entry), teaches the gate the table, and re-arms.
 - `exportRosterXLSX()` writes status + all roster columns to Excel; `exportLogCSV()` writes the scan event log
 
 ## Simulations

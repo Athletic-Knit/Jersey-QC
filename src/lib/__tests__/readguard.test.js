@@ -370,6 +370,10 @@ describe("vision parser", () => {
     const r = parseModelText(wrap({ name: "SAMU", number: 4, sleeve_numbers: [], name_complete: false, number_complete: false, number_position: "Left", obstruction: "hand" }));
     expect(r).toMatchObject({ name: "SAMU", number: "4", name_complete: false, number_complete: false, number_position: "left", obstruction: "hand" });
   });
+  it("reports whether a jersey is in the picture; absent means present", () => {
+    expect(parseModelText(wrap({ jersey_present: false, name: "", number: "" })).jersey_present).toBe(false);
+    expect(parseModelText(wrap({ name: "SAMUEL", number: "40" })).jersey_present).toBe(true);
+  });
   it("missing fields default to complete", () => {
     const r = parseModelText(wrap({ name: "SAMUEL", number: "40" }));
     expect(r).toMatchObject({ name_complete: true, number_complete: true, number_position: "", obstruction: "" });

@@ -21,6 +21,7 @@ export const DEFAULT_THINKING = "off";   // "adaptive" | "off"
 
 export const PROMPT = `This is a quality-control photo from a sports-jersey factory. It usually shows the BACK of a jersey laid flat, but it may show only a loose name plate or number patch lying on the table before it is sewn on. The text may be sideways or upside down: read it as it would read with the jersey the right way up, so an upside-down 40 is "40", never "04", and an upside-down 61 is "61", never "19".
 Read these fields:
+- "jersey_present": true when a jersey, a name plate or a number patch is in the picture, even folded, bunched or partly out of frame. false when the picture shows no garment at all — only a table, a mat, a bag, hands, or other objects. When it is false, return "" for name and number.
 - "name": the player name, printed in block capitals, if any. Ignore team names, sponsor logos and wordmarks; those are not the player name. In this block lettering, G has a horizontal bar and C does not; O is round and Q has a tail; B is closed and 8 is a digit. Copy the letters exactly as printed, including apostrophes and hyphens.
 - "number": the LARGE player number, if any. Jerseys also carry a smaller copy of the same number on each sleeve, and folded sleeves can sit right beside the back number: IGNORE sleeve numbers and never merge them into the back number. A player number is 1 or 2 digits (00 to 99). Never return 3 or more digits.
 - "jersey_colour": the main colour of the jersey body, the fabric around the number, in one or two plain words ("black", "white", "red", "navy blue", "forest green", "grey"). Not the colour of the number itself.
@@ -31,7 +32,7 @@ Read these fields:
 - "name_complete": true when the whole name is visible from its first letter to its last. false when any letters are covered (a hand, a fold, a tag, another garment), cut off by the edge of the picture, or unreadable, so the "name" you return may be only part of the word. If only part of a name is readable, still return the letters you can read.
 - "number_complete": true when every digit of the back number is wholly visible. false when any part of a digit could be covered or cut off (a hand, a fold, a tag, another garment, the edge of the picture). This is about the digits only: the jersey body, sleeves or collar running out of the picture does not matter if the digits themselves are whole. Back numbers are centred on the jersey: a single digit sitting clearly to the left or right of the jersey's centre line usually means a second digit is hidden, so return false.
 Return ONLY valid JSON, no markdown, no commentary:
-{"name":"NAME","number":"##","jersey_colour":"black","trim_colour":"red","obstruction":"","laid_flat":true,"number_position":"centre","name_complete":true,"number_complete":true}
+{"jersey_present":true,"name":"NAME","number":"##","jersey_colour":"black","trim_colour":"red","obstruction":"","laid_flat":true,"number_position":"centre","name_complete":true,"number_complete":true}
 If more than one jersey or plate is in the picture, read the largest or most central one and ignore the others.
 Never leave a field empty because you are unsure, and never decide that an item is "only a sample" or "not a real name": whatever letters are printed, return them. A person checks every read against the order, so a near-miss is far more useful than nothing. Do not explain; output the JSON only. Use "" only for a field that is truly not in the picture. A name plate with no number is a valid read: return the name and "" for the number.`;
 
@@ -48,6 +49,7 @@ function parseModelText(data) {
   // The completeness fields default to "complete" when the model leaves them
   // out, so an older or terser answer never turns into a false alarm.
   return {
+    jersey_present: obj.jersey_present !== false,   // absent → present: an older answer never reads as an empty table
     name: str(obj.name),
     number: str(obj.number),
     sleeve_numbers: Array.isArray(obj.sleeve_numbers) ? obj.sleeve_numbers.map(str).filter(Boolean) : [],
