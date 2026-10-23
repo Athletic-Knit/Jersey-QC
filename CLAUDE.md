@@ -20,6 +20,7 @@ A React/Vite web app for quality-control scanning of sports jerseys in a manufac
 
 - React 19, Vite 8 (ESM)
 - Single component file: `src/App.jsx` (~900+ lines, all inline styles, dark GitHub-like theme)
+- Type and far-view scale: `src/index.css` ships two self-hosted typefaces (`@fontsource`): Atkinson Hyperlegible for UI text (`FONT_UI` in App.jsx) and Barlow Condensed for the big numerals — jersey number, size, bin, the counters (`FONT_DISPLAY`). The stations are 27" monitors read from 4–5 ft, so `#root` gets `zoom: 1.3` at ≥1600×800 and `1.7` at ≥2300×1200; everything is laid out in the smaller logical viewport and enlarged. Because of the zoom, full-height boxes use `100%`, not `100vh`.
 - SheetJS loaded from CDN (`https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js`) for Excel read/write
 - Anthropic API (Claude Haiku 5.5 `claude-haiku-5-5`, thinking off, low effort, 800 px frame; overrides below) called **directly from the browser** via `fetch("/api/anthropic/v1/messages")` — requires a Vite dev proxy or a hosting proxy in production
 

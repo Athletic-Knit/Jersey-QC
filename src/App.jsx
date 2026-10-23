@@ -37,18 +37,20 @@ function formatKey(code) {
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const card     = { background: "#161b22", borderRadius: 10, border: "1px solid #21262d", marginBottom: 10, overflow: "hidden" };
-const btnPri   = { padding: "8px 18px", borderRadius: 8, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" };
-const btnGhost = { padding: "6px 12px", borderRadius: 8, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontWeight: 600, fontSize: 12, cursor: "pointer" };
-const btnSm    = { padding: "5px 12px", borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: "pointer" };
-const codeSt   = { background: "#1e293b", padding: "1px 6px", borderRadius: 4, fontSize: 12 };
-const thSt     = { padding: "6px 8px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 };
-const tdSt     = { padding: "6px 8px", color: "#e2e8f0", fontSize: 12 };
-const inputSt  = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 8, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 14 };
-const labelSt  = { fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 };
+const FONT_UI      = '"Atkinson Hyperlegible", system-ui, sans-serif';          // text the operator reads
+const FONT_DISPLAY = '"Barlow Condensed", "Arial Narrow", system-ui, sans-serif'; // the big numerals: number, size, bin, counters
+const btnPri   = { padding: "10px 20px", borderRadius: 8, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer" };
+const btnGhost = { padding: "8px 14px", borderRadius: 8, border: "1px solid #3f4b5c", background: "transparent", color: "#cbd5e1", fontWeight: 700, fontSize: 14, cursor: "pointer" };
+const btnSm    = { padding: "7px 14px", borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: "pointer" };
+const codeSt   = { background: "#1e293b", padding: "2px 8px", borderRadius: 4, fontSize: 14 };
+const thSt     = { padding: "10px 12px", textAlign: "left", fontSize: 14, fontWeight: 700, color: "#94a3b8" };
+const tdSt     = { padding: "10px 12px", color: "#e2e8f0", fontSize: 18 };
+const inputSt  = { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, border: "1px solid #3f4b5c", background: "#1e293b", color: "#e2e8f0", fontSize: 17 };
+const labelSt  = { fontSize: 14, color: "#94a3b8", fontWeight: 700, display: "block", marginBottom: 6 };
 const modalBg   = { position: "fixed", inset: 0, background: "#0d1117", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto" };
-const modalCard = { background: "#161b22", borderRadius: 16, border: "1px solid #21262d", padding: 36, width: 440, maxWidth: "90vw" };
-const errSt     = { fontSize: 12, color: "#f87171", marginBottom: 12, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 6 };
-const bigBtn    = { width: "100%", padding: "13px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer" };
+const modalCard = { background: "#161b22", borderRadius: 16, border: "1px solid #21262d", padding: 40, width: 560, maxWidth: "90vw" };
+const errSt     = { fontSize: 15, color: "#f87171", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 };
+const bigBtn    = { width: "100%", padding: "15px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 19, cursor: "pointer" };
 
 function statusColor(s) {
   if (s === S_PASS)    return "#22c55e";
@@ -60,7 +62,7 @@ function statusColor(s) {
 
 function Pill({ color, children }) {
   return (
-    <span style={{ background: `${color}22`, color, fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 20, border: `1px solid ${color}44` }}>
+    <span style={{ background: `${color}22`, color, fontSize: 14, fontWeight: 700, padding: "4px 11px", borderRadius: 20, border: `1px solid ${color}55`, whiteSpace: "nowrap" }}>
       {children}
     </span>
   );
@@ -68,7 +70,7 @@ function Pill({ color, children }) {
 
 function Kbd({ light, children }) {
   return (
-    <kbd style={{ background: light ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.2)", padding: "2px 7px", borderRadius: 5, fontSize: 12, fontFamily: "monospace" }}>
+    <kbd style={{ background: light ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.3)", padding: "3px 9px", borderRadius: 6, fontSize: 15, fontWeight: 700 }}>
       {children}
     </kbd>
   );
@@ -122,7 +124,7 @@ function IdleWatch({ pulse, onSpell }) {
   if (!idle || idle.pulse !== pulse) return null;
   const fmt = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 2500, background: "#f59e0b", color: "#1c1917", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", fontFamily: "system-ui,sans-serif", textAlign: "center", padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 2500, background: "#f59e0b", color: "#1c1917", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", fontFamily: FONT_UI, textAlign: "center", padding: 24 }}>
       <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", opacity: 0.9 }}>Idle for</div>
       <div style={{ fontSize: "clamp(64px, 18vw, 180px)", fontWeight: 900, lineHeight: 1, margin: "16px 0" }}>{fmt(idle.minutes)}</div>
     </div>
@@ -133,16 +135,16 @@ function ResumeModal({ session, onResume, onDiscard }) {
   const done = session.roster.filter(r => r.scanned && r.scanned !== false).length;
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 36, width: 440, maxWidth: "90vw", textAlign: "center" }}>
-        <div style={{ fontSize: 40, marginBottom: 8 }}>🔄</div>
-        <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 6 }}>Resume order {session.orderNumber || "—"}?</div>
-        <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 4 }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 40, width: 560, maxWidth: "90vw", textAlign: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 8 }}>🔄</div>
+        <div style={{ fontWeight: 900, fontSize: 28, marginBottom: 6 }}>Resume order {session.orderNumber || "—"}?</div>
+        <div style={{ fontSize: 17, color: "#cbd5e1", marginBottom: 4 }}>
           {done} of {session.roster.length} jerseys done · {session.log.length} scans · started by {session.operatorName || "an unknown operator"}
         </div>
-        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 24 }}>Saved {new Date(session.savedAt).toLocaleString()}</div>
+        <div style={{ fontSize: 15, color: "#94a3b8", marginBottom: 24 }}>Saved {new Date(session.savedAt).toLocaleString()}</div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-          <button onClick={onResume} style={{ ...btnPri, fontSize: 15, padding: "12px 28px" }}>▶ Resume</button>
-          <button onClick={onDiscard} style={{ ...btnGhost, fontSize: 14, padding: "12px 20px" }}>Start a new order</button>
+          <button onClick={onResume} style={{ ...btnPri, fontSize: 19, padding: "14px 32px" }}>▶ Resume</button>
+          <button onClick={onDiscard} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>Start a new order</button>
         </div>
       </div>
     </div>
@@ -203,15 +205,15 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   return (
     <div style={modalBg}>
       <div style={modalCard}>
-        <div style={{ fontSize: 32, marginBottom: 6, textAlign: "center" }}>🏭</div>
-        <div style={{ fontWeight: 900, fontSize: 22, textAlign: "center", marginBottom: 2 }}>Jersey QC Scanner</div>
-        <div style={{ fontSize: 13, color: "#64748b", textAlign: "center", marginBottom: 22 }}>{title || "Sign in once per shift"}</div>
+        <div style={{ fontSize: 40, marginBottom: 6, textAlign: "center" }}>🏭</div>
+        <div style={{ fontWeight: 900, fontSize: 28, textAlign: "center", marginBottom: 4 }}>Jersey QC Scanner</div>
+        <div style={{ fontSize: 17, color: "#94a3b8", textAlign: "center", marginBottom: 24 }}>{title || "Sign in once per shift"}</div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Role</label>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${ROLE_CHOICES.length},1fr)`, gap: 6 }}>
             {ROLE_CHOICES.map(r => (
               <button key={r.id} onClick={() => pickRole(r)} disabled={!!onCancel && r.id !== role}
-                style={{ ...btnGhost, padding: "8px 4px", fontSize: 12, borderColor: role === r.id ? "#3b82f6" : "#334155", color: role === r.id ? "#fff" : "#94a3b8", background: role === r.id ? "rgba(59,130,246,0.18)" : "transparent", opacity: onCancel && r.id !== role ? 0.4 : 1 }}>
+                style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: role === r.id ? "#3b82f6" : "#334155", color: role === r.id ? "#fff" : "#94a3b8", background: role === r.id ? "rgba(59,130,246,0.18)" : "transparent", opacity: onCancel && r.id !== role ? 0.4 : 1 }}>
                 {r.label}
               </button>
             ))}
@@ -223,12 +225,12 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${STATIONS.length},1fr)`, gap: 6 }}>
               {STATIONS.map(s => { const by = busyBy(s.id); return (
                 <button key={s.id} onClick={() => pickStation(s.id)} disabled={!!onCancel && s.id !== station} title={by ? `In use by ${by} on another PC` : ""}
-                  style={{ ...btnGhost, padding: "8px 4px", fontSize: 12, borderColor: station === s.id ? (by ? "#ef4444" : "#60a5fa") : by ? "#7f1d1d" : "#334155", color: station === s.id ? "#fff" : by ? "#f87171" : "#94a3b8", background: station === s.id ? (by ? "rgba(239,68,68,0.14)" : "rgba(96,165,250,0.16)") : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
-                  {s.label}{by && <div style={{ fontSize: 10, fontWeight: 400, color: "#f87171", marginTop: 2 }}>in use · {by}</div>}
+                  style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: station === s.id ? (by ? "#ef4444" : "#60a5fa") : by ? "#7f1d1d" : "#334155", color: station === s.id ? "#fff" : by ? "#f87171" : "#94a3b8", background: station === s.id ? (by ? "rgba(239,68,68,0.14)" : "rgba(96,165,250,0.16)") : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
+                  {s.label}{by && <div style={{ fontSize: 13, fontWeight: 400, color: "#f87171", marginTop: 2 }}>in use · {by}</div>}
                 </button>
               ); })}
             </div>
-            <div style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>{busyBy(station) ? <span style={{ color: "#f87171" }}>{stDef?.label} is in use by {busyBy(station)} on another PC right now.</span> : <>Each station has its own PIN. The supervisor's board shows this page as {stDef?.label}.</>}</div>
+            <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>{busyBy(station) ? <span style={{ color: "#f87171" }}>{stDef?.label} is in use by {busyBy(station)} on another PC right now.</span> : <>Each station has its own PIN. The supervisor's board shows this page as {stDef?.label}.</>}</div>
           </div>
         )}
         {PIN_REQUIRED && (
@@ -243,8 +245,8 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
               {names.map(n => (
                 <span key={n} style={{ display: "inline-flex", alignItems: "center", borderRadius: 999, border: `1px solid ${name.trim().toLowerCase() === n.toLowerCase() ? "#60a5fa" : "#334155"}`, background: name.trim().toLowerCase() === n.toLowerCase() ? "rgba(96,165,250,0.15)" : "transparent" }}>
-                  <button type="button" onClick={() => setName(n)} title="Use this name" style={{ background: "transparent", border: 0, color: "#e2e8f0", cursor: "pointer", padding: "4px 4px 4px 12px", fontSize: 13, fontWeight: 600 }}>{n}</button>
-                  <button type="button" onClick={() => { forgetName(n); setNames(loadRecentNames()); }} title="Forget this name on this PC" style={{ background: "transparent", border: 0, color: "#64748b", cursor: "pointer", padding: "4px 10px 4px 4px", fontSize: 12, lineHeight: 1 }}>×</button>
+                  <button type="button" onClick={() => setName(n)} title="Use this name" style={{ background: "transparent", border: 0, color: "#e2e8f0", cursor: "pointer", padding: "6px 4px 6px 14px", fontSize: 16, fontWeight: 700 }}>{n}</button>
+                  <button type="button" onClick={() => { forgetName(n); setNames(loadRecentNames()); }} title="Forget this name on this PC" style={{ background: "transparent", border: 0, color: "#64748b", cursor: "pointer", padding: "6px 12px 6px 6px", fontSize: 16, lineHeight: 1 }}>×</button>
                 </span>
               ))}
             </div>
@@ -266,8 +268,8 @@ function JerseyTypePicker({ value, onChange }) {
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {JERSEY_TYPES.map(t => (
         <button key={t.id} type="button" onClick={() => onChange(value === t.id ? "" : t.id)} title={t.hint}
-          style={{ ...btnGhost, padding: "6px 12px", fontSize: 13, borderColor: value === t.id ? "#60a5fa" : "#30363d", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "#93c5fd" : "#cbd5e1", fontWeight: value === t.id ? 700 : 400 }}>
-          {t.label} <span style={{ fontSize: 11, color: "#64748b", fontWeight: 400 }}>· {t.construction}</span>
+          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "#60a5fa" : "#3f4b5c", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "#93c5fd" : "#cbd5e1", fontWeight: value === t.id ? 700 : 400 }}>
+          {t.label} <span style={{ fontSize: 14, color: "#94a3b8", fontWeight: 400 }}>· {t.construction}</span>
         </button>
       ))}
     </div>
@@ -330,15 +332,15 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   return (
     <div style={modalBg}>
       <div style={modalCard}>
-        <div style={{ fontSize: 32, marginBottom: 6, textAlign: "center" }}>📋</div>
-        <div style={{ fontWeight: 900, fontSize: 22, textAlign: "center", marginBottom: 2 }}>Set up the order</div>
-        <div style={{ fontSize: 13, color: "#64748b", textAlign: "center", marginBottom: 22, display: "flex", gap: 8, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ fontSize: 40, marginBottom: 6, textAlign: "center" }}>📋</div>
+        <div style={{ fontWeight: 900, fontSize: 28, textAlign: "center", marginBottom: 4 }}>Set up the order</div>
+        <div style={{ fontSize: 17, color: "#94a3b8", textAlign: "center", marginBottom: 24, display: "flex", gap: 8, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
           <span>{operatorName} · {cap(role || "")}</span>
-          {canSupervise && <button onClick={onSupervisor} style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, borderColor: "#f59e0b", color: "#fcd34d" }}>Supervisor view</button>}
-          <button onClick={onSignOut} style={{ ...btnGhost, padding: "1px 8px", fontSize: 11 }}>Sign out</button>
+          {canSupervise && <button onClick={onSupervisor} style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>Supervisor view</button>}
+          <button onClick={onSignOut} style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>Sign out</button>
         </div>
         {hubRosters.length === 0 && (
-          <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 8, border: "1px dashed #334155", color: "#94a3b8", fontSize: 13, textAlign: "center" }}>
+          <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 8, border: "1px dashed #3f4b5c", color: "#cbd5e1", fontSize: 16, textAlign: "center", lineHeight: 1.4 }}>
             <span style={{ color: "#60a5fa" }}>●</span> Waiting for the supervisor to send an order — it will appear here by itself. Or load a roster file below.
           </div>
         )}
@@ -349,30 +351,30 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
               {hubRosters.map(r => (
                 <button key={r.id} onClick={() => pickRoster(r)}
                   style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "#22c55e" : "#334155", color: picked?.id === r.id ? "#fff" : "#94a3b8", background: picked?.id === r.id ? "rgba(34,197,94,0.12)" : "transparent" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#64748b" }}>· {r.rowCount} jerseys · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}</span>{r.forStation && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>{r.by ? `sent by ${r.by} · ` : ""}{new Date(r.createdAt).toLocaleString()}</div>
+                  <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount} jerseys · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}</span>{r.forStation && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
+                  <div style={{ fontSize: 14, color: "#94a3b8" }}>{r.by ? `sent by ${r.by} · ` : ""}{new Date(r.createdAt).toLocaleString()}</div>
                 </button>
               ))}
             </div>
           </div>
         )}
         <div style={{ marginBottom: 12 }}>
-          <label style={labelSt}>Order number{!canSupervise && <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}> — set by the supervisor</span>}</label>
+          <label style={labelSt}>Order number{!canSupervise && <span style={{ color: "#7c8ba1", fontWeight: 400 }}> — set by the supervisor</span>}</label>
           {canSupervise
             ? <input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" autoFocus onKeyDown={onEnter} style={inputSt} />
             : <div title="Only the supervisor can set the order number" style={{ ...inputSt, color: order ? "#e2e8f0" : "#64748b", cursor: "not-allowed", userSelect: "none" }}>{order || (file ? file.name.replace(/\.[^.]+$/, "") + " (file name — no supervisor number)" : "Pick the order the supervisor sent")}</div>}
         </div>
         <div style={{ marginBottom: 12 }}>
-          <label style={labelSt}>Order notes <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. sponsor logo left sleeve · captain C on #19" rows={2} style={{ ...inputSt, resize: "vertical", fontSize: 13 }} />
-          <label style={{ ...labelSt, marginTop: 10 }}>Jersey type <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}>— sets the "not right" menu and the reports</span></label>
+          <label style={labelSt}>Order notes <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
+          <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. sponsor logo left sleeve · captain C on #19" rows={2} style={{ ...inputSt, resize: "vertical", fontSize: 16 }} />
+          <label style={{ ...labelSt, marginTop: 10 }}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the "not right" menu and the reports</span></label>
           <JerseyTypePicker value={jerseyType} onChange={setJerseyType} />
         </div>
         <div style={{ marginBottom: 18 }}>
           <label style={labelSt}>{hubRosters.length ? "Or a roster file" : "Roster file"}</label>
           <div onClick={() => fileRef.current.click()}
-            style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${file ? "#22c55e" : "#334155"}`, background: "#1e293b", color: file ? "#22c55e" : "#64748b", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 16 }}>{file ? "✓" : "📂"}</span>
+            style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${file ? "#22c55e" : "#334155"}`, background: "#1e293b", color: file ? "#22c55e" : "#94a3b8", fontSize: 17, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 20 }}>{file ? "✓" : "📂"}</span>
             <span>{file ? file.name : picked ? `Using the supervisor's roster (${picked.rows.length} jerseys)` : `Choose CSV${xlsxReady ? " or Excel" : ""} file…`}</span>
           </div>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.tsv,.txt" style={{ display: "none" }} onChange={handleFile} />
@@ -401,7 +403,7 @@ function LivePreview({ stream, rotation }) {
       <div style={{ aspectRatio: "4 / 3", overflow: "hidden" }}>
         <video ref={ref} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", transform: `rotate(${rotation || 0}deg)`, display: "block" }} />
       </div>
-      <div style={{ position: "absolute", top: 6, left: 8, fontSize: 11, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.55)", padding: "2px 7px", borderRadius: 10 }}>● Live — line up the next jersey</div>
+      <div style={{ position: "absolute", top: 8, left: 10, fontSize: 14, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.6)", padding: "4px 10px", borderRadius: 10 }}>● Live — line up the next jersey</div>
     </div>
   );
 }
@@ -418,11 +420,11 @@ function ReasonTextForm({ match, onSubmit, onBack }) {
       <div style={{ fontSize: 56, textAlign: "center", lineHeight: 1 }}>✎</div>
       <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#a78bfa", textAlign: "center", marginBottom: 6 }}>What's wrong with it?</div>
       {match && <div style={{ fontSize: 18, color: "#c4b5fd", textAlign: "center", marginBottom: 10 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}</div>}
-      <div style={{ fontSize: 15, color: "#c4b5fd", textAlign: "center", marginBottom: 18, opacity: 0.9 }}>A few words — the supervisor reads exactly this and decides where it goes.</div>
+      <div style={{ fontSize: 18, color: "#c4b5fd", textAlign: "center", marginBottom: 18, opacity: 0.9 }}>A few words — the supervisor reads exactly this and decides where it goes.</div>
       <input value={text} onChange={e => setText(e.target.value)} onKeyDown={onKey} autoFocus placeholder="e.g. hole under the left arm" maxLength={120} style={{ ...inputSt, fontSize: 22, padding: "12px 14px", marginBottom: 14 }} />
       <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-        <button disabled={!text.trim()} onClick={() => onSubmit(text)} style={{ ...bigBtn, width: "auto", padding: "12px 28px", background: "#a78bfa", color: "#0d1117", opacity: text.trim() ? 1 : 0.5 }}>✓ Send to supervisor <Kbd>Enter</Kbd></button>
-        <button onClick={onBack} style={{ ...btnGhost, fontSize: 15, padding: "12px 20px" }}>← Back <Kbd light>Esc</Kbd></button>
+        <button disabled={!text.trim()} onClick={() => onSubmit(text)} style={{ ...bigBtn, width: "auto", padding: "14px 30px", background: "#a78bfa", color: "#0d1117", opacity: text.trim() ? 1 : 0.5 }}>✓ Send to supervisor <Kbd>Enter</Kbd></button>
+        <button onClick={onBack} style={{ ...btnGhost, fontSize: 18, padding: "14px 22px" }}>← Back <Kbd light>Esc</Kbd></button>
       </div>
     </div>
   );
@@ -450,7 +452,7 @@ function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
     <div style={{ width: "100%", maxWidth: 560, padding: "0 24px", boxSizing: "border-box" }}>
       <div style={{ fontSize: 56, textAlign: "center", lineHeight: 1 }}>✍</div>
       <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#f59e0b", textAlign: "center", marginBottom: 6 }}>Enter the jersey by hand</div>
-      <div style={{ fontSize: 15, color: "#fcd34d", textAlign: "center", marginBottom: 18, opacity: 0.9 }}>Type what is printed on the back. On the roster: it passes as MANUAL and the supervisor signs it off. Not on the roster: nothing is added — it goes to the supervisor now.</div>
+      <div style={{ fontSize: 18, color: "#fcd34d", textAlign: "center", marginBottom: 18, opacity: 0.9, lineHeight: 1.4 }}>Type what is printed on the back. On the roster: it passes as MANUAL and the supervisor signs it off. Not on the roster: nothing is added — it goes to the supervisor now.</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
         <div><label style={labelSt}>Number</label><input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={onKey} autoFocus inputMode="numeric" placeholder="##" style={field} /></div>
         <div><label style={labelSt}>Name</label><input value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} placeholder="as printed" style={field} /></div>
@@ -465,8 +467,8 @@ function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
       </div>
       {error && <div style={errSt}>{error}</div>}
       <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-        <button onClick={submit} style={{ ...bigBtn, width: "auto", padding: "12px 28px", background: "#f59e0b", color: "#0d1117" }}>✓ Save <Kbd>Enter</Kbd></button>
-        <button onClick={onBack} style={{ ...btnGhost, fontSize: 15, padding: "12px 20px" }}>← Back <Kbd light>Esc</Kbd></button>
+        <button onClick={submit} style={{ ...bigBtn, width: "auto", padding: "14px 30px", background: "#f59e0b", color: "#0d1117" }}>✓ Save <Kbd>Enter</Kbd></button>
+        <button onClick={onBack} style={{ ...btnGhost, fontSize: 18, padding: "14px 22px" }}>← Back <Kbd light>Esc</Kbd></button>
       </div>
     </div>
   );
@@ -701,7 +703,7 @@ function SupervisorPanel({ operatorName, onClose }) {
   const fmtMin = m => m == null ? "—" : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 1800, display: "flex", flexDirection: "column", color: "#e2e8f0", fontFamily: "system-ui,sans-serif" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 1800, display: "flex", flexDirection: "column", color: "#e2e8f0", fontFamily: FONT_UI }}>
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="#ef4444">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {data.stations.length} {data.stations.length === 1 ? "station" : "stations"} live</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -782,7 +784,7 @@ function SupervisorPanel({ operatorName, onClose }) {
                     <div style={{ fontSize: 11, color: stale ? "#f87171" : "#22c55e" }}>{stale ? `last seen ${fmtMin(Math.round(age(s) / 60))} ago` : "● live"}</div>
                     {(stale || (s.counts?.total > 0 && s.counts?.remaining === 0)) && (
                       <button onClick={() => { if (window.confirm(`Remove ${stationLabel(s.id)} · ${s.operatorName || "—"} from the board? It comes back by itself if that station reports again.`)) hub.removeStation(s.id).then(refresh).catch(() => setMsg("Could not update the hub.")); }}
-                        title="Take this card off the board" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11 }}>Remove</button>
+                        title="Take this card off the board" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>Remove</button>
                     )}
                   </div>
                 </div>
@@ -790,10 +792,10 @@ function SupervisorPanel({ operatorName, onClose }) {
                   <span>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong></span>
                   {s.counts?.total > 0 && !stale && (
                     <button onClick={() => { const n = window.prompt(`Order number for ${stationLabel(s.id)} · ${s.operatorName || "—"}:`, /^\d+$/.test(s.orderNumber || "") ? s.orderNumber : ""); if (n && n.trim()) hub.setOrder(s.id, { orderNumber: n.trim(), by: operatorName }).then(() => { setMsg(`${stationLabel(s.id)} takes order number ${n.trim()} on its next report.`); refresh(); }).catch(() => setMsg("Could not update the hub.")); }}
-                      title="Give the order running on this station its number (only the supervisor can)" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11 }}>{s.orderNumber && s.setOrder ? `→ ${s.setOrder.orderNumber}…` : "Set number"}</button>
+                      title="Give the order running on this station its number (only the supervisor can)" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>{s.orderNumber && s.setOrder ? `→ ${s.setOrder.orderNumber}…` : "Set number"}</button>
                   )}
                   {s.orderNumber && s.counts?.total > 0 && (
-                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber })} title="Open this order: every jersey with its status, what was flagged and why, and the log" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
+                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber })} title="Open this order: every jersey with its status, what was flagged and why, and the log" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
                   )}
                 </div>
                 <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: s.counts?.remaining === 0 ? "#22c55e" : "#3b82f6" }} /></div>
@@ -838,7 +840,7 @@ function SupervisorPanel({ operatorName, onClose }) {
                     {s.carried.map(c => (
                       <div key={c.key} style={{ fontSize: 12, marginBottom: 4, display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
                         <span><span style={{ color: attnColour(c.status), fontWeight: 700 }}>{attnIcon(c.status)} {c.jersey}</span><span style={{ color: "#94a3b8" }}> — order {c.order} · {c.reason}</span></span>
-                        <button onClick={() => markCarriedDone(s.id, c.key)} title="Dealt with — remove from this list" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, flexShrink: 0 }}>Done</button>
+                        <button onClick={() => markCarriedDone(s.id, c.key)} title="Dealt with — remove from this list" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, flexShrink: 0 }}>Done</button>
                       </div>
                     ))}
                   </div>
@@ -877,7 +879,7 @@ function SupervisorPanel({ operatorName, onClose }) {
           {rosters.map(r => (
             <div key={r.id} style={{ ...card, padding: "8px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#64748b" }}>· {r.rowCount}</span>{r.forStation ? <span style={{ fontWeight: 600, color: "#60a5fa", marginLeft: 6 }}>→ {stationLabel(r.forStation)}</span> : <span style={{ fontWeight: 400, color: "#64748b", marginLeft: 6 }}>· any station</span>}</div>
+                <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount}</span>{r.forStation ? <span style={{ fontWeight: 600, color: "#60a5fa", marginLeft: 6 }}>→ {stationLabel(r.forStation)}</span> : <span style={{ fontWeight: 400, color: "#64748b", marginLeft: 6 }}>· any station</span>}</div>
                 <div style={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.fileName} · {new Date(r.createdAt).toLocaleTimeString()}</div>
               </div>
               <button onClick={() => hub.removeRoster(r.id).then(refresh).catch(() => {})} style={{ ...btnGhost, padding: "2px 8px", fontSize: 11 }}>Remove</button>
@@ -903,11 +905,11 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
     <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover} data-sel={selected ? "1" : undefined}
       style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", marginBottom: 8, borderRadius: 14, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1 }}>
       <div>
-        <span style={{ fontSize: "clamp(22px, 3vw, 30px)", fontWeight: 900, color: disabled ? "#64748b" : "#fff" }}>{head || "—"}</span>
-        {sub && <span style={{ fontSize: 17, color: "#94a3b8", marginLeft: 14 }}>{sub}</span>}
-        {disabled && <span style={{ fontSize: 13, color: "#22c55e", marginLeft: 12, fontWeight: 700 }}>✓ Already passed</span>}
+        <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 3.4vw, 46px)", fontWeight: 800, lineHeight: 1, color: disabled ? "#64748b" : "#fff" }}>{head || "—"}</span>
+        {sub && <span style={{ fontSize: 22, color: "#cbd5e1", marginLeft: 16 }}>{sub}</span>}
+        {disabled && <span style={{ fontSize: 17, color: "#22c55e", marginLeft: 12, fontWeight: 700 }}>✓ Already passed</span>}
       </div>
-      {!disabled && selected && <span style={{ fontSize: 17, color: accent, fontWeight: 700, whiteSpace: "nowrap" }}>← {formatKey(confirmKey)}</span>}
+      {!disabled && selected && <span style={{ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap" }}>← {formatKey(confirmKey)}</span>}
     </div>
   );
 }
@@ -1016,9 +1018,9 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     const sel = i === selectedIdx;
     return (
       <button onClick={o.run} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
-        style={{ padding: "12px 22px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.18)"}`, background: o.primary ? accent : "transparent", color: o.primary ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
+        style={{ padding: "13px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.22)"}`, background: o.primary ? accent : "transparent", color: o.primary ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 20, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
         <span>{o.label} {o.id === "retry" ? <Kbd light>{formatKey(retryKey)}</Kbd> : o.id === "manual" ? <Kbd light>{formatKey(byHandKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
-        {o.hint && <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.7 }}>{o.hint}</span>}
+        {o.hint && <span style={{ fontSize: 15, fontWeight: 400, opacity: 0.8 }}>{o.hint}</span>}
       </button>
     );
   };
@@ -1026,55 +1028,55 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const hintLine = `${formatKey(confirmKey)} select · ${formatKey(cancelKey)} or ↓ next option · ↑ previous · ${formatKey(retryKey)} retry scan · ${formatKey(byHandKey)} enter by hand`;
 
   return (
-    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "none", padding: "20px 0", overflowY: "auto" }}>
+    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "none", padding: state.scan?.thumb && !isGreen ? "20px 0 116px" : "20px 0", overflowY: "auto" }}>
 
       {/* ── GREEN ── */}
       {isGreen && match && (
         <>
-          <div style={{ fontSize: 72, lineHeight: 1, marginBottom: 4 }}>✅</div>
-          <div style={{ fontSize: "clamp(40px, 8vw, 88px)", fontWeight: 900, color: accent, letterSpacing: "-2px", textAlign: "center", padding: "0 24px", lineHeight: 1, marginTop: 4, maxWidth: "95vw", overflowWrap: "anywhere" }}>
+          <div style={{ fontSize: 44, lineHeight: 1, marginBottom: 6 }}>✅</div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 9vw, 108px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 4, maxWidth: "100%", boxSizing: "border-box", overflowWrap: "anywhere" }}>
             #{match.number}{match.name ? ` · ${match.name}` : ""}
           </div>
-          {match.team && <div style={{ fontSize: "clamp(24px, 4vw, 42px)", color: "#86efac", marginTop: 8, fontWeight: 700, textAlign: "center" }}>{match.team}</div>}
+          {match.team && <div style={{ fontSize: "clamp(26px, 4vw, 40px)", color: "#86efac", marginTop: 8, fontWeight: 700, textAlign: "center", lineHeight: 1.1 }}>{match.team}</div>}
           <div style={{ display: "flex", gap: 16, marginTop: 14, flexWrap: "wrap", justifyContent: "center" }}>
             {hasSize && (
-              <div style={{ padding: "12px 40px", borderRadius: 20, border: "4px solid #22c55e", background: "rgba(34,197,94,0.12)", textAlign: "center", minWidth: 160 }}>
-                <div style={{ fontSize: 16, color: "#86efac", fontWeight: 700, textTransform: "uppercase", letterSpacing: 3, marginBottom: 2 }}>Size</div>
-                <div style={{ fontSize: "clamp(48px, 9vw, 96px)", fontWeight: 900, color: "#fff", letterSpacing: 4, lineHeight: 1 }}>{match.size}</div>
+              <div style={{ padding: "10px 40px 12px", borderRadius: 20, border: "4px solid #22c55e", background: "rgba(34,197,94,0.12)", textAlign: "center", minWidth: 170 }}>
+                <div style={{ fontSize: 20, color: "#86efac", fontWeight: 700, marginBottom: 2 }}>Size</div>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(60px, 10vw, 108px)", fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
               </div>
             )}
             {binNum !== null && (
-              <div style={{ padding: "12px 40px", borderRadius: 20, border: "4px solid #3b82f6", background: "rgba(59,130,246,0.12)", textAlign: "center", minWidth: 160 }}>
-                <div style={{ fontSize: 16, color: "#93c5fd", fontWeight: 700, textTransform: "uppercase", letterSpacing: 3, marginBottom: 2 }}>Bin</div>
-                <div style={{ fontSize: "clamp(48px, 9vw, 96px)", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
+              <div style={{ padding: "10px 40px 12px", borderRadius: 20, border: "4px solid #3b82f6", background: "rgba(59,130,246,0.12)", textAlign: "center", minWidth: 170 }}>
+                <div style={{ fontSize: 20, color: "#93c5fd", fontWeight: 700, marginBottom: 2 }}>Bin</div>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(60px, 10vw, 108px)", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
               </div>
             )}
           </div>
           {extras.length > 0 && (
             <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", justifyContent: "center" }}>
-              {extras.map(x => <span key={x} style={{ padding: "8px 18px", borderRadius: 12, border: "3px solid #f59e0b", background: "rgba(245,158,11,0.15)", color: "#fff", fontWeight: 900, fontSize: "clamp(18px, 3vw, 30px)" }}>{x}</span>)}
+              {extras.map(x => <span key={x} style={{ padding: "8px 18px", borderRadius: 12, border: "3px solid #f59e0b", background: "rgba(245,158,11,0.15)", color: "#fff", fontWeight: 900, fontSize: "clamp(20px, 3vw, 32px)" }}>{x}</span>)}
             </div>
           )}
-          {state.note && <div style={{ marginTop: 12, fontSize: 16, color: "#fcd34d" }}>✎ {state.note}</div>}
+          {state.note && <div style={{ marginTop: 12, fontSize: 20, color: "#fcd34d" }}>✎ {state.note}</div>}
           {mode === "confirm" && (
             <>
-              <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>
-                <span style={{ fontSize: 14, color: "#86efac", fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", marginRight: 4 }}>Check</span>
+              <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>
+                <span style={{ fontSize: 19, color: "#86efac", fontWeight: 700, marginRight: 6 }}>Check</span>
                 {CHECKLIST.map(c => (
-                  <span key={c} style={{ padding: "6px 14px", borderRadius: 999, border: "2px solid rgba(134,239,172,0.55)", background: "rgba(34,197,94,0.16)", color: "#fff", fontWeight: 700, fontSize: "clamp(15px, 2vw, 21px)", whiteSpace: "nowrap" }}>{c}</span>
+                  <span key={c} style={{ padding: "5px 13px", borderRadius: 999, border: "2px solid rgba(134,239,172,0.55)", background: "rgba(34,197,94,0.16)", color: "#fff", fontWeight: 700, fontSize: "clamp(17px, 2vw, 21px)", whiteSpace: "nowrap" }}>{c}</span>
                 ))}
               </div>
               {notes && (
-                <div style={{ marginTop: 12, padding: "8px 18px", borderRadius: 12, background: "rgba(245,158,11,0.16)", border: "2px solid rgba(245,158,11,0.55)", color: "#fde68a", fontWeight: 700, fontSize: "clamp(15px, 2vw, 21px)", textAlign: "center", maxWidth: 900 }}>
+                <div style={{ marginTop: 12, padding: "8px 18px", borderRadius: 12, background: "rgba(245,158,11,0.16)", border: "2px solid rgba(245,158,11,0.55)", color: "#fde68a", fontWeight: 700, fontSize: "clamp(18px, 2vw, 24px)", textAlign: "center", maxWidth: 900 }}>
                   📝 {notes}
                 </div>
               )}
-              <div style={{ marginTop: 18, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
+              <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", padding: "0 6px" }}>
                 {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
               </div>
             </>
           )}
-          {mode === "done" && <div style={{ fontSize: 26, color: "#4ade80", marginTop: 20, opacity: 0.8 }}>Next jersey…</div>}
+          {mode === "done" && <div style={{ fontSize: 32, color: "#4ade80", marginTop: 20, opacity: 0.85 }}>Next jersey…</div>}
         </>
       )}
 
@@ -1085,19 +1087,19 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           <div style={{ fontSize: "clamp(28px, 4.5vw, 48px)", fontWeight: 900, color: accent, marginBottom: 6, textAlign: "center", padding: "0 24px", lineHeight: 1.1 }}>
             {mode === "pick" ? "Which jersey is this?" : "No exact match"}
           </div>
-          <div style={{ fontSize: 20, color: "#fcd34d", marginBottom: 4, opacity: 0.95, textAlign: "center", padding: "0 24px" }}>
+          <div style={{ fontSize: 24, color: "#fcd34d", marginBottom: 6, opacity: 0.95, textAlign: "center", padding: "0 24px" }}>
             {state.reason}
           </div>
-          <div style={{ fontSize: 16, color: "#a8a29e", marginBottom: 14, textAlign: "center" }}>
+          <div style={{ fontSize: 20, color: "#d6d3d1", marginBottom: 16, textAlign: "center" }}>
             Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}{detected?.jersey_colour ? ` · ${detected.jersey_colour} jersey` : ""}
             {primary !== HEADLINE_FIELDS && <span style={{ marginLeft: 12, color: accent }}>· differs by {primary.map(cap).join(" and ")}</span>}
           </div>
-          <div style={{ width: "100%", maxWidth: 760, padding: "0 24px", boxSizing: "border-box", maxHeight: "48vh", overflowY: "auto" }}>
+          <div style={{ width: "100%", maxWidth: 820, padding: "0 24px", boxSizing: "border-box", maxHeight: "48%", overflowY: "auto" }}>
             {candidates.length === 0 && (
-              <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 18, padding: 16 }}>No rows to choose from.</div>
+              <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 22, padding: 16 }}>No rows to choose from.</div>
             )}
             {candidates.length > 0 && candidates.every(isDone) && (
-              <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 16, padding: "8px 0 12px" }}>Every matching row has already passed — retry the scan, or flag it as a duplicate below.</div>
+              <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 20, padding: "8px 0 12px" }}>Every matching row has already passed — retry the scan, or flag it as a duplicate below.</div>
             )}
             {options.map((o, i) => o.candidate && (
               <CandidateRow key={o.id} c={o.candidate} primary={primary} secondary={secondary} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent}
@@ -1107,7 +1109,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           <div style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
             {options.map((o, i) => !o.candidate && <OptionButton key={o.id} o={o} i={i} />)}
           </div>
-          <div style={{ marginTop: 10, fontSize: 13, color: "rgba(255,255,255,0.35)", textAlign: "center" }}>{hintLine}</div>
+          <div style={{ marginTop: 10, fontSize: 17, color: "rgba(255,255,255,0.6)", textAlign: "center", padding: "0 24px" }}>{hintLine}</div>
         </>
       )}
 
@@ -1115,22 +1117,22 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       {isRed && (
         <>
           <div style={{ fontSize: 80, lineHeight: 1, marginBottom: 4 }}>{mode === "supervisor" ? "🛑" : mode === "duplicate" ? "⚠️" : "🚩"}</div>
-          <div style={{ fontSize: "clamp(40px, 8vw, 84px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 1, marginTop: 4 }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 9vw, 120px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 4 }}>
             {mode === "supervisor" ? "GO TO SUPERVISOR" : mode === "duplicate" ? "ALREADY DONE" : state.title || "NOT FOUND"}
           </div>
           {(match || detected) && (
-            <div style={{ fontSize: "clamp(24px, 4vw, 40px)", color: "#fca5a5", marginTop: 12, textAlign: "center" }}>
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 4.5vw, 52px)", fontWeight: 700, color: "#fca5a5", marginTop: 14, textAlign: "center" }}>
               {match ? `#${match.number}${match.name ? ` · ${match.name}` : ""}${match.size ? ` · ${match.size}` : ""}` : `#${detected.number || "?"}${detected.name ? ` · ${detected.name}` : ""}`}
             </div>
           )}
           {state.reason && (
-            <div style={{ fontSize: 22, color: "#fca5a5", marginTop: 10, textAlign: "center", padding: "0 40px", maxWidth: 760, opacity: 0.9, lineHeight: 1.4 }}>
+            <div style={{ fontSize: 26, color: "#fca5a5", marginTop: 12, textAlign: "center", padding: "0 40px", maxWidth: 820, opacity: 0.95, lineHeight: 1.4 }}>
               {state.reason}
             </div>
           )}
-          {state.route && <div style={{ fontSize: 18, color: "#fecaca", marginTop: 8, opacity: 0.8 }}>→ {state.route}</div>}
+          {state.route && <div style={{ fontSize: 22, color: "#fecaca", marginTop: 8, opacity: 0.9 }}>→ {state.route}</div>}
           {mode === "flag" && (
-            <div style={{ fontSize: 17, color: "#fed7aa", marginTop: 14, textAlign: "center", padding: "0 40px", maxWidth: 760, lineHeight: 1.45 }}>
+            <div style={{ fontSize: 21, color: "#fed7aa", marginTop: 16, textAlign: "center", padding: "0 40px", maxWidth: 820, lineHeight: 1.45 }}>
               {state.title === "COULD NOT READ"
                 ? "Flatten the number area and tuck the sleeves under, then R to retry — or enter it by hand."
                 : state.title === "SCAN FAILED"
@@ -1141,7 +1143,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           <div style={{ marginTop: 28, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
             {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
           </div>
-          <div style={{ marginTop: 10, fontSize: 13, color: "rgba(255,255,255,0.35)", textAlign: "center" }}>{hintLine}</div>
+          <div style={{ marginTop: 10, fontSize: 17, color: "rgba(255,255,255,0.6)", textAlign: "center", padding: "0 24px" }}>{hintLine}</div>
         </>
       )}
 
@@ -1157,10 +1159,10 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       {mode === "manualDone" && match && (
         <>
           <div style={{ fontSize: 72, lineHeight: 1, marginBottom: 4 }}>✍</div>
-          <div style={{ fontSize: "clamp(30px, 6vw, 60px)", fontWeight: 900, color: accent, textAlign: "center", lineHeight: 1 }}>ENTERED BY HAND</div>
-          <div style={{ fontSize: "clamp(28px, 5vw, 56px)", fontWeight: 900, color: "#fff", marginTop: 12, textAlign: "center" }}>#{match.number}{match.name ? ` · ${match.name}` : ""}</div>
-          <div style={{ fontSize: 22, color: "#fcd34d", marginTop: 8, textAlign: "center" }}>{[match.team, match.size].filter(Boolean).join(" · ")}</div>
-          {state.reason && <div style={{ fontSize: 18, color: "#fde68a", marginTop: 10, opacity: 0.9, textAlign: "center", padding: "0 24px" }}>{state.reason} — the supervisor will sign this off.</div>}
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, 6vw, 72px)", fontWeight: 900, color: accent, textAlign: "center", lineHeight: 1 }}>ENTERED BY HAND</div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, 6vw, 80px)", fontWeight: 800, color: "#fff", marginTop: 12, textAlign: "center", lineHeight: 1 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}</div>
+          <div style={{ fontSize: 26, color: "#fcd34d", marginTop: 10, textAlign: "center" }}>{[match.team, match.size].filter(Boolean).join(" · ")}</div>
+          {state.reason && <div style={{ fontSize: 21, color: "#fde68a", marginTop: 10, opacity: 0.9, textAlign: "center", padding: "0 24px" }}>{state.reason} — the supervisor will sign this off.</div>}
           <div style={{ marginTop: 28, display: "flex", gap: 14 }}>{options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}</div>
         </>
       )}
@@ -1170,24 +1172,24 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         <>
           <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 4 }}>✎</div>
           <div style={{ fontSize: "clamp(28px, 4.5vw, 44px)", fontWeight: 900, color: accent, marginBottom: 6, textAlign: "center" }}>What's wrong with it?</div>
-          {jerseyType && <div style={{ fontSize: 14, color: "#a78bfa", marginBottom: 6 }}>{jerseyTypeLabel(jerseyType)} jersey · {jerseyTypeOf(jerseyType)?.construction}</div>}
-          {match && <div style={{ fontSize: 18, color: "#c4b5fd", marginBottom: 14 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}</div>}
-          <div style={{ width: "100%", maxWidth: 640, padding: "0 24px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 8 }}>
+          {jerseyType && <div style={{ fontSize: 17, color: "#c4b5fd", marginBottom: 6 }}>{jerseyTypeLabel(jerseyType)} jersey · {jerseyTypeOf(jerseyType)?.construction}</div>}
+          {match && <div style={{ fontSize: 22, color: "#c4b5fd", marginBottom: 16 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}</div>}
+          <div style={{ width: "100%", maxWidth: 720, padding: "0 24px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 8 }}>
             {options.map((o, i) => {
               const sel = i === selectedIdx;
               return (
                 <div key={o.id} onClick={o.run} onMouseEnter={() => hover(i)}
                   style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.12)"}`, background: sel ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.04)", cursor: "pointer" }}>
                   <div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>{o.label}</div>
-                    {o.hint && <div style={{ fontSize: 13, color: "#a78bfa", marginTop: 2 }}>{o.hint}</div>}
+                    <div style={{ fontSize: 26, fontWeight: 700, color: "#fff" }}>{o.label}</div>
+                    {o.hint && <div style={{ fontSize: 17, color: "#c4b5fd", marginTop: 3 }}>{o.hint}</div>}
                   </div>
-                  {sel && <span style={{ fontSize: 17, color: accent, fontWeight: 700 }}>← {formatKey(confirmKey)}</span>}
+                  {sel && <span style={{ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap", marginLeft: 12 }}>← {formatKey(confirmKey)}</span>}
                 </div>
               );
             })}
           </div>
-          <div style={{ marginTop: 12, fontSize: 13, color: "rgba(255,255,255,0.35)", textAlign: "center" }}>{hintLine}</div>
+          <div style={{ marginTop: 12, fontSize: 17, color: "rgba(255,255,255,0.6)", textAlign: "center", padding: "0 24px" }}>{hintLine}</div>
         </>
       )}
 
@@ -1200,8 +1202,8 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       )}
 
       {state.scan?.thumb && mode !== "done" && (
-        <div title="What the camera read" style={{ position: "absolute", bottom: 12, left: 12, opacity: 0.45 }}>
-          <img src={state.scan.thumb} alt="" style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6 }} />
+        <div title="What the camera read" style={{ position: "absolute", ...(isGreen ? { top: 12 } : { bottom: 12 }), left: 12, opacity: isGreen ? 0.5 : 0.6 }}>
+          <img src={state.scan.thumb} alt="" style={{ width: isGreen ? 80 : 120, height: isGreen ? 60 : 90, objectFit: "cover", borderRadius: 8 }} />
         </div>
       )}
       {!embedded && mode !== "manual" && mode !== "reasonText" && <LivePreview stream={stream} rotation={rotation} />}
@@ -1217,16 +1219,16 @@ function ResultCard({ result, onResolve }) {
   return (
     <div style={{ ...card, border: `1px solid ${statusColor(result.status)}`, background: isFlagged ? "rgba(239,68,68,0.06)" : "rgba(148,163,184,0.06)", padding: "12px 14px" }}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        {result.thumb && <img src={result.thumb} alt="" style={{ width: 60, height: 45, objectFit: "cover", borderRadius: 5, flexShrink: 0 }} />}
+        {result.thumb && <img src={result.thumb} alt="" style={{ width: 84, height: 63, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />}
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: statusColor(result.status), textTransform: "uppercase", letterSpacing: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: statusColor(result.status) }}>
             {isManual ? "✍ Entered by hand — needs supervisor sign-off" : isFlagged ? "🚩 Flagged — with the supervisor" : "🔧 Resolved"}
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 800, marginTop: 4, lineHeight: 1 }}>
             {result.match ? `#${result.match.number} · ${result.match.name || "—"}` : `#${result.detected?.number || "?"} · ${result.detected?.name || "Not detected"}`}
           </div>
-          {result.reason     && <div style={{ fontSize: 12, color: "#f87171", marginTop: 2 }}>{result.reason}</div>}
-          {result.resolution && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Resolution: {result.resolution}</div>}
+          {result.reason     && <div style={{ fontSize: 16, color: "#f87171", marginTop: 4 }}>{result.reason}</div>}
+          {result.resolution && <div style={{ fontSize: 15, color: "#cbd5e1", marginTop: 4 }}>Resolution: {result.resolution}</div>}
         </div>
       </div>
       {isFlagged && (
@@ -1237,7 +1239,7 @@ function ResultCard({ result, onResolve }) {
             <button onClick={() => onResolve(result.id, "note",   note)} style={{ ...btnSm, background: "rgba(99,102,241,0.15)", color: "#818cf8", border: "1px solid #818cf8" }}>📝 Note only</button>
           </div>
           <input value={note} onChange={e => setNote(e.target.value)} placeholder="Optional note…"
-            style={{ marginTop: 6, width: "100%", boxSizing: "border-box", padding: "5px 9px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 12 }} />
+            style={{ marginTop: 8, width: "100%", boxSizing: "border-box", padding: "8px 12px", borderRadius: 6, border: "1px solid #3f4b5c", background: "#1e293b", color: "#e2e8f0", fontSize: 15 }} />
         </div>
       )}
     </div>
@@ -1276,44 +1278,44 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
   onScreen.forEach((a, i) => onScreen.slice(i + 1).forEach(b => { if (temp[a] === temp[b]) problems.push(`${labelOf(a)} and ${labelOf(b)} cannot be the same key.`); }));
   keyRows.forEach(r => { if (reserved.includes(temp[r.key])) problems.push(`${r.label} cannot be ${temp[r.key]}.`); });
 
-  const selSt = { ...inputSt, padding: "6px 10px", fontSize: 13 };
+  const selSt = { ...inputSt, padding: "8px 12px", fontSize: 16 };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2200, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#161b22", borderRadius: 12, border: "1px solid #21262d", padding: 24, width: 400, maxWidth: "92vw", maxHeight: "92vh", overflowY: "auto" }}>
-        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14 }}>⚙ Settings</div>
+      <div style={{ background: "#161b22", borderRadius: 12, border: "1px solid #21262d", padding: 28, width: 540, maxWidth: "92vw", maxHeight: "92%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 16 }}>⚙ Settings</div>
 
         <div style={{ marginBottom: 18 }}>
           <div style={labelSt}>Keyboard shortcuts</div>
           {keyRows.map(r => (
             <div key={r.key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <div style={{ fontSize: 12, color: "#94a3b8", width: 120, flexShrink: 0 }}>{r.label}</div>
-              <div style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: `1px solid ${listening === r.key ? "#3b82f6" : "#334155"}`, background: "#1e293b", color: "#e2e8f0", fontSize: 13, textAlign: "center" }}>
+              <div style={{ fontSize: 16, color: "#cbd5e1", width: 150, flexShrink: 0 }}>{r.label}</div>
+              <div style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: `1px solid ${listening === r.key ? "#3b82f6" : "#334155"}`, background: "#1e293b", color: "#e2e8f0", fontSize: 17, fontWeight: 700, textAlign: "center" }}>
                 {listening === r.key ? "Press any key…" : formatKey(temp[r.key])}
               </div>
               <button onClick={() => setListening(r.key)} style={{ ...btnGhost, whiteSpace: "nowrap", padding: "4px 10px" }}>Change</button>
             </div>
           ))}
-          <div style={{ fontSize: 11, color: "#475569" }}>Select picks the highlighted option; Navigate (or ↓ ↑) moves it; Retry scan re-shoots from any screen with nothing recorded. Scan only works when no screen is open, so it may share a key with Select.</div>
+          <div style={{ fontSize: 14, color: "#7c8ba1" }}>Select picks the highlighted option; Navigate (or ↓ ↑) moves it; Retry scan re-shoots from any screen with nothing recorded. Scan only works when no screen is open, so it may share a key with Select.</div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
           <div style={labelSt}>Camera</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <div style={{ fontSize: 12, color: "#94a3b8", width: 120, flexShrink: 0 }}>Mount rotation</div>
+            <div style={{ fontSize: 16, color: "#cbd5e1", width: 150, flexShrink: 0 }}>Mount rotation</div>
             <select value={temp.rotation} onChange={e => setTemp(t => ({ ...t, rotation: Number(e.target.value) }))} style={selSt}>
               {[0, 90, 180, 270].map(d => <option key={d} value={d}>{d}° {d === 180 ? "(upside-down mount)" : d === 0 ? "(upright)" : ""}</option>)}
             </select>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <div style={{ fontSize: 12, color: "#94a3b8", width: 120, flexShrink: 0 }}>Camera</div>
+            <div style={{ fontSize: 16, color: "#cbd5e1", width: 150, flexShrink: 0 }}>Camera</div>
             <select value={temp.cameraId} onChange={e => setTemp(t => ({ ...t, cameraId: e.target.value }))} style={selSt}>
               <option value="">Browser default</option>
               {cameras.map(c => <option key={c.deviceId} value={c.deviceId}>{c.label || `Camera ${c.deviceId.slice(0, 6)}`}</option>)}
             </select>
           </div>
-          {cameras.length === 0 && <div style={{ fontSize: 11, color: "#475569" }}>Start the camera once to list the cameras on this machine.</div>}
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: "#94a3b8", cursor: "pointer" }}>
+          {cameras.length === 0 && <div style={{ fontSize: 14, color: "#7c8ba1" }}>Start the camera once to list the cameras on this machine.</div>}
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
             <input type="checkbox" checked={!!temp.autoScan} onChange={e => setTemp(t => ({ ...t, autoScan: e.target.checked }))} />
             Hands-free: after a confirm, scan the next jersey when it is placed and still
           </label>
@@ -1325,34 +1327,34 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
             {[[false, "⌨️ Keys or pedals", "Normal"], [true, "🎤 Voice", "Headset"]].map(([on, label, sub]) => (
               <button key={String(on)} onClick={() => setTemp(t => ({ ...t, voice: on }))}
                 style={{ flex: 1, padding: "8px 10px", borderRadius: 8, cursor: "pointer", textAlign: "left", border: `1px solid ${!!temp.voice === on ? "#3b82f6" : "#334155"}`, background: !!temp.voice === on ? "rgba(59,130,246,0.14)" : "#1e293b", color: !!temp.voice === on ? "#e2e8f0" : "#94a3b8" }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>{sub}</div>
+                <div style={{ fontSize: 17, fontWeight: 700 }}>{label}</div>
+                <div style={{ fontSize: 14, color: "#94a3b8" }}>{sub}</div>
               </button>
             ))}
           </div>
-          {!temp.voice && <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>The keys above, or a foot pedal programmed to send them.</div>}
+          {!temp.voice && <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 8 }}>The keys above, or a foot pedal programmed to send them.</div>}
           {temp.voice && (
             <>
               <VoiceLegend />
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-                <div style={{ fontSize: 12, color: "#94a3b8", width: 120, flexShrink: 0 }}>Microphone</div>
+                <div style={{ fontSize: 16, color: "#cbd5e1", width: 150, flexShrink: 0 }}>Microphone</div>
                 <select value={temp.micId || ""} onChange={e => setTemp(t => ({ ...t, micId: e.target.value }))} style={{ ...selSt, flex: 1 }}>
                   <option value="">Browser default</option>
                   {mics.map(m => <option key={m.deviceId} value={m.deviceId}>{m.label || `Microphone ${m.deviceId.slice(0, 6)}`}</option>)}
                 </select>
               </div>
-              {mics.length === 0 && <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>Turn voice on and save once to list the microphones; a headset with a boom mic works best.</div>}
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: "#94a3b8", cursor: "pointer" }}>
+              {mics.length === 0 && <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 4 }}>Turn voice on and save once to list the microphones; a headset with a boom mic works best.</div>}
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
                 <input type="checkbox" checked={temp.voiceSpeak !== false} onChange={e => setTemp(t => ({ ...t, voiceSpeak: e.target.checked }))} />
                 Read the result back through the headset ("40, bin 2")
               </label>
-              <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>Runs on this PC: the ~40 MB model loads once, then nothing leaves the machine. It only knows these words, so talk is ignored. Commands work only while a result is on screen.</div>
+              <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 8 }}>Runs on this PC: the ~40 MB model loads once, then nothing leaves the machine. It only knows these words, so talk is ignored. Commands work only while a result is on screen.</div>
             </>
           )}
         </div>
 
         {problems.length > 0 && (
-          <div style={{ fontSize: 12, color: "#f87171", marginBottom: 12, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 6 }}>
+          <div style={{ fontSize: 15, color: "#f87171", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 }}>
             {problems.map(p => <div key={p}>{p}</div>)}
           </div>
         )}
@@ -1370,22 +1372,22 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
 function BinSetupModal({ entries, onConfirm }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 40, maxWidth: 560, width: "90vw", textAlign: "center" }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>🗂️</div>
-        <div style={{ fontSize: 26, fontWeight: 900, color: "#60a5fa", marginBottom: 8 }}>Prepare {entries.length} Bins</div>
-        <div style={{ fontSize: 15, color: "#94a3b8", marginBottom: 24 }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 44, maxWidth: 680, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
+        <div style={{ fontSize: 56, marginBottom: 12 }}>🗂️</div>
+        <div style={{ fontSize: 36, fontWeight: 900, color: "#60a5fa", marginBottom: 8 }}>Prepare {entries.length} bins</div>
+        <div style={{ fontSize: 19, color: "#cbd5e1", marginBottom: 26 }}>
           This order has <strong style={{ color: "#e2e8f0" }}>{entries.length} teams</strong>. Label your bins before scanning:
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 28, maxHeight: 320, overflowY: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 30, maxHeight: 400, overflowY: "auto" }}>
           {entries.map(({ team, bin }) => (
-            <div key={team} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px", borderRadius: 10, background: "#1e293b", border: "1px solid #334155" }}>
-              <div style={{ fontSize: 24, fontWeight: 900, color: "#60a5fa", minWidth: 72, textAlign: "center" }}>Bin {bin}</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", textAlign: "left" }}>{team}</div>
+            <div key={team} style={{ display: "flex", alignItems: "center", gap: 18, padding: "14px 22px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" }}>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 44, fontWeight: 900, color: "#60a5fa", minWidth: 120, textAlign: "center", lineHeight: 1 }}>Bin {bin}</div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0", textAlign: "left" }}>{team}</div>
             </div>
           ))}
         </div>
-        <button onClick={onConfirm} style={{ padding: "13px 36px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>
-          Bins ready — Start Scanning
+        <button onClick={onConfirm} style={{ padding: "16px 40px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 21, cursor: "pointer" }}>
+          Bins ready — start scanning
         </button>
       </div>
     </div>
@@ -1405,24 +1407,24 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, onExport, onDismiss }
   const open = count("flag") + offRosterFlags + count("manual") + count("missing") + count("short");
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#161b22", borderRadius: 16, border: `2px solid ${open ? "#f59e0b" : "#22c55e"}`, padding: 40, maxWidth: 520, width: "90vw", textAlign: "center" }}>
-        <div style={{ fontSize: 56, marginBottom: 12 }}>{open ? "📋" : "🎉"}</div>
-        <div style={{ fontSize: 28, fontWeight: 900, color: open ? "#f59e0b" : "#22c55e", marginBottom: 8 }}>{open ? "Every jersey accounted for" : "Order Complete!"}</div>
-        <div style={{ fontSize: 15, color: "#94a3b8", marginBottom: 6 }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: `2px solid ${open ? "#f59e0b" : "#22c55e"}`, padding: 44, maxWidth: 640, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
+        <div style={{ fontSize: 64, marginBottom: 12 }}>{open ? "📋" : "🎉"}</div>
+        <div style={{ fontSize: 36, fontWeight: 900, color: open ? "#f59e0b" : "#22c55e", marginBottom: 10 }}>{open ? "Every jersey accounted for" : "Order complete"}</div>
+        <div style={{ fontSize: 18, color: "#cbd5e1", marginBottom: 8, lineHeight: 1.4 }}>
           {open ? `${open} still open — with the supervisor, entered by hand, missing, or short-shipped. The box stays open until they are signed off or come back.` : `All ${roster.length} jerseys passed.`}
         </div>
-        <div style={{ fontSize: 13, color: "#64748b", marginBottom: 24 }}>Review the roster before exporting.</div>
+        <div style={{ fontSize: 16, color: "#94a3b8", marginBottom: 26 }}>Review the roster before exporting.</div>
         <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 28, flexWrap: "wrap" }}>
           {stats.map(s => (
             <div key={s.label}>
-              <div style={{ fontSize: 32, fontWeight: 900, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>{s.label}</div>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 52, fontWeight: 900, color: s.color, lineHeight: 1 }}>{s.value}</div>
+              <div style={{ fontSize: 15, color: "#94a3b8", marginTop: 4 }}>{s.label}</div>
             </div>
           ))}
         </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-          <button onClick={onExport}  style={{ ...btnPri, fontSize: 15, padding: "12px 28px", background: "#22c55e" }}>⬇ Export to Excel</button>
-          <button onClick={onDismiss} style={{ ...btnGhost, fontSize: 14, padding: "12px 20px" }}>Review first</button>
+          <button onClick={onExport}  style={{ ...btnPri, fontSize: 19, padding: "14px 32px", background: "#22c55e" }}>⬇ Export to Excel</button>
+          <button onClick={onDismiss} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>Review first</button>
         </div>
       </div>
     </div>
@@ -2065,7 +2067,7 @@ export default function App() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ fontFamily: "system-ui,sans-serif", background: "#0d1117", height: "100vh", color: "#e2e8f0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ fontFamily: FONT_UI, background: "#0d1117", height: "100%", color: "#e2e8f0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
       {!signedIn && (
         <SignInModal initial={savedSignIn}
@@ -2115,12 +2117,12 @@ export default function App() {
       )}
 
       {/* Header */}
-      <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "8px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 14 }}>🏭 Jersey QC Scanner</div>
+            <div style={{ fontWeight: 700, fontSize: 18 }}>🏭 Jersey QC Scanner</div>
             {rosterFile && (
-              <div style={{ fontSize: 10, color: "#64748b" }}>
+              <div style={{ fontSize: 13, color: "#94a3b8" }}>
                 {rosterFile}{operatorName ? ` · ${operatorName}` : ""}{role ? ` (${role})` : ""}
               </div>
             )}
@@ -2128,47 +2130,47 @@ export default function App() {
           {canSupervise
             ? <input value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder="Order number…"
                 onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
-                style={{ padding: "4px 9px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 12, width: 140 }} />
-            : <div title="Only the supervisor can change the order number" style={{ padding: "4px 9px", borderRadius: 6, border: "1px solid #21262d", background: "#0d1117", color: orderNumber ? "#e2e8f0" : "#64748b", fontSize: 12, fontWeight: 700, userSelect: "none" }}>Order {orderNumber || "—"}</div>}
+                style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #3f4b5c", background: "#1e293b", color: "#e2e8f0", fontSize: 16, width: 170 }} />
+            : <div title="Only the supervisor can change the order number" style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #30363d", background: "#0d1117", color: orderNumber ? "#e2e8f0" : "#94a3b8", fontSize: 17, fontWeight: 700, userSelect: "none", whiteSpace: "nowrap" }}>Order {orderNumber || "—"}</div>}
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <Pill color="#22c55e">{passCount} Pass</Pill>
           <Pill color="#ef4444">{flagCount} Flag</Pill>
           {manualCount > 0 && <Pill color="#f59e0b">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171">Supervisor screen not reachable — scanning still works</Pill>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
-          {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
-          {sessionStarted && <button onClick={startNewOrder} title="Finish this order and set up the next one — no PIN needed" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>New order</button>}
-          {signedIn && sessionStarted && <button onClick={() => setShowHandover(true)} title="Another operator takes over this station — the order keeps going" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>Change operator</button>}
-          {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>Sign out</button>}
-          <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "3px 9px", fontSize: 11 }}>{isFullscreen ? "⤢ Exit full screen" : "⛶ Full screen"}</button>
-          {fsHint && <span style={{ fontSize: 11, color: "#fcd34d" }}>{fsHint}</span>}
-          <button onClick={() => setShowSettings(true)} style={{ ...btnGhost, padding: "3px 9px" }}>⚙</button>
+          {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
+          {sessionStarted && <button onClick={startNewOrder} title="Finish this order and set up the next one — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>New order</button>}
+          {signedIn && sessionStarted && <button onClick={() => setShowHandover(true)} title="Another operator takes over this station — the order keeps going" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Change operator</button>}
+          {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
+          <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⤢ Exit full screen" : "⛶ Full screen"}</button>
+          {fsHint && <span style={{ fontSize: 14, color: "#fcd34d" }}>{fsHint}</span>}
+          <button onClick={() => setShowSettings(true)} title="Settings" style={{ ...btnGhost, padding: "6px 12px", fontSize: 16 }}>⚙</button>
         </div>
       </div>
 
       {(notes || jerseyType) && (
-        <div style={{ background: "rgba(245,158,11,0.10)", borderBottom: "1px solid rgba(245,158,11,0.35)", padding: "6px 16px", fontSize: 12, color: "#fcd34d", flexShrink: 0, display: "flex", gap: 14, alignItems: "center" }}>
-          {jerseyType && <span style={{ border: "1px solid #60a5fa", color: "#93c5fd", borderRadius: 999, padding: "1px 10px", fontWeight: 700, whiteSpace: "nowrap" }}>{jerseyTypeLabel(jerseyType)} · {jerseyTypeOf(jerseyType)?.construction}</span>}
+        <div style={{ background: "rgba(245,158,11,0.10)", borderBottom: "1px solid rgba(245,158,11,0.35)", padding: "9px 16px", fontSize: 16, color: "#fcd34d", flexShrink: 0, display: "flex", gap: 14, alignItems: "center" }}>
+          {jerseyType && <span style={{ border: "1px solid #60a5fa", color: "#93c5fd", borderRadius: 999, padding: "2px 12px", fontWeight: 700, whiteSpace: "nowrap" }}>{jerseyTypeLabel(jerseyType)} · {jerseyTypeOf(jerseyType)?.construction}</span>}
           {notes && <span><strong>Order notes:</strong> {notes}</span>}
         </div>
       )}
 
       {sessionStarted && orderSetBy && (
-        <div style={{ background: "rgba(34,197,94,0.12)", borderBottom: "1px solid rgba(34,197,94,0.4)", padding: "6px 16px", fontSize: 12, color: "#bbf7d0", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ background: "rgba(34,197,94,0.12)", borderBottom: "1px solid rgba(34,197,94,0.4)", padding: "9px 16px", fontSize: 16, color: "#bbf7d0", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <span>🔢 <strong>{orderSetBy.by || "The supervisor"} set this order's number to {orderSetBy.orderNumber}.</strong> Reports and the board use it from now on.</span>
-          <button onClick={() => setOrderSetBy(null)} title="Hide" style={{ background: "transparent", border: 0, color: "#bbf7d0", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>✕</button>
+          <button onClick={() => setOrderSetBy(null)} title="Hide" style={{ background: "transparent", border: 0, color: "#bbf7d0", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 8px" }}>✕</button>
         </div>
       )}
       {sessionStarted && newRosters.length > 0 && (
-        <div style={{ background: "rgba(59,130,246,0.12)", borderBottom: "1px solid rgba(59,130,246,0.4)", padding: "6px 16px", fontSize: 12, color: "#bfdbfe", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ background: "rgba(59,130,246,0.12)", borderBottom: "1px solid rgba(59,130,246,0.4)", padding: "9px 16px", fontSize: 16, color: "#bfdbfe", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <span>📋 <strong>{newRosters.map(r => `Order ${r.orderNumber || "—"} from ${r.by || "the supervisor"} (${r.rowCount} ${r.rowCount === 1 ? "jersey" : "jerseys"}${r.forStation ? ", for this station" : ""})`).join(" · ")}</strong> is waiting for you — it is offered when this order ends, or on New order.</span>
-          <button onClick={() => setNewRosters([])} title="Hide" style={{ background: "transparent", border: 0, color: "#bfdbfe", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>✕</button>
+          <button onClick={() => setNewRosters([])} title="Hide" style={{ background: "transparent", border: 0, color: "#bfdbfe", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 8px" }}>✕</button>
         </div>
       )}
 
       {roster.length > 0 && (
-        <div style={{ height: 4, background: "#1e293b", flexShrink: 0 }}>
+        <div style={{ height: 8, background: "#1e293b", flexShrink: 0 }}>
           <div style={{ height: "100%", background: rosterComplete ? "#22c55e" : "#3b82f6", width: `${(scannedRows.length / roster.length) * 100}%`, transition: "width 0.4s ease" }} />
         </div>
       )}
@@ -2183,19 +2185,19 @@ export default function App() {
 
           {roster.length === 0 ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" }}>
-              <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>No Roster Loaded</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>
+              <div style={{ fontSize: 48, marginBottom: 10 }}>📋</div>
+              <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 8 }}>No roster loaded</div>
+              <div style={{ fontSize: 15, color: "#94a3b8", marginBottom: 16 }}>
                 CSV or Excel: <code style={codeSt}>name</code> <code style={codeSt}>number</code> <code style={codeSt}>team</code> <code style={codeSt}>size</code>
               </div>
-              {error && <p style={{ fontSize: 12, color: "#f87171", marginTop: 10 }}>{error}</p>}
+              {error && <p style={{ fontSize: 15, color: "#f87171", marginTop: 10 }}>{error}</p>}
             </div>
           ) : (
             <>
               <div style={{ display: "flex", borderBottom: "1px solid #21262d" }}>
                 {["camera", "upload"].map(m => (
                   <button key={m} onClick={() => { setInputMode(m); if (m === "upload") stopCamera(); }}
-                    style={{ flex: 1, padding: "8px 0", border: "none", background: inputMode === m ? "rgba(59,130,246,0.1)" : "transparent", color: inputMode === m ? "#60a5fa" : "#64748b", fontWeight: 600, fontSize: 12, borderBottom: inputMode === m ? "2px solid #3b82f6" : "2px solid transparent", cursor: "pointer" }}>
+                    style={{ flex: 1, padding: "11px 0", border: "none", background: inputMode === m ? "rgba(59,130,246,0.1)" : "transparent", color: inputMode === m ? "#60a5fa" : "#64748b", fontWeight: 700, fontSize: 16, borderBottom: inputMode === m ? "2px solid #3b82f6" : "2px solid transparent", cursor: "pointer" }}>
                     {m === "camera" ? "📷 Webcam" : "🖼 Upload"}
                   </button>
                 ))}
@@ -2208,79 +2210,79 @@ export default function App() {
                       style={{ width: "100%", height: "100%", objectFit: "cover", display: cameraOn ? "block" : "none", transform: `rotate(${settings.rotation || 0}deg)` }} />
                     {!cameraOn && (
                       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                        <span style={{ fontSize: 40 }}>📷</span>
-                        <span style={{ fontSize: 13, color: "#64748b" }}>Camera off</span>
+                        <span style={{ fontSize: 52 }}>📷</span>
+                        <span style={{ fontSize: 20, color: "#94a3b8" }}>Camera off</span>
                       </div>
                     )}
                     {cameraOn && (
                       <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-                        <div style={{ width: 200, height: 120, border: "2px solid rgba(255,255,255,0.35)", borderRadius: 6, boxShadow: "0 0 0 9999px rgba(0,0,0,0.25)" }} />
+                        <div style={{ width: 220, height: 132, border: "3px solid rgba(255,255,255,0.4)", borderRadius: 8, boxShadow: "0 0 0 9999px rgba(0,0,0,0.25)" }} />
                       </div>
                     )}
                     {scanning && (
                       <div style={{ position: "absolute", inset: 0, background: "rgba(59,130,246,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <div style={{ color: "#fff", fontWeight: 700, background: "rgba(0,0,0,0.6)", padding: "8px 20px", borderRadius: 20 }}>⏳ Reading…</div>
+                        <div style={{ color: "#fff", fontWeight: 700, fontSize: 26, background: "rgba(0,0,0,0.65)", padding: "14px 32px", borderRadius: 999 }}>⏳ Reading…</div>
                       </div>
                     )}
                     {cameraOn && !scanning && (
                       <>
                         {settings.voice && <div style={{ position: "absolute", top: 8, left: 8 }}><VoiceBadge status={voice.status} error={voice.error} loading={voice.loading} active={!!overlay && !scanning} /></div>}
-                        <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,0.55)", padding: "3px 9px", borderRadius: 20 }}>
-                          <div style={{ width: 7, height: 7, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e"}` }} />
-                          <span style={{ fontSize: 10, color: "#e2e8f0" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? "Hands-free paused — B to scan" : !settings.autoScan ? "Hands-free off — B to scan" : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : "Ready"}</span>
+                        <div style={{ position: "absolute", top: 10, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(0,0,0,0.65)", padding: "8px 16px", borderRadius: 999 }}>
+                          <div style={{ width: 12, height: 12, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e"}` }} />
+                          <span style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? "Hands-free paused — B to scan" : !settings.autoScan ? "Hands-free off — B to scan" : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : "Ready"}</span>
                         </div>
-                        <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.55)", color: "#94a3b8", fontSize: 10, padding: "3px 9px", borderRadius: 12, whiteSpace: "nowrap" }}>
-                          Lay it flat, fully open, no folds · Press <kbd style={{ background: "#1e293b", padding: "1px 4px", borderRadius: 3, fontSize: 10 }}>{keyLabel}</kbd> to scan
+                        <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.65)", color: "#e2e8f0", fontSize: 15, padding: "6px 14px", borderRadius: 999, whiteSpace: "nowrap" }}>
+                          Lay it flat, fully open, no folds · Press <kbd style={{ background: "#1e293b", padding: "2px 7px", borderRadius: 4, fontSize: 15, fontWeight: 700 }}>{keyLabel}</kbd> to scan
                         </div>
                       </>
                     )}
                   </div>
-                  <div style={{ padding: "10px 12px", display: "flex", gap: 8, borderTop: "1px solid #21262d" }}>
+                  <div style={{ padding: "12px 14px", display: "flex", gap: 10, borderTop: "1px solid #21262d" }}>
                     {!cameraOn
-                      ? <button onClick={startCamera} style={{ ...btnPri, flex: 1, fontSize: 15, padding: "12px" }}>Start Camera</button>
+                      ? <button onClick={startCamera} style={{ ...btnPri, flex: 1, fontSize: 22, padding: "16px" }}>Start camera</button>
                       : <>
-                          <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 42 }}>■</button>
+                          <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 56, fontSize: 18 }}>■</button>
                           <button onClick={toggleHandsFree} title={!settings.autoScan ? "Turn hands-free scanning on" : handsFreePaused ? "Resume hands-free scanning" : "Pause hands-free — the camera stays on and B still scans"}
-                            style={{ ...btnGhost, padding: "0 12px", fontSize: 13, fontWeight: 700, borderColor: "#f59e0b", color: "#fcd34d", background: handsFree ? "rgba(245,158,11,0.14)" : "transparent" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
+                            style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, borderColor: "#f59e0b", color: "#fcd34d", background: handsFree ? "rgba(245,158,11,0.14)" : "transparent", whiteSpace: "nowrap" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
                           <button onClick={() => { gateRef.current.disarm(); setArmed(false); doTriggerScan(); }} disabled={scanning}
-                            style={{ ...btnPri, flex: 1, fontSize: 18, padding: "12px", opacity: scanning ? 0.4 : 1 }}>
+                            style={{ ...btnPri, flex: 1, fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, letterSpacing: 1, padding: "14px", opacity: scanning ? 0.4 : 1 }}>
                             {scanning ? "Reading…" : "⚡ SCAN"}
                           </button>
                         </>
                     }
                   </div>
-                  {error && <p style={{ padding: "0 12px 8px", fontSize: 11, color: "#f87171" }}>{error}</p>}
+                  {error && <p style={{ padding: "0 14px 10px", fontSize: 15, color: "#f87171" }}>{error}</p>}
                 </div>
               )}
 
               {inputMode === "upload" && (
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20, gap: 12 }}>
+                <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20, gap: 12 }}>
                   {thumb
-                    ? <img src={thumb} alt="uploaded" style={{ width: "100%", borderRadius: 8, maxHeight: 300, objectFit: "contain" }} />
+                    ? <img src={thumb} alt="uploaded" style={{ width: "100%", borderRadius: 8, maxHeight: 300, minHeight: 0, flex: "0 1 auto", objectFit: "contain" }} />
                     : <div style={{ width: "100%", aspectRatio: "4/3", background: "#0d1117", borderRadius: 8, border: "2px dashed #334155", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "#475569" }}>
-                        <span style={{ fontSize: 36 }}>🖼</span>
-                        <span style={{ fontSize: 12 }}>No photo selected</span>
+                        <span style={{ fontSize: 48 }}>🖼</span>
+                        <span style={{ fontSize: 16 }}>No photo selected</span>
                       </div>
                   }
                   <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhotoUpload} />
                   <button onClick={() => photoRef.current.click()} disabled={scanning}
-                    style={{ ...btnPri, width: "100%", fontSize: 16, padding: "12px", opacity: scanning ? 0.5 : 1 }}>
-                    {scanning ? "⏳ Reading…" : "⚡ Upload & Scan"}
+                    style={{ ...btnPri, width: "100%", fontSize: 20, padding: "14px", opacity: scanning ? 0.5 : 1 }}>
+                    {scanning ? "⏳ Reading…" : "⚡ Upload & scan"}
                   </button>
-                  {error && <p style={{ fontSize: 11, color: "#f87171" }}>{error}</p>}
+                  {error && <p style={{ fontSize: 15, color: "#f87171" }}>{error}</p>}
                 </div>
               )}
 
               {lastConfirmed && (
-                <div style={{ padding: "7px 12px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 10, background: "rgba(34,197,94,0.05)", flexShrink: 0 }}>
-                  <span style={{ fontSize: 10, color: "#64748b", whiteSpace: "nowrap" }}>Last:</span>
-                  <span style={{ fontWeight: 700, fontSize: 13 }}>#{lastConfirmed.match?.number}{lastConfirmed.match?.name ? ` · ${lastConfirmed.match.name}` : ""}</span>
-                  {lastConfirmed.match?.size && <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 700 }}>{lastConfirmed.match.size}</span>}
-                  {binOf(lastConfirmed.match?.team) !== null && <span style={{ fontSize: 11, color: "#60a5fa", fontWeight: 700 }}>Bin {binOf(lastConfirmed.match?.team)}</span>}
+                <div style={{ padding: "10px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 14, background: "rgba(34,197,94,0.06)", flexShrink: 0, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 14, color: "#94a3b8", whiteSpace: "nowrap" }}>Last passed</span>
+                  <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 30, lineHeight: 1 }}>#{lastConfirmed.match?.number}{lastConfirmed.match?.name ? ` · ${lastConfirmed.match.name}` : ""}</span>
+                  {lastConfirmed.match?.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#4ade80", fontWeight: 800 }}>{lastConfirmed.match.size}</span>}
+                  {binOf(lastConfirmed.match?.team) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#60a5fa", fontWeight: 800 }}>Bin {binOf(lastConfirmed.match?.team)}</span>}
                   {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && r.scanned) && (
-                    <button onClick={() => unscan(lastConfirmed.match._id)} title="Wrong jersey? Un-check it — it goes back to Remaining and must be scanned again" style={{ ...btnGhost, padding: "1px 8px", fontSize: 11, borderColor: "#f59e0b", color: "#fcd34d" }}>↶ Undo — scan again</button>
+                    <button onClick={() => unscan(lastConfirmed.match._id)} title="Wrong jersey? Un-check it — it goes back to Remaining and must be scanned again" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>↶ Undo — scan again</button>
                   )}
-                  <span style={{ fontSize: 10, color: "#475569", marginLeft: "auto" }}>{lastConfirmed.timestamp}</span>
+                  <span style={{ fontSize: 14, color: "#7c8ba1", marginLeft: "auto" }}>{lastConfirmed.timestamp}</span>
                 </div>
               )}
 
@@ -2290,12 +2292,12 @@ export default function App() {
                 </div>
               )}
 
-              <div style={{ padding: "7px 12px", borderTop: "1px solid #21262d", background: "#0d1117", flexShrink: 0 }}>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px" }}>
+              <div style={{ padding: "10px 14px", borderTop: "1px solid #21262d", background: "#0d1117", flexShrink: 0 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px" }}>
                   {[["scan", keyLabel, "Scan"], ["confirm", formatKey(confirmKey), "Select"], ["nav", formatKey(cancelKey), "Next option"], ["retry", formatKey(retryKey), "Retry scan"], ["byhand", formatKey(byHandKey), "Enter by hand"], ["arrows", "↑↓", "Move"]].map(([id, k, d]) => (
-                    <div key={id} style={{ display: "flex", gap: 5, alignItems: "center" }}>
-                      <kbd style={{ background: "#1e293b", border: "1px solid #334155", padding: "1px 6px", borderRadius: 4, fontSize: 10 }}>{k}</kbd>
-                      <span style={{ fontSize: 10, color: "#64748b" }}>{d}</span>
+                    <div key={id} style={{ display: "flex", gap: 7, alignItems: "center" }}>
+                      <kbd style={{ background: "#1e293b", border: "1px solid #3f4b5c", padding: "3px 9px", borderRadius: 5, fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>{k}</kbd>
+                      <span style={{ fontSize: 15, color: "#94a3b8" }}>{d}</span>
                     </div>
                   ))}
                 </div>
@@ -2318,33 +2320,33 @@ export default function App() {
               { label: "Open",      value: openCount,  color: openCount > 0 ? "#ef4444" : "#64748b" },
               { label: "ETA",       value: etaMin ? `${etaMin}m` : "—", color: "#64748b" },
             ].map(s => (
-              <div key={s.label} style={{ padding: "10px 0", textAlign: "center", borderRight: "1px solid #21262d" }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: s.color, lineHeight: 1.2 }}>{s.value}</div>
-                <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>{s.label}</div>
+              <div key={s.label} style={{ padding: "14px 0 12px", textAlign: "center", borderRight: "1px solid #21262d" }}>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: 54, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                <div style={{ fontSize: 15, color: "#94a3b8", marginTop: 4 }}>{s.label}</div>
               </div>
             ))}
           </div>
 
           <div style={{ display: "flex", borderBottom: "1px solid #21262d", flexShrink: 0 }}>
             {["roster", "log"].map(v => (
-              <button key={v} onClick={() => setView(v)} style={{ flex: 1, padding: "8px 0", border: "none", background: "transparent", color: view === v ? "#3b82f6" : "#64748b", fontWeight: 600, fontSize: 12, borderBottom: view === v ? "2px solid #3b82f6" : "2px solid transparent", cursor: "pointer", textTransform: "capitalize" }}>
+              <button key={v} onClick={() => setView(v)} style={{ flex: 1, padding: "11px 0", border: "none", background: "transparent", color: view === v ? "#3b82f6" : "#64748b", fontWeight: 700, fontSize: 16, borderBottom: view === v ? "2px solid #3b82f6" : "2px solid transparent", cursor: "pointer", textTransform: "capitalize" }}>
                 {v === "log" ? `Log (${log.length})` : `Roster (${roster.length})`}
               </button>
             ))}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 10px", borderLeft: "1px solid #21262d" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 12px", borderLeft: "1px solid #21262d", flexWrap: "wrap" }}>
               {roster.length > 0 && (
                 <>
-                  <button onClick={() => addRef.current.click()} title="Append another roster file to this order" style={{ ...btnGhost, padding: "3px 8px", fontSize: 11 }}>+ Add</button>
+                  <button onClick={() => addRef.current.click()} title="Append another roster file to this order" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>+ Add</button>
                   <input ref={addRef} type="file" accept=".csv,.xlsx,.xls,.tsv,.txt" style={{ display: "none" }} onChange={handleRosterAdd} />
-                  <button onClick={() => rosterRef.current.click()} title="Replace the roster (scans stay in the log)" style={{ ...btnGhost, padding: "3px 8px", fontSize: 11 }}>Replace</button>
+                  <button onClick={() => rosterRef.current.click()} title="Replace the roster (scans stay in the log)" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Replace</button>
                   <input ref={rosterRef} type="file" accept=".csv,.xlsx,.xls,.tsv,.txt" style={{ display: "none" }} onChange={handleRosterUpload} />
                   <button onClick={() => exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf)}
-                    style={{ ...btnPri, padding: "3px 10px", fontSize: 11, background: rosterComplete ? "#22c55e" : "#3b82f6" }}>
+                    style={{ ...btnPri, padding: "6px 14px", fontSize: 14, background: rosterComplete ? "#22c55e" : "#3b82f6" }}>
                     {rosterComplete ? "✅ Export" : "⬇ Export"}
                   </button>
                   {log.some(l => l.status === S_FLAGGED) && (
                     <button onClick={() => exportDamageReportXLSX(buildDamageRows(log, { operatorName, orderNumber, jerseyType, typeLabel: jerseyTypeLabel }), { name: orderNumber || "order", title: `Damage report — order ${orderNumber || "—"}${jerseyType ? " · " + jerseyTypeLabel(jerseyType) : ""}` }).catch(e => setError(e.message))}
-                      title="Every flagged jersey of this order with its photo, as Excel" style={{ ...btnGhost, padding: "3px 10px", fontSize: 11, borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>
+                      title="Every flagged jersey of this order with its photo, as Excel" style={{ ...btnGhost, padding: "6px 14px", fontSize: 14, borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>
                   )}
                 </>
               )}
@@ -2354,13 +2356,13 @@ export default function App() {
           {view === "roster" && (
             <div style={{ flex: 1, overflowY: "auto" }}>
               {roster.length === 0
-                ? <div style={{ padding: 32, textAlign: "center", color: "#64748b" }}>No roster loaded.</div>
+                ? <div style={{ padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 17 }}>No roster loaded.</div>
                 : (
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 18 }}>
                     <thead style={{ position: "sticky", top: 0, background: "#161b22", zIndex: 1 }}>
                       <tr>
                         <th style={thSt}>Status</th>
-                        {rosterCols.map(c => <th key={c} style={thSt}>{c}</th>)}
+                        {rosterCols.map(c => <th key={c} style={thSt}>{cap(c)}</th>)}
                         {binMap && <th style={thSt}>Bin</th>}
                         <th style={thSt}>Mark</th>
                       </tr>
@@ -2375,13 +2377,13 @@ export default function App() {
                             {r.scanned === "pass" ? "✅" : r.scanned === "flag" ? "🛑" : r.scanned === "manual" ? "✍" : r.scanned === "missing" ? "❓" : r.scanned === "short" ? "📦" : <span style={{ color: "#475569" }}>—</span>}
                           </td>
                           {rosterCols.map(c => (
-                            <td key={c} style={{ ...tdSt, fontWeight: c === "size" ? 700 : 400, color: c === "size" ? "#f59e0b" : "#e2e8f0" }}>{r[c]}</td>
+                            <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "#fbbf24" : "#e2e8f0" }}>{r[c]}</td>
                           ))}
                           {binMap && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{binOf(r.team) !== null ? `Bin ${binOf(r.team)}` : "—"}</td>}
                           <td style={{ ...tdSt, padding: "2px 6px" }}>
                             <select value={["missing", "short"].includes(r.scanned) ? r.scanned : ""}
                               onChange={e => { const v = e.target.value; if (v === "unscan") unscan(r._id); else markRow(r._id, v || false); }}
-                              style={{ background: "#1e293b", color: "#94a3b8", border: "1px solid #334155", borderRadius: 4, fontSize: 10, padding: "2px 4px" }}>
+                              style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
                               <option value="">—</option>
                               {(!r.scanned || ["missing", "short"].includes(r.scanned))
                                 ? <><option value="missing">Missing</option><option value="short">Short-shipped</option></>
@@ -2400,27 +2402,27 @@ export default function App() {
           {view === "log" && (
             <div style={{ flex: 1, overflowY: "auto", padding: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: "#94a3b8" }}>{log.length} scans this session</span>
-                {log.length > 0 && <button onClick={() => exportLogCSV(log, orderNumber, binOf)} style={{ ...btnGhost, fontSize: 11 }}>⬇ Export Log</button>}
+                <span style={{ fontSize: 15, color: "#94a3b8" }}>{log.length} scans this session</span>
+                {log.length > 0 && <button onClick={() => exportLogCSV(log, orderNumber, binOf)} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px" }}>⬇ Export log</button>}
               </div>
               {log.length === 0
-                ? <div style={{ textAlign: "center", padding: 28, color: "#64748b" }}>No scans yet.</div>
+                ? <div style={{ textAlign: "center", padding: 28, color: "#94a3b8", fontSize: 17 }}>No scans yet.</div>
                 : log.map(l => (
                   <div key={l.id} style={{ ...card, borderLeft: `3px solid ${statusColor(l.status)}`, padding: "10px 12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                       {(l.photo || l.thumb) && <img src={l.photo || l.thumb} alt="" title={l.photo ? "Photo kept for the supervisor — click to enlarge" : ""} onClick={l.photo ? () => setBigPhoto(l.photo) : undefined} style={{ width: l.photo ? 72 : 48, height: l.photo ? 54 : 36, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: l.photo ? "zoom-in" : "default", border: l.photo ? "1px solid #ef4444" : "none" }} />}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: statusColor(l.status), textTransform: "uppercase", letterSpacing: 1 }}>{l.status}</span>
-                        <div style={{ fontWeight: 700, fontSize: 14, marginTop: 1 }}>Read: #{l.detected?.number || "?"} · {l.detected?.name || "—"}</div>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: statusColor(l.status) }}>{cap(l.status)}</span>
+                        <div style={{ fontWeight: 700, fontSize: 18, marginTop: 2 }}>Read: #{l.detected?.number || "?"} · {l.detected?.name || "—"}</div>
                         {l.match && (
-                          <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                          <div style={{ fontSize: 15, color: "#cbd5e1", marginTop: 2 }}>
                             Matched: {l.match.name || "—"} #{l.match.number}{l.match.size ? ` · ${l.match.size}` : ""}{l.match.team ? ` · ${l.match.team}` : ""}{binOf(l.match.team) !== null ? ` · Bin ${binOf(l.match.team)}` : ""}
                           </div>
                         )}
-                        {l.reason     && <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 2 }}>⚠ {l.reason}</div>}
-                        {l.resolution && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Resolution: {l.resolution}</div>}
+                        {l.reason     && <div style={{ fontSize: 15, color: "#fbbf24", marginTop: 3 }}>⚠ {l.reason}</div>}
+                        {l.resolution && <div style={{ fontSize: 15, color: "#cbd5e1", marginTop: 3 }}>Resolution: {l.resolution}</div>}
                       </div>
-                      <div style={{ fontSize: 10, color: "#475569", whiteSpace: "nowrap", textAlign: "right" }}>{l.timestamp}<br />{l.operator}</div>
+                      <div style={{ fontSize: 13, color: "#7c8ba1", whiteSpace: "nowrap", textAlign: "right", lineHeight: 1.5 }}>{l.timestamp}<br />{l.operator}</div>
                     </div>
                   </div>
                 ))
@@ -2429,11 +2431,11 @@ export default function App() {
           )}
 
           {remaining > 0 && roster.length > 0 && (
-            <div style={{ borderTop: "1px solid #21262d", padding: "8px 12px", maxHeight: 110, overflowY: "auto", flexShrink: 0 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 5 }}>Remaining ({remaining})</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            <div style={{ borderTop: "1px solid #21262d", padding: "10px 14px", maxHeight: 150, overflowY: "auto", flexShrink: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#94a3b8", marginBottom: 7 }}>Remaining ({remaining})</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {roster.filter(r => !r.scanned).map(r => (
-                  <div key={r._id} style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 5, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>
+                  <div key={r._id} style={{ background: "#1e293b", border: "1px solid #3f4b5c", borderRadius: 6, padding: "5px 12px", fontSize: 17, fontWeight: 700 }}>
                     #{r.number}{r.name ? ` ${r.name}` : ""}{r.size ? ` (${r.size})` : ""}
                   </div>
                 ))}

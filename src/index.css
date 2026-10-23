@@ -5,3 +5,35 @@
 html, body, #root { height: 100%; margin: 0; padding: 0; background: #0d1117; color: #e2e8f0; }
 body { overflow: hidden; overscroll-behavior: none; }
 html { color-scheme: dark; }
+
+/* Type. Atkinson Hyperlegible for everything the operator reads as text: its
+   letterforms were drawn so 0/O, 1/l/I and 6/9 cannot be confused, which is
+   what matters when a name and a number are read from several feet away.
+   Barlow Condensed carries the big numerals (the jersey number, the size, the
+   bin, the counters): a condensed black weight lets the figures run taller in
+   the same width, so they read from farther. Both ship with the app, so the
+   floor does not depend on a font CDN. */
+body { font-family: "Atkinson Hyperlegible", system-ui, sans-serif; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+button, input, select, textarea, kbd { font-family: inherit; }
+
+/* Far-view scale. The stations run on 27" monitors that the operator reads
+   from 4–5 ft; this scales the whole station by the screen it is on, so the
+   same layout stays readable on a laptop, a 1080p monitor and a 1440p one.
+   Everything inside is laid out in a smaller logical viewport and then
+   enlarged, so nothing has to be designed twice. */
+@media (min-width: 1600px) and (min-height: 800px) { #root { zoom: 1.3; } }
+@media (min-width: 2300px) and (min-height: 1200px) { #root { zoom: 1.7; } }
+
+/* A visible focus ring for keyboard and pedal users — the app is driven by
+   keys, so where the focus sits must be obvious from a distance. */
+:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
+button:focus:not(:focus-visible) { outline: none; }
+
+/* Scrollbars wide enough to grab from a standing position. */
+::-webkit-scrollbar { width: 14px; height: 14px; }
+::-webkit-scrollbar-thumb { background: #3f4b5c; border-radius: 8px; border: 3px solid #0d1117; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
