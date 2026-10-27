@@ -1316,6 +1316,7 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
             <select value={temp.cameraId} onChange={e => setTemp(t => ({ ...t, cameraId: e.target.value }))} style={selSt}>
               <option value="">Browser default</option>
               {cameras.map(c => <option key={c.deviceId} value={c.deviceId}>{c.label || `Camera ${c.deviceId.slice(0, 6)}`}</option>)}
+              {temp.cameraId && !cameras.some(c => c.deviceId === temp.cameraId) && <option value={temp.cameraId}>Saved camera (not on this PC)</option>}
             </select>
           </div>
           {cameras.length === 0 && <div style={{ fontSize: 14, color: "#7c8ba1" }}>Start the camera once to list the cameras on this machine.</div>}
@@ -1687,17 +1688,33 @@ export default function App() {
   const startCamera = useCallback(async () => {
     setError(null);
     try {
-      const video = settings.cameraId
-        ? { deviceId: { exact: settings.cameraId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        : { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } };
-      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+      const size = { width: { ideal: 1280 }, height: { ideal: 720 } };
+      const fallback = { facingMode: "environment", ...size };
+      let stream;
+      if (settings.cameraId) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: settings.cameraId }, ...size }, audio: false });
+        } catch (e) {
+          // The saved camera is not on this machine (another PC, unplugged, or the browser gave it a new id):
+          // use whatever camera there is rather than refusing to start.
+          if (e?.name !== "OverconstrainedError" && e?.name !== "NotFoundError") throw e;
+          console.log(`[camera] saved camera not found (${e.name}) — using the default camera`);
+          stream = await navigator.mediaDevices.getUserMedia({ video: fallback, audio: false });
+        }
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({ video: fallback, audio: false });
+      }
       streamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
       stream.getVideoTracks().forEach(t => { t.onended = () => { setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); }; });
       setCameraOn(true);
       try { const devs = await navigator.mediaDevices.enumerateDevices(); setCameras(devs.filter(d => d.kind === "videoinput")); setMics(devs.filter(d => d.kind === "audioinput")); } catch { /* no device list; the dropdown stays on default */ }
     } catch (e) {
-      setError(e?.name === "OverconstrainedError" ? "That camera is not available — choose another in Settings." : "Camera access denied. Click the camera icon in your browser's address bar.");
+      setError(e?.name === "NotFoundError" || e?.name === "OverconstrainedError"
+        ? "No camera found on this PC. Plug one in, or choose another in Settings."
+        : "Camera access denied. Click the camera icon in your browser's address bar.");
+      // List the cameras anyway so Settings can offer whatever is here.
+      try { const devs = await navigator.mediaDevices.enumerateDevices(); setCameras(devs.filter(d => d.kind === "videoinput")); } catch { /* no device list */ }
     }
   }, [settings.cameraId, stopCamera]);
 
@@ -2506,18 +2523,6 @@ export default function App() {
             </div>
           )}
 
-          {remaining > 0 && roster.length > 0 && (
-            <div style={{ borderTop: "1px solid #21262d", padding: "10px 14px", maxHeight: 150, overflowY: "auto", flexShrink: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#94a3b8", marginBottom: 7 }}>Remaining ({remaining})</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {roster.filter(r => !r.scanned).map(r => (
-                  <div key={r._id} style={{ background: "#1e293b", border: "1px solid #3f4b5c", borderRadius: 6, padding: "5px 12px", fontSize: 17, fontWeight: 700 }}>
-                    #{r.number}{r.name ? ` ${r.name}` : ""}{r.size ? ` (${r.size})` : ""}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
