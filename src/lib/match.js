@@ -71,6 +71,16 @@ function nearNumbers(nNum, roster, { anyDigit = false, side = null, sameLength =
   });
 }
 
+// What a number reads as when the jersey is upside down: 6 ↔ 9, 18 ↔ 81,
+// 66 ↔ 99; "" when a digit has no upside-down twin (2, 3, 4, 5, 7) or the
+// result would start with 0.
+export function rotated180(nNum) {
+  const map = { 0: "0", 1: "1", 6: "9", 8: "8", 9: "6" };
+  const out = [...String(nNum)].reverse().map(d => map[d]).join("");
+  if (out.length !== String(nNum).length || !out || (out.length > 1 && out[0] === "0")) return "";
+  return out;
+}
+
 // Roster numbers a hidden digit would make from a shorter read: "4" → 40, 14, 44.
 // Only longer numbers that contain the read; a one-digit substitution is not a
 // hidden digit (that is nearNumbers' job).
@@ -188,7 +198,7 @@ function findMatchesInner(roster, name, number, read = {}) {
   // complete two-digit number on a rumpled jersey is still that number.
   const partialNum  = !typed && !!nNumRaw && (read.numberComplete === false || (read.laidFlat === false && nNumRaw.length === 1));
   const offCentre   = !typed && !!nNumRaw && nNumRaw.length === 1 && (position === "left" || position === "right");
-  const suspect     = partialName || partialNum || offCentre;
+  let   suspect     = partialName || partialNum || offCentre;
 
   // Misread guard: 3+ digits cannot be a jersey number — unless the roster
   // itself carries that number (a #104 exists on some orders).
@@ -201,10 +211,37 @@ function findMatchesInner(roster, name, number, read = {}) {
   const nNum = nNumRaw;
 
   const byNum  = nNum ? roster.filter(r => normNum(r.number) === nNum) : [];
+
+  // A jersey that is not the right way up, with no name to anchor it, and a
+  // number that reads as another number upside down (6/9, 18/81, 66/99): if
+  // that other number is open on the roster, the camera cannot tell them
+  // apart from a turned picture. Ask, with both. (The app turns the frame and
+  // reads again first; this is the net under that.)
+  // (A name that is on no roster row — a badge, a sponsor, a misread — anchors nothing.)
+  const nameAnchors = !!nName && !numberOnly && roster.some(r => nameMatches(nName, r.name));
+  if (!typed && !nameAnchors && nNum && read.orientation && read.orientation !== "upright") {
+    const alt = rotated180(nNum);
+    const altRows = alt && alt !== nNum ? roster.filter(r => normNum(r.number) === alt && !isDone(r)) : [];
+    if (altRows.length) {
+      const cands = dedupe([...byNum, ...altRows]);
+      return { type: "pick", candidates: cands, reason: `Read #${nNum} on a jersey that is not the right way up — turned round it would read #${alt}. Which is it?`, soft: true };
+    }
+  }
   const byName = nName && !numberOnly
     ? (partialName ? prefixNames(nName, roster) : roster.filter(r => nameMatches(nName, r.name)))
     : [];
   const byBoth = byNum.filter(r => byName.includes(r));
+
+  // The whole name AND the number were read, and together they point at a row:
+  // that is the jersey. A doubt about the number alone ("the 9 may be a 19
+  // under a fold", "the 4 sits left of centre") cannot change the name, so it
+  // is only a question when THIS name is also on the roster with a number a
+  // hidden digit would make (SEACH #9 and SEACH #19 both open). Every
+  // one-digit jersey went yellow before this; the floor said: exact row → green.
+  if (suspect && !partialName && byBoth.length >= 1) {
+    const sameNameOther = byName.filter(r => !byBoth.includes(r) && !isDone(r));
+    if (!sameNameOther.length) suspect = false;
+  }
 
   // The camera doubts its own read: part of the name or number was covered,
   // cut off, or the number sat off-centre (a digit hidden). Never green. Offer

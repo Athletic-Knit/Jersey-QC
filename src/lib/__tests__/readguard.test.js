@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { findMatches } from "../match.js";
-import { parseModelText, normPosition } from "../vision.js";
+import { findMatches, rotated180 } from "../match.js";
+import { parseModelText, normPosition, normOrientation, uprightRotation } from "../vision.js";
 import { colourFamilies, narrowByColour } from "../colour.js";
 
 const row = (i, name, number, team = "T", size = "A-L", extra = {}) => ({ _id: i, name, number, team, size, scanned: false, ...extra });
@@ -349,10 +349,47 @@ describe("the camera doubts its read", () => {
     const r = [row(0, "", "40"), row(1, "", "4")];
     expect(findMatches(r, "", "40", { position: "right" }).type).toBe("exact");
   });
-  it("name and number both read in full but flagged incomplete number → yellow, that row first", () => {
-    const m = findMatches(named, "EVANOVICH", "4", { numberComplete: false });
+  it("name and number both read in full, number flagged covered / not flat / off centre → green: the name settles it", () => {
+    expect(findMatches(named, "EVANOVICH", "4", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 1 } });
+    expect(findMatches(named, "EVANOVICH", "4", { laidFlat: false })).toMatchObject({ type: "exact", match: { _id: 1 } });
+    expect(findMatches(named, "EVANOVICH", "4", { position: "left" })).toMatchObject({ type: "exact", match: { _id: 1 } });
+    expect(findMatches(named, "EVANOVICH", "4", { numberComplete: false, laidFlat: false, position: "right", obstruction: "second digit may be under a fold" })).toMatchObject({ type: "exact", match: { _id: 1 } });
+    // Already passed: a duplicate, not a question.
+    const done = named.map(r => r._id === 1 ? { ...r, scanned: "pass" } : r);
+    expect(findMatches(done, "EVANOVICH", "4", { numberComplete: false })).toMatchObject({ type: "duplicate", match: { _id: 1 } });
+  });
+  it("…but the same name on another open row with a hidden-digit number keeps it a question", () => {
+    const r = [row(0, "Seach", "9"), row(1, "Seach", "19"), row(2, "Nguyen", "14")];
+    const m = findMatches(r, "SEACH", "9", { numberComplete: false });
     expect(m.type).toBe("pick");
-    expect(ids(m)[0]).toBe(1);
+    expect(ids(m)).toEqual([0, 1]);
+    // Once the #19 has passed, #9 is the only Seach left: green.
+    const done = r.map(x => x._id === 1 ? { ...x, scanned: "pass" } : x);
+    expect(findMatches(done, "SEACH", "9", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+  it("a cut-short name with a covered number is still a question", () => {
+    expect(findMatches(named, "EVAN", "4", { nameComplete: false, numberComplete: false }).type).toBe("pick");
+  });
+  it("a nameless 6 on a jersey that is not upright, with a 9 open on the roster → ask with both; upright → green", () => {
+    const r = [row(0, "", "6"), row(1, "", "9"), row(2, "", "23")];
+    const m = findMatches(r, "", "6", { orientation: "upside_down" });
+    expect(m.type).toBe("pick"); expect(ids(m)).toEqual([0, 1]); expect(m.reason).toMatch(/#9/);
+    expect(findMatches(r, "", "6", { orientation: "rotated_left" }).type).toBe("pick");
+    expect(findMatches(r, "", "6", { orientation: "upright" })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches(r, "", "6", {})).toMatchObject({ type: "exact", match: { _id: 0 } });
+    // the 9 has passed: the 6 is the only one it can be
+    const done = r.map(x => x._id === 1 ? { ...x, scanned: "pass" } : x);
+    expect(findMatches(done, "", "6", { orientation: "upside_down" })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    // 23 has no upside-down twin; a name anchors the row
+    expect(findMatches(r, "", "23", { orientation: "upside_down" })).toMatchObject({ type: "exact", match: { _id: 2 } });
+    expect(findMatches([row(0, "Seach", "6"), row(1, "Walker", "9")], "SEACH", "6", { orientation: "upside_down" })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    // a "name" that is on no row (a badge, a sponsor) anchors nothing: still a question
+    expect(findMatches(r, "AK", "6", { orientation: "upside_down" }).type).toBe("pick");
+    expect(findMatches([row(0, "Seach", "6"), row(1, "Walker", "9")], "AK", "6", { orientation: "upside_down" }).type).toBe("pick");
+  });
+  it("rotated180: 6↔9, 18↔81, 66↔99, 69→69; nothing for 2 3 4 5 7 or a leading zero", () => {
+    expect(rotated180("6")).toBe("9"); expect(rotated180("18")).toBe("81"); expect(rotated180("66")).toBe("99"); expect(rotated180("69")).toBe("69");
+    expect(rotated180("23")).toBe(""); expect(rotated180("60")).toBe(""); expect(rotated180("0")).toBe("0"); expect(rotated180("00")).toBe("");
   });
   it("suspect read with nothing on the roster → none, with the reason", () => {
     const m = findMatches([row(0, "Samuel", "40")], "", "9", { numberComplete: false });
@@ -370,9 +407,17 @@ describe("vision parser", () => {
     const r = parseModelText(wrap({ name: "SAMU", number: 4, sleeve_numbers: [], name_complete: false, number_complete: false, number_position: "Left", obstruction: "hand" }));
     expect(r).toMatchObject({ name: "SAMU", number: "4", name_complete: false, number_complete: false, number_position: "left", obstruction: "hand" });
   });
-  it("reports whether a jersey is in the picture; absent means present", () => {
+  it("reports whether a jersey is in the picture; absent means present; a number read means present", () => {
     expect(parseModelText(wrap({ jersey_present: false, name: "", number: "" })).jersey_present).toBe(false);
     expect(parseModelText(wrap({ name: "SAMUEL", number: "40" })).jersey_present).toBe(true);
+    // a close-up of a number patch: the flag says no garment, but a number was read — never an empty table
+    expect(parseModelText(wrap({ jersey_present: false, name: "", number: "17" })).jersey_present).toBe(true);
+  });
+  it("reads the orientation and knows how far to turn the frame", () => {
+    expect(parseModelText(wrap({ name: "A", number: "1", orientation: "upside_down" })).orientation).toBe("upside_down");
+    expect(normOrientation("Upside-down")).toBe("upside_down"); expect(normOrientation("rotated left")).toBe("rotated_left");
+    expect(normOrientation("rotated_right")).toBe("rotated_right"); expect(normOrientation("upright")).toBe("upright"); expect(normOrientation("")).toBe("");
+    expect(uprightRotation("upside_down")).toBe(180); expect(uprightRotation("rotated_left")).toBe(90); expect(uprightRotation("rotated_right")).toBe(270); expect(uprightRotation("upright")).toBe(0); expect(uprightRotation("")).toBe(0);
   });
   it("missing fields default to complete", () => {
     const r = parseModelText(wrap({ name: "SAMUEL", number: "40" }));

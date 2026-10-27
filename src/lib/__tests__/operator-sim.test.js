@@ -36,6 +36,7 @@ import { buildRosterSheet, buildLogCSV, buildDaySheets, localTimeStamp } from ".
 import { snapshotOf } from "../hub.js";
 import { saveSession, loadSession, clearSession } from "../persist.js";
 import { buildDamageRows } from "../damage.js";
+import { createVigilance, reconcile } from "../vigilance.js";
 import { reasonsFor, JERSEY_TYPES } from "../../config.js";
 
 function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
@@ -163,6 +164,12 @@ function workOrder(r, seed, k, stats, findings) {
   if (chance(r, 0.15)) { let stray, tries = 0; do { stray = { name: pick(r, LAST), number: String(Math.floor(r() * 100)), team: "other", size: "A-M", _id: -1 }; } while (++tries < 50 && roster.some(x => normNum(x.number) === normNum(stray.number) && (!x.name || nameMatches(stray.name, x.name)))); if (tries < 50) pile.splice(Math.floor(r() * pile.length), 0, { truth: stray, extra: true }); }
   if (pile.length > 1 && chance(r, 0.2)) { const dup = pick(r, pile); pile.splice(Math.floor(r() * pile.length), 0, { ...dup, again: true }); }
 
+  // Self-check, as the station runs it: after the app is corrected, the next 5
+  // jerseys are read twice and the reads must agree. SIM_VIGIL=0 turns it off
+  // to see what it buys.
+  const vig = createVigilance({ checks: process.env.SIM_VIGIL === "0" ? 0 : undefined });
+  const matchOf = read => (!read.name && !read.number) ? null : findMatches(roster, read.name, read.number, { nameComplete: read.name_complete, numberComplete: read.number_complete, position: read.number_position, obstruction: read.obstruction, colour: read.jersey_colour, trim: read.trim_colour, laidFlat: read.laid_flat });
+
   const byHand = (truth, why) => {
     seconds += T.byHand; stats.byHand++; stats.byHandWhy[why] = (stats.byHandWhy[why] || 0) + 1;
     const m = findMatches(roster, truth.name, truth.number, { typed: true });
@@ -189,17 +196,37 @@ function workOrder(r, seed, k, stats, findings) {
       const { read, kind } = camera(r, truth);
       stats.kinds[kind] = (stats.kinds[kind] || 0) + 1;
       if (kind === "api error") { seconds += T.retry; stats.retries++; continue; }
-      const m = (!read.name && !read.number) ? null : findMatches(roster, read.name, read.number, { nameComplete: read.name_complete, numberComplete: read.number_complete, position: read.number_position, obstruction: read.obstruction, colour: read.jersey_colour, trim: read.trim_colour, laidFlat: read.laid_flat });
+      let m = matchOf(read);
+      // Checks owed: a second, independent read of the same jersey; the two
+      // settle the screen. A first read that was green on the wrong row and a
+      // second read that differs is a wrong green caught before it was shown.
+      if (vig.active) {
+        const second = camera(r, truth);
+        if (second.kind !== "api error") {
+          seconds += T.scan; stats.checks++;
+          const rc = reconcile(read, m, second.read, matchOf(second.read));
+          if (!rc.agreed) { stats.checkDisagree++; if (m?.type === "exact" && !sameJersey(m.match, truth)) stats.checkCaught++; }
+          m = rc.match.type === "none" && m === null ? null : rc.match;
+        }
+      }
       const detected = { ...read, number_complete: read.number_complete, laid_flat: read.laid_flat };
       const related = x => normNum(x.number) === normNum(truth.number) || normNum(x.number) === normNum(read.number) || (truth.name && norm(x.name) === norm(truth.name));
       const ctx = () => `${ctxHead}: jersey #${truth.number} "${truth.name}" ${truth.team} ${truth.size}${item.again ? " (scanned AGAIN)" : ""}${item.extra ? " (STRAY)" : ""}, camera ${kind} → read #${read.number}${read.number_complete ? "" : "?"} "${read.name}"${read.name_complete ? "" : "…"}${read.laid_flat ? "" : " [not flat]"} colour "${read.jersey_colour}"; related rows ${JSON.stringify(roster.filter(related).map(x => [x.number, x.name, x.team, x.size, x.scanned || "open"]))}; history ${JSON.stringify(log.filter(l => l.match && related(l.match)).reverse().map(l => [l.status, l.match.number, l.match.size, l.reason || ""]))}`;
       if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace] #${truth.number} "${truth.name}" ${truth.team} ${truth.size}${item.again ? " AGAIN" : ""}${item.extra ? " STRAY" : ""} | ${kind} → #${read.number} "${read.name}" ${read.jersey_colour} | ${m ? m.type : "null"} ${m?.match ? `→ #${m.match.number} ${m.match.team} ${m.match.size}` : ""} ${m?.candidates ? JSON.stringify(m.candidates.map(c => [c.number, c.team, c.size, c.scanned || "open"])) : ""}`);
       if (m === null) { seconds += T.retry; stats.retries++; continue; }                  // COULD NOT READ → scan again
+      vig.scanDone();                                                                      // a screen is shown: one owed check spent
       if (m.type === "exact") {
         const g = m.match;
         if (item.again && !sameJersey(g, truth) && norm(g.name) === norm(truth.name) && normNum(g.number) === normNum(truth.number)) { stats.twinRescan++; seconds += T.retry; done = true; continue; }
         const consumed = !item.extra && !sameJersey(g, truth) && roster.some(x => sameJersey(x, truth) && isDone(x));   // its own row was taken by an earlier misread
         if (item.extra || !sameJersey(g, truth)) { if (kind === "digit misread") stats.misreadGreen++; else if (consumed) stats.misreadChain++; else { findings.push(`A WRONG GREEN: ${ctx()} → green on #${g.number} "${g.name}" ${g.team} ${g.size}`); stats.wrongGreen++; } }
+        // The screen shows the number large: half the time the operator sees a
+        // misread green is not this jersey, says "not right" and types it. That
+        // is the correction the self-check starts from.
+        if (kind === "digit misread" && !sameJersey(g, truth) && !item.extra && chance(r, 0.5)) {
+          stats.misreadGreenCaught++; vig.noteMistake("greenOverridden"); seconds += T.retry;
+          byHand(truth, "operator caught a wrong green"); done = true; continue;
+        }
         seconds += T.green; stats.greens++; stats.greenByKind[kind] = (stats.greenByKind[kind] || 0) + 1;
         setRow(g._id, "pass"); add({ detected, match: g, status: "pass", thumb: "t".repeat(6_000) });
         done = true; continue;
@@ -221,22 +248,24 @@ function workOrder(r, seed, k, stats, findings) {
         if (item.extra) { seconds += T.flag; stats.offRosterFlag++; add({ detected, match: null, status: "flagged", reason: "Not on the roster", photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); done = true; continue; }
         const open = roster.some(x => sameJersey(x, truth) && !isDone(x));
         if (open) { stats.listMissing++; stats.listMissingByKind[kind] = (stats.listMissingByKind[kind] || 0) + 1; if (kind === "clean") findings.push(`list without the jersey on a CLEAN read: ${ctx()} → ${JSON.stringify(m.candidates.map(x => [x.number, x.name]))}`); }
+        if (open) vig.noteMistake("notOnList");
         byHand(truth, "not on the yellow list (" + kind + ")"); done = true; continue;
       }
       // none
       if (item.extra) { seconds += T.flag; stats.offRosterFlag++; add({ detected, match: null, status: "flagged", reason: `"${read.name}" #${read.number} is not on this roster`, photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); done = true; continue; }
       stats.notFound++; stats.notFoundByKind[kind] = (stats.notFoundByKind[kind] || 0) + 1;
       if (kind === "clean") findings.push(`NOT FOUND on a CLEAN read: ${ctx()}`);
+      vig.noteMistake("couldNotRead");
       byHand(truth, "not found (" + kind + ")"); done = true;
     }
-    if (!done) byHand(truth, "three scans failed");
+    if (!done) { if (!item.extra) vig.noteMistake("couldNotRead"); byHand(truth, "three scans failed"); }
 
     // Things the operator does now and then
     if (chance(r, 0.03) && reasons.length) {                       // a damaged jersey: flag it with a reason
       const last = log[0]; if (last?.status === "pass" && last.match) { const reason = pick(r, reasons); setRow(last.match._id, "flag"); add({ detected: last.detected, match: last.match, status: "flagged", reason: reason.label, reasonId: reason.id, photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); seconds += T.flag; stats.damageFlags++; }
     }
     if (chance(r, 0.01)) {                                         // confirmed the wrong size by mistake: un-check and scan again
-      const passed = roster.filter(x => x.scanned === "pass"); if (passed.length) { const u = pick(r, passed); if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace] UN-CHECK #${u.number} ${u.team} ${u.size}`); setRow(u._id, false); add({ match: { ...u, scanned: false }, status: "undo", reason: "Un-checked — was passed; scan it again" }); pile.push({ truth: u, extra: false }); seconds += T.unscan; stats.unscans++; }
+      const passed = roster.filter(x => x.scanned === "pass"); if (passed.length) { const u = pick(r, passed); if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace] UN-CHECK #${u.number} ${u.team} ${u.size}`); setRow(u._id, false); add({ match: { ...u, scanned: false }, status: "undo", reason: "Un-checked — was passed; scan it again" }); pile.push({ truth: u, extra: false }); seconds += T.unscan; stats.unscans++; vig.noteMistake("unchecked"); }
     }
   }
 
@@ -299,7 +328,7 @@ describe("operator simulation: whole orders, the way the floor works them", () =
   it(`${N} orders end to end`, { timeout: 600_000 }, () => {
     const seed = Number(process.env.SIM_SEED) || 20261022;
     const r = rng(seed);
-    const stats = { orders: 0, jerseys: 0, seconds: 0, scans: 0, greens: 0, yellows: 0, dups: 0, retries: 0, byHand: 0, byHandFail: 0, dupOnByHand: 0, offRosterFlag: 0, damageFlags: 0, unscans: 0, notFound: 0, listMissing: 0, wrongGreen: 0, wrongDup: 0, misreadGreen: 0, misreadDup: 0, misreadChain: 0, twinRescan: 0, openAtEnd: 0, parseLoss: 0, over400: 0, sessionLost: 0, kinds: {}, greenByKind: {}, yellowByKind: {}, listMissingByKind: {}, notFoundByKind: {}, byHandWhy: {}, listLen: [], perHour: [] };
+    const stats = { orders: 0, jerseys: 0, seconds: 0, scans: 0, greens: 0, yellows: 0, dups: 0, retries: 0, byHand: 0, byHandFail: 0, dupOnByHand: 0, offRosterFlag: 0, damageFlags: 0, unscans: 0, notFound: 0, listMissing: 0, wrongGreen: 0, wrongDup: 0, misreadGreen: 0, misreadGreenCaught: 0, misreadDup: 0, misreadChain: 0, twinRescan: 0, checks: 0, checkDisagree: 0, checkCaught: 0, openAtEnd: 0, parseLoss: 0, over400: 0, sessionLost: 0, kinds: {}, greenByKind: {}, yellowByKind: {}, listMissingByKind: {}, notFoundByKind: {}, byHandWhy: {}, listLen: [], perHour: [] };
     const findings = [];
     for (let k = 0; k < N; k++) workOrder(r, seed, k, stats, findings);
 
@@ -317,7 +346,8 @@ describe("operator simulation: whole orders, the way the floor works them", () =
       `  by hand: ${stats.byHand} jerseys (${pct(stats.byHand, stats.jerseys)} of jerseys) — ${Object.entries(stats.byHandWhy).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${v}`).join(" · ")}`,
       `  by hand that still failed: ${stats.byHandFail} · duplicate shown on by-hand: ${stats.dupOnByHand}`,
       `  flags: damage ${stats.damageFlags} · not on roster ${stats.offRosterFlag} · un-checks ${stats.unscans} · rows left open at the end ${stats.openAtEnd}`,
-      `  camera misread a clean digit → green on the wrong row ${stats.misreadGreen}, "already passed" ${stats.misreadDup} (the model's error; the screen shows the number large so the operator can catch it); the real jersey then landing on the last open twin: ${stats.misreadChain}`,
+      `  camera misread a clean digit → green on the wrong row ${stats.misreadGreen} (operator caught ${stats.misreadGreenCaught} of them on the big number), "already passed" ${stats.misreadDup}; the real jersey then landing on the last open twin: ${stats.misreadChain}`,
+      `  self-check after a mistake${process.env.SIM_VIGIL === "0" ? " (OFF)" : ""}: ${stats.checks} double-read scans (${pct(stats.checks, stats.scans)}) · reads disagreed ${stats.checkDisagree} · wrong greens stopped before the screen ${stats.checkCaught}`,
       `  same jersey scanned twice while its twin (another size) was open → the twin offered, caught by the size on screen: ${stats.twinRescan}`,
       `  WRONG GREEN ${stats.wrongGreen} · WRONG DUPLICATE ${stats.wrongDup} · roster rows lost in parsing ${stats.parseLoss} · orders over 400 log lines ${stats.over400} · sessions that could not be saved ${stats.sessionLost}`,
       `  pace: median ${med.toFixed(0)} jerseys/hour (slowest order ${sorted[0]?.toFixed(0)}, fastest ${sorted[sorted.length - 1]?.toFixed(0)}); ${(stats.seconds / stats.jerseys).toFixed(1)} s per jersey`,

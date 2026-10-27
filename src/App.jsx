@@ -2,11 +2,12 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
-import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, loadRecentNames, rememberName, forgetName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl } from "./lib/persist.js";
+import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, loadRecentNames, rememberName, forgetName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { playTone } from "./lib/audio.js";
-import { readJersey } from "./lib/vision.js";
+import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
+import { createVigilance, reconcile, turnMatters, settleTurned } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { useVoice } from "./useVoice.js";
 import { VoiceBadge, VoiceLegend } from "./VoiceBadge.jsx";
@@ -196,7 +197,10 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
     if (PIN_REQUIRED && pin !== pinOwner.pin) { setError("Wrong PIN for " + pinOwner.label + "."); return; }
     if (!name.trim()) { setError("Please enter your name."); return; }
     if (role === "inspector" && !onCancel && busyBy(station)) { setError(`${stDef.label} is in use by ${busyBy(station)} on another PC. Pick a free station — or use Change operator on that PC to take it over.`); return; }
-    if (target !== here && !onCancel) { goToStation(target); return; }
+    // The page is not on the chosen station yet (opened from the bare address):
+    // it has to reload there. Save the sign-in for that station FIRST, or the
+    // reload throws the name and PIN away and the operator has to do it twice.
+    if (target !== here && !onCancel) { rememberName(name); saveSignIn({ role, name: name.trim() }, target); goToStation(target); return; }
     rememberName(name);
     onSignIn({ role, name: name.trim(), station: target });
   };
@@ -1484,6 +1488,12 @@ export default function App() {
   const knownRosterIds = useRef(null);                 // what was already waiting when this order started
   const [showHandover, setShowHandover] = useState(false);   // another operator takes over; the order stays
   const [handsFreePaused, setHandsFreePaused] = useState(false);   // operator paused hands-free; camera stays on, B still scans
+  // Self-check: after the app is corrected, the next 5 jerseys are read twice
+  // and must agree before a green (src/lib/vigilance.js). checksLeft mirrors
+  // the counter for the badge and the saved session.
+  const vigilRef = useRef(createVigilance({ log: m => console.log(m) }));
+  const [checksLeft, setChecksLeft] = useState(0);
+  const noteMistake = useCallback(kind => { vigilRef.current.noteMistake(kind); setChecksLeft(vigilRef.current.remaining); }, []);
   // Browser full screen (hides tabs and address bar). Browsers allow it only
   // from a click, so it is a header button; F11 does the same in Chrome.
   const [isFullscreen, setIsFullscreen] = useState(() => typeof document !== "undefined" && !!document.fullscreenElement);
@@ -1578,8 +1588,8 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells });
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells]);
+    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, vigil: vigilRef.current.state() });
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, checksLeft]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -1632,6 +1642,7 @@ export default function App() {
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
     setOrderNumber(s.orderNumber || ""); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []);
+    vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
     setSessionStarted(true); setResumeDecided(true);
   }, [savedSession]);
 
@@ -1710,15 +1721,49 @@ export default function App() {
     const matchOf = d => (!d.name && !d.number) ? null : findMatches(roster, d.name, d.number, {
       nameComplete: d.name_complete, numberComplete: d.number_complete,
       position: d.number_position, obstruction: d.obstruction,
-      colour: d.jersey_colour, trim: d.trim_colour, laidFlat: d.laid_flat,
+      colour: d.jersey_colour, trim: d.trim_colour, laidFlat: d.laid_flat, orientation: d.orientation,
     });
 
     let detected = { name: "", number: "" };
     let apiError = null;
     let m = null;
+    let check = null;   // { agreed, second } when this scan was double-checked
     try {
       detected = await readOne(base64, dataUrl);
       m = matchOf(detected);
+      // A jersey that is not the right way up reads 6 as 9, 18 as 81. When the
+      // number read has such a twin open on the roster, turn the frame upright
+      // and read it again; the upright read wins when it is whole and differs
+      // only the way a turn would, otherwise the operator is asked with both.
+      // The model mixes up left and right, so a turn can land upside down:
+      // keep turning by what the latest read says, up to two more times.
+      if (uprightRotation(detected.orientation) && turnMatters(detected, roster) && version === rosterVersion.current) {
+        let frame = dataUrl, total = 0, d2 = detected;
+        for (let i = 0; i < 3 && uprightRotation(d2.orientation); i++) {
+          const turn = uprightRotation(d2.orientation); total = (total + turn) % 360;
+          const turned = await rotateDataUrl(frame, turn); if (!turned) break;
+          console.log(`[upright] #${d2.number} on a jersey that is ${d2.orientation} — turning the frame ${turn}° and reading again`);
+          frame = turned; d2 = await readOne(turned.split(",")[1], turned);
+        }
+        if (d2 !== detected) {
+          const r = settleTurned(detected, m, d2, matchOf(d2));
+          if (!r.agreed) console.log("[upright] the turned read is not settled — asking the operator");
+          detected = r.read || d2; m = r.match;
+        }
+      }
+      // Self-check: checks are owed after a mistake, so read a second frame and
+      // let the two reads settle the screen between them — green only when
+      // both say the same jersey. A silent empty-table read is left alone.
+      if (vigilRef.current.active && detected.jersey_present !== false && version === rosterVersion.current) {
+        const again = recapture ? recapture() : null;
+        console.log(`[self-check] ${vigilRef.current.remaining} to go — reading ${again ? "a second frame" : "the frame again"}`);
+        const d2 = await readOne(again?.base64 || base64, again?.dataUrl || dataUrl);
+        const r = reconcile(detected, m, d2, matchOf(d2));
+        check = { agreed: r.agreed, second: d2 };
+        if (!r.agreed) console.log("[self-check] the two reads disagree — asking the operator");
+        m = r.match;
+        if (r.agreed && again) { detected = d2; dataUrl = again.dataUrl; }
+      }
       // Second look, off by default: a doubtful first read used to be re-shot
       // 0.7 s later before anything showed, which turned a 1.5 s yellow into a
       // 4 s one. The operator can say "scan" or press R instead.
@@ -1742,8 +1787,11 @@ export default function App() {
     const smallThumb = await shrinkDataUrl(dataUrl);
     // The photo a flag will carry to the supervisor: the frame cropped to the jersey.
     const photo = await cropDataUrl(dataUrl, detected.jersey_box, 640);
-    const scanObj  = { id: Date.now(), detected, thumb: dataUrl, smallThumb, photo };
-    const showFlag = (reason, title) => { setOverlay({ mode: "flag", scan: scanObj, reason, title }); playTone("flag"); };
+    // `shown` remembers what the app first put on the screen for this jersey,
+    // so a correction later can be told apart from the operator answering a
+    // question: a green overridden is a mistake, a pick from a list is not.
+    const scanObj  = { id: Date.now(), detected, thumb: dataUrl, smallThumb, photo, check, shown: null };
+    const showFlag = (reason, title) => { scanObj.shown = { mode: "flag" }; setOverlay({ mode: "flag", scan: scanObj, reason, title }); playTone("flag"); };
 
     if (apiError) { showFlag("API error: " + apiError, "SCAN FAILED"); return; }
     // Hands-free looked at an empty table (the jersey was lifted, nothing put
@@ -1755,11 +1803,13 @@ export default function App() {
       armRef.current();
       return;
     }
+    // A jersey reached the screen: one of the owed checks is spent on it.
+    if (vigilRef.current.scanDone()) setChecksLeft(vigilRef.current.remaining);
     if (m === null) { showFlag("No name or number could be read. Check the jersey is in frame, flat, and lit.", "COULD NOT READ"); return; }
 
-    if (m.type === "exact")          setOverlay({ mode: "confirm", scan: scanObj, match: m.match });
-    else if (m.type === "duplicate") { setOverlay({ mode: "duplicate", scan: scanObj, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.size ? " · " + m.match.size : ""} already passed this session.` }); playTone("flag"); }
-    else if (m.type === "pick" || m.type === "close") { setOverlay({ mode: m.type, scan: scanObj, candidates: m.candidates, reason: m.reason }); }
+    if (m.type === "exact")          { scanObj.shown = { mode: "confirm", id: m.match._id }; setOverlay({ mode: "confirm", scan: scanObj, match: m.match }); }
+    else if (m.type === "duplicate") { scanObj.shown = { mode: "duplicate", id: m.match._id }; setOverlay({ mode: "duplicate", scan: scanObj, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.size ? " · " + m.match.size : ""} already passed this session.` }); playTone("flag"); }
+    else if (m.type === "pick" || m.type === "close") { scanObj.shown = { mode: m.type, ids: m.candidates.map(c => c._id) }; setOverlay({ mode: m.type, scan: scanObj, candidates: m.candidates, reason: m.reason }); }
     else showFlag(`"${detected.name || "?"}" #${detected.number || "?"} is not on this roster.${m.reason ? ` Camera: ${m.reason}.` : ""}`, "NOT FOUND");
   }, [roster, firstScanTime]);
 
@@ -1912,6 +1962,14 @@ export default function App() {
     // the supervisor to sign off. Not on the roster: nothing is added — the
     // roster is the order — it is flagged to the supervisor right away.
     const commitTyped = (o, { number, name, size, team }, exactRow) => {
+      // What the app showed first for this jersey, against what the operator
+      // says it is. The app was wrong when: a green was a different jersey (or
+      // not on the roster); a list did not have it; it could not read a jersey
+      // that is on the roster.
+      const shown = o?.scan?.shown;
+      if (shown?.mode === "confirm" && exactRow?._id !== shown.id) noteMistake("greenOverridden");
+      else if ((shown?.mode === "pick" || shown?.mode === "close") && !(exactRow && shown.ids?.includes(exactRow._id))) noteMistake("notOnList");
+      else if (shown?.mode === "flag" && exactRow) noteMistake("couldNotRead");
       if (exactRow) {
         const reason = "Entered by operator — the camera could not read it";
         setRoster(prev => prev.map(r => r._id === exactRow._id ? { ...r, scanned: "manual" } : r));
@@ -2005,7 +2063,7 @@ export default function App() {
     },
     continueManual() { setOverlay(null); armAutoScan(); },
     };
-  }, [overlay, stamp, armAutoScan, roster, teamNames]);
+  }, [overlay, stamp, armAutoScan, roster, teamNames, noteMistake]);
 
   // ── Flag resolution (from the result card) ────────────────────────────────
   const resolveFlag = useCallback((logId, decision, note) => {
@@ -2049,6 +2107,7 @@ export default function App() {
     const row = roster.find(r => r._id === id); if (!row || !row.scanned) return;
     const was = { pass: "passed", manual: "entered by hand", flag: "with the supervisor", missing: "marked missing", short: "marked short-shipped" }[row.scanned] || row.scanned;
     if (!window.confirm(`Un-check #${row.number}${row.name ? " · " + row.name : ""} (${was})?\n\nIt goes back to Remaining and must be scanned again.`)) return;
+    if (row.scanned === "pass") noteMistake("unchecked");   // a pass taken back: the app, or the operator, got it wrong — check the next ones
     setRoster(prev => prev.map(r => r._id === id ? { ...r, scanned: false } : r));
     const resolution = `Un-checked by ${operatorName || "operator"} — to be scanned again`;
     setLog(prev => [
@@ -2056,7 +2115,7 @@ export default function App() {
       ...prev.map(l => l.match?._id === id && (l.status === S_FLAGGED || l.status === S_MANUAL || l.status === "missing" || l.status === "short") && !l.resolution ? { ...l, resolution } : l),
     ]);
     setLastResult(r => (r?.match?._id === id ? null : r)); setLastConfirmed(c => (c?.match?._id === id ? null : c));
-  }, [roster, operatorName, stamp]);
+  }, [roster, operatorName, stamp, noteMistake]);
 
   // ── Global keyboard: scan trigger only ───────────────────────────────────
   useEffect(() => {
@@ -2147,6 +2206,7 @@ export default function App() {
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <Pill color="#22c55e">{passCount} Pass</Pill>
           <Pill color="#ef4444">{flagCount} Flag</Pill>
+          {checksLeft > 0 && <span title="After a mistake the next jerseys are read twice and must agree before a green"><Pill color="#60a5fa">Double-checking · {checksLeft} to go</Pill></span>}
           {manualCount > 0 && <Pill color="#f59e0b">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171">Supervisor screen not reachable — scanning still works</Pill>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
@@ -2242,6 +2302,11 @@ export default function App() {
                           <div style={{ width: 12, height: 12, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e"}` }} />
                           <span style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? "Hands-free paused — B to scan" : !settings.autoScan ? "Hands-free off — B to scan" : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : "Ready"}</span>
                         </div>
+                        {checksLeft > 0 && (
+                          <div title="After a mistake the next jerseys are read twice and must agree before a green" style={{ position: "absolute", top: 54, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(37,99,235,0.85)", padding: "8px 16px", borderRadius: 999 }}>
+                            <span style={{ fontSize: 17, fontWeight: 700, color: "#fff" }}>Double-checking · {checksLeft} to go</span>
+                          </div>
+                        )}
                         <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.65)", color: "#e2e8f0", fontSize: 15, padding: "6px 14px", borderRadius: 999, whiteSpace: "nowrap" }}>
                           Lay it flat, fully open, no folds · Press <kbd style={{ background: "#1e293b", padding: "2px 7px", borderRadius: 4, fontSize: 15, fontWeight: 700 }}>{keyLabel}</kbd> to scan
                         </div>

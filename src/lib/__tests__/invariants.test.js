@@ -87,7 +87,11 @@ describe("matcher invariants over random rosters and reads", () => {
         if (normNum(read.number)) expect(normNum(g.number), "3 the number read: " + ctx).toBe(normNum(read.number));
         const nNum = normNum(read.number);
         if (nNum.length === 1 && (read.flags.numberComplete === false || read.flags.laidFlat === false)) {
-          const hiddenOpen = roster.some(x => !x.scanned && x !== g && normNum(x.number).length === 2 && normNum(x.number).includes(nNum));
+          // A hidden digit only competes when the row it would make could be
+          // this jersey: any open two-digit row for a nameless read, but only
+          // an open row with THE SAME NAME once the whole name was read.
+          const namedFull = !!g.name && read.flags.nameComplete !== false && nameMatches(norm(read.name), g.name);
+          const hiddenOpen = roster.some(x => !x.scanned && x !== g && normNum(x.number).length === 2 && normNum(x.number).includes(nNum) && (!namedFull || nameMatches(norm(read.name), x.name)));
           expect(hiddenOpen, "4 hidden digit alternative open: " + ctx).toBe(false);
         }
         const twins = roster.filter(x => !x.scanned && x !== g && normNum(x.number) === normNum(g.number) && (!g.name || nameMatches(norm(read.name), x.name)));

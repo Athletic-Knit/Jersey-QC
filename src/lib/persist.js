@@ -3,7 +3,8 @@
 // A station named in the URL (?station=line2) keeps its own saved session and
 // sign-in, so several stations in one browser never resume each other's order.
 // Settings stay per browser. Without ?station= nothing changes.
-const suffix = (() => { try { const s = new URLSearchParams(window.location.search).get("station"); return s ? "." + s.replace(/[^\w-]/g, "").slice(0, 24) : ""; } catch { return ""; } })();
+const stationSuffix = s => s ? "." + String(s).replace(/[^\w-]/g, "").slice(0, 24) : "";
+const suffix = (() => { try { return stationSuffix(new URLSearchParams(window.location.search).get("station")); } catch { return ""; } })();
 const SESSION_KEY  = "jerseyqc.session.v1" + suffix;
 const SETTINGS_KEY = "jerseyqc.settings.v2";   // v2: Enter selects, R retries
 const SIGNIN_KEY   = "jerseyqc.signin.v1" + suffix;
@@ -32,7 +33,9 @@ export function clearSession()  { quiet(() => localStorage.removeItem(SESSION_KE
 export function saveSettings(s) { quiet(() => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))); }
 export function loadSettings()  { return quiet(() => { const v = localStorage.getItem(SETTINGS_KEY); return v ? JSON.parse(v) : null; }) ?? null; }
 // Who is signed in at this station outlives any one order.
-export function saveSignIn(s)   { quiet(() => localStorage.setItem(SIGNIN_KEY, JSON.stringify(s))); }
+// `station`: save for ANOTHER station's page — the one the sign-in box is about
+// to reload to — so the page comes back already signed in instead of empty.
+export function saveSignIn(s, station) { quiet(() => localStorage.setItem(station === undefined ? SIGNIN_KEY : "jerseyqc.signin.v1" + stationSuffix(station), JSON.stringify(s))); }
 export function loadSignIn()    { return quiet(() => { const v = localStorage.getItem(SIGNIN_KEY); return v ? JSON.parse(v) : null; }) ?? null; }
 export function clearSignIn()   { quiet(() => localStorage.removeItem(SIGNIN_KEY)); }
 // The names used on this PC, newest first, so an operator taps theirs instead
@@ -62,6 +65,30 @@ export function shrinkDataUrl(dataUrl, maxW = 160) {
         c.width = Math.max(1, Math.round(img.width * s)); c.height = Math.max(1, Math.round(img.height * s));
         c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
         resolve(c.toDataURL("image/jpeg", 0.7));
+      } catch { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
+// Turn a frame clockwise by 90, 180 or 270 degrees: the picture the model
+// re-reads when it says the jersey is not the right way up.
+export function rotateDataUrl(dataUrl, degrees, quality = 0.92) {
+  return new Promise(resolve => {
+    const d = ((Number(degrees) % 360) + 360) % 360;
+    if (!dataUrl || !d) { resolve(dataUrl || null); return; }
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const swap = d === 90 || d === 270;
+        const c = document.createElement("canvas");
+        c.width = swap ? img.height : img.width; c.height = swap ? img.width : img.height;
+        const ctx = c.getContext("2d");
+        ctx.translate(c.width / 2, c.height / 2);
+        ctx.rotate(d * Math.PI / 180);
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+        resolve(c.toDataURL("image/jpeg", quality));
       } catch { resolve(null); }
     };
     img.onerror = () => resolve(null);
