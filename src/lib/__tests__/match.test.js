@@ -69,9 +69,9 @@ describe("findMatches: the dangerous cases", () => {
     const n2 = numberOnly.map(r => r._id === 1 ? { ...r, scanned: "pass" } : r);
     expect(findMatches(n2, "", "88").type).toBe("duplicate");
   });
-  it("a flagged (out for repair) row can be scanned again", () => {
+  it("a flagged row is with the supervisor: scanning it again shows the flag, not a green", () => {
     const r2 = roster.map(r => r._id === 3 ? { ...r, scanned: "flag" } : r);
-    expect(findMatches(r2, "YAMAMOTO", "19").type).toBe("exact");
+    expect(findMatches(r2, "YAMAMOTO", "19")).toMatchObject({ type: "duplicate", match: { _id: 3 } });
   });
 });
 

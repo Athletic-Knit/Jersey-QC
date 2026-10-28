@@ -22,6 +22,12 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 
 - [x] **Hands-free waits after a confirm.** The gate holds for 3 s (Settings → "Wait after a confirm", 0–30 s) before it may scan again, so the operator can put the old jersey away and reach for the next; a jersey placed inside the wait scans the moment it ends.
 
+- [x] **Shorter yellow lists for nameless jerseys.** A jersey with no name printed no longer lists rows that have names (#40, #41, not #45 VARGHESE). Named rows still keep it a question. Gate 13/13, simulation 0 wrong greens; finding 17 in tools/RECOGNITION-FINDINGS.md.
+
+- [x] **Flags are resolved by the supervisor only.** Accept / Reject / Note on a flagged jersey show only to a supervisor or admin; the operator sees the flag card without them. The server's day ledger keeps every event a station ever sent.
+
+- [x] **A flagged jersey stays flagged.** Scanning it again shows FLAGGED ("with the supervisor"), never a green; on a list it is greyed as Flagged; only a supervisor can un-check a flagged row. The supervisor's Reject reopens the row for the rescan after rework; Accept passes it.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.

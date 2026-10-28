@@ -5,7 +5,11 @@ import { narrowByColour } from "./colour.js";
 // A row counts as done when it passed, or was entered by hand (awaiting the
 // supervisor's sign-off). A flagged row is out for repair and comes back with a
 // pink slip to be scanned again, so it stays selectable.
-export const isDone = r => r.scanned === "pass" || r.scanned === "manual";
+// A row is done when it passed, was entered by hand, or is FLAGGED: a flagged
+// jersey is with the supervisor until they clear it, so scanning it again shows
+// the flag, never a green. Missing / short-shipped marks are not "done": a
+// jersey that turns up after all scans normally.
+export const isDone = r => r.scanned === "pass" || r.scanned === "manual" || r.scanned === "flag";
 
 export function isNumberOnlyRoster(roster) {
   return roster.length > 0 && roster.every(r => !r.name);
@@ -178,6 +182,22 @@ const soleOpen = (direct, cands) => {
  * hidden, and so may a digit. A partial or off-centre read is never green.
  * Number-only rosters stay green on a clean, complete, centred read.
  */
+// A read with no name at all, the number sitting in the middle of the jersey
+// and nothing said about the name area: the name area is in view and empty,
+// so this jersey has no name printed. Rows WITH names come off the list while
+// an open nameless row remains to choose from. Only the list the operator
+// sees changes: the named rows still count when deciding that nothing may be
+// green, so a hidden digit on a named jersey is still a question, never a pass.
+function withoutNamed(cands, nName, read, numberOnly) {
+  if (nName || read.typed || numberOnly) return cands;
+  if (read.nameComplete === false) return cands;                       // letters were seen, just not read
+  const pos = String(read.position || "");
+  if (pos === "left" || pos === "right") return cands;                 // off-centre: the name may be out of frame too
+  if (/\bname\b/i.test(String(read.obstruction || ""))) return cands; // something lies over the name area
+  if (!cands.some(r => !norm(r.name) && !isDone(r))) return cands;
+  return cands.filter(r => !norm(r.name));
+}
+
 export function findMatches(roster, name, number, read = {}) {
   const m = findMatchesInner(roster, name, number, read);
   // A list on which every row has already passed is not a choice: the jersey
@@ -299,7 +319,7 @@ function findMatchesInner(roster, name, number, read = {}) {
         if (sure2) return sure2;
       }
     }
-    if (cands.length) return { type: "pick", candidates: cands, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true };
+    if (cands.length) return { type: "pick", candidates: withoutNamed(cands, nName, read, numberOnly), reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true };
     return { type: "none", reason: `${why.join("; ")}${what}`, soft: true };
   }
 
@@ -327,7 +347,7 @@ function findMatchesInner(roster, name, number, read = {}) {
       const s2 = settleTwins(byNum, byNum.filter(r => !norm(r.name)), read);
       if (s2) return s2;
     }
-    return { type: "pick", candidates: cands, reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?`, soft: true };
+    return { type: "pick", candidates: withoutNamed(cands, nName, read, numberOnly), reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?`, soft: true };
   }
 
   // The name points at one row, the number at another: a digit was misread

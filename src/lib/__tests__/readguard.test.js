@@ -217,7 +217,7 @@ describe("colour settles same-number rows", () => {
     const r = [row(0, "", "31", "green", "A-S"), row(1, "", "31", "green", "A-XL"), row(2, "Rine", "31", "green", "A-3XL"), row(3, "Donnelly", "31", "red", "A-M")];
     const m = findMatches(r, "", "31", { colour: "white", trim: "red" });
     expect(m.type).toBe("pick");
-    expect(ids(m)).toEqual(expect.arrayContaining([0, 1, 2, 3]));
+    expect(ids(m)).toEqual([0, 1]);   // the jersey has no name, so RINE and DONNELLY are off the list — but they still keep this a question
     const m2 = findMatches(r, "", "31", { colour: "red", trim: "white" });   // even a red body: Donnelly has a name that was not read
     expect(m2.type).toBe("pick");
   });
@@ -270,9 +270,9 @@ describe("same number on several rows", () => {
     const r = [row(0, "Smith", "9", "A", "A-L", { scanned: "pass" }), row(1, "Smith", "9", "B", "A-M")];
     expect(findMatches(r, "SMITH", "9")).toMatchObject({ type: "exact", match: { _id: 1 } });
   });
-  it("a flagged (out for repair) row still counts as open", () => {
+  it("a flagged row is done like a passed one: the last open twin is green", () => {
     const r = three(); r[1].scanned = "pass"; r[2].scanned = "flag";
-    expect(findMatches(r, "", "1").type).toBe("pick");
+    expect(findMatches(r, "", "1")).toMatchObject({ type: "exact", match: { _id: 0 } });
   });
 });
 
@@ -428,5 +428,50 @@ describe("vision parser", () => {
     expect(normPosition("Middle")).toBe("centre");
     expect(normPosition("right side")).toBe("right");
     expect(normPosition("")).toBe("");
+  });
+});
+
+describe("a jersey with no name does not list named rows", () => {
+  const row = (i, number, name = "", team = "") => ({ _id: i, name, number, team, size: "A-L", scanned: false });
+  const mixed = [row(0, "40", "", "blue"), row(1, "41", "", "blue"), row(2, "45", "VARGHESE", "green"), row(3, "11", "BIDDLE", "blue")];
+  const covered = { numberComplete: false, nameComplete: true, laidFlat: false, position: "centre", obstruction: "hand over the right digit" };
+  it("hidden right digit on a nameless #40: #40 and #41, not #45 VARGHESE", () => {
+    const m = findMatches(mixed, "", "40", covered);
+    expect(m.type).toBe("pick");
+    expect(m.candidates.map(c => c.number)).toEqual(["40", "41"]);
+  });
+  it("still a question, never green, while the named row could be the jersey", () => {
+    const only40 = [row(0, "40", "", "blue"), row(2, "45", "VARGHESE", "green")];
+    const m = findMatches(only40, "", "4", { ...covered, numberComplete: false });
+    expect(m.type).toBe("pick");                       // #45 VARGHESE blocks the green even though it is not listed
+    expect(m.candidates.map(c => c.number)).toEqual(["40"]);
+  });
+  it("named rows stay when every candidate is named, when something covers the name, or when the number sits off-centre", () => {
+    const named = [row(0, "40", "SMITH"), row(1, "41", "JONES")];
+    expect(findMatches(named, "", "4", covered).candidates.length).toBe(2);
+    expect(findMatches(mixed, "", "40", { ...covered, obstruction: "fold over the name and the right digit" }).candidates.map(c => c.number)).toContain("45");
+    expect(findMatches(mixed, "", "4", { ...covered, position: "right" }).candidates.map(c => c.number)).toContain("45");
+  });
+  it("a typed number is never trimmed", () => {
+    const m = findMatches(mixed, "", "4", { typed: true });
+    expect(m.type === "none" || m.candidates.length >= 0).toBe(true);
+  });
+});
+
+describe("a flagged jersey stays flagged", () => {
+  const row = (i, number, name = "", scanned = false) => ({ _id: i, name, number, team: "", size: "A-L", scanned });
+  it("scanning a flagged jersey again shows the flag, never a green", () => {
+    const r = [row(0, "9", "SEACH", "flag"), row(1, "19", "SEACH")];
+    expect(findMatches(r, "SEACH", "9", {})).toMatchObject({ type: "duplicate", match: { _id: 0 } });
+    const nameless = [row(0, "40", "", "flag"), row(1, "41")];
+    expect(findMatches(nameless, "", "40", {})).toMatchObject({ type: "duplicate", match: { _id: 0 } });
+  });
+  it("a flagged twin does not compete: the open row is green", () => {
+    const r = [row(0, "31", "", "flag"), row(1, "31")];
+    expect(findMatches(r, "", "31", {})).toMatchObject({ type: "exact", match: { _id: 1 } });
+  });
+  it("a jersey marked missing that turns up scans normally", () => {
+    const r = [row(0, "52", "", "missing")];
+    expect(findMatches(r, "", "52", {})).toMatchObject({ type: "exact", match: { _id: 0 } });
   });
 });

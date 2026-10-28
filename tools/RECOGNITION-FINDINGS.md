@@ -82,6 +82,10 @@ Every remaining failure is a yellow with the right row on it (a sideways 66 read
 
 Where it stands: 0 wrong greens in 1,140 live reads over the full set and the subset rerun, the 13-frame gate at 39/39, the operator simulation at 0 wrong greens over 1,500 orders with the self-check on.
 
+## 2026-10-28 — a jersey with no name listed named rows
+
+17. **Floor: a nameless navy #40 with a hand over the right digit listed #40, #41 and #45 VARGHESE.** The hidden-digit rule offered every open 4X row, and the fact that the jersey plainly has no name was never used. Fix in the matcher (`withoutNamed`): when the read has no name, the number sits in the middle of the jersey, nothing is said about the name area and at least one open nameless row is on the list, rows WITH names come off the list. Only the list changes: the named rows still block a green, so a hidden digit on a named jersey stays a question. Gate 13/13 after. Cost, from the operator simulation: a named jersey whose name is out of frame while a nameless row is open is no longer on its list — 125 of 45,755 scans (0.3%) — and goes by hand; the self-check then watches the next 5. Wrong greens stay at 0 over 1,500 orders.
+
 ## Self-check after a mistake (operator simulation, 1500 orders)
 
 | | self-check off | self-check on |
