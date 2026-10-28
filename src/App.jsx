@@ -2572,7 +2572,7 @@ export default function App() {
                               <option value="">—</option>
                               {(!r.scanned || ["missing", "short"].includes(r.scanned))
                                 ? <><option value="missing">Missing</option><option value="short">Short-shipped</option></>
-                                : (r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check — scan again</option>}
+                                : (r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check</option>}
                             </select>
                           </td>}
                         </tr>
