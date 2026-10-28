@@ -20,6 +20,8 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 
 - [x] **No export or roster editing for operators.** Add, Replace, Export, Damage report and Export log show only to a supervisor or admin; the operator's completion screen ends with Done instead of Export to Excel. The supervisor's board keeps every export.
 
+- [x] **Hands-free waits after a confirm.** The gate holds for 3 s (Settings → "Wait after a confirm", 0–30 s) before it may scan again, so the operator can put the old jersey away and reach for the next; a jersey placed inside the wait scans the moment it ends.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.

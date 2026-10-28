@@ -122,3 +122,24 @@ describe("motion gate — the jersey just scanned", () => {
     expect(frameDiff(null, flat(1))).toBe(0);
   });
 });
+
+describe("motion gate — grace period after arming", () => {
+  // lift to the bare table, place a new jersey: the same moves as the first test
+  const swap = g => { g.tick(busy()); g.tick(flat(40)); settle(g, flat(40), 2); g.tick(busy(3)); };   // 5 ticks
+  it("a jersey placed and still inside the grace scans the moment the grace ends, not before", () => {
+    const g = createMotionGate({ changeAt: 10, stillBelow: 3, stillTicks: 2, minTexture: 2, tableBelow: 4, timeoutTicks: 50, graceTicks: 10, width: W, height: H });
+    g.arm(busy()); swap(g);
+    let at = 0;
+    for (let i = 6; i <= 14 && !at; i++) if (g.tick(busy(3))) at = i;
+    expect(at).toBe(10);                              // still from tick 7, held until the grace ran out
+    expect(g.armed).toBe(false);
+  });
+  it("setGrace changes the hold; zero means scan as soon as it is still", () => {
+    const g = gate(); g.setGrace(0); g.arm(busy()); swap(g);
+    expect(settle(g, busy(3))).toBe(true);
+    const h = gate(); h.setGrace(30); h.arm(busy()); swap(h);
+    expect(settle(h, busy(3), 20)).toBe(false);       // 25 ticks in, still holding
+    expect(h.armed).toBe(true);
+    expect(settle(h, busy(3), 6)).toBe(true);         // tick 31: scan
+  });
+});

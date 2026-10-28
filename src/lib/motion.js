@@ -59,15 +59,21 @@ export function texture(gray, w = 32, h = 18) {
 // the jersey nudged 18 px 8.5, a different player 12.4, a hand over the jersey 29.6, a jersey vs the bare table 60.
 // So: `sameBelow` sits under the one-digit change, `changeAt` between a nudge and a swap,
 // `tableBelow` allows for sensor noise and a shadow on an otherwise unchanged table.
-export function createMotionGate({ changeAt = 10, stillBelow = 4, sameBelow = 2.5, tableBelow = 4, stillTicks = 4, minTexture = 2, timeoutTicks = 300, width = 32, height = 18, log } = {}) {
-  let armed = false, phase = "idle", prev = null, ref = null, table = null, still = 0, ticks = 0, drifted = false;
-  const reset = () => { prev = null; ref = null; still = 0; ticks = 0; drifted = false; phase = "lift"; };
+// `graceTicks`: for this many ticks after arming (200 ms each) the gate watches
+// but never fires, so the operator has time to put the old jersey away and
+// reach for the next one without a half-placed jersey or a resting hand being
+// read. A jersey placed and still inside the grace scans the moment it ends.
+export function createMotionGate({ changeAt = 10, stillBelow = 4, sameBelow = 2.5, tableBelow = 4, stillTicks = 4, minTexture = 2, timeoutTicks = 300, graceTicks = 0, width = 32, height = 18, log } = {}) {
+  let armed = false, phase = "idle", prev = null, ref = null, table = null, still = 0, ticks = 0, drifted = false, grace = graceTicks, held = false;
+  const reset = () => { prev = null; ref = null; still = 0; ticks = 0; drifted = false; held = false; phase = "lift"; };
   const fire  = () => { armed = false; phase = "idle"; return true; };
   return {
     // `refFrame` is the frame that was just scanned: anything that still looks
     // like it (the same jersey after the hand pulls back) is not a new jersey.
     arm(refFrame = null) { reset(); ref = refFrame || null; prev = refFrame || null; armed = true; },
     disarm() { armed = false; phase = "idle"; },
+    setGrace(t) { grace = Math.max(0, Number(t) || 0); },
+    get grace() { return grace; },
     // What the empty table looks like, from a scan the model answered "no jersey".
     learnTable(frame) { if (frame) { table = frame; log?.("learned the empty table"); } },
     forgetTable() { table = null; },
@@ -100,6 +106,7 @@ export function createMotionGate({ changeAt = 10, stillBelow = 4, sameBelow = 2.
         if (table && frameDiff(table, frame) < tableBelow) { log?.("empty table — waiting for a jersey"); phase = "place"; still = 0; return false; }
         const t = texture(frame, width, height);
         if (t < minTexture) { if (!table) table = frame; log?.(`featureless (texture ${t.toFixed(1)}) — waiting for a jersey`); phase = "place"; still = 0; return false; }
+        if (ticks < grace) { if (!held) { held = true; log?.(`settled — holding ${((grace - ticks) / 5).toFixed(1)} s more`); } return false; }
         log?.(`settled, texture ${t.toFixed(1)} — scan`);
         return fire();
       }

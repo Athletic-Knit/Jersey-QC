@@ -1330,6 +1330,13 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
             <input type="checkbox" checked={!!temp.autoScan} onChange={e => setTemp(t => ({ ...t, autoScan: e.target.checked }))} />
             Hands-free: after a confirm, scan the next jersey when it is placed and still
           </label>
+          {temp.autoScan && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 16, color: "#cbd5e1" }}>
+              <div style={{ width: 150, flexShrink: 0 }}>Wait after a confirm</div>
+              <input type="number" min={0} max={30} step={0.5} value={temp.autoScanDelay ?? 3} onChange={e => setTemp(t => ({ ...t, autoScanDelay: Math.max(0, Math.min(30, Number(e.target.value) || 0)) }))} style={{ ...selSt, width: 90 }} />
+              <span>seconds</span>
+            </div>
+          )}
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -1456,6 +1463,7 @@ export default function App() {
   const gateRef         = useRef(createMotionGate({ log: m => console.log("[hands-free] " + m) }));
 
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...(loadSettings() || {}) }));
+  useEffect(() => { gateRef.current.setGrace(Math.round((Number(settings.autoScanDelay) || 0) * 5)); }, [settings.autoScanDelay]);   // 200 ms ticks
   const { scanKey, confirmKey, cancelKey, retryKey, byHandKey } = settings;
 
   const [savedSession]  = useState(() => { const s = loadSession(); return s && s.sessionStarted && Array.isArray(s.roster) && s.roster.length ? s : null; });

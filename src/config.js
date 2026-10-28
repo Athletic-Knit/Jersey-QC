@@ -98,6 +98,7 @@ export const DEFAULT_SETTINGS = {
   rotation: 180,          // 0 | 90 | 180 | 270 — how the camera is mounted
   cameraId: "",           // "" = browser default
   autoScan: true,         // hands-free: scan when the jersey changes and settles
+  autoScanDelay: 3,       // seconds after a confirm before hands-free may scan again
   voice: false,           // answer result screens by voice through a headset (Vosk, on this PC)
   micId: "",              // "" = browser default microphone
   voiceSpeak: true,       // read the result back through the headset ("40, bin 2")
