@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createVigilance, readsAgree, reconcile, describeRead, turnMatters, settleTurned, CHECKS_AFTER_MISTAKE } from "../vigilance.js";
+import { createVigilance, readsAgree, reconcile, describeRead, turnMatters, settleTurned, CHECKS_AFTER_MISTAKE, createInspection, inspectLabel, INSPECT_FULL, INSPECT_EVERY } from "../vigilance.js";
 import { findMatches } from "../match.js";
 
 const row = (i, name, number, extra = {}) => ({ _id: i, name, number, team: "", size: "A-L", scanned: false, ...extra });
@@ -112,5 +112,43 @@ describe("reconcile two reads into one screen", () => {
     expect(describeRead(read("4", "", { number_complete: false }))).toBe("#4 (digit may be hidden)");
     expect(describeRead({ jersey_present: false })).toBe("no jersey");
     expect(describeRead(read("", ""))).toBe("nothing");
+  });
+});
+
+describe("operator inspection regime", () => {
+  it("opens with a full inspection of the first 5, then quick looks, then a spot check after 10 clean", () => {
+    const r = createInspection();
+    expect(r.current().phase).toBe("full"); expect(r.current().remaining).toBe(INSPECT_FULL);
+    expect(inspectLabel(r.current())).toBe("Inspect fully · 5 to go");
+    for (let i = 0; i < INSPECT_FULL; i++) r.jerseyDone();
+    expect(r.current().phase).toBe("quick"); expect(r.full).toBe(false);
+    expect(inspectLabel(r.current())).toBe("Quick look · 0/10");
+    for (let i = 0; i < INSPECT_EVERY - 1; i++) r.jerseyDone();
+    expect(r.current().phase).toBe("quick"); expect(r.current().clean).toBe(9);
+    r.jerseyDone();
+    expect(r.current().phase).toBe("sample"); expect(r.full).toBe(true);
+    expect(inspectLabel(r.current())).toBe("Inspect fully · spot check");
+    r.jerseyDone();                                   // the spot check was clean
+    expect(r.current().phase).toBe("quick"); expect(r.current().clean).toBe(0);
+  });
+  it("a defect anywhere restarts the 5", () => {
+    const r = createInspection();
+    for (let i = 0; i < 12; i++) r.jerseyDone();      // deep into quick looks
+    expect(r.current().phase).toBe("quick");
+    r.defect();
+    expect(r.current()).toMatchObject({ phase: "full", remaining: 5, clean: 0 });
+    r.jerseyDone(); r.jerseyDone(); r.defect();
+    expect(r.current().remaining).toBe(5);
+    for (let i = 0; i < 15; i++) r.jerseyDone();
+    expect(r.current().phase).toBe("sample");
+    r.defect();                                       // the spot check found one
+    expect(r.current().phase).toBe("full"); expect(r.state().defects).toBe(3);
+  });
+  it("survives a save and load, and an old session without it starts full", () => {
+    const r = createInspection(); for (let i = 0; i < 7; i++) r.jerseyDone();
+    const w = createInspection(); w.load(r.state());
+    expect(w.current()).toEqual(r.current());
+    const fresh = createInspection(); fresh.load(undefined);
+    expect(fresh.current().phase).toBe("full"); expect(fresh.current().remaining).toBe(5);
   });
 });

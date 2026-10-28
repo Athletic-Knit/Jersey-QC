@@ -123,3 +123,51 @@ export function describeRead(d) {
   if (!n && !s) return "nothing";
   return `${n ? "#" + n : ""}${n && s ? " " : ""}${s}${d.number_complete === false ? " (digit may be hidden)" : ""}`.trim();
 }
+
+// ── The operator's inspection regime ─────────────────────────────────────────
+// The same rule, for the person: after a defect, inspect the next FULL
+// jerseys completely; once EVERY jerseys in a row are clean, inspect one
+// completely as a spot check; a defect anywhere starts the FULL count again.
+// An order opens with a full inspection of its first FULL jerseys.
+//
+// A "defect" is a problem the operator found on the jersey itself: a reason
+// chosen on the reasons screen, typed in, or found after the jersey passed.
+// A jersey the camera could not read, a duplicate, or a missing mark is not.
+export const INSPECT_FULL  = 5;    // jerseys inspected fully after a defect
+export const INSPECT_EVERY = 10;   // clean jerseys between spot checks
+
+export function createInspection({ full = INSPECT_FULL, every = INSPECT_EVERY, log } = {}) {
+  let phase = "full", remaining = full, clean = 0, defects = 0;
+  const api = {
+    // What the operator should do with the jersey on the screen now.
+    current() { return { phase, remaining, clean, full, every }; },
+    get full() { return phase !== "quick"; },
+    defect() {
+      defects++; phase = "full"; remaining = full; clean = 0;
+      log?.(`[inspect] defect found — inspect the next ${full} jerseys fully`);
+    },
+    // A jersey passed (confirmed, or entered by hand).
+    jerseyDone() {
+      if (phase === "full")        { remaining--; if (remaining <= 0) { phase = "quick"; remaining = 0; clean = 0; log?.("[inspect] 5 clean — quick look from here"); } }
+      else if (phase === "quick")  { clean++; if (clean >= every) { phase = "sample"; log?.(`[inspect] ${every} clean — inspect the next one fully`); } }
+      else                         { phase = "quick"; clean = 0; }   // the spot check was clean
+    },
+    reset() { phase = "full"; remaining = full; clean = 0; },
+    state() { return { phase, remaining, clean, defects }; },
+    load(s) {
+      if (!s || typeof s !== "object") return;
+      phase = ["full", "quick", "sample"].includes(s.phase) ? s.phase : "full";
+      remaining = Number(s.remaining) || 0; clean = Number(s.clean) || 0; defects = Number(s.defects) || 0;
+      if (phase === "full" && remaining <= 0) remaining = full;
+    },
+  };
+  return api;
+}
+
+// The words on the header pill and the green screen.
+export function inspectLabel(cur) {
+  if (!cur) return "";
+  if (cur.phase === "full")   return `Inspect fully · ${cur.remaining} to go`;
+  if (cur.phase === "sample") return "Inspect fully · spot check";
+  return `Quick look · ${cur.clean}/${cur.every}`;
+}

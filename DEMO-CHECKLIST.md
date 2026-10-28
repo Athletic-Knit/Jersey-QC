@@ -10,6 +10,8 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 - [x] **Recognition stress test and fixes.** 103 synthetic jerseys + 270 distorted frames + the 13 real ones through the live model (`tools/recog-stress.mjs`). Fixed: turned jerseys are turned upright and read again; lone digits are flagged only on evidence; a close-up number is never "no jersey"; 6/9-type numbers on a turned jersey ask. Findings in `tools/RECOGNITION-FINDINGS.md`. Committed (b2af187).
 - [x] **Self-check after a mistake ("military grade").** After the operator corrects the app, the next 5 jerseys are read twice and must agree before a green; another mistake restarts the 5. Header pill shows "Double-checking · N to go". Verified in the browser; in the operator simulation too. Committed (b2af187).
 
+- [x] **Operator inspection regime (the operator's "military testing").** The order opens with a full inspection of the first 5 jerseys; after that a quick look, with a full spot check after every 10 clean; any defect the operator flags starts the 5 again. Header pill "Inspect fully · N to go" / "Inspect fully · spot check" / "Quick look · N/10"; the green screen carries the same banner and shows the check pills only during a full inspection. Saved with the session; the app's own double-check runs independently.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.

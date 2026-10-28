@@ -7,7 +7,7 @@ import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
-import { createVigilance, reconcile, turnMatters, settleTurned } from "./lib/vigilance.js";
+import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { useVoice } from "./useVoice.js";
 import { VoiceBadge, VoiceLegend } from "./VoiceBadge.jsx";
@@ -916,7 +916,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", confirmKey, cancelKey, retryKey, byHandKey, stream, rotation, embedded }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, confirmKey, cancelKey, retryKey, byHandKey, stream, rotation, embedded }) {
   const reasons = reasonsFor(jerseyType);
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
@@ -1060,12 +1060,19 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           {state.note && <div style={{ marginTop: 12, fontSize: 20, color: "#fcd34d" }}>✎ {state.note}</div>}
           {mode === "confirm" && (
             <>
-              <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>
+              {inspect && inspect.phase !== "quick" && (
+                <div style={{ marginTop: 16, padding: "10px 28px", borderRadius: 14, background: "#f59e0b", color: "#0d1117", fontWeight: 900, fontSize: "clamp(22px, 3vw, 30px)", letterSpacing: 0.5 }}>
+                  🔍 {inspectLabel(inspect)}
+                </div>
+              )}
+              {inspect && inspect.phase !== "quick" && (
+              <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>
                 <span style={{ fontSize: 19, color: "#86efac", fontWeight: 700, marginRight: 6 }}>Check</span>
                 {CHECKLIST.map(c => (
                   <span key={c} style={{ padding: "5px 13px", borderRadius: 999, border: "2px solid rgba(134,239,172,0.55)", background: "rgba(34,197,94,0.16)", color: "#fff", fontWeight: 700, fontSize: "clamp(17px, 2vw, 21px)", whiteSpace: "nowrap" }}>{c}</span>
                 ))}
               </div>
+              )}
               {notes && (
                 <div style={{ marginTop: 12, padding: "8px 18px", borderRadius: 12, background: "rgba(245,158,11,0.16)", border: "2px solid rgba(245,158,11,0.55)", color: "#fde68a", fontWeight: 700, fontSize: "clamp(18px, 2vw, 24px)", textAlign: "center", maxWidth: 900 }}>
                   📝 {notes}
@@ -1482,6 +1489,12 @@ export default function App() {
   const vigilRef = useRef(createVigilance({ log: m => console.log(m) }));
   const [checksLeft, setChecksLeft] = useState(0);
   const noteMistake = useCallback(kind => { vigilRef.current.noteMistake(kind); setChecksLeft(vigilRef.current.remaining); }, []);
+  // The operator's own regime: full inspection of the next 5 after a defect,
+  // a spot check after 10 clean (createInspection). `inspect` mirrors it for
+  // the header pill and the green screen.
+  const inspectRef = useRef(createInspection({ log: m => console.log(m) }));
+  const [inspect, setInspect] = useState(() => inspectRef.current.current());
+  const syncInspect = useCallback(() => setInspect(inspectRef.current.current()), []);
   // Browser full screen (hides tabs and address bar). Browsers allow it only
   // from a click, so it is a header button; F11 does the same in Chrome.
   const [isFullscreen, setIsFullscreen] = useState(() => typeof document !== "undefined" && !!document.fullscreenElement);
@@ -1576,8 +1589,8 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, vigil: vigilRef.current.state() });
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, checksLeft]);
+    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, checksLeft, inspect]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -1616,12 +1629,12 @@ export default function App() {
     rosterVersion.current++;
     setRoster(parsed.map(r => ({ ...r, scanned: false })));
     setRosterFile(fileName);
-    if (!keepLog) { setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); setIdleSpells([]); }
+    if (!keepLog) { setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); setIdleSpells([]); inspectRef.current.reset(); syncInspect(); }
     setThumb(null); setOverlay(null); setShowRosterComplete(false);
     const bins = buildBinMap(parsed, binMap || {});
     if (Object.keys(bins).length > 1) { setBinMap(bins); setShowBinSetup(true); }
     else { setBinMap(null); setShowBinSetup(false); }
-  }, [binMap]);
+  }, [binMap, syncInspect]);
 
   // The order belongs to the station, not to a person: whoever is signed in
   // here now continues it under their own name.
@@ -1631,8 +1644,9 @@ export default function App() {
     setOrderNumber(s.orderNumber || ""); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []);
     vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
+    inspectRef.current.load(s.inspect); syncInspect();
     setSessionStarted(true); setResumeDecided(true);
-  }, [savedSession]);
+  }, [savedSession, syncInspect]);
 
   const discardSession = useCallback(() => { clearSession(); setResumeDecided(true); }, []);
 
@@ -1979,6 +1993,7 @@ export default function App() {
         setRoster(prev => prev.map(r => r._id === exactRow._id ? { ...r, scanned: "manual" } : r));
         const entry = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, match: exactRow, status: S_MANUAL, reason, ...stamp() };
         setLog(prev => [entry, ...prev]); setLastResult(entry); setLastConfirmed(entry);
+        inspectRef.current.jerseyDone(); syncInspect();
         setOverlay({ mode: "manualDone", scan: o.scan, match: exactRow, reason });
         playTone("pass");
         return;
@@ -1999,6 +2014,7 @@ export default function App() {
       setRoster(prev => prev.map(r => r._id === overlay.match._id ? { ...r, scanned: "pass" } : r));
       setLog(prev => [entry, ...prev]);
       setLastResult(entry); setLastConfirmed(entry);
+      inspectRef.current.jerseyDone(); syncInspect();
       setOverlay({ mode: "done", scan, match: overlay.match });
       playTone("pass");
     },
@@ -2016,6 +2032,7 @@ export default function App() {
     back()   { setOverlay(o => o.returnTo || null); },
     chooseReason(r) {
       const o = overlay; if (!o) return;
+      if (!r.custom) { inspectRef.current.defect(); syncInspect(); }
       if (r.inPlace) { if (o.reopened) { setOverlay(null); armAutoScan(); return; } setOverlay({ ...(o.returnTo || { mode: "flag", scan: o.scan }), note: r.label }); return; }
       if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it
       const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened ? `${r.label} — found after it passed` : r.label, reasonId: r.id, ...stamp() };
@@ -2027,6 +2044,7 @@ export default function App() {
     reasonSubmit(text) {
       const o = overlay; if (!o) return;
       const label = String(text || "").trim(); if (!label) return;
+      inspectRef.current.defect(); syncInspect();
       const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened ? `${label} — found after it passed` : label, reasonId: "other", ...stamp() };
       if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
       setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(null);
@@ -2075,7 +2093,7 @@ export default function App() {
     },
     continueManual() { setOverlay(null); armAutoScan(); },
     };
-  }, [overlay, stamp, armAutoScan, roster, teamNames, noteMistake, lastConfirmed]);
+  }, [overlay, stamp, armAutoScan, roster, teamNames, noteMistake, lastConfirmed, syncInspect]);
 
   // ── Flag resolution (from the result card) ────────────────────────────────
   const resolveFlag = useCallback((logId, decision, note) => {
@@ -2183,7 +2201,7 @@ export default function App() {
       )}
 
       {overlay && !wide && (
-        <ScanOverlay key={overlayKey} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
+        <ScanOverlay key={overlayKey} inspect={inspect} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
           stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} />
       )}
 
@@ -2219,6 +2237,7 @@ export default function App() {
           <Pill color="#22c55e">{passCount} Pass</Pill>
           <Pill color="#ef4444">{flagCount} Flag</Pill>
           {checksLeft > 0 && <span title="After a mistake the next jerseys are read twice and must agree before a green"><Pill color="#60a5fa">Double-checking · {checksLeft} to go</Pill></span>}
+          {sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect)}</Pill></span>}
           {manualCount > 0 && <Pill color="#f59e0b">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171">Supervisor screen not reachable — scanning still works</Pill>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
@@ -2400,7 +2419,7 @@ export default function App() {
         {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && wide && (
-            <ScanOverlay key={overlayKey} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
+            <ScanOverlay key={overlayKey} inspect={inspect} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
               stream={null} rotation={settings.rotation} />
           )}
 
