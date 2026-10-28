@@ -197,7 +197,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const submit = () => {
     if (PIN_REQUIRED && pin !== pinOwner.pin) { setError("Wrong PIN for " + pinOwner.label + "."); return; }
     if (!name.trim()) { setError("Please enter your name."); return; }
-    if (role === "inspector" && !onCancel && busyBy(station)) { setError(`${stDef.label} is in use by ${busyBy(station)} on another PC. Pick a free station — or use Change operator on that PC to take it over.`); return; }
+    if (role === "inspector" && !onCancel && busyBy(station)) { setError(`${stDef.label} is in use by ${busyBy(station)} on another PC. Pick a free station, or sign out on that PC first.`); return; }
     // The page is not on the chosen station yet (opened from the bare address):
     // it has to reload there. Save the sign-in for that station FIRST, or the
     // reload throws the name and PIN away and the operator has to do it twice.
@@ -1495,7 +1495,6 @@ export default function App() {
   const [newRosters, setNewRosters] = useState([]);   // rosters the supervisor sent while this order was running
   const [orderSetBy, setOrderSetBy] = useState(null); // { orderNumber, by } — the supervisor named this order from the board
   const knownRosterIds = useRef(null);                 // what was already waiting when this order started
-  const [showHandover, setShowHandover] = useState(false);   // another operator takes over; the order stays
   const [handsFreePaused, setHandsFreePaused] = useState(false);   // operator paused hands-free; camera stays on, B still scans
   // Self-check: after the app is corrected, the next 5 jerseys are read twice
   // and must agree before a green (src/lib/vigilance.js). checksLeft mirrors
@@ -1880,7 +1879,7 @@ export default function App() {
   useEffect(() => { triggerRef.current = doTriggerScan; }, [doTriggerScan]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
-  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHandover;
+  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor;
   useEffect(() => {
     if (!cameraOn || inputMode !== "camera" || !handsFree) { gateRef.current.disarm(); return; }   // paused, or nothing left in the order: never scan the empty table
     const id = setInterval(() => {
@@ -2190,11 +2189,6 @@ export default function App() {
 
       {signedIn && showResume && <ResumeModal session={savedSession} onResume={resumeSession} onDiscard={discardSession} />}
 
-      {showHandover && (
-        <SignInModal title="Hand this station to another operator — the order, roster and log stay as they are" initial={{ role }}
-          onCancel={() => closeDialog(() => setShowHandover(false))}
-          onSignIn={({ role: r, name }) => { setRole(r); setOperatorName(name); saveSignIn({ role: r, name }); closeDialog(() => setShowHandover(false)); }} />
-      )}
 
       {showSupervisor && <SupervisorPanel operatorName={operatorName} onClose={() => closeDialog(() => setShowSupervisor(false))} />}
 
@@ -2255,7 +2249,6 @@ export default function App() {
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
           {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
           {sessionStarted && <button onClick={startNewOrder} title="Finish this order and set up the next one — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>New order</button>}
-          {signedIn && sessionStarted && <button onClick={() => setShowHandover(true)} title="Another operator takes over this station — the order keeps going" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Change operator</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
           <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⤢ Exit full screen" : "⛶ Full screen"}</button>
           {fsHint && <span style={{ fontSize: 14, color: "#fcd34d" }}>{fsHint}</span>}
