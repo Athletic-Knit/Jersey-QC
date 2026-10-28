@@ -402,7 +402,7 @@ function findMatchesInner(roster, name, number, read = {}) {
 
   // Nothing exact: nearest rows only.
   const close = dedupe([...nearNumbers(nNum, roster), ...nearNames(nName, roster)]);
-  if (close.length) return { type: "close", candidates: close, reason: "No exact match — nearest rows" };
+  if (close.length) return { type: "close", candidates: close, reason: "" };   // the headline says it
   return { type: "none" };
 }
 

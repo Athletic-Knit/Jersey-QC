@@ -1045,27 +1045,26 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   };
 
   return (
-    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "none", padding: state.scan?.thumb && !isGreen ? "20px 0 116px" : "20px 0", overflowY: "auto" }}>
+    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "safe center", userSelect: "none", padding: state.scan?.thumb && !isGreen ? "16px 0 116px" : "16px 0", overflowY: "auto" }}>
 
       {/* ── GREEN ── */}
       {isGreen && match && (
         <>
-          <div style={{ fontSize: 44, lineHeight: 1, marginBottom: 6 }}>✅</div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 9vw, 108px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 4, maxWidth: "100%", boxSizing: "border-box", overflowWrap: "anywhere" }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, 7.5vw, 100px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 2, maxWidth: "100%", boxSizing: "border-box", overflowWrap: "anywhere" }}>
             #{match.number}{match.name ? ` · ${match.name}` : ""}
           </div>
-          {match.team && <div style={{ fontSize: "clamp(26px, 4vw, 40px)", color: "#86efac", marginTop: 8, fontWeight: 700, textAlign: "center", lineHeight: 1.1 }}>{match.team}</div>}
-          <div style={{ display: "flex", gap: 16, marginTop: 14, flexWrap: "wrap", justifyContent: "center" }}>
+          {match.team && <div style={{ fontSize: "clamp(24px, 3.5vw, 36px)", color: "#86efac", marginTop: 6, fontWeight: 700, textAlign: "center", lineHeight: 1.1 }}>{match.team}</div>}
+          <div style={{ display: "flex", gap: 14, marginTop: 10, flexWrap: "wrap", justifyContent: "center" }}>
             {hasSize && (
-              <div style={{ padding: "10px 40px 12px", borderRadius: 20, border: "4px solid #22c55e", background: "rgba(34,197,94,0.12)", textAlign: "center", minWidth: 170 }}>
-                <div style={{ fontSize: 20, color: "#86efac", fontWeight: 700, marginBottom: 2 }}>Size</div>
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(60px, 10vw, 108px)", fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
+              <div style={{ padding: "6px 32px 8px", borderRadius: 18, border: "4px solid #22c55e", background: "rgba(34,197,94,0.12)", textAlign: "center", minWidth: 150 }}>
+                <div style={{ fontSize: 18, color: "#86efac", fontWeight: 700, marginBottom: 2 }}>Size</div>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, 8vw, 92px)", fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
               </div>
             )}
             {binNum !== null && (
-              <div style={{ padding: "10px 40px 12px", borderRadius: 20, border: "4px solid #3b82f6", background: "rgba(59,130,246,0.12)", textAlign: "center", minWidth: 170 }}>
-                <div style={{ fontSize: 20, color: "#93c5fd", fontWeight: 700, marginBottom: 2 }}>Bin</div>
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(60px, 10vw, 108px)", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
+              <div style={{ padding: "6px 32px 8px", borderRadius: 18, border: "4px solid #3b82f6", background: "rgba(59,130,246,0.12)", textAlign: "center", minWidth: 150 }}>
+                <div style={{ fontSize: 18, color: "#93c5fd", fontWeight: 700, marginBottom: 2 }}>Bin</div>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, 8vw, 92px)", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
               </div>
             )}
           </div>
@@ -1078,13 +1077,13 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           {mode === "confirm" && (
             <>
               {inspect && inspect.phase !== "quick" && (
-                <div style={{ marginTop: 16, padding: "10px 28px", borderRadius: 14, background: "#f59e0b", color: "#0d1117", fontWeight: 900, fontSize: "clamp(22px, 3vw, 30px)", letterSpacing: 0.5 }}>
+                <div style={{ marginTop: 12, padding: "8px 24px", borderRadius: 14, background: "#f59e0b", color: "#0d1117", fontWeight: 900, fontSize: "clamp(20px, 2.6vw, 26px)", letterSpacing: 0.5 }}>
                   🔍 {inspectLabel(inspect)}
                 </div>
               )}
               {inspect && inspect.phase !== "quick" && (
-              <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>
-                <span style={{ fontSize: 19, color: "#86efac", fontWeight: 700, marginRight: 6 }}>Check</span>
+              <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>
+                <span style={{ fontSize: 18, color: "#86efac", fontWeight: 700, marginRight: 6 }}>Check</span>
                 {CHECKLIST.map(c => (
                   <span key={c} style={{ padding: "5px 13px", borderRadius: 999, border: "2px solid rgba(134,239,172,0.55)", background: "rgba(34,197,94,0.16)", color: "#fff", fontWeight: 700, fontSize: "clamp(17px, 2vw, 21px)", whiteSpace: "nowrap" }}>{c}</span>
                 ))}
@@ -1095,7 +1094,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
                   📝 {notes}
                 </div>
               )}
-              <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", padding: "0 6px" }}>
+              <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", padding: "0 6px" }}>
                 {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
               </div>
             </>
@@ -1111,9 +1110,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           <div style={{ fontSize: "clamp(28px, 4.5vw, 48px)", fontWeight: 900, color: accent, marginBottom: 6, textAlign: "center", padding: "0 24px", lineHeight: 1.1 }}>
             {mode === "pick" ? "Which jersey is this?" : "No exact match"}
           </div>
-          <div style={{ fontSize: 24, color: "#fcd34d", marginBottom: 6, opacity: 0.95, textAlign: "center", padding: "0 24px" }}>
-            {state.reason}
-          </div>
+          {state.reason && (
+            <div style={{ fontSize: 24, color: "#fcd34d", marginBottom: 6, opacity: 0.95, textAlign: "center", padding: "0 24px" }}>
+              {state.reason}
+            </div>
+          )}
           <div style={{ fontSize: 20, color: "#d6d3d1", marginBottom: 16, textAlign: "center" }}>
             Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}{detected?.jersey_colour ? ` · ${detected.jersey_colour} jersey` : ""}
             {primary !== HEADLINE_FIELDS && <span style={{ marginLeft: 12, color: accent }}>· differs by {primary.map(cap).join(" and ")}</span>}
@@ -2548,7 +2549,7 @@ export default function App() {
                         <th style={thSt}>Status</th>
                         {rosterCols.map(c => <th key={c} style={thSt}>{cap(c)}</th>)}
                         {binMap && <th style={thSt}>Bin</th>}
-                        <th style={thSt}>Mark</th>
+                        {canSupervise && <th style={thSt}>Mark</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -2564,7 +2565,7 @@ export default function App() {
                             <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "#fbbf24" : "#e2e8f0" }}>{r[c]}</td>
                           ))}
                           {binMap && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{binOf(r.team) !== null ? `Bin ${binOf(r.team)}` : "—"}</td>}
-                          <td style={{ ...tdSt, padding: "2px 6px" }}>
+                          {canSupervise && <td style={{ ...tdSt, padding: "2px 6px" }}>
                             <select value={["missing", "short"].includes(r.scanned) ? r.scanned : ""}
                               onChange={e => { const v = e.target.value; if (v === "unscan") unscan(r._id); else markRow(r._id, v || false); }}
                               style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
@@ -2573,7 +2574,7 @@ export default function App() {
                                 ? <><option value="missing">Missing</option><option value="short">Short-shipped</option></>
                                 : (r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check — scan again</option>}
                             </select>
-                          </td>
+                          </td>}
                         </tr>
                       ))}
                     </tbody>

@@ -30,6 +30,9 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 
 - [x] **Three recognition rules.** A name that pins the row makes the turn irrelevant (no re-read, green); the side of the cover trims hidden-digit lists (#40, #41, not #14, #54); two sizes are two numbers, and a small sleeve number inside a two-digit read puts it in doubt. Gate 13/13, simulation 0 wrong greens; the live subset rerun showed 5 wrong greens from older limits, written up as findings 18–19.
 
+- [x] **Green screen fits a 1600×900 half panel; no duplicate line on the yellow screen.** Smaller headline and tiles, no check-mark icon, the result screen never clips its top (safe centering); measured 533/533 at 1600×900 and 717/717 at 1920×1080. The "No exact match — nearest rows" line under the same headline is gone.
+- [x] **Mark column is the supervisor's.** Missing / Short-shipped / Un-check show only to a supervisor or admin; the operator's roster table has no dropdowns.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.
