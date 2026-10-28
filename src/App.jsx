@@ -424,7 +424,6 @@ function ReasonTextForm({ match, onSubmit, onBack }) {
       <div style={{ fontSize: 56, textAlign: "center", lineHeight: 1 }}>✎</div>
       <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#a78bfa", textAlign: "center", marginBottom: 6 }}>What's wrong with it?</div>
       {match && <div style={{ fontSize: 18, color: "#c4b5fd", textAlign: "center", marginBottom: 10 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}</div>}
-      <div style={{ fontSize: 18, color: "#c4b5fd", textAlign: "center", marginBottom: 18, opacity: 0.9 }}>A few words — the supervisor reads exactly this and decides where it goes.</div>
       <input value={text} onChange={e => setText(e.target.value)} onKeyDown={onKey} autoFocus placeholder="e.g. hole under the left arm" maxLength={120} style={{ ...inputSt, fontSize: 22, padding: "12px 14px", marginBottom: 14 }} />
       <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
         <button disabled={!text.trim()} onClick={() => onSubmit(text)} style={{ ...bigBtn, width: "auto", padding: "14px 30px", background: "#a78bfa", color: "#0d1117", opacity: text.trim() ? 1 : 0.5 }}>✓ Send to supervisor <Kbd>Enter</Kbd></button>
@@ -455,8 +454,7 @@ function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
   return (
     <div style={{ width: "100%", maxWidth: 560, padding: "0 24px", boxSizing: "border-box" }}>
       <div style={{ fontSize: 56, textAlign: "center", lineHeight: 1 }}>✍</div>
-      <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#f59e0b", textAlign: "center", marginBottom: 6 }}>Enter the jersey by hand</div>
-      <div style={{ fontSize: 18, color: "#fcd34d", textAlign: "center", marginBottom: 18, opacity: 0.9, lineHeight: 1.4 }}>Type what is printed on the back. On the roster: it passes as MANUAL and the supervisor signs it off. Not on the roster: nothing is added — it goes to the supervisor now.</div>
+      <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#f59e0b", textAlign: "center", marginBottom: 18 }}>Enter the jersey by hand</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
         <div><label style={labelSt}>Number</label><input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={onKey} autoFocus inputMode="numeric" placeholder="##" style={field} /></div>
         <div><label style={labelSt}>Name</label><input value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} placeholder="as printed" style={field} /></div>
@@ -941,23 +939,23 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const secondary = fields.filter(f => !primary.includes(f) && !extraCols.includes(f));
 
   const options = useMemo(() => {
-    const retry    = { id: "retry",    label: "↻ Retry scan",             hint: "nothing is recorded", run: actions.retry };
-    const notRight = { id: "notright", label: "✎ Not right — pick a reason", run: actions.reasons };
-    const byHand   = { id: "manual",   label: "⌨ Enter by hand",          hint: "camera cannot read it, or not on the roster", run: actions.manual };
-    if (mode === "confirm")    return [{ id: "confirm", label: "✓ Confirm — next jersey", primary: true, run: actions.confirm }, retry, notRight];
+    const retry    = { id: "retry",    label: "↻ Retry scan",    run: actions.retry };
+    const notRight = { id: "notright", label: "🚩 Flag",          run: actions.reasons };
+    const byHand   = { id: "manual",   label: "⌨ Enter by hand", run: actions.manual };
+    if (mode === "confirm")    return [{ id: "confirm", label: "✓ Confirm", primary: true, run: actions.confirm }, retry, notRight];
     if (isList) {
       const t = state.typed;
       const none = t
-        ? { ...byHand, label: `🛑 None of these — #${t.number || "?"}${t.name ? " " + t.name : ""} is not on the roster`, hint: "nothing is added; the supervisor is told now" }
-        : { ...byHand, label: "⌨ None of these — enter by hand" };
-      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), retry, none, { ...notRight, label: "🚩 Bad jersey — pick a reason" }];
+        ? { ...byHand, label: `🛑 #${t.number || "?"}${t.name ? " " + t.name : ""} — not on the roster` }
+        : { ...byHand, label: "⌨ None of these" };
+      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), retry, none, notRight];
     }
-    if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "✎ Bad jersey — pick a reason" }];
-    if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue — next jersey", primary: true, run: actions.continueManual }];
+    if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "🚩 Bad jersey" }];
+    if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }];
     if (mode === "manual")     return [];
-    if (mode === "duplicate")  return [{ id: "skip", label: "✓ Already done — skip", primary: true, hint: "nothing is recorded", run: actions.skipDuplicate }, retry, { id: "dup", label: "🚩 Log it as a duplicate", run: actions.flagDuplicate }];
+    if (mode === "duplicate")  return [{ id: "skip", label: "✓ Skip", primary: true, run: actions.skipDuplicate }, retry, { id: "dup", label: "🚩 Duplicate", run: actions.flagDuplicate }];
     if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, hint: r.route, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
-    if (mode === "supervisor") return [{ id: "cont", label: "✓ Continue — next jersey", primary: true, run: actions.continueSupervisor }];
+    if (mode === "supervisor") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueSupervisor }];
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
   }, [mode, isList, candidates, actions, state.typed, reasons]);
@@ -1028,8 +1026,6 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       </button>
     );
   };
-
-  const hintLine = `${formatKey(confirmKey)} select · ${formatKey(cancelKey)} or ↓ next option · ↑ previous · ${formatKey(retryKey)} retry scan · ${formatKey(byHandKey)} enter by hand`;
 
   return (
     <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "none", padding: state.scan?.thumb && !isGreen ? "20px 0 116px" : "20px 0", overflowY: "auto" }}>
@@ -1103,7 +1099,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
               <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 22, padding: 16 }}>No rows to choose from.</div>
             )}
             {candidates.length > 0 && candidates.every(isDone) && (
-              <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 20, padding: "8px 0 12px" }}>Every matching row has already passed — retry the scan, or flag it as a duplicate below.</div>
+              <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 20, padding: "8px 0 12px" }}>All of these already passed.</div>
             )}
             {options.map((o, i) => o.candidate && (
               <CandidateRow key={o.id} c={o.candidate} primary={primary} secondary={secondary} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent}
@@ -1113,7 +1109,6 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           <div style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
             {options.map((o, i) => !o.candidate && <OptionButton key={o.id} o={o} i={i} />)}
           </div>
-          <div style={{ marginTop: 10, fontSize: 17, color: "rgba(255,255,255,0.6)", textAlign: "center", padding: "0 24px" }}>{hintLine}</div>
         </>
       )}
 
@@ -1135,19 +1130,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             </div>
           )}
           {state.route && <div style={{ fontSize: 22, color: "#fecaca", marginTop: 8, opacity: 0.9 }}>→ {state.route}</div>}
-          {mode === "flag" && (
-            <div style={{ fontSize: 21, color: "#fed7aa", marginTop: 16, textAlign: "center", padding: "0 40px", maxWidth: 820, lineHeight: 1.45 }}>
-              {state.title === "COULD NOT READ"
-                ? "Flatten the number area and tuck the sleeves under, then R to retry — or enter it by hand."
-                : state.title === "SCAN FAILED"
-                  ? "Check the network, then R to retry."
-                  : "If the read looks wrong (sleeves can merge with the number), R to retry — otherwise enter it by hand."}
-            </div>
+          {mode === "flag" && state.title === "SCAN FAILED" && (
+            <div style={{ fontSize: 21, color: "#fed7aa", marginTop: 16, textAlign: "center" }}>Check the network.</div>
           )}
           <div style={{ marginTop: 28, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
             {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
           </div>
-          <div style={{ marginTop: 10, fontSize: 17, color: "rgba(255,255,255,0.6)", textAlign: "center", padding: "0 24px" }}>{hintLine}</div>
         </>
       )}
 
@@ -1166,7 +1154,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, 6vw, 72px)", fontWeight: 900, color: accent, textAlign: "center", lineHeight: 1 }}>ENTERED BY HAND</div>
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, 6vw, 80px)", fontWeight: 800, color: "#fff", marginTop: 12, textAlign: "center", lineHeight: 1 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}</div>
           <div style={{ fontSize: 26, color: "#fcd34d", marginTop: 10, textAlign: "center" }}>{[match.team, match.size].filter(Boolean).join(" · ")}</div>
-          {state.reason && <div style={{ fontSize: 21, color: "#fde68a", marginTop: 10, opacity: 0.9, textAlign: "center", padding: "0 24px" }}>{state.reason} — the supervisor will sign this off.</div>}
+          {state.reason && <div style={{ fontSize: 21, color: "#fde68a", marginTop: 10, opacity: 0.9, textAlign: "center", padding: "0 24px" }}>{state.reason}</div>}
           <div style={{ marginTop: 28, display: "flex", gap: 14 }}>{options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}</div>
         </>
       )}
@@ -1193,7 +1181,6 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
               );
             })}
           </div>
-          <div style={{ marginTop: 12, fontSize: 17, color: "rgba(255,255,255,0.6)", textAlign: "center", padding: "0 24px" }}>{hintLine}</div>
         </>
       )}
 
@@ -1226,7 +1213,7 @@ function ResultCard({ result, onResolve }) {
         {result.thumb && <img src={result.thumb} alt="" style={{ width: 84, height: 63, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />}
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: statusColor(result.status) }}>
-            {isManual ? "✍ Entered by hand — needs supervisor sign-off" : isFlagged ? "🚩 Flagged — with the supervisor" : "🔧 Resolved"}
+            {isManual ? "✍ Entered by hand" : isFlagged ? "🚩 Flagged" : "🔧 Resolved"}
           </div>
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 800, marginTop: 4, lineHeight: 1 }}>
             {result.match ? `#${result.match.number} · ${result.match.name || "—"}` : `#${result.detected?.number || "?"} · ${result.detected?.name || "Not detected"}`}
@@ -1822,7 +1809,7 @@ export default function App() {
     }
     // A jersey reached the screen: one of the owed checks is spent on it.
     if (vigilRef.current.scanDone()) setChecksLeft(vigilRef.current.remaining);
-    if (m === null) { showFlag("No name or number could be read. Check the jersey is in frame, flat, and lit.", "COULD NOT READ"); return; }
+    if (m === null) { showFlag("No name or number could be read.", "COULD NOT READ"); return; }
 
     if (m.type === "exact")          { scanObj.shown = { mode: "confirm", id: m.match._id }; setOverlay({ mode: "confirm", scan: scanObj, match: m.match }); }
     else if (m.type === "duplicate") { scanObj.shown = { mode: "duplicate", id: m.match._id }; setOverlay({ mode: "duplicate", scan: scanObj, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.size ? " · " + m.match.size : ""} already passed this session.` }); playTone("flag"); }
@@ -2001,7 +1988,7 @@ export default function App() {
       const reason = `Not on the roster — operator typed ${label}`;
       const entry  = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: typedRow, status: S_FLAGGED, reason, ...stamp() };
       setLog(prev => [entry, ...prev]); setLastResult(entry);
-      setOverlay({ mode: "supervisor", scan: o.scan, match: typedRow, reason: "This jersey is not on the order's roster. Nothing was added — take it to the supervisor to check against the order paper.", route: "Supervisor → check the order" });
+      setOverlay({ mode: "supervisor", scan: o.scan, match: typedRow, reason: "Not on the roster.", route: "Supervisor → check the order" });
       playTone("flag");
     };
     return {
@@ -2018,23 +2005,31 @@ export default function App() {
     retry()  { setOverlay(null); armAutoScan(); },
     pick(c)  { if (!overlay?.scan || !c || isDone(c)) return; setOverlay({ mode: "confirm", scan: overlay.scan, match: c, note: overlay.note }); },
     reasons() { setOverlay(o => ({ mode: "reasons", scan: o.scan, match: o.match || null, returnTo: o })); },
+    // The jersey just passed turns out to have a problem: reopen it on the
+    // reasons screen. The chosen reason flags it (its pass is taken back);
+    // Back leaves it passed.
+    reopenLast() {
+      const c = lastConfirmed; if (!c?.match) return;
+      const scan = { id: c.id, detected: c.detected, thumb: c.thumb, smallThumb: c.thumb, photo: null };
+      setOverlay({ mode: "reasons", scan, match: c.match, returnTo: null, reopened: true });
+    },
     back()   { setOverlay(o => o.returnTo || null); },
     chooseReason(r) {
       const o = overlay; if (!o) return;
-      if (r.inPlace) { setOverlay({ ...(o.returnTo || { mode: "flag", scan: o.scan }), note: r.label }); return; }
+      if (r.inPlace) { if (o.reopened) { setOverlay(null); armAutoScan(); return; } setOverlay({ ...(o.returnTo || { mode: "flag", scan: o.scan }), note: r.label }); return; }
       if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it
-      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: r.label, reasonId: r.id, ...stamp() };
+      const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened ? `${r.label} — found after it passed` : r.label, reasonId: r.id, ...stamp() };
       if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
-      setLog(prev => [entry, ...prev]); setLastResult(entry);
+      setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(null);
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: r.label, route: r.route });
       playTone("flag");
     },
     reasonSubmit(text) {
       const o = overlay; if (!o) return;
       const label = String(text || "").trim(); if (!label) return;
-      const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: label, reasonId: "other", ...stamp() };
+      const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened ? `${label} — found after it passed` : label, reasonId: "other", ...stamp() };
       if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
-      setLog(prev => [entry, ...prev]); setLastResult(entry);
+      setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(null);
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: label, route: "Supervisor decides" });
       playTone("flag");
     },
@@ -2072,7 +2067,7 @@ export default function App() {
         const sameAsRead = d && String(d.number ?? "").trim() === number && String(d.name ?? "").trim().toLowerCase() === name.toLowerCase();
         if (m.type === "close" && sameAsRead) { commitTyped(o, typed, null); return; }
         setOverlay({ mode: "pick", scan: o.scan, candidates: m.candidates, typed,
-          reason: m.type === "pick" ? "What you typed matches these rows — which one?" : "What you typed is close to these rows — one of them, or not on the roster?",
+          reason: m.type === "pick" ? "Which one?" : "Close to these — one of them?",
           note: "Typed by operator — the camera could not read it" });
         return;
       }
@@ -2080,7 +2075,7 @@ export default function App() {
     },
     continueManual() { setOverlay(null); armAutoScan(); },
     };
-  }, [overlay, stamp, armAutoScan, roster, teamNames, noteMistake]);
+  }, [overlay, stamp, armAutoScan, roster, teamNames, noteMistake, lastConfirmed]);
 
   // ── Flag resolution (from the result card) ────────────────────────────────
   const resolveFlag = useCallback((logId, decision, note) => {
@@ -2123,7 +2118,7 @@ export default function App() {
   const unscan = useCallback((id) => {
     const row = roster.find(r => r._id === id); if (!row || !row.scanned) return;
     const was = { pass: "passed", manual: "entered by hand", flag: "with the supervisor", missing: "marked missing", short: "marked short-shipped" }[row.scanned] || row.scanned;
-    if (!window.confirm(`Un-check #${row.number}${row.name ? " · " + row.name : ""} (${was})?\n\nIt goes back to Remaining and must be scanned again.`)) return;
+    if (!window.confirm(`Un-check #${row.number}${row.name ? " · " + row.name : ""} (${was})?`)) return;
     if (row.scanned === "pass") noteMistake("unchecked");   // a pass taken back: the app, or the operator, got it wrong — check the next ones
     setRoster(prev => prev.map(r => r._id === id ? { ...r, scanned: false } : r));
     const resolution = `Un-checked by ${operatorName || "operator"} — to be scanned again`;
@@ -2325,7 +2320,7 @@ export default function App() {
                           </div>
                         )}
                         <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.65)", color: "#e2e8f0", fontSize: 15, padding: "6px 14px", borderRadius: 999, whiteSpace: "nowrap" }}>
-                          Lay it flat, fully open, no folds · Press <kbd style={{ background: "#1e293b", padding: "2px 7px", borderRadius: 4, fontSize: 15, fontWeight: 700 }}>{keyLabel}</kbd> to scan
+                          Press <kbd style={{ background: "#1e293b", padding: "2px 7px", borderRadius: 4, fontSize: 15, fontWeight: 700 }}>{keyLabel}</kbd> to scan
                         </div>
                       </>
                     )}
@@ -2373,7 +2368,10 @@ export default function App() {
                   {lastConfirmed.match?.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#4ade80", fontWeight: 800 }}>{lastConfirmed.match.size}</span>}
                   {binOf(lastConfirmed.match?.team) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#60a5fa", fontWeight: 800 }}>Bin {binOf(lastConfirmed.match?.team)}</span>}
                   {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && r.scanned) && (
-                    <button onClick={() => unscan(lastConfirmed.match._id)} title="Wrong jersey? Un-check it — it goes back to Remaining and must be scanned again" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>↶ Undo — scan again</button>
+                    <button onClick={() => unscan(lastConfirmed.match._id)} title="Un-check it; it must be scanned again" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>↶ Undo</button>
+                  )}
+                  {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && r.scanned === "pass") && (
+                    <button onClick={actions.reopenLast} title="Found a problem after confirming? Flag this jersey" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#ef4444", color: "#fca5a5", whiteSpace: "nowrap" }}>🚩 Flag it</button>
                   )}
                   <span style={{ fontSize: 14, color: "#7c8ba1", marginLeft: "auto" }}>{lastConfirmed.timestamp}</span>
                 </div>
