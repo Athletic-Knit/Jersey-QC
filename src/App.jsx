@@ -1406,7 +1406,7 @@ function BinSetupModal({ entries, onConfirm }) {
 }
 
 // ── Roster complete modal ─────────────────────────────────────────────────────
-function RosterCompleteModal({ roster, offRosterFlags = 0, onExport, onDismiss }) {
+function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onExport, onDismiss }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const stats = [
     { label: "Passed",        value: count("pass"),    color: "#22c55e" },
@@ -1424,7 +1424,7 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, onExport, onDismiss }
         <div style={{ fontSize: 18, color: "#cbd5e1", marginBottom: 8, lineHeight: 1.4 }}>
           {open ? `${open} still open — with the supervisor, entered by hand, missing, or short-shipped. The box stays open until they are signed off or come back.` : `All ${roster.length} jerseys passed.`}
         </div>
-        <div style={{ fontSize: 16, color: "#94a3b8", marginBottom: 26 }}>Review the roster before exporting.</div>
+        {canExport && <div style={{ fontSize: 16, color: "#94a3b8", marginBottom: 26 }}>Review the roster before exporting.</div>}
         <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 28, flexWrap: "wrap" }}>
           {stats.map(s => (
             <div key={s.label}>
@@ -1434,8 +1434,8 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, onExport, onDismiss }
           ))}
         </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-          <button onClick={onExport}  style={{ ...btnPri, fontSize: 19, padding: "14px 32px", background: "#22c55e" }}>⬇ Export to Excel</button>
-          <button onClick={onDismiss} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>Review first</button>
+          {canExport && <button onClick={onExport}  style={{ ...btnPri, fontSize: 19, padding: "14px 32px", background: "#22c55e" }}>⬇ Export to Excel</button>}
+          <button onClick={onDismiss} style={canExport ? { ...btnGhost, fontSize: 17, padding: "14px 22px" } : { ...btnPri, fontSize: 19, padding: "14px 32px" }}>{canExport ? "Review first" : "✓ Done"}</button>
         </div>
       </div>
     </div>
@@ -2225,7 +2225,7 @@ export default function App() {
       {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
 
       {showRosterComplete && (
-        <RosterCompleteModal roster={roster} offRosterFlags={offRosterFlags}
+        <RosterCompleteModal roster={roster} offRosterFlags={offRosterFlags} canExport={canSupervise}
           onExport={() => { exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf); closeDialog(() => setShowRosterComplete(false)); }}
           onDismiss={() => closeDialog(() => setShowRosterComplete(false))} />
       )}
@@ -2455,6 +2455,7 @@ export default function App() {
                 {v === "log" ? `Log (${log.length})` : `Roster (${roster.length})`}
               </button>
             ))}
+            {canSupervise && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 12px", borderLeft: "1px solid #21262d", flexWrap: "wrap" }}>
               {roster.length > 0 && (
                 <>
@@ -2473,6 +2474,7 @@ export default function App() {
                 </>
               )}
             </div>
+            )}
           </div>
 
           {view === "roster" && (
@@ -2531,7 +2533,7 @@ export default function App() {
             <div style={{ flex: 1, overflowY: "auto", padding: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontSize: 15, color: "#94a3b8" }}>{log.length} scans this session</span>
-                {log.length > 0 && <button onClick={() => exportLogCSV(log, orderNumber, binOf)} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px" }}>⬇ Export log</button>}
+                {canSupervise && log.length > 0 && <button onClick={() => exportLogCSV(log, orderNumber, binOf)} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px" }}>⬇ Export log</button>}
               </div>
               {log.length === 0
                 ? <div style={{ textAlign: "center", padding: 28, color: "#94a3b8", fontSize: 17 }}>No scans yet.</div>

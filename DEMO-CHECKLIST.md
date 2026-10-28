@@ -18,6 +18,8 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 - [x] **Operator sets the order number.** The order-number field is open to everyone at setup and in the header. A roster file that carries the number (an Order / Order Number / PO / Job column, or a title row such as "Order 55555" above the header) fills it in by itself; the operator can type over it. A supervisor-sent roster still brings its number.
 - [x] **Packer blocked at sign-in.** The Packer role shows dimmed with "under development" and a not-allowed cursor; clicking it does nothing.
 
+- [x] **No export or roster editing for operators.** Add, Replace, Export, Damage report and Export log show only to a supervisor or admin; the operator's completion screen ends with Done instead of Export to Excel. The supervisor's board keeps every export.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.
