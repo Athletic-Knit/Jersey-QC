@@ -1416,6 +1416,45 @@ function BinSetupModal({ entries, onConfirm }) {
 }
 
 // ── Roster complete modal ─────────────────────────────────────────────────────
+// ── History: every jersey scanned this order, latest first ──────────────────
+// One line per jersey (its latest log entry). A passed jersey can be flagged
+// from here when a problem is found later; a flagged one is with the
+// supervisor. Esc or Close goes back to the camera.
+function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
+  useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
+  const seen = new Set();
+  const rows = log.filter(l => l.match && l.match._id !== undefined && [S_PASS, S_FLAGGED, S_MANUAL].includes(l.status) && !seen.has(l.match._id) && seen.add(l.match._id));
+  const stateOf = l => roster.find(r => r._id === l.match._id)?.scanned;
+  return (
+    <div style={modalBg} onClick={onClose}>
+      <div style={{ ...modalCard, maxWidth: 780, width: "100%", maxHeight: "90%", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <div style={{ fontWeight: 900, fontSize: 26 }}>Scanned this order</div>
+          <span style={{ color: "#94a3b8", fontSize: 15 }}>{rows.length} · latest first</span>
+          <button onClick={onClose} style={{ ...btnGhost, marginLeft: "auto", padding: "6px 14px", fontSize: 14 }}>Close <Kbd light>Esc</Kbd></button>
+        </div>
+        <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+          {rows.length === 0 && <div style={{ color: "#94a3b8", padding: 24, textAlign: "center", fontSize: 17 }}>Nothing scanned yet.</div>}
+          {rows.map(l => { const st = stateOf(l); return (
+            <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 10, background: st === "flag" ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.06)", border: "1px solid #21262d" }}>
+              {l.thumb && <img src={l.thumb} alt="" style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
+              <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 28, lineHeight: 1 }}>#{l.match.number}{l.match.name ? ` · ${l.match.name}` : ""}</span>
+              {l.match.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#4ade80", fontWeight: 800 }}>{l.match.size}</span>}
+              {binOf(l.match.team) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#60a5fa", fontWeight: 800 }}>Bin {binOf(l.match.team)}</span>}
+              <span style={{ marginLeft: "auto", fontSize: 14, color: "#7c8ba1", whiteSpace: "nowrap" }}>{l.timestamp}</span>
+              {st === "flag"
+                ? <Pill color="#ef4444">Flagged</Pill>
+                : st === "pass" || st === "manual"
+                  ? <button onClick={() => onFlag(l)} style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#ef4444", color: "#fca5a5", whiteSpace: "nowrap" }}>🚩 Flag it</button>
+                  : <span style={{ fontSize: 14, color: "#7c8ba1" }}>Open</span>}
+            </div>
+          ); })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onExport, onDismiss }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const stats = [
@@ -1493,7 +1532,8 @@ export default function App() {
   const [lastConfirmed,      setLastConfirmed]      = useState(null);
   const [log,                setLog]                = useState([]);
   const [view,               setView]               = useState("roster");
-  const [rosterFilter,       setRosterFilter]       = useState(null);   // "pass" | "flag" | "manual" | null — set by clicking a header pill
+  const [rosterFilter,       setRosterFilter]       = useState(null);
+  const [showHistory,        setShowHistory]        = useState(false);   // every jersey scanned this order, latest first   // "pass" | "flag" | "manual" | null — set by clicking a header pill
   const filterRoster = useCallback(kind => { setRosterFilter(f => (f === kind ? null : kind)); setView("roster"); }, []);
   const [error,              setError]              = useState(null);
   const [xlsxReady,          setXlsxReady]          = useState(!!window.XLSX);
@@ -1890,7 +1930,7 @@ export default function App() {
   useEffect(() => { triggerRef.current = doTriggerScan; }, [doTriggerScan]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
-  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor;
+  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHistory;
   useEffect(() => {
     if (!cameraOn || inputMode !== "camera" || !handsFree) { gateRef.current.disarm(); return; }   // paused, or nothing left in the order: never scan the empty table
     const id = setInterval(() => {
@@ -2048,11 +2088,12 @@ export default function App() {
     // The jersey just passed turns out to have a problem: reopen it on the
     // reasons screen. The chosen reason flags it (its pass is taken back);
     // Back leaves it passed.
-    reopenLast() {
-      const c = lastConfirmed; if (!c?.match) return;
+    reopen(c) {
+      if (!c?.match) return;
       const scan = { id: c.id, detected: c.detected, thumb: c.thumb, smallThumb: c.thumb, photo: null };
       setOverlay({ mode: "reasons", scan, match: c.match, returnTo: null, reopened: true });
     },
+    reopenLast() { actions.reopen(lastConfirmed); },
     back()   { setOverlay(o => o.returnTo || null); },
     chooseReason(r) {
       const o = overlay; if (!o) return;
@@ -2061,7 +2102,7 @@ export default function App() {
       if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it
       const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened ? `${r.label} — found after it passed` : r.label, reasonId: r.id, ...stamp() };
       if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
-      setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(null);
+      setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(c => (c?.match?._id === o.match?._id ? null : c));
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: r.label, route: r.route });
       playTone("flag");
     },
@@ -2071,7 +2112,7 @@ export default function App() {
       inspectRef.current.defect(); syncInspect();
       const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened ? `${label} — found after it passed` : label, reasonId: "other", ...stamp() };
       if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
-      setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(null);
+      setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(c => (c?.match?._id === o.match?._id ? null : c));
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: label, route: "Supervisor decides" });
       playTone("flag");
     },
@@ -2233,6 +2274,10 @@ export default function App() {
       )}
       {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
 
+      {showHistory && (
+        <HistoryModal log={log} roster={roster} binOf={binOf} onClose={() => closeDialog(() => setShowHistory(false))}
+          onFlag={l => { setShowHistory(false); actions.reopen(l); }} />
+      )}
       {showRosterComplete && (
         <RosterCompleteModal roster={roster} offRosterFlags={offRosterFlags} canExport={canSupervise}
           onExport={() => { exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf); closeDialog(() => setShowRosterComplete(false)); }}
@@ -2263,6 +2308,7 @@ export default function App() {
           {hubOk === false && <Pill color="#f87171">Supervisor screen not reachable — scanning still works</Pill>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
           {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
+          {sessionStarted && <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>History</button>}
           {sessionStarted && <button onClick={startNewOrder} title="Finish this order and set up the next one — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>New order</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
           <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⤢ Exit full screen" : "⛶ Full screen"}</button>

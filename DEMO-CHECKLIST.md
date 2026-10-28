@@ -36,7 +36,7 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 4. [ ] **Clear and obvious.** Every screen should tell a new operator what to do next without training.
 5. [ ] **Damage logic by order type.** The damage / flag reasons offered should depend on the type of order. Needs item 8 first.
 6. [x] **Go back to the last scan.** The "Last passed" bar has "Flag it": it reopens the jersey on the reasons screen, the chosen reason takes its pass back and logs "— found after it passed"; Back leaves it passed. Any earlier jersey is item 7.
-7. [ ] **History button on top.** A button that lists all previously scanned jerseys, latest first, so any of them can be flagged after the fact. Builds on item 6.
+7. [x] **History button on top.** "History" in the header opens every jersey scanned this order, latest first, one line each with its photo, size and bin; a passed jersey has "Flag it" (reasons screen, pass taken back, "found after it passed" in the log), a flagged one shows Flagged. Esc closes.
 8. [ ] **Ask Mahesh or Polina for every flag type.** Get the full list of flags that can come up on the floor, so the reasons menu and item 5 are complete.
 9. [ ] **Virtual keyboard.** Put an on-screen keyboard wherever typing is needed (name, order number, edit number, note), and remove the need to type wherever a button or list can do the job instead.
 10. [ ] **Ask Polina for a real roster file.** Test with it without jerseys, and check whether the roster carries more about the order (order type, what to inspect for) that the app could read and use.
