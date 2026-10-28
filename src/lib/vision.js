@@ -24,7 +24,8 @@ Read these fields:
 - "jersey_present": true when a jersey, a name plate or a number patch is in the picture, even folded, bunched, partly out of frame, or so close that only the number and the fabric around it are in view. Any printed name or number in the picture means true, whatever it is printed on. false only when the picture shows no garment and no printed name or number at all — only a table, a mat, a bag, hands, or other objects. When it is false, return "" for name and number.
 - "orientation": which way the printed name and number are turned in the picture: "upright" when the letters and digits stand the right way up and read left to right; "upside_down" when they stand on their heads; "rotated_left" when the top of the letters points to the left edge of the picture; "rotated_right" when it points to the right edge. Nearly every jersey is upright: answer anything else only when the lettering is clearly turned.
 - "name": the player name, printed in block capitals, if any. Ignore team names, sponsor logos and wordmarks; those are not the player name. In this block lettering, G has a horizontal bar and C does not; O is round and Q has a tail; B is closed and 8 is a digit. Copy the letters exactly as printed, including apostrophes and hyphens.
-- "number": the LARGE player number, if any. Jerseys also carry a smaller copy of the same number on each sleeve, and folded sleeves can sit right beside the back number: IGNORE sleeve numbers and never merge them into the back number. A player number is 1 or 2 digits (00 to 99). Never return 3 or more digits.
+- "number": the LARGE player number, if any. Jerseys also carry a smaller copy of the same number on each sleeve, and folded sleeves can sit right beside the back number: IGNORE sleeve numbers and never merge them into the back number. Two numbers of different sizes in one picture are two different things: only the LARGEST is the player number. A player number is 1 or 2 digits (00 to 99). Never return 3 or more digits.
+- "sleeve_numbers": the small numbers printed on the sleeves or shoulders, exactly as printed, as a list; [] when none are in view.
 - "jersey_colour": the main colour of the jersey body, the fabric around the number, in one or two plain words ("black", "white", "red", "navy blue", "forest green", "grey"). Not the colour of the number itself.
 - "trim_colour": the second most visible colour on the jersey (stripes, shoulders, number outline), one or two words, or "" if none.
 - "obstruction": look closely at the fabric immediately left and right of the digits and around the name before you answer the next fields. At most five words saying what, if anything, covers, overlaps or cuts off the name or number, for example "hand over the right digit", "folded sleeve over the name", "cut off at the top of the picture". "" when nothing does.
@@ -33,7 +34,7 @@ Read these fields:
 - "name_complete": true when the whole name is visible from its first letter to its last. false when any letters are covered (a hand, a fold, a tag, another garment), cut off by the edge of the picture, or unreadable, so the "name" you return may be only part of the word. If only part of a name is readable, still return the letters you can read. A short name of two or three letters with open fabric on both sides of it is complete.
 - "number_complete": true when every digit of the back number is wholly visible. false when any part of a digit could be covered or cut off (a hand, a fold, a tag, another garment, the edge of the picture). This is about the digits only: the jersey body, sleeves or collar running out of the picture does not matter if the digits themselves are whole. For a single digit, look at the fabric within one digit's width on each side of it: smooth, open fabric on both sides means the number is complete and is that one digit. Return false only when something is actually there — a fold line, a crease, a sleeve, a hand, a tag, a shadow band, or the edge of the picture — or the digit sits clearly to the left or right of the jersey's centre line, which usually means a second digit is hidden.
 Return ONLY valid JSON, no markdown, no commentary:
-{"jersey_present":true,"orientation":"upright","name":"NAME","number":"##","jersey_colour":"black","trim_colour":"red","obstruction":"","laid_flat":true,"number_position":"centre","name_complete":true,"number_complete":true}
+{"jersey_present":true,"orientation":"upright","name":"NAME","number":"##","sleeve_numbers":[],"jersey_colour":"black","trim_colour":"red","obstruction":"","laid_flat":true,"number_position":"centre","name_complete":true,"number_complete":true}
 If more than one jersey or plate is in the picture, read the largest or most central one and ignore the others.
 Never leave a field empty because you are unsure, and never decide that an item is "only a sample" or "not a real name": whatever letters are printed, return them. A person checks every read against the order, so a near-miss is far more useful than nothing. Do not explain; output the JSON only. Use "" only for a field that is truly not in the picture. A name plate with no number is a valid read: return the name and "" for the number.`;
 
@@ -50,7 +51,7 @@ function parseModelText(data) {
   // The completeness fields default to "complete" when the model leaves them
   // out, so an older or terser answer never turns into a false alarm.
   const name = str(obj.name), number = str(obj.number);
-  return {
+  const out = {
     // Absent → present: an older answer never reads as an empty table. And a
     // read with a name or a number in it is never an empty table either, whatever
     // the flag says: hands-free would skip that jersey in silence.
@@ -68,6 +69,16 @@ function parseModelText(data) {
     trim_colour: str(obj.trim_colour).toLowerCase(),
     obstruction: str(obj.obstruction),
   };
+  // Sleeves carry a copy of the whole back number. A ONE-digit sleeve number
+  // beside a TWO-digit back read that contains it is a merge (the real #4 with
+  // its sleeve "4" read as "44" or "40"): the back number is in doubt.
+  const small = out.sleeve_numbers.map(x => x.replace(/\D/g, "")).filter(x => x.length === 1);
+  const n = out.number.replace(/\D/g, "");
+  if (n.length === 2 && small.some(d => n.includes(d))) {
+    out.number_complete = false;
+    out.obstruction = (out.obstruction ? out.obstruction + "; " : "") + "small sleeve number beside the digit";
+  }
+  return out;
 }
 
 // Four fractions [left, top, right, bottom] in 0–1 with a real area, else null.

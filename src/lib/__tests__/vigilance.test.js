@@ -152,3 +152,20 @@ describe("operator inspection regime", () => {
     expect(fresh.current().phase).toBe("full"); expect(fresh.current().remaining).toBe(5);
   });
 });
+
+describe("a name that anchors the row: the turn cannot change the answer", () => {
+  const roster = [row(0, "MACDONALD", "81"), row(1, "OKAFOR", "18"), row(2, "", "6"), row(3, "", "9")];
+  it("turnMatters is false for #81 MACDONALD however the frame is turned, true for a nameless 6 with a 9 open", () => {
+    expect(turnMatters({ ...read("81", "MACDONALD"), orientation: "rotated_left" }, roster)).toBe(false);
+    expect(turnMatters({ ...read("6"), orientation: "upside_down" }, roster)).toBe(true);
+    expect(turnMatters({ ...read("81", "MACDONALX"), orientation: "rotated_left" }, roster)).toBe(true);   // the name does not match a row: no anchor
+  });
+  it("settleTurned keeps the green when two non-upright reads agree on a name-anchored row", () => {
+    const first = { ...read("81", "MACDONALD"), orientation: "rotated_left" }, again = { ...read("81", "MACDONALD"), orientation: "rotated_right" };
+    const m = findMatches(roster, "MACDONALD", "81", { orientation: "rotated_left" });
+    expect(settleTurned(first, m, again, m).match.type).toBe("exact");
+    const n1 = { ...read("9"), orientation: "upside_down" }, n2 = { ...read("9"), orientation: "upside_down" };
+    const m9 = findMatches(roster, "", "9", {});
+    expect(settleTurned(n1, m9, n2, m9).match.type).toBe("pick");                    // nameless: still a question
+  });
+});

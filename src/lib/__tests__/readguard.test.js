@@ -291,10 +291,11 @@ describe("the camera doubts its read", () => {
     expect(m.type).toBe("pick");
     expect(ids(m)).toEqual([0, 1]);
   });
-  it("number covered: #4 flagged incomplete, no name → yellow with #4, #40, #14 and the model's words", () => {
+  it("number covered: #4 flagged incomplete, no name, hand to the RIGHT → yellow with #4 and #40 (not #14) and the model's words", () => {
     const m = findMatches(named, "", "4", { numberComplete: false, obstruction: "hand over the right digit" });
     expect(m.type).toBe("pick");
-    expect(ids(m)).toEqual(expect.arrayContaining([0, 1, 2]));
+    expect(m.candidates.map(c => c.number)).toEqual(expect.arrayContaining(["4", "40"]));
+    expect(m.candidates.map(c => c.number)).not.toContain("14");   // a 4 with the cover to its right is the FIRST digit
     expect(m.reason).toMatch(/covered or cut off/);
     expect(m.reason).toMatch(/hand over the right digit/);
   });
@@ -473,5 +474,38 @@ describe("a flagged jersey stays flagged", () => {
   it("a jersey marked missing that turns up scans normally", () => {
     const r = [row(0, "52", "", "missing")];
     expect(findMatches(r, "", "52", {})).toMatchObject({ type: "exact", match: { _id: 0 } });
+  });
+});
+
+describe("the side of the hidden digit trims the list", () => {
+  const row = (i, number) => ({ _id: i, name: "", number, team: "", size: "A-L", scanned: false });
+  const roster = [row(0, "40"), row(1, "14"), row(2, "54"), row(3, "41"), row(4, "52")];
+  it("a 4 with the cover to its right lists #40 and #41; to its left, #14 and #54; unknown side, all four", () => {
+    const right = findMatches(roster, "", "4", { numberComplete: false, obstruction: "hand over the right digit" });
+    expect(right.type).toBe("pick"); expect(right.candidates.map(c => c.number).sort()).toEqual(["40", "41"]);
+    const left = findMatches(roster, "", "4", { numberComplete: false, obstruction: "fold covering the left digit" });
+    expect(left.candidates.map(c => c.number).sort()).toEqual(["14", "54"]);
+    const unknown = findMatches(roster, "", "4", { numberComplete: false, obstruction: "a hand" });
+    expect(unknown.candidates.map(c => c.number).sort()).toEqual(["14", "40", "41", "54"]);
+  });
+  it("never trims into a green: #4 open with a cover to the right and only #14 as the alternative stays a question", () => {
+    const r = [row(0, "4"), row(1, "14")];
+    const m = findMatches(r, "", "4", { numberComplete: false, obstruction: "hand over the right digit" });
+    expect(m.type).toBe("pick");
+    expect(m.candidates.map(c => c.number)).toEqual(["4"]);
+  });
+});
+
+describe("vision parser: sleeve numbers", () => {
+  const wrap = obj => ({ content: [{ type: "text", text: JSON.stringify(obj) }] });
+  it("a one-digit sleeve number inside a two-digit back read puts the back number in doubt", () => {
+    const r = parseModelText(wrap({ name: "", number: "40", sleeve_numbers: ["4", "4"], number_complete: true }));
+    expect(r.number_complete).toBe(false);
+    expect(r.obstruction).toMatch(/sleeve number/);
+  });
+  it("a sleeve number that copies the whole back number, or none, changes nothing", () => {
+    expect(parseModelText(wrap({ name: "GABBARD", number: "40", sleeve_numbers: ["40", "40"], number_complete: true })).number_complete).toBe(true);
+    expect(parseModelText(wrap({ name: "", number: "40", number_complete: true })).number_complete).toBe(true);
+    expect(parseModelText(wrap({ name: "", number: "4", sleeve_numbers: ["4"], number_complete: true })).number_complete).toBe(true);
   });
 });

@@ -15,7 +15,7 @@
 // disagreement spelled out. The model's two answers are independent enough
 // that a misread digit (4.7% of clean reads in the operator simulation) is
 // caught on the second read almost every time.
-import { norm, normNum } from "./text.js";
+import { norm, normNum, nameMatches } from "./text.js";
 import { rotated180 } from "./match.js";
 
 export const CHECKS_AFTER_MISTAKE = 5;
@@ -93,9 +93,21 @@ export function reconcile(d1, m1, d2, m2) {
 // A turned jersey only matters when turning could change the answer: the
 // number read has an upside-down twin (6/9, 18/81, 66/99) that is open on the
 // roster. A #52 reads as #52 whichever way up it lies.
+// The name read matches exactly one roster row, and that row carries the
+// number read: the name pins the jersey, and no turn of the frame can move a
+// name onto another roster name. (A read like that was "#81 MACDONALD" four
+// times on a tilted jersey while the model kept changing its mind about which
+// way it was turned.)
+export function nameAnchors(read, roster) {
+  const nm = norm(read?.name); if (!nm) return false;
+  const rows = roster.filter(r => nameMatches(nm, r.name));
+  return rows.length === 1 && normNum(rows[0].number) === normNum(read.number);
+}
+
 export function turnMatters(read, roster) {
   if (!read || !read.orientation || read.orientation === "upright") return false;
   const n = normNum(read.number); if (!n) return false;
+  if (nameAnchors(read, roster)) return false;
   const alt = rotated180(n);
   return !!alt && alt !== n && roster.some(r => normNum(r.number) === alt && !r.scanned);
 }
@@ -111,7 +123,8 @@ export function settleTurned(first, m1, upright, m2) {
   const rc = reconcile(first, m1, upright, m2);
   // Two reads of a jersey that is still not upright may agree on a 9 that is
   // really a 6: that agreement is never a green.
-  if (rc.agreed && rc.match?.type === "exact" && upright?.orientation !== "upright") {
+  const anchored = rc.match?.type === "exact" && nameMatches(norm(rc.read?.name), rc.match.match?.name);   // the name pins the row: a turn cannot change it
+  if (rc.agreed && rc.match?.type === "exact" && upright?.orientation !== "upright" && !anchored) {
     return { match: { type: "pick", candidates: [rc.match.match], reason: `Read #${n2 || n1} on a jersey that is not the right way up — check the number. Is it this one?`, soft: true }, read: rc.read, checked: true, agreed: false };
   }
   return rc;

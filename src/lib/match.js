@@ -93,6 +93,25 @@ function hiddenDigitNumbers(nNum, roster) {
   return roster.filter(r => { const rn = normNum(r.number); return rn.length > nNum.length && isPlausibleNumber(rn) && rn.includes(nNum); });
 }
 
+// Which side of the digits the cover is on, from the model's own words about
+// the obstruction: 1 = right / second / last, 0 = left / first, null = unknown.
+export function coverSide(obstruction) {
+  const obs = String(obstruction || "").toLowerCase();
+  return /\b(left|first)\b/.test(obs) ? 0 : /\b(right|second|last)\b/.test(obs) ? 1 : null;
+}
+
+// A one-digit read with the cover to its RIGHT can only be the first digit
+// of a two-digit number ("4" with a hand to the right: 40, 41, 45, never 14
+// or 54); a cover to the LEFT, only the second. Trims the two-digit rows on
+// the list to the side that fits. Only the list the operator sees changes;
+// if nothing would be left, the list stays as it was.
+export function trimBySide(cands, nNum, side, covered) {
+  if (!covered || side === null || !nNum || nNum.length !== 1) return cands;
+  const fits = r => { const rn = normNum(r.number); return rn.length !== 2 || (side === 1 ? rn[0] === nNum : rn[rn.length - 1] === nNum); };
+  const kept = cands.filter(fits);
+  return kept.length ? kept : cands;
+}
+
 function nearNames(nName, roster) {
   if (nName.length < 3) return [];
   const tol = nName.length >= 6 ? 2 : 1;
@@ -285,8 +304,7 @@ function findMatchesInner(roster, name, number, read = {}) {
     const hidden = nNum.length === 1 ? hiddenDigitNumbers(nNum, roster) : [];
     // A COVERED two-digit read is a guess at the hidden digit ("21" with the 3
     // under a hand is the #31), so it also offers the rows one digit away.
-    const obs = String(read.obstruction || "").toLowerCase();
-    const side = /\b(left|first)\b/.test(obs) ? 0 : /\b(right|second|last)\b/.test(obs) ? 1 : null;
+    const side = coverSide(read.obstruction);
     const guessedDigit = partialNum && read.numberComplete === false && nNum.length === 2 ? nearNumbers(nNum, roster, { anyDigit: true, side, sameLength: true }) : [];
     const cands = exact.length
       ? dedupe([...exact, ...hidden, ...guessedDigit])
@@ -319,7 +337,7 @@ function findMatchesInner(roster, name, number, read = {}) {
         if (sure2) return sure2;
       }
     }
-    if (cands.length) return { type: "pick", candidates: withoutNamed(cands, nName, read, numberOnly), reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true };
+    if (cands.length) return { type: "pick", candidates: withoutNamed(trimBySide(cands, nNum, side, partialNum && read.numberComplete === false), nName, read, numberOnly), reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true };
     return { type: "none", reason: `${why.join("; ")}${what}`, soft: true };
   }
 

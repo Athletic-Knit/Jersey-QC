@@ -28,6 +28,8 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 
 - [x] **A flagged jersey stays flagged.** Scanning it again shows FLAGGED ("with the supervisor"), never a green; on a list it is greyed as Flagged; only a supervisor can un-check a flagged row. The supervisor's Reject reopens the row for the rescan after rework; Accept passes it.
 
+- [x] **Three recognition rules.** A name that pins the row makes the turn irrelevant (no re-read, green); the side of the cover trims hidden-digit lists (#40, #41, not #14, #54); two sizes are two numbers, and a small sleeve number inside a two-digit read puts it in doubt. Gate 13/13, simulation 0 wrong greens; the live subset rerun showed 5 wrong greens from older limits, written up as findings 18–19.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.
