@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCSV, splitCSVLine, detectDelimiter, canonicalHeader, rowsToRoster, buildBinMap, binFor, binEntries, extraColumns, displayColumns, BOM } from "../roster.js";
+import { parseCSV, splitCSVLine, detectDelimiter, canonicalHeader, rowsToRoster, buildBinMap, binFor, binEntries, extraColumns, displayColumns, BOM, orderNumberOf } from "../roster.js";
 
 const SAMPLE = `Name,Number,Team,Size Range,Size
 Smith,12,Eagles,A,L
@@ -110,5 +110,25 @@ describe("a re-used export is a roster, not yesterday's results", () => {
     expect(rows[0].bin).toBeUndefined();
     expect(rows[0].scanned).toBeUndefined();
     expect(displayColumns(rows)).toEqual(["name", "number", "team", "size"]);
+  });
+});
+
+describe("order number in the roster file", () => {
+  it("comes from an order column, which is not kept as roster data", () => {
+    const r = parseCSV("Order Number,Name,Number,Size\n55555,SEACH,9,A-L\n55555,EVANOVICH,4,Y-M\n");
+    expect(orderNumberOf(r)).toBe("55555");
+    expect(r).toHaveLength(2);
+    expect(Object.keys(r[0])).not.toContain("order");
+    expect(JSON.parse(JSON.stringify(r)).orderNumber).toBeUndefined();   // the saved session sees plain rows
+  });
+  it("comes from a title row above the header", () => {
+    const r = rowsToRoster([["Order 4521 - Ravens"], [], ["Name", "Number"], ["SEACH", "9"]]);
+    expect(orderNumberOf(r)).toBe("4521");
+    const po = rowsToRoster([["PO# AK-7781"], ["Name", "Number"], ["SEACH", "9"]]);
+    expect(orderNumberOf(po)).toBe("AK-7781");
+  });
+  it("is empty when the file has none", () => {
+    expect(orderNumberOf(parseCSV("name,number\nSEACH,9\n"))).toBe("");
+    expect(orderNumberOf([])).toBe("");
   });
 });

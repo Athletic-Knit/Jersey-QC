@@ -10,6 +10,7 @@ const ALIASES = {
   name:         ["name", "player", "player name", "playername", "last name", "lastname", "surname", "last", "full name", "fullname"],
   number:       ["number", "no", "no.", "#", "num", "jersey", "jersey #", "jersey#", "jersey number", "jerseynumber", "jersey no", "jersey no.", "shirt number", "shirt"],
   team:         ["team", "team name", "teamname", "club", "squad"],
+  order:        ["order", "order number", "order no", "order no.", "order #", "order#", "ordernumber", "order id", "po", "po number", "po #", "po#", "job", "job number", "work order", "wo"],
   size:         ["size"],
   "size range": ["size range", "sizerange", "range", "age group", "agegroup"],
 };
@@ -56,22 +57,44 @@ export function detectDelimiter(line) {
   return ",";
 }
 
+// "Order 55555", "Order no: 55555", "PO# 55555" in a title row above the header.
+const ORDER_IN_TEXT = /\b(?:order|po|job|work order)\s*(?:no\.?|number|id|#)?\s*[:#-]?\s*([A-Za-z0-9][\w-]*)/i;
+
 // rows: array of arrays of cell strings. Finds the header row (first row that
 // looks like one, within the first 15) so title rows above it are skipped.
+// The order number, when the file carries one (an "order" column, or a title
+// row above the header), rides along as a non-enumerable `orderNumber` on
+// the returned array: read it with orderNumberOf(). The column itself is not
+// kept as roster data.
 export function rowsToRoster(rows) {
   const limit = Math.min(rows.length, 15);
   let hIdx = -1;
   for (let i = 0; i < limit; i++) if (looksLikeHeader(rows[i])) { hIdx = i; break; }
   if (hIdx < 0) return [];
   const headers = rows[hIdx].map(canonicalHeader);
+  let orderNumber = "";
+  for (let i = 0; i < hIdx && !orderNumber; i++) {
+    const m = (rows[i] || []).map(c => String(c ?? "")).join(" ").match(ORDER_IN_TEXT);
+    if (m && !/^(no|number|id)$/i.test(m[1])) orderNumber = m[1];
+  }
   const out = [];
   rows.slice(hIdx + 1).forEach(cells => {
     const row = {};
-    headers.forEach((h, i) => { if (h && !APP_COLUMNS.includes(h)) row[h] = String(cells?.[i] ?? "").trim(); });
+    headers.forEach((h, i) => {
+      if (!h || APP_COLUMNS.includes(h)) return;
+      const v = String(cells?.[i] ?? "").trim();
+      if (h === "order") { if (v && !orderNumber) orderNumber = v; return; }
+      row[h] = v;
+    });
     if (row.name || row.number) out.push(row);
   });
-  return normaliseRosterRows(out);
+  const result = normaliseRosterRows(out);
+  Object.defineProperty(result, "orderNumber", { value: orderNumber, enumerable: false });
+  return result;
 }
+
+// The order number a parsed roster carried, or "".
+export function orderNumberOf(rows) { return (rows && rows.orderNumber) || ""; }
 
 export function parseCSV(text) {
   const clean = stripBOM(String(text ?? ""));

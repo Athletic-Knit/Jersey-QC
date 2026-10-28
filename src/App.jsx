@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS } from "./lib/roster.js";
+import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, loadRecentNames, rememberName, forgetName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -164,6 +164,7 @@ const goToStation = id => { const u = new URL(window.location.href); u.searchPar
 // PIN. The page's ?station= says where it is: station1..3 for inspectors,
 // "packing" for the packer, "supervisor" for the supervisor's board.
 const ROLE_CHOICES = ROLES.filter(r => r.id !== "admin");
+const BLOCKED_ROLES = ["packer"];   // shown, but not signable: the packer side is not built yet
 const roleOfStation = id => stationOf(id) ? "inspector" : id === "packing" ? "packer" : id === "supervisor" ? "supervisor" : "";
 const pageFor = (role, station) => role === "inspector" ? station : role === "packer" ? "packing" : "supervisor";
 
@@ -215,12 +216,15 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Role</label>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${ROLE_CHOICES.length},1fr)`, gap: 6 }}>
-            {ROLE_CHOICES.map(r => (
-              <button key={r.id} onClick={() => pickRole(r)} disabled={!!onCancel && r.id !== role}
-                style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: role === r.id ? "#3b82f6" : "#334155", color: role === r.id ? "#fff" : "#94a3b8", background: role === r.id ? "rgba(59,130,246,0.18)" : "transparent", opacity: onCancel && r.id !== role ? 0.4 : 1 }}>
-                {r.label}
+            {ROLE_CHOICES.map(r => {
+              const blocked = BLOCKED_ROLES.includes(r.id);   // under development: nobody signs in as it
+              return (
+              <button key={r.id} onClick={blocked ? undefined : () => pickRole(r)} disabled={!!onCancel && r.id !== role} aria-disabled={blocked || undefined} title={blocked ? "Under development" : undefined}
+                style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: role === r.id ? "#3b82f6" : "#334155", color: role === r.id ? "#fff" : "#94a3b8", background: role === r.id ? "rgba(59,130,246,0.18)" : "transparent", opacity: blocked || (onCancel && r.id !== role) ? 0.4 : 1, cursor: blocked ? "not-allowed" : "pointer" }}>
+                {r.label}{blocked && <div style={{ fontSize: 12, fontWeight: 400, marginTop: 2 }}>under development</div>}
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
         {role === "inspector" && (
@@ -303,7 +307,22 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     return () => { on = false; clearInterval(t); };
   }, []);
 
-  const handleFile = (e) => { const f = e.target.files[0]; if (f) { setFile(f); setPicked(null); setError(null); } e.target.value = ""; };
+  // A chosen file is read at once for the order number it may carry, so the
+  // field fills itself; the operator can still type over it.
+  const handleFile = (e) => {
+    const f = e.target.files[0];
+    if (f) {
+      setFile(f); setPicked(null); setError(null);
+      (async () => {
+        try {
+          const parsed = /\.(xlsx|xls)$/i.test(f.name) ? await parseExcel(f) : parseCSV(await f.text());
+          const n = orderNumberOf(parsed);
+          if (n) setOrder(o => o.trim() || n);
+        } catch { /* the Start button reports a bad file */ }
+      })();
+    }
+    e.target.value = "";
+  };
 
   const pickRoster = async (summary) => {
     try {
@@ -315,7 +334,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
 
   const canSupervise = role === "supervisor" || role === "admin";
   const handleStart = async () => {
-    if (canSupervise && !order.trim()) { setError("Please enter an order number."); return; }
+    if (!order.trim() && !picked) { setError("Enter the order number, or use a roster file that has it."); return; }
     if (!file && !picked) { setError(canSupervise ? "Upload a roster file, or pick one the supervisor sent." : "Pick the order the supervisor sent, or load a roster file."); return; }
     setLoading(true);
     try {
@@ -323,9 +342,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); return; }
-      // A file loaded at the station has no supervisor number: the file's name
-      // identifies the order so the hub still records it and the board can open it.
-      onStart({ roster: parsed, orderNumber: order.trim() || file.name.replace(/\.[^.]+$/, ""), notes: notes.trim(), jerseyType, rosterFile: file.name });
+      onStart({ roster: parsed, orderNumber: order.trim() || orderNumberOf(parsed) || file.name.replace(/\.[^.]+$/, ""), notes: notes.trim(), jerseyType, rosterFile: file.name });
     } catch (err) {
       setError("Failed to parse roster: " + err.message);
       setLoading(false);
@@ -363,10 +380,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           </div>
         )}
         <div style={{ marginBottom: 12 }}>
-          <label style={labelSt}>Order number{!canSupervise && <span style={{ color: "#7c8ba1", fontWeight: 400 }}> — set by the supervisor</span>}</label>
-          {canSupervise
-            ? <input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" autoFocus onKeyDown={onEnter} style={inputSt} />
-            : <div title="Only the supervisor can set the order number" style={{ ...inputSt, color: order ? "#e2e8f0" : "#64748b", cursor: "not-allowed", userSelect: "none" }}>{order || (file ? file.name.replace(/\.[^.]+$/, "") + " (file name — no supervisor number)" : "Pick the order the supervisor sent")}</div>}
+          <label style={labelSt}>Order number</label>
+          <input value={order} onChange={e => setOrder(e.target.value)} placeholder="From the roster file, or type it" autoFocus onKeyDown={onEnter} style={inputSt} />
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order notes <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
@@ -2226,11 +2241,9 @@ export default function App() {
               </div>
             )}
           </div>
-          {canSupervise
-            ? <input value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder="Order number…"
-                onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
-                style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #3f4b5c", background: "#1e293b", color: "#e2e8f0", fontSize: 16, width: 170 }} />
-            : <div title="Only the supervisor can change the order number" style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #30363d", background: "#0d1117", color: orderNumber ? "#e2e8f0" : "#94a3b8", fontSize: 17, fontWeight: 700, userSelect: "none", whiteSpace: "nowrap" }}>Order {orderNumber || "—"}</div>}
+          <input value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder="Order number…" title="Order number"
+            onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
+            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #3f4b5c", background: "#1e293b", color: "#e2e8f0", fontSize: 16, fontWeight: 700, width: 170 }} />
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <Pill color="#22c55e" active={rosterFilter === "pass"} onClick={() => filterRoster("pass")} title="Show the passed jerseys">{passCount} Pass</Pill>

@@ -72,6 +72,7 @@ Expected columns (case-insensitive, auto-detected):
 - `team` — team name (optional, used for bin assignment)
 - `size` — size (optional)
 - `size range` + `size` — auto-merged into `A-XS` / `Y-M` style combined size
+- `order` / `order number` / `PO` / `job` (optional) — fills the order number at setup; a title row above the header such as `Order 55555` works too. Not kept as a roster column (`orderNumberOf()` in roster.js).
 
 ## Key architecture notes
 

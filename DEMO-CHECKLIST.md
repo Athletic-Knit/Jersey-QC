@@ -15,6 +15,9 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 - [x] **Reasons and supervisor screens, plain.** Reason rows are the label alone (no route under them, no jersey-type line, no thumbnail over the rows; the list scrolls inside the panel). The supervisor screen is GO TO SUPERVISOR and the jersey; the reason and route still go to the log and the board.
 - [x] **Pass / Flag / By hand pills show their jerseys.** Clicking a header pill filters the roster table to those rows ("2 flagged · Show all"); clicking it again, or Show all, clears. Jerseys typed that are not on the roster have no row; they are in the Log.
 
+- [x] **Operator sets the order number.** The order-number field is open to everyone at setup and in the header. A roster file that carries the number (an Order / Order Number / PO / Job column, or a title row such as "Order 55555" above the header) fills it in by itself; the operator can type over it. A supervisor-sent roster still brings its number.
+- [x] **Packer blocked at sign-in.** The Packer role shows dimmed with "under development" and a not-allowed cursor; clicking it does nothing.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.
