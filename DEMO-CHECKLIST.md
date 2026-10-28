@@ -12,6 +12,9 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 
 - [x] **Operator inspection regime (the operator's "military testing").** The order opens with a full inspection of the first 5 jerseys; after that a quick look, with a full spot check after every 10 clean; any defect the operator flags starts the 5 again. Header pill "Inspect fully · N to go" / "Inspect fully · spot check" / "Quick look · N/10"; the green screen carries the same banner and shows the check pills only during a full inspection. Saved with the session; the app's own double-check runs independently.
 
+- [x] **Reasons and supervisor screens, plain.** Reason rows are the label alone (no route under them, no jersey-type line, no thumbnail over the rows; the list scrolls inside the panel). The supervisor screen is GO TO SUPERVISOR and the jersey; the reason and route still go to the log and the board.
+- [x] **Pass / Flag / By hand pills show their jerseys.** Clicking a header pill filters the roster table to those rows ("2 flagged · Show all"); clicking it again, or Show all, clears. Jerseys typed that are not on the roster have no row; they are in the Log.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.

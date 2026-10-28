@@ -61,9 +61,9 @@ function statusColor(s) {
   return "#64748b";
 }
 
-function Pill({ color, children }) {
+function Pill({ color, children, onClick, active = false, title }) {
   return (
-    <span style={{ background: `${color}22`, color, fontSize: 14, fontWeight: 700, padding: "4px 11px", borderRadius: 20, border: `1px solid ${color}55`, whiteSpace: "nowrap" }}>
+    <span onClick={onClick} title={title} style={{ background: active ? color : `${color}22`, color: active ? "#0d1117" : color, fontSize: 14, fontWeight: 700, padding: "4px 11px", borderRadius: 20, border: `1px solid ${color}55`, whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", userSelect: "none" }}>
       {children}
     </span>
   );
@@ -954,7 +954,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }];
     if (mode === "manual")     return [];
     if (mode === "duplicate")  return [{ id: "skip", label: "✓ Skip", primary: true, run: actions.skipDuplicate }, retry, { id: "dup", label: "🚩 Duplicate", run: actions.flagDuplicate }];
-    if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, hint: r.route, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
+    if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueSupervisor }];
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
@@ -1131,12 +1131,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
               {match ? `#${match.number}${match.name ? ` · ${match.name}` : ""}${match.size ? ` · ${match.size}` : ""}` : `#${detected.number || "?"}${detected.name ? ` · ${detected.name}` : ""}`}
             </div>
           )}
-          {state.reason && (
+          {state.reason && mode !== "supervisor" && (
             <div style={{ fontSize: 26, color: "#fca5a5", marginTop: 12, textAlign: "center", padding: "0 40px", maxWidth: 820, opacity: 0.95, lineHeight: 1.4 }}>
               {state.reason}
             </div>
           )}
-          {state.route && <div style={{ fontSize: 22, color: "#fecaca", marginTop: 8, opacity: 0.9 }}>→ {state.route}</div>}
           {mode === "flag" && state.title === "SCAN FAILED" && (
             <div style={{ fontSize: 21, color: "#fed7aa", marginTop: 16, textAlign: "center" }}>Check the network.</div>
           )}
@@ -1171,17 +1170,15 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         <>
           <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 4 }}>✎</div>
           <div style={{ fontSize: "clamp(28px, 4.5vw, 44px)", fontWeight: 900, color: accent, marginBottom: 6, textAlign: "center" }}>What's wrong with it?</div>
-          {jerseyType && <div style={{ fontSize: 17, color: "#c4b5fd", marginBottom: 6 }}>{jerseyTypeLabel(jerseyType)} jersey · {jerseyTypeOf(jerseyType)?.construction}</div>}
           {match && <div style={{ fontSize: 22, color: "#c4b5fd", marginBottom: 16 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}</div>}
-          <div style={{ width: "100%", maxWidth: 720, padding: "0 24px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ width: "100%", maxWidth: 720, padding: "0 24px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 6, maxHeight: "68%", overflowY: "auto" }}>
             {options.map((o, i) => {
               const sel = i === selectedIdx;
               return (
-                <div key={o.id} onClick={o.run} onMouseEnter={() => hover(i)}
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.12)"}`, background: sel ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.04)", cursor: "pointer" }}>
+                <div key={o.id} onClick={o.run} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 18px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.12)"}`, background: sel ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.04)", cursor: "pointer" }}>
                   <div>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: "#fff" }}>{o.label}</div>
-                    {o.hint && <div style={{ fontSize: 17, color: "#c4b5fd", marginTop: 3 }}>{o.hint}</div>}
+                    <div style={{ fontSize: 24, fontWeight: 700, color: "#fff" }}>{o.label}</div>
                   </div>
                   {sel && <span style={{ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap", marginLeft: 12 }}>← {formatKey(confirmKey)}</span>}
                 </div>
@@ -1199,7 +1196,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         </div>
       )}
 
-      {state.scan?.thumb && mode !== "done" && (
+      {state.scan?.thumb && mode !== "done" && !isMenu && (
         <div title="What the camera read" style={{ position: "absolute", ...(isGreen ? { top: 12 } : { bottom: 12 }), left: 12, opacity: isGreen ? 0.5 : 0.6 }}>
           <img src={state.scan.thumb} alt="" style={{ width: isGreen ? 80 : 120, height: isGreen ? 60 : 90, objectFit: "cover", borderRadius: 8 }} />
         </div>
@@ -1470,6 +1467,8 @@ export default function App() {
   const [lastConfirmed,      setLastConfirmed]      = useState(null);
   const [log,                setLog]                = useState([]);
   const [view,               setView]               = useState("roster");
+  const [rosterFilter,       setRosterFilter]       = useState(null);   // "pass" | "flag" | "manual" | null — set by clicking a header pill
+  const filterRoster = useCallback(kind => { setRosterFilter(f => (f === kind ? null : kind)); setView("roster"); }, []);
   const [error,              setError]              = useState(null);
   const [xlsxReady,          setXlsxReady]          = useState(!!window.XLSX);
   const [showSettings,       setShowSettings]       = useState(false);
@@ -2234,11 +2233,11 @@ export default function App() {
             : <div title="Only the supervisor can change the order number" style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #30363d", background: "#0d1117", color: orderNumber ? "#e2e8f0" : "#94a3b8", fontSize: 17, fontWeight: 700, userSelect: "none", whiteSpace: "nowrap" }}>Order {orderNumber || "—"}</div>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <Pill color="#22c55e">{passCount} Pass</Pill>
-          <Pill color="#ef4444">{flagCount} Flag</Pill>
+          <Pill color="#22c55e" active={rosterFilter === "pass"} onClick={() => filterRoster("pass")} title="Show the passed jerseys">{passCount} Pass</Pill>
+          <Pill color="#ef4444" active={rosterFilter === "flag"} onClick={() => filterRoster("flag")} title="Show the flagged jerseys">{flagCount} Flag</Pill>
           {checksLeft > 0 && <span title="After a mistake the next jerseys are read twice and must agree before a green"><Pill color="#60a5fa">Double-checking · {checksLeft} to go</Pill></span>}
           {sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect)}</Pill></span>}
-          {manualCount > 0 && <Pill color="#f59e0b">{manualCount} By hand</Pill>}
+          {manualCount > 0 && <Pill color="#f59e0b" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the jerseys entered by hand">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171">Supervisor screen not reachable — scanning still works</Pill>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
           {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
@@ -2465,6 +2464,12 @@ export default function App() {
 
           {view === "roster" && (
             <div style={{ flex: 1, overflowY: "auto" }}>
+              {rosterFilter && (
+                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", background: "#161b22", borderBottom: "1px solid #21262d", fontSize: 15, fontWeight: 700, color: rosterFilter === "pass" ? "#22c55e" : rosterFilter === "flag" ? "#f87171" : "#fbbf24" }}>
+                  <span>{roster.filter(r => r.scanned === rosterFilter).length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : "by hand"}</span>
+                  <button onClick={() => setRosterFilter(null)} style={{ ...btnGhost, padding: "3px 10px", fontSize: 13 }}>Show all</button>
+                </div>
+              )}
               {roster.length === 0
                 ? <div style={{ padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 17 }}>No roster loaded.</div>
                 : (
@@ -2478,7 +2483,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {roster.map(r => (
+                      {roster.filter(r => !rosterFilter || r.scanned === rosterFilter).map(r => (
                         <tr key={r._id} style={{
                           background: r.scanned === "pass" ? "rgba(34,197,94,0.07)" : r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned ? "rgba(245,158,11,0.07)" : "transparent",
                           borderBottom: "1px solid #1e293b",
