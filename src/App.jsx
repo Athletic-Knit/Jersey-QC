@@ -69,6 +69,34 @@ function Pill({ color, children, onClick, active = false, title }) {
   );
 }
 
+// ── On-screen keys ───────────────────────────────────────────────────────────
+// The stations have a mouse and four programmed keys, no keyboard. Anything
+// that must be typed (the PIN, a jersey entered by hand) gets these keys under
+// the field. "digits" is a numeric pad; "full" adds the letters and a dash for
+// names and sizes. Presses do not steal focus from the field.
+const KEY_ROWS = {
+  digits: [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["⌫", "0", "⏎"]],
+  full:   [["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"], ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], ["A", "S", "D", "F", "G", "H", "J", "K", "L", "-"], ["Z", "X", "C", "V", "B", "N", "M", "⌫", "⏎"]],
+};
+function ScreenKeys({ layout = "digits", onKey, onEnter, enterLabel = "OK" }) {
+  const rows = KEY_ROWS[layout] || KEY_ROWS.digits;
+  const wide = layout === "digits";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10, userSelect: "none" }}>
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+          {r.map(k => (
+            <button key={k} type="button" onMouseDown={e => e.preventDefault()} onClick={() => (k === "⏎" ? onEnter?.() : onKey(k))}
+              style={{ flex: wide ? 1 : "0 0 auto", minWidth: wide ? 0 : 44, padding: wide ? "12px 0" : "10px 0", borderRadius: 8, border: "1px solid #3f4b5c", background: k === "⏎" ? "#3b82f6" : k === "⌫" ? "#334155" : "#1e293b", color: "#f1f5f9", fontSize: k === "⏎" ? 15 : 20, fontWeight: 700, cursor: "pointer" }}>
+              {k === "⏎" ? enterLabel : k}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Kbd({ light, children }) {
   return (
     <kbd style={{ background: light ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.3)", padding: "3px 9px", borderRadius: 6, fontSize: 15, fontWeight: 700 }}>
@@ -245,6 +273,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>PIN</label>
             <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} placeholder="••••" autoFocus onKeyDown={onEnter} style={inputSt} />
+            <ScreenKeys layout="digits" onKey={k => setPin(v => (k === "⌫" ? v.slice(0, -1) : (v + k).slice(0, 8)))} onEnter={submit} enterLabel="Sign in" />
           </div>
         )}
         <div style={{ marginBottom: 18 }}>
@@ -455,6 +484,9 @@ function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
   const [size,   setSize]   = useState("");
   const [team,   setTeam]   = useState(teams[0] || "");
   const [error,  setError]  = useState(null);
+  const [field,  setField]  = useState("number");   // which field the on-screen keys write into
+  const setters = { number: setNumber, name: setName, size: setSize, team: setTeam };
+  const press = k => setters[field](v => (k === "⌫" ? v.slice(0, -1) : v + k));
 
   const submit = () => {
     if (!number.trim() && !name.trim()) { setError("Enter at least a number or a name."); return; }
@@ -464,26 +496,27 @@ function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
     if (e.key === "Enter")  { e.preventDefault(); submit(); }
     if (e.key === "Escape") { e.preventDefault(); onBack(); }
   };
-  const field = { ...inputSt, fontSize: 22, padding: "12px 14px" };
+  const fieldSt = { ...inputSt, fontSize: 22, padding: "12px 14px" };
 
   return (
     <div style={{ width: "100%", maxWidth: 560, padding: "0 24px", boxSizing: "border-box" }}>
       <div style={{ fontSize: 56, textAlign: "center", lineHeight: 1 }}>✍</div>
       <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#f59e0b", textAlign: "center", marginBottom: 18 }}>Enter the jersey by hand</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
-        <div><label style={labelSt}>Number</label><input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={onKey} autoFocus inputMode="numeric" placeholder="##" style={field} /></div>
-        <div><label style={labelSt}>Name</label><input value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} placeholder="as printed" style={field} /></div>
+        <div><label style={labelSt}>Number</label><input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={onKey} onFocus={() => setField("number")} autoFocus inputMode="numeric" placeholder="##" style={{ ...fieldSt, borderColor: field === "number" ? "#f59e0b" : fieldSt.borderColor }} /></div>
+        <div><label style={labelSt}>Name</label><input value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} onFocus={() => setField("name")} placeholder="as printed" style={{ ...fieldSt, borderColor: field === "name" ? "#f59e0b" : fieldSt.borderColor }} /></div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-        <div><label style={labelSt}>Size</label><input value={size} onChange={e => setSize(e.target.value)} onKeyDown={onKey} placeholder="e.g. A-L" style={field} /></div>
+        <div><label style={labelSt}>Size</label><input value={size} onChange={e => setSize(e.target.value)} onKeyDown={onKey} onFocus={() => setField("size")} placeholder="e.g. A-L" style={{ ...fieldSt, borderColor: field === "size" ? "#f59e0b" : fieldSt.borderColor }} /></div>
         <div>
           <label style={labelSt}>Team</label>
-          <input list="manual-teams" value={team} onChange={e => setTeam(e.target.value)} onKeyDown={onKey} placeholder="team" style={field} />
+          <input list="manual-teams" value={team} onChange={e => setTeam(e.target.value)} onKeyDown={onKey} onFocus={() => setField("team")} placeholder="team" style={{ ...fieldSt, borderColor: field === "team" ? "#f59e0b" : fieldSt.borderColor }} />
           <datalist id="manual-teams">{teams.map(t => <option key={t} value={t} />)}</datalist>
         </div>
       </div>
       {error && <div style={errSt}>{error}</div>}
-      <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+      <ScreenKeys layout={field === "number" ? "digits" : "full"} onKey={press} onEnter={submit} enterLabel="Save" />
+      <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 12 }}>
         <button onClick={submit} style={{ ...bigBtn, width: "auto", padding: "14px 30px", background: "#f59e0b", color: "#0d1117" }}>✓ Save <Kbd>Enter</Kbd></button>
         <button onClick={onBack} style={{ ...btnGhost, fontSize: 18, padding: "14px 22px" }}>← Back <Kbd light>Esc</Kbd></button>
       </div>
@@ -2435,6 +2468,8 @@ export default function App() {
                           </button>
                         </>
                     }
+                    <button onClick={() => { gateRef.current.disarm(); setArmed(false); actions.manual(); }} disabled={scanning} title="Type the jersey in — when the camera cannot read it"
+                      style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, whiteSpace: "nowrap" }}>⌨ By hand</button>
                   </div>
                   {error && <p style={{ padding: "0 14px 10px", fontSize: 15, color: "#f87171" }}>{error}</p>}
                 </div>
@@ -2560,7 +2595,7 @@ export default function App() {
                         <th style={thSt}>Status</th>
                         {rosterCols.map(c => <th key={c} style={thSt}>{cap(c)}</th>)}
                         {binMap && <th style={thSt}>Bin</th>}
-                        {canSupervise && <th style={thSt}>Mark</th>}
+                        <th style={thSt}>Mark</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2576,7 +2611,7 @@ export default function App() {
                             <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "#fbbf24" : "#e2e8f0" }}>{r[c]}</td>
                           ))}
                           {binMap && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{binOf(r.team) !== null ? `Bin ${binOf(r.team)}` : "—"}</td>}
-                          {canSupervise && <td style={{ ...tdSt, padding: "2px 6px" }}>
+                          <td style={{ ...tdSt, padding: "2px 6px" }}>
                             <select value={["missing", "short"].includes(r.scanned) ? r.scanned : ""}
                               onChange={e => { const v = e.target.value; if (v === "unscan") unscan(r._id); else markRow(r._id, v || false); }}
                               style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
@@ -2585,7 +2620,7 @@ export default function App() {
                                 ? <><option value="missing">Missing</option><option value="short">Short-shipped</option></>
                                 : (r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check</option>}
                             </select>
-                          </td>}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

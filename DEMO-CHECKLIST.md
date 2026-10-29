@@ -31,7 +31,7 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 - [x] **Three recognition rules.** A name that pins the row makes the turn irrelevant (no re-read, green); the side of the cover trims hidden-digit lists (#40, #41, not #14, #54); two sizes are two numbers, and a small sleeve number inside a two-digit read puts it in doubt. Gate 13/13, simulation 0 wrong greens; the live subset rerun showed 5 wrong greens from older limits, written up as findings 18–19.
 
 - [x] **Green screen fits a 1600×900 half panel; no duplicate line on the yellow screen.** Smaller headline and tiles, no check-mark icon, the result screen never clips its top (safe centering); measured 533/533 at 1600×900 and 717/717 at 1920×1080. The "No exact match — nearest rows" line under the same headline is gone.
-- [x] **Mark column is the supervisor's.** Missing / Short-shipped / Un-check show only to a supervisor or admin; the operator's roster table has no dropdowns.
+- [x] **Mark column for everyone again.** Missing / Short-shipped / Un-check are back on every roster row (the operator asked for them); only un-checking a FLAGGED row stays the supervisor's.
 
 - [x] **B on an empty table is not a failure.** When the camera says there is no jersey, a B press shows "No jersey in view" for two seconds and nothing else: no red screen, no Enter by hand, nothing in the log; the table is learned and hands-free re-arms, the same as it already did for an automatic look.
 
@@ -47,7 +47,7 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 6. [x] **Go back to the last scan.** The "Last passed" bar has "Flag it": it reopens the jersey on the reasons screen, the chosen reason takes its pass back and logs "— found after it passed"; Back leaves it passed. Any earlier jersey is item 7.
 7. [x] **History button on top.** "History" in the header opens every jersey scanned this order, latest first, one line each with its photo, size and bin; a passed jersey has "Flag it" (reasons screen, pass taken back, "found after it passed" in the log), a flagged one shows Flagged. Esc closes.
 8. [ ] **Ask Mahesh or Polina for every flag type.** Get the full list of flags that can come up on the floor, so the reasons menu and item 5 are complete.
-9. [ ] **Virtual keyboard.** Put an on-screen keyboard wherever typing is needed (name, order number, edit number, note), and remove the need to type wherever a button or list can do the job instead.
+9. [x] **On-screen keys.** A numeric pad under the PIN at sign-in (with Sign in on it); on the hand-entry form the keys follow the field that has focus, digits for the number and letters plus a dash for name, size and team, with Save on the pad. The stations run on a mouse and four programmed keys (B, A, up, down), so "By hand" is also a button on the camera panel, camera on or off.
 10. [ ] **Ask Polina for a real roster file.** Test with it without jerseys, and check whether the roster carries more about the order (order type, what to inspect for) that the app could read and use.
 
 ## Suggested order
