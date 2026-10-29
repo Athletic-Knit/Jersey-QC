@@ -37,7 +37,7 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 
 - [x] **Two navigation keys.** Settings has Down (default A) and Up (default ↑), each with Change; ↓ and ↑ always work too. The camera legend shows both.
 
-- [x] **Sign-in: name dropdown and keypad on demand.** The name is picked from a list (Person 1, Person 2, Person 3 by default, set with VITE_OPERATORS) or "Other" with a text field; the numeric pad appears only while the PIN field is active.
+- [x] **Sign-in: name dropdown and keypad on demand.** The name is picked from a list (Person 1, Person 2, Person 3 by default, set with VITE_OPERATORS) or "Other" (someone sent to the station for the day; no typing); the numeric pad appears only while the PIN field is active.
 
 ## Changes to the UI (from the notes)
 

@@ -202,7 +202,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const [station, setStation] = useState(stationOf(here) ? here : STATIONS[0].id);
   const [pin,   setPin]   = useState("");
   const [name, setName] = useState(() => (initial?.name || "") || OPERATORS[0] || "");
-  const [nameChoice, setNameChoice] = useState(() => (initial?.name && !OPERATORS.includes(initial.name) ? "other" : (initial?.name || OPERATORS[0] || "other")));   // a name from the list, or "other" with the field below
+  const [nameChoice, setNameChoice] = useState(() => (initial?.name && !OPERATORS.includes(initial.name) ? "other" : (initial?.name || OPERATORS[0] || "other")));   // "Other": someone sent to this station for the day   // a name from the list, or "other" with the field below
   const [pinFocus, setPinFocus] = useState(false);   // the keypad shows only while the PIN field is active
   const [error, setError] = useState(null);
   // Which stations are live right now, and from where: refreshed every 5 s.
@@ -279,11 +279,10 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         )}
         <div style={{ marginBottom: 18 }}>
           <label style={labelSt}>Your name</label>
-          <select value={nameChoice} onChange={e => { const v = e.target.value; setNameChoice(v); setName(v === "other" ? "" : v); }} style={{ ...inputSt, cursor: "pointer" }}>
+          <select value={nameChoice} onChange={e => { const v = e.target.value; setNameChoice(v); setName(v === "other" ? "Other" : v); }} style={{ ...inputSt, cursor: "pointer" }}>
             {OPERATORS.map(n => <option key={n} value={n}>{n}</option>)}
-            <option value="other">Other…</option>
+            <option value="other">Other</option>
           </select>
-          {nameChoice === "other" && <input value={name} onChange={e => setName(e.target.value)} placeholder="Type the name" autoFocus={!PIN_REQUIRED} onKeyDown={onEnter} style={{ ...inputSt, marginTop: 8 }} />}
         </div>
         {error && <div style={errSt}>{error}</div>}
         <button onClick={submit} style={bigBtn}>{onCancel ? "Take over →" : "Sign in →"}</button>
