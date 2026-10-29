@@ -33,6 +33,8 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 - [x] **Green screen fits a 1600×900 half panel; no duplicate line on the yellow screen.** Smaller headline and tiles, no check-mark icon, the result screen never clips its top (safe centering); measured 533/533 at 1600×900 and 717/717 at 1920×1080. The "No exact match — nearest rows" line under the same headline is gone.
 - [x] **Mark column is the supervisor's.** Missing / Short-shipped / Un-check show only to a supervisor or admin; the operator's roster table has no dropdowns.
 
+- [x] **B on an empty table is not a failure.** When the camera says there is no jersey, a B press shows "No jersey in view" for two seconds and nothing else: no red screen, no Enter by hand, nothing in the log; the table is learned and hands-free re-arms, the same as it already did for an automatic look.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.
