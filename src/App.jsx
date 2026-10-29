@@ -941,20 +941,30 @@ function SupervisorPanel({ operatorName, onClose }) {
 // retried without writing a record.
 const HEADLINE_FIELDS = ["number", "name"];
 
+// Two columns, filled down the left and then down the right, when there are
+// more than three rows; the list uses the whole panel and scrolls only when
+// both columns are full. Down walks the left column and carries on at the
+// top of the right one, since the rows are in that order.
+function twoColumns(n) {
+  return n > 3
+    ? { display: "grid", gridTemplateColumns: "1fr 1fr", gridAutoFlow: "column", gridTemplateRows: `repeat(${Math.ceil(n / 2)}, auto)`, gap: 8, alignItems: "start" }
+    : { display: "flex", flexDirection: "column", gap: 8 };
+}
+
 function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, accent, onClick, onHover, confirmKey }) {
   const head = primary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")).filter(Boolean).join(" · ");
   const sub  = [...secondary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")), ...extraCols.map(k => c[k] ? `${cap(k)}: ${c[k]}` : "")].filter(Boolean).join(" · ");
   return (
     <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover} data-sel={selected ? "1" : undefined}
-      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", marginBottom: 8, borderRadius: 14, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1 }}>
-      <div>
-        <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 3.4vw, 46px)", fontWeight: 800, lineHeight: 1, color: disabled ? "#64748b" : "#fff" }}>{head || "—"}</span>
-        {sub && <span style={{ fontSize: 22, color: "#cbd5e1", marginLeft: 16 }}>{sub}</span>}
+      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1 }}>
+      <div style={{ minWidth: 0 }}>
+        <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px, 3vw, 42px)", fontWeight: 800, lineHeight: 1, color: disabled ? "#64748b" : "#fff" }}>{head || "—"}</span>
+        {sub && <span style={{ fontSize: 20, color: "#cbd5e1", marginLeft: 14, display: "inline-block", whiteSpace: "nowrap" }}>{sub}</span>}
         {disabled && (c.scanned === "flag"
           ? <span style={{ fontSize: 17, color: "#f87171", marginLeft: 12, fontWeight: 700 }}>🚩 Flagged</span>
           : <span style={{ fontSize: 17, color: "#22c55e", marginLeft: 12, fontWeight: 700 }}>✓ Already passed</span>)}
       </div>
-      {!disabled && selected && <span style={{ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap" }}>← {formatKey(confirmKey)}</span>}
+      {!disabled && selected && <span style={{ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap", marginLeft: 10 }}>← {formatKey(confirmKey)}</span>}
     </div>
   );
 }
@@ -1145,17 +1155,19 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}{detected?.jersey_colour ? ` · ${detected.jersey_colour} jersey` : ""}
             {primary !== HEADLINE_FIELDS && <span style={{ marginLeft: 12, color: accent }}>· differs by {primary.map(cap).join(" and ")}</span>}
           </div>
-          <div style={{ width: "100%", maxWidth: 820, padding: "0 24px", boxSizing: "border-box", maxHeight: "48%", overflowY: "auto" }}>
+          <div style={{ width: "100%", maxWidth: candidates.length > 3 ? 1200 : 820, padding: "0 24px", boxSizing: "border-box", maxHeight: "52%", overflowY: "auto" }}>
             {candidates.length === 0 && (
               <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 22, padding: 16 }}>No rows to choose from.</div>
             )}
             {candidates.length > 0 && candidates.every(isDone) && (
               <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 20, padding: "8px 0 12px" }}>All of these already passed.</div>
             )}
-            {options.map((o, i) => o.candidate && (
-              <CandidateRow key={o.id} c={o.candidate} primary={primary} secondary={secondary} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent}
-                onClick={o.run} onHover={() => hover(i)} confirmKey={confirmKey} />
-            ))}
+            <div style={twoColumns(candidates.length)}>
+              {options.map((o, i) => o.candidate && (
+                <CandidateRow key={o.id} c={o.candidate} primary={primary} secondary={secondary} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent}
+                  onClick={o.run} onHover={() => hover(i)} confirmKey={confirmKey} />
+              ))}
+            </div>
           </div>
           <div style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
             {options.map((o, i) => !o.candidate && <OptionButton key={o.id} o={o} i={i} />)}
@@ -1215,12 +1227,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 4 }}>✎</div>
           <div style={{ fontSize: "clamp(28px, 4.5vw, 44px)", fontWeight: 900, color: accent, marginBottom: 6, textAlign: "center" }}>What's wrong with it?</div>
           {match && <div style={{ fontSize: 22, color: "#c4b5fd", marginBottom: 16 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}</div>}
-          <div style={{ width: "100%", maxWidth: 720, padding: "0 24px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 6, maxHeight: "68%", overflowY: "auto" }}>
+          <div style={{ width: "100%", maxWidth: 1200, padding: "0 24px", boxSizing: "border-box", maxHeight: "68%", overflowY: "auto", ...twoColumns(options.length) }}>
             {options.map((o, i) => {
               const sel = i === selectedIdx;
               return (
                 <div key={o.id} onClick={o.run} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 18px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.12)"}`, background: sel ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.04)", cursor: "pointer" }}>
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 12, minWidth: 0, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.12)"}`, background: sel ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.04)", cursor: "pointer" }}>
                   <div>
                     <div style={{ fontSize: 24, fontWeight: 700, color: "#fff" }}>{o.label}</div>
                   </div>
