@@ -475,16 +475,15 @@ function ReasonTextForm({ match, onSubmit, onBack }) {
 function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
   const [number, setNumber] = useState(detected?.number || "");
   const [name,   setName]   = useState(detected?.name || "");
-  const [size,   setSize]   = useState("");
   const [team,   setTeam]   = useState(teams[0] || "");
   const [error,  setError]  = useState(null);
   const [field,  setField]  = useState("number");   // which field the on-screen keys write into
-  const setters = { number: setNumber, name: setName, size: setSize, team: setTeam };
+  const setters = { number: setNumber, name: setName };
   const press = k => setters[field](v => (k === "⌫" ? v.slice(0, -1) : v + k));
 
   const submit = () => {
     if (!number.trim() && !name.trim()) { setError("Enter at least a number or a name."); return; }
-    onSubmit({ number: number.trim(), name: name.trim(), size: size.trim(), team: team.trim() });
+    onSubmit({ number: number.trim(), name: name.trim(), size: "", team: team.trim() });
   };
   const onKey = e => {
     if (e.key === "Enter")  { e.preventDefault(); submit(); }
@@ -500,14 +499,14 @@ function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
         <div><label style={labelSt}>Number</label><input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={onKey} onFocus={() => setField("number")} autoFocus inputMode="numeric" placeholder="##" style={{ ...fieldSt, borderColor: field === "number" ? "#f59e0b" : fieldSt.borderColor }} /></div>
         <div><label style={labelSt}>Name</label><input value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} onFocus={() => setField("name")} placeholder="as printed" style={{ ...fieldSt, borderColor: field === "name" ? "#f59e0b" : fieldSt.borderColor }} /></div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-        <div><label style={labelSt}>Size</label><input value={size} onChange={e => setSize(e.target.value)} onKeyDown={onKey} onFocus={() => setField("size")} placeholder="e.g. A-L" style={{ ...fieldSt, borderColor: field === "size" ? "#f59e0b" : fieldSt.borderColor }} /></div>
-        <div>
+      {teams.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
           <label style={labelSt}>Team</label>
-          <input list="manual-teams" value={team} onChange={e => setTeam(e.target.value)} onKeyDown={onKey} onFocus={() => setField("team")} placeholder="team" style={{ ...fieldSt, borderColor: field === "team" ? "#f59e0b" : fieldSt.borderColor }} />
-          <datalist id="manual-teams">{teams.map(t => <option key={t} value={t} />)}</datalist>
+          <select value={team} onChange={e => setTeam(e.target.value)} style={{ ...fieldSt, cursor: "pointer" }}>
+            {teams.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
         </div>
-      </div>
+      )}
       {error && <div style={errSt}>{error}</div>}
       <ScreenKeys layout={field === "number" ? "digits" : "full"} onKey={press} onEnter={submit} enterLabel="Save" />
       <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 12 }}>
