@@ -475,7 +475,7 @@ function ReasonTextForm({ match, onSubmit, onBack }) {
 function ManualEntryForm({ detected, initial = null, teams, onSubmit, onBack }) {
   const [number, setNumber] = useState(initial?.number ?? detected?.number ?? "");
   const [name,   setName]   = useState(initial?.name ?? detected?.name ?? "");
-  const [team,   setTeam]   = useState(initial?.team || teams[0] || "");
+  const [team,   setTeam]   = useState(initial?.team || "");   // none until the operator picks one: a team narrows the search
   const [error,  setError]  = useState(null);
   const [field,  setField]  = useState("number");   // which field the on-screen keys write into
   const setters = { number: setNumber, name: setName };
@@ -503,6 +503,7 @@ function ManualEntryForm({ detected, initial = null, teams, onSubmit, onBack }) 
         <div style={{ marginBottom: 14 }}>
           <label style={labelSt}>Team</label>
           <select value={team} onChange={e => setTeam(e.target.value)} style={{ ...fieldSt, cursor: "pointer" }}>
+            <option value="">Any team</option>
             {teams.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
@@ -1001,10 +1002,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       const none = t
         ? { ...byHand, label: `🛑 #${t.number || "?"}${t.name ? " " + t.name : ""} — not on the roster` }
         : { ...byHand, label: "⌨ None of these" };
-      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), retry, none, notRight];
+      const back = { id: "back", label: "← Back", run: actions.editTyped };   // mistyped: back to the form, as typed
+      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back] : [retry]), none, notRight];
     }
     if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "🚩 Bad jersey" }];
-    if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }];
+    if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }, { ...notRight, run: actions.reopenLast }];
     if (mode === "manual")     return [];
     if (mode === "duplicate")  return [{ id: "skip", label: "✓ Skip", primary: true, run: actions.skipDuplicate }, retry, { id: "dup", label: "🚩 Duplicate", run: actions.flagDuplicate }];
     if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
@@ -1036,6 +1038,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (mode === "done") return;
       if (mode === "manual" || mode === "reasonText") { if (e.code === "Escape") { e.preventDefault(); actions.back(); } return; }   // typing, not navigating
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target?.tagName)) return;   // the Enter that submitted the form is still bubbling: it must not also pick the first row of the list it opened
       if (e.code === retryKey) { const o = options.find(x => x.id === "retry"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }
       if (e.code === byHandKey) { const o = options.find(x => x.id === "manual"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }   // straight to the form, like R goes straight to retry
       if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled) o.run(); return; }
@@ -2202,8 +2205,8 @@ export default function App() {
       // narrowed to that team.
       if ((m.type === "pick" || m.type === "close") && team.trim()) {
         const same = m.candidates.filter(c => teamKey(c.team) === teamKey(team));
-        if (same.length === 1) m = isDone(same[0]) ? { type: "duplicate", match: same[0] } : { type: "exact", match: same[0] };
-        else if (same.length > 1) m = { ...m, candidates: same };
+        if (m.type === "pick" && same.length === 1) m = isDone(same[0]) ? { type: "duplicate", match: same[0] } : { type: "exact", match: same[0] };
+        else if (same.length >= 1) m = { ...m, candidates: same };
       }
       if (m.type === "duplicate") { setOverlay({ mode: "duplicate", scan: o.scan, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.scanned === "flag" ? " is flagged — with the supervisor." : " already passed this session."}` }); playTone("flag"); return; }
       if (m.type === "exact") { commitTyped(o, typed, m.match); return; }
@@ -2221,6 +2224,11 @@ export default function App() {
       commitTyped(o, typed, null);
     },
     continueManual() { setOverlay(null); armAutoScan(); },
+    // Back from a list the operator typed for: the form again, as it was typed.
+    editTyped() {
+      const o = overlay; if (!o?.typed) return;
+      setOverlay({ mode: "manual", scan: o.scan, match: null, teams: teamNames, returnTo: null, initial: o.typed });
+    },
     // Back from "entered by hand": the entry is already in the log and on the
     // row, so take it back (the log line stays, marked taken back; the row
     // opens again) and reopen the form with what was typed.
