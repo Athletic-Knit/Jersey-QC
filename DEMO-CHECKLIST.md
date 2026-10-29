@@ -35,6 +35,8 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 
 - [x] **B on an empty table is not a failure.** When the camera says there is no jersey, a B press shows "No jersey in view" for two seconds and nothing else: no red screen, no Enter by hand, nothing in the log; the table is learned and hands-free re-arms, the same as it already did for an automatic look.
 
+- [x] **Two navigation keys.** Settings has Down (default A) and Up (default ↑), each with Change; ↓ and ↑ always work too. The camera legend shows both.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.

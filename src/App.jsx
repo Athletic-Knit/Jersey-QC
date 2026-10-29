@@ -933,7 +933,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, confirmKey, cancelKey, retryKey, byHandKey, stream, rotation, embedded }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded }) {
   const reasons = reasonsFor(jerseyType);
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
@@ -1004,7 +1004,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (e.code === byHandKey) { const o = options.find(x => x.id === "manual"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }   // straight to the form, like R goes straight to retry
       if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled) o.run(); return; }
       if (e.code === cancelKey || e.code === "ArrowDown") { e.preventDefault(); lastKeyRef.current = Date.now(); move(1); return; }
-      if (e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
+      if (e.code === upKey || e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
     };
     // Voice on a result screen: "next" selects what is highlighted (the mouse
     // moves the highlight, voice never does); "again" retries the scan.
@@ -1017,7 +1017,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     window.addEventListener("keydown", onKey);
     window.addEventListener("jerseyqc:voice", onVoice);
     return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("jerseyqc:voice", onVoice); };
-  }, [options, selectedIdx, mode, confirmKey, cancelKey, retryKey, byHandKey, actions]);
+  }, [options, selectedIdx, mode, confirmKey, cancelKey, upKey, retryKey, byHandKey, actions]);
 
   // A bumped mouse never overrides a key press made in the last moment.
   const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) setSelectedIdx(i); }, []);
@@ -1281,13 +1281,14 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
   const keyRows = [
     { label: "Scan",       key: "scanKey" },
     { label: "Select",     key: "confirmKey" },
-    { label: "Navigate",   key: "cancelKey" },
+    { label: "Down",       key: "cancelKey" },
+    { label: "Up",         key: "upKey" },
     { label: "Retry scan", key: "retryKey" },
     { label: "Enter by hand", key: "byHandKey" },
   ];
   const reserved = ["Escape", "Tab"];
   const problems = [];
-  const onScreen = ["confirmKey", "cancelKey", "retryKey", "byHandKey"];   // these act on the same screen, so they must differ
+  const onScreen = ["confirmKey", "cancelKey", "upKey", "retryKey", "byHandKey"];   // these act on the same screen, so they must differ
   const labelOf  = k => keyRows.find(r => r.key === k).label;
   onScreen.forEach((a, i) => onScreen.slice(i + 1).forEach(b => { if (temp[a] === temp[b]) problems.push(`${labelOf(a)} and ${labelOf(b)} cannot be the same key.`); }));
   keyRows.forEach(r => { if (reserved.includes(temp[r.key])) problems.push(`${r.label} cannot be ${temp[r.key]}.`); });
@@ -1310,7 +1311,7 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
               <button onClick={() => setListening(r.key)} style={{ ...btnGhost, whiteSpace: "nowrap", padding: "4px 10px" }}>Change</button>
             </div>
           ))}
-          <div style={{ fontSize: 14, color: "#7c8ba1" }}>Select picks the highlighted option; Navigate (or ↓ ↑) moves it; Retry scan re-shoots from any screen with nothing recorded. Scan only works when no screen is open, so it may share a key with Select.</div>
+          <div style={{ fontSize: 14, color: "#7c8ba1" }}>Select picks the highlighted option; Down and Up (or ↓ ↑) move it; Retry scan re-shoots from any screen with nothing recorded. Scan only works when no screen is open, so it may share a key with Select.</div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -1507,7 +1508,7 @@ export default function App() {
 
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...(loadSettings() || {}) }));
   useEffect(() => { gateRef.current.setGrace(Math.round((Number(settings.autoScanDelay) || 0) * 5)); }, [settings.autoScanDelay]);   // 200 ms ticks
-  const { scanKey, confirmKey, cancelKey, retryKey, byHandKey } = settings;
+  const { scanKey, confirmKey, cancelKey, upKey, retryKey, byHandKey } = settings;
 
   const [savedSession]  = useState(() => { const s = loadSession(); return s && s.sessionStarted && Array.isArray(s.roster) && s.roster.length ? s : null; });
   const [resumeDecided, setResumeDecided] = useState(false);
@@ -2271,7 +2272,7 @@ export default function App() {
       )}
 
       {overlay && !wide && (
-        <ScanOverlay key={overlayKey} inspect={inspect} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
+        <ScanOverlay key={overlayKey} inspect={inspect} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey}
           stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} />
       )}
 
@@ -2481,7 +2482,7 @@ export default function App() {
 
               <div style={{ padding: "10px 14px", borderTop: "1px solid #21262d", background: "#0d1117", flexShrink: 0 }}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px" }}>
-                  {[["scan", keyLabel, "Scan"], ["confirm", formatKey(confirmKey), "Select"], ["nav", formatKey(cancelKey), "Next option"], ["retry", formatKey(retryKey), "Retry scan"], ["byhand", formatKey(byHandKey), "Enter by hand"], ["arrows", "↑↓", "Move"]].map(([id, k, d]) => (
+                  {[["scan", keyLabel, "Scan"], ["confirm", formatKey(confirmKey), "Select"], ["nav", formatKey(cancelKey), "Down"], ["up", formatKey(upKey), "Up"], ["retry", formatKey(retryKey), "Retry scan"], ["byhand", formatKey(byHandKey), "Enter by hand"]].map(([id, k, d]) => (
                     <div key={id} style={{ display: "flex", gap: 7, alignItems: "center" }}>
                       <kbd style={{ background: "#1e293b", border: "1px solid #3f4b5c", padding: "3px 9px", borderRadius: 5, fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>{k}</kbd>
                       <span style={{ fontSize: 15, color: "#94a3b8" }}>{d}</span>
@@ -2496,7 +2497,7 @@ export default function App() {
         {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && wide && (
-            <ScanOverlay key={overlayKey} inspect={inspect} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} retryKey={retryKey} byHandKey={byHandKey}
+            <ScanOverlay key={overlayKey} inspect={inspect} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey}
               stream={null} rotation={settings.rotation} />
           )}
 

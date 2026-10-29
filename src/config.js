@@ -92,7 +92,8 @@ export const stationOf = id => STATIONS.find(s => s.id === id) || null;
 export const DEFAULT_SETTINGS = {
   scanKey: "KeyB",        // take a picture (only when no screen is open)
   confirmKey: "Enter",    // select the highlighted option on any screen
-  cancelKey: "KeyA",      // move to the next option (↓ ↑ also work)
+  cancelKey: "KeyA",      // move the highlight down (↓ also works)
+  upKey: "ArrowUp",       // move the highlight up (↑ also works)
   retryKey: "KeyR",       // retry the scan wherever it is offered; nothing is recorded
   byHandKey: "KeyW",      // open "Enter by hand" wherever it is offered (a failed read, a pick list)
   rotation: 180,          // 0 | 90 | 180 | 270 — how the camera is mounted
