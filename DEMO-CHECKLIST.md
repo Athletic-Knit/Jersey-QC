@@ -33,7 +33,7 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 - [x] **Green screen fits a 1600×900 half panel; no duplicate line on the yellow screen.** Smaller headline and tiles, no check-mark icon, the result screen never clips its top (safe centering); measured 533/533 at 1600×900 and 717/717 at 1920×1080. The "No exact match — nearest rows" line under the same headline is gone.
 - [x] **Mark column for everyone again.** Missing / Short-shipped / Un-check are back on every roster row (the operator asked for them); only un-checking a FLAGGED row stays the supervisor's.
 
-- [x] **B on an empty table is not a failure.** When the camera says there is no jersey, a B press shows "No jersey in view" for two seconds and nothing else: no red screen, no Enter by hand, nothing in the log; the table is learned and hands-free re-arms, the same as it already did for an automatic look.
+- [x] **A read with nothing in it is not a failure.** When the camera reads no name and no number (an empty table, or fabric and hands with no lettering in view), a B press shows "No jersey in view" or "No name or number in view" for two seconds and nothing else: no red screen, no Enter by hand, nothing in the log; the table is learned and hands-free re-arms, the same as it already did for an automatic look.
 
 - [x] **Two navigation keys.** Settings has Down (default A) and Up (default ↑), each with Change; ↓ and ↑ always work too. The camera legend shows both.
 

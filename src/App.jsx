@@ -1580,7 +1580,7 @@ export default function App() {
   // the counter for the badge and the saved session.
   const vigilRef = useRef(createVigilance({ log: m => console.log(m) }));
   const [checksLeft, setChecksLeft] = useState(0);
-  const [noJersey, setNoJersey] = useState(false);   // a B press on an empty table: a quiet notice for a moment, no screen
+  const [noJersey, setNoJersey] = useState("");      // a B press that read nothing: a quiet notice for a moment, no screen
   const noJerseyTimer = useRef(null);
   const noteMistake = useCallback(kind => { vigilRef.current.noteMistake(kind); setChecksLeft(vigilRef.current.remaining); }, []);
   // The operator's own regime: full inspection of the next 5 after a defect,
@@ -1911,10 +1911,15 @@ export default function App() {
     // waits through it, arm again, say nothing. A B press: the same, plus a
     // quiet "No jersey in view" for a moment. Never a red screen, never a
     // form, nothing in the log — there is no jersey to enter.
-    if (detected.jersey_present === false) {
-      console.log(`[${auto ? "hands-free" : "scan"}] nothing on the table — learned it, waiting for a jersey`);
-      gateRef.current.learnTable(lastScanFrameRef.current);
-      if (!auto) { setNoJersey(true); clearTimeout(noJerseyTimer.current); noJerseyTimer.current = setTimeout(() => setNoJersey(false), 2200); }
+    // Nothing readable at all — an empty table, or fabric and hands with no
+    // name or number in view. Either way there is nothing to enter, so never a
+    // red screen: an empty table is learned for hands-free, a B press gets a
+    // quiet notice for a moment, and the gate re-arms. Nothing in the log.
+    if (detected.jersey_present === false || (!String(detected.number || "").trim() && !String(detected.name || "").trim())) {
+      const empty = detected.jersey_present === false;
+      console.log(`[${auto ? "hands-free" : "scan"}] ${empty ? "nothing on the table — learned it" : "no name or number in view"} — waiting for a jersey`);
+      if (empty) gateRef.current.learnTable(lastScanFrameRef.current);
+      if (!auto) { setNoJersey(empty ? "No jersey in view" : "No name or number in view"); clearTimeout(noJerseyTimer.current); noJerseyTimer.current = setTimeout(() => setNoJersey(""), 2200); }
       armRef.current();
       return;
     }
@@ -2333,7 +2338,7 @@ export default function App() {
 
       {noJersey && (
         <div style={{ position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 1950, background: "#1e293b", color: "#e2e8f0", border: "1px solid #3f4b5c", borderRadius: 999, padding: "10px 22px", fontSize: 20, fontWeight: 700, boxShadow: "0 8px 30px rgba(0,0,0,0.5)", pointerEvents: "none" }}>
-          No jersey in view
+          {noJersey}
         </div>
       )}
       {showHistory && (
