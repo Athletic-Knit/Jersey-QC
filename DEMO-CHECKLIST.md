@@ -39,6 +39,8 @@ Tick a box when the item is on the `read-guard` branch and checked at a station.
 
 - [x] **Sign-in: name dropdown and keypad on demand.** The name is picked from a list (Person 1, Person 2, Person 3 by default, set with VITE_OPERATORS) or "Other" (someone sent to the station for the day; no typing); the numeric pad appears only while the PIN field is active.
 
+- [x] **Typed list rows pick by mouse.** On a list the operator typed for, clicking a row (or the Select key) enters that jersey by hand. GUI pass at 1920×1080: header height identical across idle, bins, typed list, entered by hand, green, red, history and settings; every result screen fits its panel; same at 1600×900.
+
 ## Changes to the UI (from the notes)
 
 1. [ ] **Sorting system.** Decide what the roster, log and remaining lists sort by (number, name, status, time) and give the operator a way to change it.

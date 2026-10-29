@@ -2106,7 +2106,7 @@ export default function App() {
     return {
     confirm() {
       if (!overlay?.match) return;
-      const scan  = overlay.scan;
+      const scan  = overlay.scan || {};
       const entry = { id: scan.id || Date.now(), detected: scan.detected, thumb: scan.smallThumb, match: overlay.match, status: S_PASS, reason: overlay.note || "", ...stamp() };
       setRoster(prev => prev.map(r => r._id === overlay.match._id ? { ...r, scanned: "pass" } : r));
       setLog(prev => [entry, ...prev]);
@@ -2116,7 +2116,13 @@ export default function App() {
       playTone("pass");
     },
     retry()  { setOverlay(null); armAutoScan(); },
-    pick(c)  { if (!overlay?.scan || !c || isDone(c)) return; setOverlay({ mode: "confirm", scan: overlay.scan, match: c, note: overlay.note }); },
+    // A row picked from a list, by key or by mouse. On a list the operator
+    // typed for, the pick IS the hand entry: it goes in as entered by hand.
+    pick(c)  {
+      if (!overlay || !c || isDone(c)) return;
+      if (overlay.typed) { commitTyped(overlay, overlay.typed, c); return; }
+      setOverlay({ mode: "confirm", scan: overlay.scan, match: c, note: overlay.note });
+    },
     reasons() { setOverlay(o => ({ mode: "reasons", scan: o.scan, match: o.match || null, returnTo: o })); },
     // The jersey just passed turns out to have a problem: reopen it on the
     // reasons screen. The chosen reason flags it (its pass is taken back);
