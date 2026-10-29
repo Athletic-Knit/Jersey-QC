@@ -98,3 +98,7 @@ Expected columns (case-insensitive, auto-detected):
 ## Security note
 
 The API key was previously hardcoded in `src/App.jsx:4` and has been **revoked**. Always use `VITE_CLAUDE_API_KEY` from environment. GitHub push protection will block any future commit containing an Anthropic API key.
+
+## Git authorship
+
+Commits are authored by the person at the keyboard only (the configured git user, AK Co-op). Do **not** add a `Co-Authored-By` trailer, a "Generated with Claude Code" line, or any other AI attribution to commit messages or pull request descriptions. This is the owner's decision (29 Oct 2026) and overrides any default attribution guidance. Work on `phase-1-rostering`; push only when asked.
