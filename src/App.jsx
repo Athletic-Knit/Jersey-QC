@@ -1257,18 +1257,18 @@ function ResultCard({ result, onResolve, canResolve = true }) {
   const isManual  = result.status === S_MANUAL && !result.resolution;    // entered by hand, awaiting sign-off
   const isFlagged = result.status === S_FLAGGED || isManual;
   return (
-    <div style={{ ...card, border: `1px solid ${statusColor(result.status)}`, background: isFlagged ? "rgba(239,68,68,0.06)" : "rgba(148,163,184,0.06)", padding: "12px 14px" }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        {result.thumb && <img src={result.thumb} alt="" style={{ width: 84, height: 63, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />}
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: statusColor(result.status) }}>
-            {isManual ? "✍ Entered by hand" : isFlagged ? "🚩 Flagged" : "🔧 Resolved"}
-          </div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 800, marginTop: 4, lineHeight: 1 }}>
-            {result.match ? `#${result.match.number} · ${result.match.name || "—"}` : `#${result.detected?.number || "?"} · ${result.detected?.name || "Not detected"}`}
-          </div>
-          {result.reason     && <div style={{ fontSize: 16, color: "#f87171", marginTop: 4 }}>{result.reason}</div>}
-          {result.resolution && <div style={{ fontSize: 15, color: "#cbd5e1", marginTop: 4 }}>Resolution: {result.resolution}</div>}
+    <div style={{ ...card, border: `1px solid ${statusColor(result.status)}`, background: isFlagged ? "rgba(239,68,68,0.06)" : "rgba(148,163,184,0.06)", padding: "6px 10px" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        {result.thumb && <img src={result.thumb} alt="" style={{ width: 44, height: 33, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: statusColor(result.status), whiteSpace: "nowrap" }}>
+            {isManual ? "✍ By hand" : isFlagged ? "🚩 Flagged" : "🔧 Resolved"}
+          </span>
+          <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, fontWeight: 800, lineHeight: 1 }}>
+            {result.match ? `#${result.match.number}${result.match.name ? " · " + result.match.name : ""}` : `#${result.detected?.number || "?"}${result.detected?.name ? " · " + result.detected.name : ""}`}
+          </span>
+          {result.reason     && <span style={{ fontSize: 13, color: "#f87171", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{result.reason}</span>}
+          {result.resolution && <span style={{ fontSize: 13, color: "#cbd5e1" }}>{result.resolution}</span>}
         </div>
       </div>
       {isFlagged && canResolve && (
@@ -2341,33 +2341,35 @@ export default function App() {
       )}
 
       {/* Header */}
-      <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+      <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "0 16px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "nowrap", flexShrink: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 18 }}>🏭 Jersey QC Scanner</div>
+            <div style={{ fontWeight: 700, fontSize: 18, whiteSpace: "nowrap" }}>🏭 Jersey QC</div>
             {rosterFile && (
-              <div style={{ fontSize: 13, color: "#94a3b8" }}>
+              <div style={{ fontSize: 13, color: "#94a3b8", whiteSpace: "nowrap", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>
                 {rosterFile}{operatorName ? ` · ${operatorName}` : ""}{role ? ` (${role})` : ""}
               </div>
             )}
           </div>
           <input value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder="Order number…" title="Order number"
             onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
-            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #3f4b5c", background: "#1e293b", color: "#e2e8f0", fontSize: 16, fontWeight: 700, width: 170 }} />
+            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #3f4b5c", background: "#1e293b", color: "#e2e8f0", fontSize: 16, fontWeight: 700, width: 140 }} />
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flex: 1, minWidth: 0, overflow: "hidden", justifyContent: "flex-end" }}>
           <Pill color="#22c55e" active={rosterFilter === "pass"} onClick={() => filterRoster("pass")} title="Show the passed jerseys">{passCount} Pass</Pill>
           <Pill color="#ef4444" active={rosterFilter === "flag"} onClick={() => filterRoster("flag")} title="Show the flagged jerseys">{flagCount} Flag</Pill>
-          {checksLeft > 0 && <span title="After a mistake the next jerseys are read twice and must agree before a green"><Pill color="#60a5fa">Double-checking · {checksLeft} to go</Pill></span>}
+          {checksLeft > 0 && <span title="After a mistake the next jerseys are read twice and must agree before a green"><Pill color="#60a5fa">Checking · {checksLeft}</Pill></span>}
           {sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect)}</Pill></span>}
           {manualCount > 0 && <Pill color="#f59e0b" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the jerseys entered by hand">{manualCount} By hand</Pill>}
-          {hubOk === false && <Pill color="#f87171">Supervisor screen not reachable — scanning still works</Pill>}
+          {hubOk === false && <Pill color="#f87171" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
           {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
           {sessionStarted && <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>History</button>}
           {sessionStarted && <button onClick={startNewOrder} title="Finish this order and set up the next one — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>New order</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
-          <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⤢ Exit full screen" : "⛶ Full screen"}</button>
+          <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>
           {fsHint && <span style={{ fontSize: 14, color: "#fcd34d" }}>{fsHint}</span>}
           <button onClick={() => setShowSettings(true)} title="Settings" style={{ ...btnGhost, padding: "6px 12px", fontSize: 16 }}>⚙</button>
         </div>
@@ -2526,16 +2528,6 @@ export default function App() {
                 </div>
               )}
 
-              <div style={{ padding: "10px 14px", borderTop: "1px solid #21262d", background: "#0d1117", flexShrink: 0 }}>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px" }}>
-                  {[["scan", keyLabel, "Scan"], ["confirm", formatKey(confirmKey), "Select"], ["nav", formatKey(cancelKey), "Down"], ["up", formatKey(upKey), "Up"], ["retry", formatKey(retryKey), "Retry scan"], ["byhand", formatKey(byHandKey), "Enter by hand"]].map(([id, k, d]) => (
-                    <div key={id} style={{ display: "flex", gap: 7, alignItems: "center" }}>
-                      <kbd style={{ background: "#1e293b", border: "1px solid #3f4b5c", padding: "3px 9px", borderRadius: 5, fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>{k}</kbd>
-                      <span style={{ fontSize: 15, color: "#94a3b8" }}>{d}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </>
           )}
         </div>
