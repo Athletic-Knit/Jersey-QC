@@ -2515,7 +2515,7 @@ export default function App() {
                   {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && r.scanned) && (
                     <button onClick={() => unscan(lastConfirmed.match._id)} title="Un-check it; it must be scanned again" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>↶ Undo</button>
                   )}
-                  {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && r.scanned === "pass") && (
+                  {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && (r.scanned === "pass" || r.scanned === "manual")) && (
                     <button onClick={actions.reopenLast} title="Found a problem after confirming? Flag this jersey" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#ef4444", color: "#fca5a5", whiteSpace: "nowrap" }}>🚩 Flag it</button>
                   )}
                   <span style={{ fontSize: 14, color: "#7c8ba1", marginLeft: "auto" }}>{lastConfirmed.timestamp}</span>
