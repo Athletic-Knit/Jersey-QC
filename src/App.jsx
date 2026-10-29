@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf } from "./lib/roster.js";
+import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -2173,7 +2173,15 @@ export default function App() {
     manualSubmit({ number, name, size, team }) {
       const o = overlay; if (!o) return;
       const typed = { number, name, size, team };
-      const m = findMatches(roster, name, number, { typed: true });
+      let m = findMatches(roster, name, number, { typed: true });
+      // The team the operator chose settles same-number rows: one row of that
+      // team is the jersey (or a duplicate if it is done); several keep the list,
+      // narrowed to that team.
+      if ((m.type === "pick" || m.type === "close") && team.trim()) {
+        const same = m.candidates.filter(c => teamKey(c.team) === teamKey(team));
+        if (same.length === 1) m = isDone(same[0]) ? { type: "duplicate", match: same[0] } : { type: "exact", match: same[0] };
+        else if (same.length > 1) m = { ...m, candidates: same };
+      }
       if (m.type === "duplicate") { setOverlay({ mode: "duplicate", scan: o.scan, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.scanned === "flag" ? " is flagged — with the supervisor." : " already passed this session."}` }); playTone("flag"); return; }
       if (m.type === "exact") { commitTyped(o, typed, m.match); return; }
       if (m.type === "pick" || m.type === "close") {
