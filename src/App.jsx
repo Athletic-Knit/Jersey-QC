@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
-import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, loadRecentNames, rememberName, forgetName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
+import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey, uprightRotation } from "./lib/vision.js";
@@ -13,7 +13,7 @@ import { useVoice } from "./useVoice.js";
 import { VoiceBadge, VoiceLegend } from "./VoiceBadge.jsx";
 import { speak } from "./lib/voice.js";
 const SECOND_LOOK = false;
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
 
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
 
@@ -201,8 +201,9 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const [role,    setRole]    = useState(roleOfStation(here) || initial?.role || "inspector");
   const [station, setStation] = useState(stationOf(here) ? here : STATIONS[0].id);
   const [pin,   setPin]   = useState("");
-  const [name,  setName]  = useState(initial?.name || "");
-  const [names, setNames] = useState(() => loadRecentNames());   // names used on this PC before
+  const [name, setName] = useState(() => (initial?.name || "") || OPERATORS[0] || "");
+  const [nameChoice, setNameChoice] = useState(() => (initial?.name && !OPERATORS.includes(initial.name) ? "other" : (initial?.name || OPERATORS[0] || "other")));   // a name from the list, or "other" with the field below
+  const [pinFocus, setPinFocus] = useState(false);   // the keypad shows only while the PIN field is active
   const [error, setError] = useState(null);
   // Which stations are live right now, and from where: refreshed every 5 s.
   const [use, setUse] = useState({});
@@ -272,23 +273,17 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         {PIN_REQUIRED && (
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>PIN</label>
-            <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} placeholder="••••" autoFocus onKeyDown={onEnter} style={inputSt} />
-            <ScreenKeys layout="digits" onKey={k => setPin(v => (k === "⌫" ? v.slice(0, -1) : (v + k).slice(0, 8)))} onEnter={submit} enterLabel="Sign in" />
+            <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} placeholder="••••" autoFocus onKeyDown={onEnter} onFocus={() => setPinFocus(true)} onBlur={() => setPinFocus(false)} style={{ ...inputSt, borderColor: pinFocus ? "#60a5fa" : inputSt.borderColor }} />
+            {pinFocus && <ScreenKeys layout="digits" onKey={k => setPin(v => (k === "⌫" ? v.slice(0, -1) : (v + k).slice(0, 8)))} onEnter={submit} enterLabel="Sign in" />}
           </div>
         )}
         <div style={{ marginBottom: 18 }}>
           <label style={labelSt}>Your name</label>
-          {names.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-              {names.map(n => (
-                <span key={n} style={{ display: "inline-flex", alignItems: "center", borderRadius: 999, border: `1px solid ${name.trim().toLowerCase() === n.toLowerCase() ? "#60a5fa" : "#334155"}`, background: name.trim().toLowerCase() === n.toLowerCase() ? "rgba(96,165,250,0.15)" : "transparent" }}>
-                  <button type="button" onClick={() => setName(n)} title="Use this name" style={{ background: "transparent", border: 0, color: "#e2e8f0", cursor: "pointer", padding: "6px 4px 6px 14px", fontSize: 16, fontWeight: 700 }}>{n}</button>
-                  <button type="button" onClick={() => { forgetName(n); setNames(loadRecentNames()); }} title="Forget this name on this PC" style={{ background: "transparent", border: 0, color: "#64748b", cursor: "pointer", padding: "6px 12px 6px 6px", fontSize: 16, lineHeight: 1 }}>×</button>
-                </span>
-              ))}
-            </div>
-          )}
-          <input value={name} onChange={e => setName(e.target.value)} placeholder={names.length ? "or type a new name" : "e.g. John Smith"} autoFocus={!PIN_REQUIRED} onKeyDown={onEnter} style={inputSt} />
+          <select value={nameChoice} onChange={e => { const v = e.target.value; setNameChoice(v); setName(v === "other" ? "" : v); }} style={{ ...inputSt, cursor: "pointer" }}>
+            {OPERATORS.map(n => <option key={n} value={n}>{n}</option>)}
+            <option value="other">Other…</option>
+          </select>
+          {nameChoice === "other" && <input value={name} onChange={e => setName(e.target.value)} placeholder="Type the name" autoFocus={!PIN_REQUIRED} onKeyDown={onEnter} style={{ ...inputSt, marginTop: 8 }} />}
         </div>
         {error && <div style={errSt}>{error}</div>}
         <button onClick={submit} style={bigBtn}>{onCancel ? "Take over →" : "Sign in →"}</button>

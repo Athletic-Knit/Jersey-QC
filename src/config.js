@@ -9,6 +9,8 @@ export const THINKING = import.meta.env.VITE_CLAUDE_THINKING || DEFAULT_THINKING
 // Longest side of the frame sent to the model, in pixels. 800 reads as well as
 // full resolution and answers ~0.6 s sooner than a 1280 px frame.
 export const SEND_MAX_PX = Number(import.meta.env.VITE_SEND_MAX_PX) || 800;
+// The names offered at sign-in (a dropdown, plus "Other" for anyone else): VITE_OPERATORS="Shiv,Priya,Arshil".
+export const OPERATORS = String(import.meta.env.VITE_OPERATORS || "Person 1,Person 2,Person 3").split(",").map(s => s.trim()).filter(Boolean);
 
 // Shown on every green screen. Zero taps when the jersey is good.
 export const CHECKLIST = ["name & number", "size tag", "logos", "seams", "spots & threads"];
