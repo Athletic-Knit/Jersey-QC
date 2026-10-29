@@ -472,10 +472,10 @@ function ReasonTextForm({ match, onSubmit, onBack }) {
 }
 
 // ── Manual entry: the camera could not read it, or it is not on the roster ───
-function ManualEntryForm({ detected, teams, onSubmit, onBack }) {
-  const [number, setNumber] = useState(detected?.number || "");
-  const [name,   setName]   = useState(detected?.name || "");
-  const [team,   setTeam]   = useState(teams[0] || "");
+function ManualEntryForm({ detected, initial = null, teams, onSubmit, onBack }) {
+  const [number, setNumber] = useState(initial?.number ?? detected?.number ?? "");
+  const [name,   setName]   = useState(initial?.name ?? detected?.name ?? "");
+  const [team,   setTeam]   = useState(initial?.team || teams[0] || "");
   const [error,  setError]  = useState(null);
   const [field,  setField]  = useState("number");   // which field the on-screen keys write into
   const setters = { number: setNumber, name: setName };
@@ -994,7 +994,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), retry, none, notRight];
     }
     if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "🚩 Bad jersey" }];
-    if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }];
+    if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }];
     if (mode === "manual")     return [];
     if (mode === "duplicate")  return [{ id: "skip", label: "✓ Skip", primary: true, run: actions.skipDuplicate }, retry, { id: "dup", label: "🚩 Duplicate", run: actions.flagDuplicate }];
     if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
@@ -1196,7 +1196,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
 
       {/* ── MANUAL entry and its confirmation ── */}
       {mode === "manual" && (
-        <ManualEntryForm detected={detected} teams={state.teams || []} onSubmit={actions.manualSubmit} onBack={actions.back} />
+        <ManualEntryForm detected={detected} initial={state.initial} teams={state.teams || []} onSubmit={actions.manualSubmit} onBack={actions.back} />
       )}
       {mode === "manualDone" && match && (
         <>
@@ -2091,7 +2091,7 @@ export default function App() {
         const entry = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, match: exactRow, status: S_MANUAL, reason, ...stamp() };
         setLog(prev => [entry, ...prev]); setLastResult(entry); setLastConfirmed(entry);
         inspectRef.current.jerseyDone(); syncInspect();
-        setOverlay({ mode: "manualDone", scan: o.scan, match: exactRow, reason });
+        setOverlay({ mode: "manualDone", scan: o.scan, match: exactRow, reason, typed: { number, name, team }, entryId: entry.id });
         playTone("pass");
         return;
       }
@@ -2198,6 +2198,16 @@ export default function App() {
       commitTyped(o, typed, null);
     },
     continueManual() { setOverlay(null); armAutoScan(); },
+    // Back from "entered by hand": the entry is already in the log and on the
+    // row, so take it back (the log line stays, marked taken back; the row
+    // opens again) and reopen the form with what was typed.
+    undoManual() {
+      const o = overlay; if (!o?.match) return;
+      setRoster(prev => prev.map(r => r._id === o.match._id && r.scanned === "manual" ? { ...r, scanned: false } : r));
+      setLog(prev => prev.map(l => l.id === o.entryId ? { ...l, status: "undo", reason: "Taken back — re-entered by hand" } : l));
+      setLastResult(r => (r?.id === o.entryId ? null : r)); setLastConfirmed(c => (c?.id === o.entryId ? null : c));
+      setOverlay({ mode: "manual", scan: o.scan, match: null, teams: teamNames, returnTo: null, initial: o.typed });
+    },
     };
   }, [overlay, stamp, armAutoScan, roster, teamNames, noteMistake, lastConfirmed, syncInspect]);
 
