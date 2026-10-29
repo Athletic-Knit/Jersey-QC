@@ -69,15 +69,11 @@ function parseModelText(data) {
     trim_colour: str(obj.trim_colour).toLowerCase(),
     obstruction: str(obj.obstruction),
   };
-  // Sleeves carry a copy of the whole back number. A ONE-digit sleeve number
-  // beside a TWO-digit back read that contains it is a merge (the real #4 with
-  // its sleeve "4" read as "44" or "40"): the back number is in doubt.
-  const small = out.sleeve_numbers.map(x => x.replace(/\D/g, "")).filter(x => x.length === 1);
-  const n = out.number.replace(/\D/g, "");
-  if (n.length === 2 && small.some(d => n.includes(d))) {
-    out.number_complete = false;
-    out.obstruction = (out.obstruction ? out.obstruction + "; " : "") + "small sleeve number beside the digit";
-  }
+  // The sleeve numbers are reported, not acted on. A one-digit sleeve number
+  // beside a two-digit back read looked like a merge, but on the floor it was
+  // the "3" of a "30" sleeve cut off by the picture edge, and the doubt it
+  // raised put a done #30 on a list with #37 (finding 20). The reader is told
+  // in the prompt that two sizes are two numbers; that is where the rule lives.
   return out;
 }
 

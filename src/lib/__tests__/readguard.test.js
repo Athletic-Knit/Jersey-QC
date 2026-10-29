@@ -498,10 +498,10 @@ describe("the side of the hidden digit trims the list", () => {
 
 describe("vision parser: sleeve numbers", () => {
   const wrap = obj => ({ content: [{ type: "text", text: JSON.stringify(obj) }] });
-  it("a one-digit sleeve number inside a two-digit back read puts the back number in doubt", () => {
-    const r = parseModelText(wrap({ name: "", number: "40", sleeve_numbers: ["4", "4"], number_complete: true }));
-    expect(r.number_complete).toBe(false);
-    expect(r.obstruction).toMatch(/sleeve number/);
+  it("a one-digit sleeve number (a cut-off '3' of a '30' sleeve) never puts the back number in doubt", () => {
+    const r = parseModelText(wrap({ name: "", number: "30", sleeve_numbers: ["3"], number_complete: true }));
+    expect(r.number_complete).toBe(true);
+    expect(r.sleeve_numbers).toEqual(["3"]);
   });
   it("a sleeve number that copies the whole back number, or none, changes nothing", () => {
     expect(parseModelText(wrap({ name: "GABBARD", number: "40", sleeve_numbers: ["40", "40"], number_complete: true })).number_complete).toBe(true);
