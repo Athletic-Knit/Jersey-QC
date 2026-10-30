@@ -78,8 +78,8 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
           // event (same id) updates in place — a resolution added later lands too.
           const { events = [], rows = [], bins = null, ...rest } = body;
           const led = (state.ledger ||= {}); const dayLed = (led[today] ||= { events: {}, orders: {} });
-          // A photo arrives with the first few reports after a flag; keep it when later reports leave it out.
-          events.forEach(ev => { if (ev && ev.id !== undefined) { const k = `${id}|${ev.id}`; const old = dayLed.events[k]; dayLed.events[k] = { ...ev, station: id, ...(ev.photo ? {} : old?.photo ? { photo: old.photo } : {}) }; } });
+          // A photo arrives with the first few reports after a flag (the damage photos a little later, once taken); keep them when later reports leave them out.
+          events.forEach(ev => { if (ev && ev.id !== undefined) { const k = `${id}|${ev.id}`; const old = dayLed.events[k]; dayLed.events[k] = { ...ev, station: id, ...(ev.photo ? {} : old?.photo ? { photo: old.photo } : {}), ...(ev.damagePhotos?.length ? {} : old?.damagePhotos?.length ? { damagePhotos: old.damagePhotos } : {}) }; } });
           if (renamed && prev.orderNumber) delete dayLed.orders[`${id}|${prev.orderNumber}`];
           if (body.orderNumber) {
             // The order record keeps the latest roster with each jersey's status, so the

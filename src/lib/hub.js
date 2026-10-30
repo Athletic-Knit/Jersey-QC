@@ -61,8 +61,9 @@ export const hub = {
 };
 
 // What a station tells the hub: small. The only images are the photos of the
-// newest few flagged jerseys (each ~40 KB); the hub keeps a photo once it has
-// seen it, so older flags keep theirs without being re-sent every 5 s.
+// newest few flagged jerseys (each ~40 KB; the scan, and any damage photos the
+// operator took); the hub keeps a photo once it has seen it, so older flags
+// keep theirs without being re-sent every 5 s.
 const PHOTOS_PER_REPORT = 6;   // the newest log entries that carry their photo in each 5-second report
 export function snapshotOf({ operatorName, role, orderNumber, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap }) {
   const count = s => roster.filter(r => r.scanned === s).length;
@@ -83,9 +84,9 @@ export function snapshotOf({ operatorName, role, orderNumber, notes, jerseyType 
         offRoster: !!l.match?.offRoster, reason: l.reason || "", resolution: l.resolution || "",
         read: l.detected ? `#${l.detected.number || "?"}${l.detected.number_complete === false ? "?" : ""}${l.detected.name ? " " + l.detected.name : ""}${l.detected.laid_flat === false ? " [not flat]" : ""}` : "",
       };
-      if (l.status === "flagged" && l.photo && i < PHOTOS_PER_REPORT) ev.photo = l.photo;
+      if (l.status === "flagged" && i < PHOTOS_PER_REPORT) { if (l.photo) ev.photo = l.photo; if (l.damagePhotos?.length) ev.damagePhotos = l.damagePhotos; }
       return ev;
     }),
-    attention: log.filter(l => l.status === "flagged" || l.status === "manual" || l.status === "missing" || l.status === "short").slice(0, 25).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(i < 3 && l.photo ? { photo: l.photo } : {}) })),
+    attention: log.filter(l => l.status === "flagged" || l.status === "manual" || l.status === "missing" || l.status === "short").slice(0, 25).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(i < 3 && l.photo ? { photo: l.photo } : {}), ...(i < 3 && l.damagePhotos?.length ? { damagePhotos: l.damagePhotos } : {}) })),
   };
 }

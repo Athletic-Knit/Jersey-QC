@@ -26,7 +26,15 @@ describe("damage report rows", () => {
     expect(rows[1]).toMatchObject({ order: "41", operator: "Sam", name: "RINE", team: "green", photo: "data:image/jpeg;base64,BBB" });
   });
   it("has a column for every field", () => {
-    expect(DAMAGE_COLUMNS.length).toBe(14);
+    expect(DAMAGE_COLUMNS.length).toBe(15);
+  });
+  it("carries the damage photos the operator took, from a ledger event or a station log entry", () => {
+    const rows = buildDamageRows([
+      { id: 1, t: "2026-10-20 09:00:00", status: "flagged", photo: "data:image/jpeg;base64,AAA", damagePhotos: ["data:image/jpeg;base64,D1", null, "data:image/jpeg;base64,D2"] },
+      { id: 2, timestamp: "2026-10-20 09:01:00", status: "flagged", match: { number: "4" }, photo: null },
+    ]);
+    expect(rows[0].damagePhotos).toEqual(["data:image/jpeg;base64,D1", "data:image/jpeg;base64,D2"]);
+    expect(rows[1]).toMatchObject({ photo: null, damagePhotos: [] });
   });
   it("carries the jersey type, from the event or the order, through a label", () => {
     const rows = buildDamageRows([{ id: 1, t: "2026-10-20 09:00:00", status: "flagged", jerseyType: "sublimated" }, { id: 2, t: "2026-10-20 09:01:00", status: "flagged" }], { jerseyType: "echl", typeLabel: t => ({ echl: "ECHL", sublimated: "Sublimated" })[t] || "" });
@@ -76,5 +84,9 @@ describe("photo budget in the saved session", () => {
     const out = trimPhotos(log, 2);
     expect(out.map(l => l.photo)).toEqual(["p0", "p1", null, null, null]);
     expect(trimPhotos(log, 0).every(l => l.photo === null)).toBe(true);
+  });
+  it("counts an entry with only damage photos, and drops them with the scan photo", () => {
+    const log = [{ id: 1, status: "flagged", photo: null, damagePhotos: ["d"] }, { id: 2, status: "flagged", photo: "p", damagePhotos: ["d", "d"] }, { id: 3, status: "pass" }];
+    expect(trimPhotos(log, 1)).toEqual([{ id: 1, status: "flagged", photo: null, damagePhotos: ["d"] }, { id: 2, status: "flagged", photo: null, damagePhotos: [] }, { id: 3, status: "pass" }]);
   });
 });

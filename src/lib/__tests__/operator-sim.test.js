@@ -262,7 +262,7 @@ function workOrder(r, seed, k, stats, findings) {
 
     // Things the operator does now and then
     if (chance(r, 0.03) && reasons.length) {                       // a damaged jersey: flag it with a reason
-      const last = log[0]; if (last?.status === "pass" && last.match) { const reason = pick(r, reasons); setRow(last.match._id, "flag"); add({ detected: last.detected, match: last.match, status: "flagged", reason: reason.label, reasonId: reason.id, photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); seconds += T.flag; stats.damageFlags++; }
+      const last = log[0]; if (last?.status === "pass" && last.match) { const reason = pick(r, reasons); setRow(last.match._id, "flag"); add({ detected: last.detected, match: last.match, status: "flagged", reason: reason.label, reasonId: reason.id, photo: "data:image/jpeg;base64," + "x".repeat(40_000), damagePhotos: ["data:image/jpeg;base64," + "y".repeat(40_000)] }); seconds += T.flag; stats.damageFlags++; }
     }
     if (chance(r, 0.01)) {                                         // confirmed the wrong size by mistake: un-check and scan again
       const passed = roster.filter(x => x.scanned === "pass"); if (passed.length) { const u = pick(r, passed); if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace] UN-CHECK #${u.number} ${u.team} ${u.size}`); setRow(u._id, false); add({ match: { ...u, scanned: false }, status: "undo", reason: "Un-checked — was passed; scan it again" }); pile.push({ truth: u, extra: false }); seconds += T.unscan; stats.unscans++; vig.noteMistake("unchecked"); }

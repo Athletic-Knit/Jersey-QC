@@ -11,14 +11,14 @@ const SIGNIN_KEY   = "jerseyqc.signin.v1" + suffix;
 
 // localStorage can be full, blocked, or absent (private window); never let that throw.
 const quiet = fn => { try { return fn(); } catch { return undefined; } };
-// Flag photos (~40 KB each) live in the log. localStorage holds ~5 MB, so a
-// long order keeps photos on the newest flagged entries only, and drops them
-// all rather than lose the session.
+// Flag photos (~40 KB each, plus any damage photos the operator took) live in
+// the log. localStorage holds ~5 MB, so a long order keeps photos on the newest
+// flagged entries only, and drops them all rather than lose the session.
 const PHOTO_BUDGET = 3_500_000;
 export function trimPhotos(log, keep = 20) {
   if (!Array.isArray(log)) return log;
   let seen = 0;
-  return log.map(l => { if (!l?.photo) return l; seen++; return seen <= keep ? l : { ...l, photo: null }; });
+  return log.map(l => { if (!l?.photo && !l?.damagePhotos?.length) return l; seen++; return seen <= keep ? l : { ...l, photo: null, damagePhotos: [] }; });
 }
 export function saveSession(s)  {
   quiet(() => {

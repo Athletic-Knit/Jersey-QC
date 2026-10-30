@@ -20,6 +20,14 @@ export function playTone(type) {
       osc.frequency.setValueAtTime(300, t); osc.frequency.setValueAtTime(220, t + 0.15);
       gain.gain.setValueAtTime(0.4, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
       osc.start(t); osc.stop(t + 0.5);
+    } else if (type === "count") {            // one tick per second of the damage-photo countdown
+      osc.frequency.setValueAtTime(880, t);
+      gain.gain.setValueAtTime(0.3, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.start(t); osc.stop(t + 0.12);
+    } else if (type === "shutter") {          // the photo is taken: two quick rising blips
+      osc.frequency.setValueAtTime(1200, t); osc.frequency.setValueAtTime(1800, t + 0.08);
+      gain.gain.setValueAtTime(0.35, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      osc.start(t); osc.stop(t + 0.25);
     } else {
       osc.frequency.setValueAtTime(660, t);
       gain.gain.setValueAtTime(0.15, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
