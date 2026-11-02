@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey } from "./lib/roster.js";
+import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, binCount, binFieldOf, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -294,6 +294,20 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
 
 // ── Order setup (every order; no PIN) ─────────────────────────────────────────
 // ECHL / ECHL replica / Sublimated as buttons; "" = not set.
+// How the order is sorted at the station: a bin per team, a bin per size, or none.
+function BinByPicker({ value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {BIN_BY.map(t => (
+        <button key={t.id} type="button" onClick={() => onChange(t.id)} title={t.hint}
+          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "#60a5fa" : "#3f4b5c", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "#93c5fd" : "#cbd5e1", fontWeight: value === t.id ? 700 : 400 }}>
+          {t.label} <span style={{ fontSize: 14, color: "#94a3b8", fontWeight: 400 }}>· {t.hint}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function JerseyTypePicker({ value, onChange }) {
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -311,6 +325,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [jerseyType, setJerseyType] = useState("");
+  const [binBy, setBinBy] = useState("team");       // bins by team, by size, or none — the supervisor's roster brings its own
   const [file,    setFile]    = useState(null);
   const [error,   setError]   = useState(null);
   const [loading, setLoading] = useState(false);
@@ -351,7 +366,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     try {
       const full = await hub.roster(summary.id);
       setPicked(full); setFile(null); setError(null);
-      setOrder(full.orderNumber || ""); setNotes(full.notes || ""); setJerseyType(full.jerseyType || "");
+      setOrder(full.orderNumber || ""); setNotes(full.notes || ""); setJerseyType(full.jerseyType || ""); setBinBy(full.binBy || "team");
     } catch (e) { setError("Could not fetch that roster: " + e.message); }
   };
 
@@ -361,11 +376,11 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     if (!file && !picked) { setError(canSupervise ? "Upload a roster file, or pick one the supervisor sent." : "Pick the order the supervisor sent, or load a roster file."); return; }
     setLoading(true);
     try {
-      if (picked) { onStart({ roster: picked.rows, orderNumber: order.trim(), notes: notes.trim(), jerseyType, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})` }); return; }
+      if (picked) { onStart({ roster: picked.rows, orderNumber: order.trim(), notes: notes.trim(), jerseyType, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})` }); return; }
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); return; }
-      onStart({ roster: parsed, orderNumber: order.trim() || orderNumberOf(parsed) || file.name.replace(/\.[^.]+$/, ""), notes: notes.trim(), jerseyType, rosterFile: file.name });
+      onStart({ roster: parsed, orderNumber: order.trim() || orderNumberOf(parsed) || file.name.replace(/\.[^.]+$/, ""), notes: notes.trim(), jerseyType, binBy, rosterFile: file.name });
     } catch (err) {
       setError("Failed to parse roster: " + err.message);
       setLoading(false);
@@ -395,7 +410,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
               {hubRosters.map(r => (
                 <button key={r.id} onClick={() => pickRoster(r)}
                   style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "#22c55e" : "#334155", color: picked?.id === r.id ? "#fff" : "#94a3b8", background: picked?.id === r.id ? "rgba(34,197,94,0.12)" : "transparent" }}>
-                  <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount} jerseys · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}</span>{r.forStation && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
+                  <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount} jerseys · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}{r.binBy && r.binBy !== "team" ? ` · ${BIN_BY.find(b => b.id === r.binBy)?.label.toLowerCase() || r.binBy}` : ""}</span>{r.forStation && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
                   <div style={{ fontSize: 14, color: "#94a3b8" }}>{r.by ? `sent by ${r.by} · ` : ""}{new Date(r.createdAt).toLocaleString()}</div>
                 </button>
               ))}
@@ -411,6 +426,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. sponsor logo left sleeve · captain C on #19" rows={2} style={{ ...inputSt, resize: "vertical", fontSize: 16 }} />
           <label style={{ ...labelSt, marginTop: 10 }}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the "not right" menu and the reports</span></label>
           <JerseyTypePicker value={jerseyType} onChange={setJerseyType} />
+          <label style={{ ...labelSt, marginTop: 12 }}>Bins — how the order is sorted{picked?.binBy ? <span style={{ color: "#60a5fa", fontWeight: 400 }}> · set by the supervisor</span> : null}</label>
+          <BinByPicker value={binBy} onChange={setBinBy} />
         </div>
         <div style={{ marginBottom: 18 }}>
           <label style={labelSt}>{hubRosters.length ? "Or a roster file" : "Roster file"}</label>
@@ -622,7 +639,7 @@ function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto 
                     <tr key={r._id ?? i} style={{ background: r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned === "manual" ? "rgba(245,158,11,0.07)" : "transparent" }}>
                       <td style={{ ...td, color: colour(r.scanned), fontWeight: 700, whiteSpace: "nowrap" }}>{label(r.scanned)}</td>
                       <td style={td}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{r.size || ""}</td>
-                      <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binFor(rec.bins, r.team) !== null ? `Bin ${binFor(rec.bins, r.team)}` : ""}</td>
+                      <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binFor(rec.bins, r) !== null ? `Bin ${binFor(rec.bins, r)}` : ""}</td>
                       <td style={{ ...td, color: "#cbd5e1" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                       <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
                       {tab === "problems" && <td style={td}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} /></td>}
@@ -715,11 +732,12 @@ function SupervisorPanel({ operatorName, onClose }) {
     const rows = rec.rows || [];
     if (!rows.length) { setMsg(`The hub has no jersey list for order ${o.order} on ${stationLabel(o.station)} — that station last reported before today's update, or the order was done before it. Press Export on the station for its sheet; reload the station page so future orders come through.`); return; }
     const log = (l.events || []).filter(e => e.station === rec.station && e.order === rec.order).map(e => ({ match: { _id: e.rowId }, reason: e.reason, resolution: e.resolution, operator: e.operator, timestamp: e.t }));
-    exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "", jerseyType: jerseyTypeLabel(rec.jerseyType) }, displayColumns(rows), team => binFor(rec.bins, team));
+    exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "", jerseyType: jerseyTypeLabel(rec.jerseyType) }, displayColumns(rows), row => binFor(rec.bins, row));
   }).catch(() => setMsg("Could not fetch that order from the hub."));
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [jerseyType, setJerseyType] = useState("");
+  const [binBy,   setBinBy]   = useState("team");   // how the station sorts the order: a bin per team, per size, or none
   const [file,    setFile]    = useState(null);
   const [target,  setTarget]  = useState("");     // station id to send the roster to; "" = any station may take it
   const [msg,     setMsg]     = useState(null);
@@ -813,10 +831,10 @@ function SupervisorPanel({ operatorName, onClose }) {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const rows = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (!rows.length) { setMsg("No valid rows in that file."); return; }
-      await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), jerseyType, fileName: file.name, rows, by: operatorName, forStation: target });
+      await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), jerseyType, binBy, fileName: file.name, rows, by: operatorName, forStation: target });
       const to = target ? `${stationLabel(target)} only` : "every station";
       setMsg(`Sent ${file.name} — ${rows.length} jerseys for order ${order.trim()} to ${to}. It shows on the order screen there.`);
-      setFile(null); setOrder(""); setNotes(""); setJerseyType(""); refresh();
+      setFile(null); setOrder(""); setNotes(""); setJerseyType(""); setBinBy("team"); refresh();
     } catch (e) { setMsg("Could not send: " + e.message); }
   };
 
@@ -1072,6 +1090,7 @@ function SupervisorPanel({ operatorName, onClose }) {
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order number</label><input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Jersey type</label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Bins — how the station sorts it</label><BinByPicker value={binBy} onChange={setBinBy} /></div>
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Roster file</label>
             <div onClick={() => fileRef.current.click()} style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${file ? "#22c55e" : "#334155"}`, background: "#1e293b", color: file ? "#22c55e" : "#64748b", fontSize: 13, cursor: "pointer" }}>{file ? "✓ " + file.name : "📂 Choose CSV or Excel…"}</div>
@@ -1255,7 +1274,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     document.querySelector('[data-sel="1"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selectedIdx]);
 
-  const binNum  = match ? binFor(binMap, match.team) : null;
+  const binNum  = match ? binFor(binMap, match) : null;
   const hasSize = !!(match?.size);
   const extras  = match ? extraCols.filter(k => match[k]).map(k => `${cap(k)}: ${match[k]}`) : [];
 
@@ -1641,20 +1660,20 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
 }
 
 // ── Bin setup modal ───────────────────────────────────────────────────────────
-function BinSetupModal({ entries, onConfirm }) {
+function BinSetupModal({ entries, by = "team", onConfirm }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 44, maxWidth: 680, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
         <div style={{ fontSize: 56, marginBottom: 12 }}>🗂️</div>
         <div style={{ fontSize: 36, fontWeight: 900, color: "#60a5fa", marginBottom: 8 }}>Prepare {entries.length} bins</div>
         <div style={{ fontSize: 19, color: "#cbd5e1", marginBottom: 26 }}>
-          This order has <strong style={{ color: "#e2e8f0" }}>{entries.length} teams</strong>. Label your bins before scanning:
+          This order is sorted <strong style={{ color: "#e2e8f0" }}>by {by}</strong>: {entries.length} {by === "size" ? "sizes" : "teams"}. Label your bins before scanning:
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 30, maxHeight: 400, overflowY: "auto" }}>
-          {entries.map(({ team, bin }) => (
-            <div key={team} style={{ display: "flex", alignItems: "center", gap: 18, padding: "14px 22px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" }}>
+          {entries.map(({ label, bin }) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 18, padding: "14px 22px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" }}>
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 44, fontWeight: 900, color: "#60a5fa", minWidth: 120, textAlign: "center", lineHeight: 1 }}>Bin {bin}</div>
-              <div style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0", textAlign: "left" }}>{team}</div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0", textAlign: "left" }}>{label}</div>
             </div>
           ))}
         </div>
@@ -1883,7 +1902,7 @@ export default function App() {
   const [firstScanTime,      setFirstScanTime]      = useState(null);
   const [now,                setNow]                = useState(() => Date.now());
 
-  const binOf          = useCallback(team => binFor(binMap, team), [binMap]);
+  const binOf          = useCallback(row => binFor(binMap, row), [binMap]);
   const scannedRows    = roster.filter(r => r.scanned && r.scanned !== false);
   const remaining      = roster.filter(r => !r.scanned).length;
   // Hands-free runs only while it is on in Settings, not paused by the operator,
@@ -1912,7 +1931,7 @@ export default function App() {
   useEffect(() => {
     if (!settings.voice || settings.voiceSpeak === false || !overlay) return;
     const m = overlay.match, mode = overlay.mode;
-    if (mode === "confirm" && m) { const b = binFor(binMap, m.team); speak(`${m.number}${m.name ? ", " + m.name : ""}${b !== null ? ", bin " + b : ""}`); }
+    if (mode === "confirm" && m) { const b = binFor(binMap, m); speak(`${m.number}${m.name ? ", " + m.name : ""}${b !== null ? ", bin " + b : ""}`); }
     else if (mode === "pick" || mode === "close") speak("check it, which jersey");
     else if (mode === "flag") speak(overlay.title === "COULD NOT READ" ? "could not read" : overlay.title === "SCAN FAILED" ? "scan failed" : "not found");
     else if (mode === "duplicate") speak("already done");
@@ -1988,16 +2007,16 @@ export default function App() {
   }, [remaining, roster.length, firstScanTime]);
 
   // ── Session lifecycle ─────────────────────────────────────────────────────
-  const applyRoster = useCallback((parsed, fileName, { keepLog = false } = {}) => {
+  const applyRoster = useCallback((parsed, fileName, { keepLog = false, binBy = "team" } = {}) => {
     rosterVersion.current++;
     setRoster(parsed.map(r => ({ ...r, scanned: false })));
     setRosterFile(fileName);
     if (!keepLog) { setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); setIdleSpells([]); inspectRef.current.reset(); syncInspect(); }
     setThumb(null); setOverlay(null); setShowRosterComplete(false);
-    const bins = buildBinMap(parsed, binMap || {});
-    if (Object.keys(bins).length > 1) { setBinMap(bins); setShowBinSetup(true); }
+    const bins = binBy === "none" ? {} : buildBinMap(parsed, {}, binBy);
+    if (binCount(bins) > 1) { setBinMap(bins); setShowBinSetup(true); }
     else { setBinMap(null); setShowBinSetup(false); }
-  }, [binMap, syncInspect]);
+  }, [syncInspect]);
 
   // The order belongs to the station, not to a person: whoever is signed in
   // here now continues it under their own name.
@@ -2336,9 +2355,11 @@ export default function App() {
       setRoster(next);
       setRosterFile(f => f ? `${f} + ${file.name}` : file.name);
       setShowRosterComplete(false);
-      const bins = buildBinMap(next, binMap || {});
-      const newTeams = Object.keys(bins).length > Object.keys(binMap || {}).length;
-      if (Object.keys(bins).length > 1) { setBinMap(bins); if (newTeams) setShowBinSetup(true); }
+      if (binMap) {   // the order has bins: the added rows join them, by the same field
+        const bins = buildBinMap(next, binMap);
+        const newBins = binCount(bins) > binCount(binMap);
+        setBinMap(bins); if (newBins) setShowBinSetup(true);
+      }
     } catch (err) { setError("Failed to parse roster: " + err.message); }
   }, [roster, binMap]);
 
@@ -2606,16 +2627,16 @@ export default function App() {
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
         <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onSupervisor={() => setShowSupervisor(true)}
-          onStart={({ roster, orderNumber, notes, jerseyType, rosterFile }) => {
+          onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile }) => {
             setBinMap(null);
-            applyRoster(roster, rosterFile);
+            applyRoster(roster, rosterFile, { binBy: binBy || "team" });
             setOrderNumber(orderNumber); setNotes(notes); setJerseyType(jerseyType || "");
             setSessionStarted(true); setResumeDecided(true);
           }} />
       )}
 
       {showBinSetup && binMap && (
-        <BinSetupModal entries={binEntries(roster, binMap)} onConfirm={() => setShowBinSetup(false)} />
+        <BinSetupModal entries={binEntries(roster, binMap)} by={binFieldOf(binMap)} onConfirm={() => setShowBinSetup(false)} />
       )}
 
       {overlay && !wide && (
@@ -2920,7 +2941,7 @@ export default function App() {
                           {rosterCols.map(c => (
                             <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "#fbbf24" : "#e2e8f0" }}>{r[c]}</td>
                           ))}
-                          {binMap && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{binOf(r.team) !== null ? `Bin ${binOf(r.team)}` : "—"}</td>}
+                          {binMap && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{binOf(r) !== null ? `Bin ${binOf(r)}` : "—"}</td>}
                           <td style={{ ...tdSt, padding: "2px 6px" }}>
                             <select value={["missing", "short"].includes(r.scanned) ? r.scanned : ""}
                               onChange={e => { const v = e.target.value; if (v === "unscan") unscan(r._id); else markRow(r._id, v || false); }}

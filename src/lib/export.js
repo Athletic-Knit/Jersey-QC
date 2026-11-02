@@ -42,7 +42,7 @@ export function buildRosterSheet(roster, log, meta, columns, binOf = () => null)
     ["Status", ...columns.map(cap), "Bin", "Reason", "Resolution", "Inspected By", "Time"],
     ...roster.map(r => {
       const l = latest.get(r._id);
-      return [rosterStatusLabel(r), ...columns.map(c => r[c] ?? ""), binOf(r.team) ?? "", l?.reason ?? "", l?.resolution ?? "", l?.operator ?? "", l?.timestamp ?? ""];
+      return [rosterStatusLabel(r), ...columns.map(c => r[c] ?? ""), binOf(r) ?? "", l?.reason ?? "", l?.resolution ?? "", l?.operator ?? "", l?.timestamp ?? ""];
     }),
   ];
 }
@@ -61,7 +61,7 @@ export function buildLogCSV(log, binOf = () => null) {
     l.timestamp ?? "", l.status ?? "",
     l.detected?.name ?? "", l.detected?.number ?? "",
     l.match?.name ?? "", l.match?.number ?? "", l.match?.team ?? "", l.match?.size ?? "",
-    l.match ? (binOf(l.match.team) ?? "") : "",
+    l.match ? (binOf(l.match) ?? "") : "",
     l.reason ?? "", l.resolution ?? "", l.operator ?? "",
   ]);
   return [header, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");

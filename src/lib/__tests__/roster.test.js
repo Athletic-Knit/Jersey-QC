@@ -88,7 +88,24 @@ describe("bins", () => {
     expect(second.wolves).toBe(3);
   });
   it("lists entries with the roster's spelling", () => {
-    expect(binEntries(roster, buildBinMap(roster))).toEqual([{ team: "Hawks", bin: 1 }, { team: "Ravens", bin: 2 }]);
+    expect(binEntries(roster, buildBinMap(roster))).toEqual([{ label: "Hawks", bin: 1 }, { label: "Ravens", bin: 2 }]);
+  });
+  it("by size: one bin per size, youth before adult, XS before 3XL; the row says which field", () => {
+    const r = [{ team: "Ravens", size: "A-L" }, { team: "Hawks", size: "Y-M" }, { team: "Ravens", size: "A-XS" }, { team: "Hawks", size: "a-l " }, { team: "Hawks", size: "A-3XL" }];
+    const m = buildBinMap(r, {}, "size");
+    expect(m.__by).toBe("size");
+    expect(binEntries(r, m)).toEqual([{ label: "Y-M", bin: 1 }, { label: "A-XS", bin: 2 }, { label: "A-L", bin: 3 }, { label: "A-3XL", bin: 4 }]);
+    expect(binFor(m, { team: "Hawks", size: "A-L" })).toBe(3);
+    expect(binFor(m, { team: "Hawks" })).toBeNull();
+    expect(binFor(buildBinMap(r), { team: "Hawks", size: "A-L" })).toBe(1);   // by team, the size is ignored
+  });
+  it("switching the field starts the bins over; the same field keeps them", () => {
+    const r = [{ team: "Ravens", size: "A-L" }, { team: "Hawks", size: "A-M" }];
+    const team = buildBinMap(r);
+    const size = buildBinMap(r, team, "size");
+    expect(Object.keys(size).sort()).toEqual(["__by", "a-l", "a-m"]);
+    expect(buildBinMap(r, size).__by).toBe("size");
+    expect(buildBinMap(r, size, "team")).toEqual(team);
   });
 });
 

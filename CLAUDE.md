@@ -6,7 +6,7 @@ A React/Vite web app for quality-control scanning of sports jerseys in a manufac
 
 **Workflow:**
 1. Operator enters their name, order number, and uploads a roster file (CSV/TSV or Excel)
-2. If the roster has multiple teams, a bin assignment screen appears (Bin 1 = Team A, Bin 2 = Team B, etc.)
+2. Bins: the supervisor chooses on the send-roster form (and the station on its setup form) whether the order is sorted by team, by size, or not at all (`BIN_BY`, `binBy` on the hub roster). With more than one team or size a bin screen appears (Bin 1 = Navy, Bin 2 = Red; or Bin 1 = Y-M, Bin 2 = A-L …). A size map carries `__by: "size"` (`binFieldOf`), a team map is flat; `binFor(binMap, row)` takes the roster row.
 3. Camera feed is shown; operator presses a configurable key (default: `B`) to scan a jersey
 4. Claude Haiku extracts name + number from the photo via the Anthropic API
 5. Match result shows as a full-screen overlay:
