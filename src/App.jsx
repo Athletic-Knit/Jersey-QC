@@ -560,13 +560,13 @@ function PhotoLightbox({ src, onClose }) {
   );
 }
 
-function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto = () => {} }) {
+function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto = () => {}, date = "" }) {
   const [data, setData] = useState(null);     // { rec, events }
   const [tab,  setTab]  = useState("roster");
   const [err,  setErr]  = useState(null);
   useEffect(() => {
     let on = true;
-    const load = () => hub.ledger().then(l => {
+    const load = () => hub.ledger(date).then(l => {
       if (!on) return;
       const rec = (l.orders || []).find(x => x.station === station && x.order === order);
       const events = (l.events || []).filter(e => e.station === station && e.order === order).sort((a, b) => String(b.t).localeCompare(String(a.t)));
@@ -575,7 +575,7 @@ function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto 
     load();
     const t = setInterval(load, 5000);   // a running order keeps updating
     return () => { on = false; clearInterval(t); };
-  }, [station, order]);
+  }, [station, order, date]);
   useEffect(() => { const h = e => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
 
   const rec = data?.rec, events = data?.events || [], rows = rec?.rows || [];
@@ -696,16 +696,21 @@ const WATCH_MS = 2 * 60 * 1000;
 function SupervisorPanel({ operatorName, onClose }) {
   const [data,    setData]    = useState(() => ({ stations: [], now: Date.now() }));
   const [rosters, setRosters] = useState([]);
-  const [orders,  setOrders]  = useState([]);     // every order any station worked today (from the hub's ledger)
+  const [orders,  setOrders]  = useState([]);     // every order any station worked on the chosen day (from the hub's ledger)
   const [openOrder, setOpenOrder] = useState(null);   // { station, order } shown in the order view
+  // Looking back: "" is today; a date is a past day the hub still keeps (90
+  // days; photos on the newest 14). The orders list, the order view, the day
+  // sheet and the damage report all follow it. The station cards are always now.
+  const [day,  setDay]  = useState("");
+  const [days, setDays] = useState([]);
   useEffect(() => {
-    const load = () => hub.ledger().then(l => setOrders(l.orders || [])).catch(() => {});
+    const load = () => hub.ledger(day).then(l => { setOrders(l.orders || []); setDays(l.days || []); }).catch(() => {});
     load();
     const t = setInterval(load, 20000);
     return () => clearInterval(t);
-  }, []);
+  }, [day]);
   // The same QC Results workbook the station exports, built from what the hub holds.
-  const downloadOrderSheet = (o) => hub.ledger().then(l => {
+  const downloadOrderSheet = (o) => hub.ledger(day).then(l => {
     const rec = (l.orders || []).find(x => x.station === o.station && x.order === o.order) || o;
     const rows = rec.rows || [];
     if (!rows.length) { setMsg(`The hub has no jersey list for order ${o.order} on ${stationLabel(o.station)} — that station last reported before today's update, or the order was done before it. Press Export on the station for its sheet; reload the station page so future orders come through.`); return; }
@@ -901,7 +906,7 @@ function SupervisorPanel({ operatorName, onClose }) {
           </span>
         </div>
       )}
-      {openOrder && <OrderView station={openOrder.station} order={openOrder.order} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}
+      {openOrder && <OrderView station={openOrder.station} order={openOrder.order} date={day} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}
       {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
       {alerts.length > 0 && (
         <div style={{ position: "absolute", top: 54, right: 16, width: 380, maxWidth: "calc(100% - 32px)", zIndex: 1900, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -925,9 +930,17 @@ function SupervisorPanel({ operatorName, onClose }) {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12, alignContent: "start" }}>
           {data.stations.length === 0 && <div style={{ color: "#64748b", padding: 24 }}>No station has reported yet. A station appears here within a few seconds of starting an order.</div>}
-          {orders.length > 0 && (
+          {(orders.length > 0 || days.length > 1 || day) && (
             <div style={{ gridColumn: "1 / -1", order: 99, marginTop: 8 }}>
-              <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>Orders today ({orders.length})</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>Orders {day ? `on ${day}` : "today"} ({orders.length})</div>
+                <select value={day} onChange={e => setDay(e.target.value)} title="Look back at a day the hub still keeps (90 days; photos on the newest 14)" style={{ ...inputSt, width: "auto", fontSize: 12, padding: "3px 8px" }}>
+                  <option value="">Today</option>
+                  {days.filter(d => d !== todayStr).slice().reverse().map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                {day && <button onClick={() => setDay("")} style={{ ...btnGhost, padding: "3px 10px", fontSize: 12 }}>Back to today</button>}
+              </div>
+              {orders.length === 0 && <div style={{ color: "#64748b", fontSize: 13, padding: "6px 0 10px" }}>No orders on this day.</div>}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {orders.slice().sort((a, b) => ((((a.counts?.total ?? 0) > 0 && a.counts?.remaining === 0) ? 1 : 0) - (((b.counts?.total ?? 0) > 0 && b.counts?.remaining === 0) ? 1 : 0)) || ((b.lastSeen || 0) - (a.lastSeen || 0))).map(o => {   /* in progress first, then the newest */
                   const c = o.counts || {}; const total = c.total ?? 0; const done = total - (c.remaining ?? 0); const finished = total > 0 && c.remaining === 0;
@@ -1041,10 +1054,10 @@ function SupervisorPanel({ operatorName, onClose }) {
           })}
         </div>
         <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid #21262d", padding: 14, overflowY: "auto" }}>
-          <button onClick={() => hub.ledger().then(l => exportDaySheetXLSX(l, stationLabel)).catch(() => setMsg("Could not fetch the day's scans from the hub."))}
-            title="One Excel file for the whole day, every station: jerseys per hour, time per jersey, flags, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 8, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {todayTotal} {todayTotal === 1 ? "jersey" : "jerseys"} so far</button>
-          <button onClick={() => hub.ledger().then(l => exportDamageReportXLSX(buildDamageRows(l.events || [], { stationLabel, typeLabel: jerseyTypeLabel }), { name: "day_" + (l.date || ""), title: `Damage report — ${l.date || "today"}, every station` })).catch(e => setMsg(e.message || "Could not fetch the day's flags from the hub."))}
-            title="Every flagged jersey today, every station, with its photo" style={{ ...bigBtn, fontSize: 13, marginBottom: 16, background: "transparent", border: "1px solid #ef4444", color: "#f87171" }}>⬇ Damage report (Excel, with photos)</button>
+          <button onClick={() => hub.ledger(day).then(l => exportDaySheetXLSX(l, stationLabel)).catch(() => setMsg("Could not fetch the day's scans from the hub."))}
+            title="One Excel file for the whole day, every station: jerseys per hour, time per jersey, flags, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 8, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {day ? day : `${todayTotal} ${todayTotal === 1 ? "jersey" : "jerseys"} so far`}</button>
+          <button onClick={() => hub.ledger(day).then(l => exportDamageReportXLSX(buildDamageRows(l.events || [], { stationLabel, typeLabel: jerseyTypeLabel }), { name: "day_" + (l.date || ""), title: `Damage report — ${l.date || "today"}, every station` })).catch(e => setMsg(e.message || "Could not fetch the day's flags from the hub."))}
+            title="Every flagged jersey of the day, every station, with its photo (photos are kept 14 days)" style={{ ...bigBtn, fontSize: 13, marginBottom: 16, background: "transparent", border: "1px solid #ef4444", color: "#f87171" }}>⬇ Damage report (Excel, with photos){day ? ` — ${day}` : ""}</button>
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Send a roster</div>
           <div style={{ marginBottom: 10 }}>
             <label style={labelSt}>Send to</label>

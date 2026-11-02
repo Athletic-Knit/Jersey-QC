@@ -6,13 +6,26 @@
 //   POST   /api/hub/stations/:id        a station reports (body = snapshot)
 //   DELETE /api/hub/stations/:id
 //   DELETE /api/hub/stations/:id/carried?key=…   supervisor marks an item from an earlier order done
-//   GET    /api/hub/ledger?date=YYYY-MM-DD   every scan event and order of that day (default today) — the day sheet
+//   GET    /api/hub/ledger?date=YYYY-MM-DD   every scan event and order of that day (default today) — the day sheet;
+//                                            `days` lists every day still kept (90; photos only on the newest 14);
+//                                            `days` lists every day still kept (90; photos only on the newest 14)
 //   GET    /api/hub/rosters             rosters waiting for stations (summaries)
 //   GET    /api/hub/rosters/:id         one roster, with rows
 //   POST   /api/hub/rosters             { orderNumber, notes, jerseyType, fileName, rows, by }
 //   DELETE /api/hub/rosters/:id
 import fs from "node:fs";
 import path from "node:path";
+
+// The ledger keeps `keepDays` of days; the photos (the weight, ~40 KB each)
+// only on the newest `photoDays`. An event whose photos went says so.
+export function pruneLedger(led, { keepDays = 90, photoDays = 14 } = {}) {
+  const days = Object.keys(led || {}).sort();
+  days.slice(0, Math.max(0, days.length - keepDays)).forEach(d => delete led[d]);
+  days.slice(0, Math.max(0, days.length - photoDays)).filter(d => led[d]).forEach(d => Object.values(led[d].events || {}).forEach(ev => {
+    if (ev && (ev.photo || ev.damagePhotos)) { delete ev.photo; delete ev.damagePhotos; ev.photosPruned = true; }
+  }));
+  return led;
+}
 
 export default function hubPlugin({ file = path.resolve("data/hub.json") } = {}) {
   let state = { stations: {}, rosters: {} };
@@ -87,7 +100,7 @@ export default function hubPlugin({ file = path.resolve("data/hub.json") } = {})
             const ok = `${id}|${body.orderNumber}`; const o = dayLed.orders[ok] || { station: id, order: body.orderNumber, operator: body.operatorName, firstSeen: now };
             dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", jerseyType: body.jerseyType || o.jerseyType || "", rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null };
           }
-          Object.keys(led).sort().slice(0, -14).forEach(d => delete led[d]);   // keep two weeks
+          pruneLedger(led);   // 90 days; photos on the newest 14
           const setOrder = renamed ? undefined : prev?.setOrder;          // pending until the station reports it
           state.stations[id] = { ...rest, id, carried, day, history, rate, etaMin, updatedAt: now, ...(setOrder ? { setOrder } : {}) }; save();
           return json(res, 200, { ok: true, ...(setOrder ? { setOrder } : {}) });
