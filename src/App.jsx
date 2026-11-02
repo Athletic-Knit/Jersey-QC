@@ -203,7 +203,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const [pin,   setPin]   = useState("");
   const [name, setName] = useState(() => (initial?.name || "") || OPERATORS[0] || "");
   const [nameChoice, setNameChoice] = useState(() => (initial?.name && !OPERATORS.includes(initial.name) ? "other" : (initial?.name || OPERATORS[0] || "other")));   // "Other": someone sent to this station for the day   // a name from the list, or "other" with the field below
-  const [pinFocus, setPinFocus] = useState(false);   // the keypad shows only while the PIN field is active
+  const [pinFocus, setPinFocus] = useState(false);   // only the field's highlight follows focus; the keypad is always there
   const [error, setError] = useState(null);
   // Which stations are live right now, and from where: refreshed every 5 s.
   const [use, setUse] = useState({});
@@ -274,7 +274,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>PIN</label>
             <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} placeholder="••••" autoFocus onKeyDown={onEnter} onFocus={() => setPinFocus(true)} onBlur={() => setPinFocus(false)} style={{ ...inputSt, borderColor: pinFocus ? "#60a5fa" : inputSt.borderColor }} />
-            {pinFocus && <ScreenKeys layout="digits" onKey={k => setPin(v => (k === "⌫" ? v.slice(0, -1) : (v + k).slice(0, 8)))} onEnter={submit} enterLabel="Sign in" />}
+            <ScreenKeys layout="digits" onKey={k => setPin(v => (k === "⌫" ? v.slice(0, -1) : (v + k).slice(0, 8)))} onEnter={submit} enterLabel="Sign in" />
           </div>
         )}
         <div style={{ marginBottom: 18 }}>
