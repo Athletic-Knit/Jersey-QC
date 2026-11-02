@@ -106,3 +106,19 @@ Where it stands: 0 wrong greens in 1,140 live reads over the full set and the su
 | pace, jerseys per hour (median) | 728 | 716 |
 
 In the simulation mistakes are spread evenly, so a 5-jersey window after each one covers 6.5% of scans and catches that share. On the floor mistakes cluster (a bad light, a fold-prone order, a tired hour), which is what the window is for. The cost is one extra read on those scans and about 1.5% of pace.
+
+## 2026-11-02 — fifth full run (after the damage-photo work; prompt, model and matcher unchanged since item 20)
+
+| category | screen right | number read | name read | WRONG GREEN | avg ms |
+|---|---|---|---|---|---|
+| real | 20/20 | 10/20 | 20/20 | 0 | 1073 |
+| synth | 201/206 | 203/206 | 163/206 | 0 | 1163 |
+| distort-real | 140/150 | 88/150 | 150/150 | 4 | 1097 |
+| distort-synth | 385/390 | 381/390 | 282/390 | 1 | 1150 |
+| all | 746/766 | 682/766 | 615/766 | 5 | 1141 |
+
+The 13-frame gate the same morning: 39/39 on Haiku 5.5, 1006 ms a read. Screens right 745 → 746 of 766 against run 3; wrong greens 3 → 5, every one in a class already written down (items 13, 16, 19). Nothing new came out of this run.
+
+21. **The 20 failures, sorted by what the operator would have seen.** Yellow that should have been red: none. Yellow that should have been green (the app asking when it could have been sure): 12 — the two-jerseys frame blown out, turned 270° and tilted (6; the list has #5 and only #5, which is the right screen; the judge also wants #22 on it), the sideways SEACH #66 read as 69 or 96 (3; #66 SEACH is on the list beside the twin), a lone 8 turned 90° whose badge "AK" counted as a name and so got a hidden-digit list (1), and LILLI #81 turned left read as "8? ILLI" (2; the right row is on the list). Red that should have been silence: the blank synthetic jersey (2; the badge again, item 15). One read came back as prose instead of JSON on the turned LILLI #81; the app asks once more on that and then shows SCAN FAILED with Retry — 1 in 766.
+
+22. **Five wrong greens, three classes, all known.** (a) The two-jerseys frame turned 90°, twice: the number is under the fold, only STEPHENSON is read, and a name that matches one open row with no number read settles green on #22 (the `direct` rule and `soleOpen` in match.js; the comment above the name-only branch says "yellow, never green" but the code lets the sole open row through). Item 19 called this worth a look; it is the one class a rule change would remove — a camera read with a name and no number would list that one row as a soft question, at the cost of one press on a single jersey whose number is out of frame. (b) The washed-out fold frame, twice: a confident #5 for the #35 with its 3 under the sleeve (known limit 13). (c) A tilted lone 6 on a nameless roster: two turns, the upright read said 9, green #9 (the 6/9 variance of items 16 and 19).
