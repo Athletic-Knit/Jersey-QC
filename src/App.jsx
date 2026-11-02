@@ -1706,7 +1706,52 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
   );
 }
 
-function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onExport, onDismiss }) {
+// ── Finish order: one look at where it stands, then confirm ─────────────────
+// Confirm clears the order and the station goes back to "waiting for an
+// order"; the hub keeps the order's record and sheets. Keep going closes it.
+function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, onConfirm, onCancel }) {
+  const count = s => roster.filter(r => r.scanned === s).length;
+  const remaining = roster.filter(r => !r.scanned).length;
+  const open = count("flag") + offRosterFlags + count("manual") + count("missing") + count("short");
+  useEffect(() => {
+    const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); } if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onConfirm(); } };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [onConfirm, onCancel]);
+  const stats = [
+    { label: "Passed",    value: count("pass"), color: "#22c55e" },
+    { label: "Open",      value: open,          color: open ? "#ef4444" : "#64748b" },
+    { label: "Not scanned", value: remaining,   color: remaining ? "#f59e0b" : "#64748b" },
+  ];
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: `2px solid ${remaining ? "#f59e0b" : "#22c55e"}`, padding: 44, maxWidth: 640, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
+        <div style={{ fontSize: 56, marginBottom: 10 }}>🏁</div>
+        <div style={{ fontSize: 36, fontWeight: 900, color: "#e2e8f0", marginBottom: 10 }}>Finish order {orderNumber || "—"}?</div>
+        <div style={{ fontSize: 18, color: "#cbd5e1", marginBottom: 22, lineHeight: 1.4 }}>
+          {remaining
+            ? `${remaining} ${remaining === 1 ? "jersey is" : "jerseys are"} not scanned yet. Finish anyway and the station goes back to waiting for an order; the supervisor keeps this order's record and sheets.`
+            : "Every jersey is scanned. The station goes back to waiting for an order; the supervisor keeps this order's record and sheets."}
+          {scans === 0 ? " Nothing was scanned on it." : ""}
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 28, marginBottom: 30 }}>
+          {stats.map(s => (
+            <div key={s.label}>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 52, fontWeight: 900, color: s.color, lineHeight: 1 }}>{s.value}</div>
+              <div style={{ fontSize: 15, color: "#94a3b8", marginTop: 4 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+          <button onClick={onConfirm} style={{ ...btnPri, fontSize: 19, padding: "14px 32px", background: remaining ? "#f59e0b" : "#22c55e", color: "#0d1117" }}>✓ Finish order <Kbd>Enter</Kbd></button>
+          <button onClick={onCancel} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>← Keep going <Kbd light>Esc</Kbd></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onExport, onDismiss, onFinish }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const stats = [
     { label: "Passed",        value: count("pass"),    color: "#22c55e" },
@@ -1736,6 +1781,7 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onE
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
           {canExport && <button onClick={onExport}  style={{ ...btnPri, fontSize: 19, padding: "14px 32px", background: "#22c55e" }}>⬇ Export to Excel</button>}
           <button onClick={onDismiss} style={canExport ? { ...btnGhost, fontSize: 17, padding: "14px 22px" } : { ...btnPri, fontSize: 19, padding: "14px 32px" }}>{canExport ? "Review first" : "✓ Done"}</button>
+          {onFinish && <button onClick={onFinish} title="Close this order and go back to waiting for the next" style={{ ...btnGhost, fontSize: 17, padding: "14px 22px", borderColor: "#22c55e", color: "#4ade80" }}>🏁 Finish order</button>}
         </div>
       </div>
     </div>
@@ -1979,10 +2025,10 @@ export default function App() {
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false);
   }, []);
 
-  const startNewOrder = useCallback(() => {
-    if (log.length > 0 && !window.confirm(`Start a new order? Export first if you need the ${log.length} scans from order ${orderNumber || "—"}.`)) return;
-    resetOrder();
-  }, [log.length, orderNumber, resetOrder]);
+  // Finish order: the confirm screen, then back to waiting for an order.
+  const [showFinish, setShowFinish] = useState(false);
+  const askFinish    = useCallback(() => { setShowRosterComplete(false); setShowFinish(true); }, []);
+  const finishOrder  = useCallback(() => { setShowFinish(false); resetOrder(); }, [resetOrder]);
 
   // Sign out leaves the station, not the order: an unfinished order stays saved
   // on this PC and is offered to the next person who signs in here (a mistaken
@@ -2191,7 +2237,7 @@ export default function App() {
   useEffect(() => { triggerRef.current = doTriggerScan; }, [doTriggerScan]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
-  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHistory;
+  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHistory || showFinish;
   useEffect(() => {
     if (!cameraOn || inputMode !== "camera" || !handsFree) { gateRef.current.disarm(); return; }   // paused, or nothing left in the order: never scan the empty table
     const id = setInterval(() => {
@@ -2209,7 +2255,7 @@ export default function App() {
   }, [cameraOn, inputMode, handsFree, overlay, scanning, modalOpen, doTriggerScan, stopCamera]);
 
   // A roster the supervisor sends while an order is running: say so quietly.
-  // It is offered on the order screen when this order ends or on New order.
+  // It is offered on the order screen when this order ends or on Finish order.
   useEffect(() => {
     if (!sessionStarted) { knownRosterIds.current = null; return; }
     const mine = stationId();
@@ -2528,7 +2574,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.repeat) return;
-      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || !sessionStarted) return;
+      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || showFinish || !sessionStarted) return;
       if (e.code !== scanKey) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       e.preventDefault();
@@ -2537,7 +2583,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, sessionStarted, scanKey, doTriggerScan]);
+  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, sessionStarted, scanKey, doTriggerScan]);
 
   const overlayKey = overlay ? `${overlay.mode}:${overlay.scan?.id}:${(overlay.candidates || []).map(c => c._id).join(",")}` : "";
   const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType) };
@@ -2594,7 +2640,11 @@ export default function App() {
       {showRosterComplete && (
         <RosterCompleteModal roster={roster} offRosterFlags={offRosterFlags} canExport={canSupervise}
           onExport={() => { exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf); closeDialog(() => setShowRosterComplete(false)); }}
-          onDismiss={() => closeDialog(() => setShowRosterComplete(false))} />
+          onDismiss={() => closeDialog(() => setShowRosterComplete(false))} onFinish={askFinish} />
+      )}
+      {showFinish && (
+        <FinishOrderModal orderNumber={orderNumber} roster={roster} offRosterFlags={offRosterFlags} scans={log.length}
+          onConfirm={finishOrder} onCancel={() => closeDialog(() => setShowFinish(false))} />
       )}
 
       {/* Header */}
@@ -2624,7 +2674,7 @@ export default function App() {
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
           {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
           {sessionStarted && <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>History</button>}
-          {sessionStarted && <button onClick={startNewOrder} title="Finish this order and set up the next one — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>New order</button>}
+          {sessionStarted && <button onClick={askFinish} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#22c55e", color: "#4ade80" }}>🏁 Finish order</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
           <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>
           {fsHint && <span style={{ fontSize: 14, color: "#fcd34d" }}>{fsHint}</span>}
@@ -2647,7 +2697,7 @@ export default function App() {
       )}
       {sessionStarted && newRosters.length > 0 && (
         <div style={{ background: "rgba(59,130,246,0.12)", borderBottom: "1px solid rgba(59,130,246,0.4)", padding: "9px 16px", fontSize: 16, color: "#bfdbfe", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <span>📋 <strong>{newRosters.map(r => `Order ${r.orderNumber || "—"} from ${r.by || "the supervisor"} (${r.rowCount} ${r.rowCount === 1 ? "jersey" : "jerseys"}${r.forStation ? ", for this station" : ""})`).join(" · ")}</strong> is waiting for you — it is offered when this order ends, or on New order.</span>
+          <span>📋 <strong>{newRosters.map(r => `Order ${r.orderNumber || "—"} from ${r.by || "the supervisor"} (${r.rowCount} ${r.rowCount === 1 ? "jersey" : "jerseys"}${r.forStation ? ", for this station" : ""})`).join(" · ")}</strong> is waiting for you — it is offered when this order ends, or on Finish order.</span>
           <button onClick={() => setNewRosters([])} title="Hide" style={{ background: "transparent", border: 0, color: "#bfdbfe", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 8px" }}>✕</button>
         </div>
       )}

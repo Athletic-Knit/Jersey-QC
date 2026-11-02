@@ -15,6 +15,7 @@ A React/Vite web app for quality-control scanning of sports jerseys in a manufac
    - **Red** = not found or API error → flag and continue
 6. Flagged items appear in the log and can be resolved (Accept / Reject / Note)
 7. When all roster entries are scanned, a completion modal offers Excel export
+8. "🏁 Finish order" (header, and on the completion modal) shows a confirm with passed / open / not-scanned counts; Enter or ✓ clears the order and the station returns to "waiting for an order" (the hub keeps the order's record and sheets); Esc keeps going
 
 ## Tech stack
 
