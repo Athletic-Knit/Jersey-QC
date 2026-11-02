@@ -826,7 +826,7 @@ function SupervisorPanel({ operatorName, onClose }) {
               : stale ? `not reporting · last seen ${fmtMin(Math.round(age(s) / 60))} ago`
               : total > 0 ? (c.remaining === 0 ? "order done" : s.lastScan ? `now at ${s.lastScan.text}` : "scanning") : "waiting for an order";
             return (
-              <div key={s.id} style={{ display: "grid", gridTemplateColumns: "26cqw 1fr 20cqw", alignItems: "center", gap: "2cqw", background: `${col}26`, borderLeft: `2.5cqw solid ${col}`, borderRadius: "1cqh", padding: "0 2cqw", minHeight: 0, overflow: "hidden" }}>
+              <div key={s.id} style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr) auto", alignItems: "center", gap: "2cqw", background: `${col}26`, borderLeft: `2.5cqw solid ${col}`, borderRadius: "1cqh", padding: "0 2cqw", minHeight: 0, overflow: "hidden" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: FONT_DISPLAY, fontSize: f(0.46), fontWeight: 900, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{stationLabel(s.id)}</div>
                   <div style={{ fontSize: f(0.2), color: "#cbd5e1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.operatorName || "—"} · order {s.orderNumber || "—"}</div>
