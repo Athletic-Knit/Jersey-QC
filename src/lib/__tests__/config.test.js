@@ -42,7 +42,7 @@ describe("jersey types and their reason menus", () => {
 
 describe("where a flag goes, and its weight on the board", () => {
   it("maps every reason label of every jersey type to its route", async () => {
-    const { routeOfReason, severityOf, REASONS_BY_CONSTRUCTION } = await import("../../config.js");
+    const { routeOfReason, REASONS_BY_CONSTRUCTION } = await import("../../config.js");
     expect(routeOfReason("Sublimation error")).toBe("Supervisor → full remake");
     expect(routeOfReason("Loose, missing or broken stitching")).toBe("Supervisor → stitcher");
     expect(routeOfReason("Print error — ghosting, fading, misaligned — found after it passed")).toBe("Supervisor → full remake");

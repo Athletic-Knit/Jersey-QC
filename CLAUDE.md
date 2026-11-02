@@ -15,7 +15,8 @@ A React/Vite web app for quality-control scanning of sports jerseys in a manufac
    - **Red** = not found or API error → flag and continue
 6. Flagged items appear in the log and can be resolved (Accept / Reject / Note)
 7. When all roster entries are scanned, a completion modal offers Excel export
-8. "🏁 Finish order" (header, and on the completion modal) shows a confirm with passed / open / not-scanned counts; Enter or ✓ clears the order and the station returns to "waiting for an order" (the hub keeps the order's record and sheets); Esc keeps going
+8. "🏁 Finish order" (header, and on the completion modal) shows a confirm with passed / open / not-scanned counts; Enter or ✓ clears the order, removes the roster from the hub (no station is offered it again) and the station returns to "waiting for an order" (the hub keeps the order's record and sheets); Esc keeps going
+9. One station per order: starting a sent roster takes it on the hub (`POST /rosters/:id/take`, `takenBy`); other stations see it greyed "In progress on Station 1" and get a 409 if they race; the board's "Rosters sent" list shows who has it with Release / Remove. Each start of an order on a station is a run (`orderRun`, saved in the session, reported in the snapshot and on events); the hub's ledger keeps one order record per run (`station|order|run`), so an order started again by mistake does not overwrite the finished one
 
 ## Tech stack
 

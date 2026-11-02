@@ -321,7 +321,7 @@ function JerseyTypePicker({ value, onChange }) {
   );
 }
 
-function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, onSupervisor }) {
+function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, onSupervisor, stationLabel = id => String(id || "").replace(/^st-/, "") }) {
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [jerseyType, setJerseyType] = useState("");
@@ -332,6 +332,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   const [hubRosters, setHubRosters] = useState([]);
   const [picked,  setPicked]  = useState(null);     // a roster the supervisor sent
   const fileRef = useRef(null);
+  const loadRef = useRef(() => {});   // the roster list refresh, for after a refused start
 
   // Rosters the supervisor has sent to the hub, if a hub is running.
   useEffect(() => {
@@ -342,8 +343,11 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     const load = () => hub.rosters().then(r => { if (on) setHubRosters((r.rosters || []).filter(x => !x.forStation || x.forStation === mine)); }).catch(() => {});
     load();
     const t = setInterval(load, 5000);
+    loadRef.current = load;
     return () => { on = false; clearInterval(t); };
   }, []);
+  // An order another station is working on is shown, not offered: one station per order.
+  const takenElsewhere = r => !!r.takenBy && r.takenBy.station !== stationId();
 
   // A chosen file is read at once for the order number it may carry, so the
   // field fills itself; the operator can still type over it.
@@ -376,7 +380,15 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     if (!file && !picked) { setError(canSupervise ? "Upload a roster file, or pick one the supervisor sent." : "Pick the order the supervisor sent, or load a roster file."); return; }
     setLoading(true);
     try {
-      if (picked) { onStart({ roster: picked.rows, orderNumber: order.trim(), notes: notes.trim(), jerseyType, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})` }); return; }
+      if (picked) {
+        // Take the order on the hub first: if another station got there first, say who, and stop.
+        try { await hub.takeRoster(picked.id, { station: stationId(), operator: operatorName }); }
+        catch (e) {
+          if (e.status === 409) { const t = e.body?.takenBy || {}; setError(`${stationLabel(t.station)} (${t.operator || "someone"}) is already working on order ${picked.orderNumber || ""}. One station works an order — ask the supervisor to release it from the board if that is wrong.`); setPicked(null); setLoading(false); loadRef.current(); return; }
+          /* no hub answer: start anyway, the station still works from the roster it has */
+        }
+        onStart({ roster: picked.rows, orderNumber: order.trim(), notes: notes.trim(), jerseyType, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})`, hubRosterId: picked.id }); return;
+      }
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); return; }
@@ -408,10 +420,12 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
             <label style={labelSt}>From the supervisor</label>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 150, overflowY: "auto" }}>
               {hubRosters.map(r => (
-                <button key={r.id} onClick={() => pickRoster(r)}
-                  style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "#22c55e" : "#334155", color: picked?.id === r.id ? "#fff" : "#94a3b8", background: picked?.id === r.id ? "rgba(34,197,94,0.12)" : "transparent" }}>
-                  <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount} jerseys · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}{r.binBy && r.binBy !== "team" ? ` · ${BIN_BY.find(b => b.id === r.binBy)?.label.toLowerCase() || r.binBy}` : ""}</span>{r.forStation && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
+                <button key={r.id} onClick={() => !takenElsewhere(r) && pickRoster(r)} disabled={takenElsewhere(r)}
+                  title={takenElsewhere(r) ? `${stationLabel(r.takenBy.station)} is working on this order — one station per order` : undefined}
+                  style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "#22c55e" : "#334155", color: picked?.id === r.id ? "#fff" : "#94a3b8", background: picked?.id === r.id ? "rgba(34,197,94,0.12)" : "transparent", opacity: takenElsewhere(r) ? 0.5 : 1, cursor: takenElsewhere(r) ? "not-allowed" : "pointer" }}>
+                  <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount} jerseys · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}{r.binBy && r.binBy !== "team" ? ` · ${BIN_BY.find(b => b.id === r.binBy)?.label.toLowerCase() || r.binBy}` : ""}</span>{r.forStation && !r.takenBy && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
                   <div style={{ fontSize: 14, color: "#94a3b8" }}>{r.by ? `sent by ${r.by} · ` : ""}{new Date(r.createdAt).toLocaleString()}</div>
+                  {r.takenBy && <div style={{ fontSize: 14, fontWeight: 700, color: takenElsewhere(r) ? "#f59e0b" : "#4ade80" }}>{takenElsewhere(r) ? `⛔ In progress on ${stationLabel(r.takenBy.station)} · ${r.takenBy.operator || "—"} · since ${new Date(r.takenBy.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "↻ Started on this station — pick it to continue"}</div>}
                 </button>
               ))}
             </div>
@@ -577,7 +591,10 @@ function PhotoLightbox({ src, onClose }) {
   );
 }
 
-function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto = () => {}, date = "" }) {
+// The same record and the same events: one run of an order on a station.
+// Events from before runs existed carry none and match any run.
+const sameRun = (a, b) => !a || !b || a === b;
+function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload, onPhoto = () => {}, date = "" }) {
   const [data, setData] = useState(null);     // { rec, events }
   const [tab,  setTab]  = useState("roster");
   const [err,  setErr]  = useState(null);
@@ -585,14 +602,15 @@ function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto 
     let on = true;
     const load = () => hub.ledger(date).then(l => {
       if (!on) return;
-      const rec = (l.orders || []).find(x => x.station === station && x.order === order);
-      const events = (l.events || []).filter(e => e.station === station && e.order === order).sort((a, b) => String(b.t).localeCompare(String(a.t)));
+      const runs = (l.orders || []).filter(x => x.station === station && x.order === order);
+      const rec = runs.find(x => sameRun(x.run, run)) || runs.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))[0];
+      const events = (l.events || []).filter(e => e.station === station && e.order === order && sameRun(e.run, rec?.run)).sort((a, b) => String(b.t).localeCompare(String(a.t)));
       setData({ rec, events });
     }).catch(() => on && setErr("Could not fetch this order from the hub."));
     load();
     const t = setInterval(load, 5000);   // a running order keeps updating
     return () => { on = false; clearInterval(t); };
-  }, [station, order, date]);
+  }, [station, order, run, date]);
   useEffect(() => { const h = e => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
 
   const rec = data?.rec, events = data?.events || [], rows = rec?.rows || [];
@@ -728,10 +746,10 @@ function SupervisorPanel({ operatorName, onClose }) {
   }, [day]);
   // The same QC Results workbook the station exports, built from what the hub holds.
   const downloadOrderSheet = (o) => hub.ledger(day).then(l => {
-    const rec = (l.orders || []).find(x => x.station === o.station && x.order === o.order) || o;
+    const rec = (l.orders || []).find(x => x.station === o.station && x.order === o.order && sameRun(x.run, o.run)) || o;
     const rows = rec.rows || [];
     if (!rows.length) { setMsg(`The hub has no jersey list for order ${o.order} on ${stationLabel(o.station)} — that station last reported before today's update, or the order was done before it. Press Export on the station for its sheet; reload the station page so future orders come through.`); return; }
-    const log = (l.events || []).filter(e => e.station === rec.station && e.order === rec.order).map(e => ({ match: { _id: e.rowId }, reason: e.reason, resolution: e.resolution, operator: e.operator, timestamp: e.t }));
+    const log = (l.events || []).filter(e => e.station === rec.station && e.order === rec.order && sameRun(e.run, rec.run)).map(e => ({ match: { _id: e.rowId }, reason: e.reason, resolution: e.resolution, operator: e.operator, timestamp: e.t }));
     exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "", jerseyType: jerseyTypeLabel(rec.jerseyType) }, displayColumns(rows), row => binFor(rec.bins, row));
   }).catch(() => setMsg("Could not fetch that order from the hub."));
   const [order,   setOrder]   = useState("");
@@ -924,7 +942,7 @@ function SupervisorPanel({ operatorName, onClose }) {
           </span>
         </div>
       )}
-      {openOrder && <OrderView station={openOrder.station} order={openOrder.order} date={day} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}
+      {openOrder && <OrderView station={openOrder.station} order={openOrder.order} run={openOrder.run || 0} date={day} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}
       {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
       {alerts.length > 0 && (
         <div style={{ position: "absolute", top: 54, right: 16, width: 380, maxWidth: "calc(100% - 32px)", zIndex: 1900, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -964,7 +982,7 @@ function SupervisorPanel({ operatorName, onClose }) {
                   const c = o.counts || {}; const total = c.total ?? 0; const done = total - (c.remaining ?? 0); const finished = total > 0 && c.remaining === 0;
                   const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
                   return (
-                    <div key={`${o.station}|${o.order}`} style={{ ...card, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <div key={`${o.station}|${o.order}|${o.run || 0}`} style={{ ...card, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: 13, fontWeight: 700 }}>Order {o.order} <span style={{ fontWeight: 400, color: "#64748b" }}>· {stationLabel(o.station)} · {o.operator || "—"}</span></div>
                         <div style={{ fontSize: 11, color: "#94a3b8" }}>
@@ -974,7 +992,7 @@ function SupervisorPanel({ operatorName, onClose }) {
                           {" · "}{finished ? <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(o.lastSeen)}</span> : `in progress · started ${hm(o.firstSeen)}`}
                         </div>
                       </div>
-                      <button onClick={() => setOpenOrder({ station: o.station, order: o.order })} title="Open this order: roster with statuses, problems, and the log" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
+                      <button onClick={() => setOpenOrder({ station: o.station, order: o.order, run: o.run || 0 })} title="Open this order: roster with statuses, problems, and the log" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
                       <button onClick={() => downloadOrderSheet(o)} title="The QC Results workbook for this order: every jersey with its status, reason, resolution, inspector and time" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet</button>
                     </div>
                   );
@@ -1098,14 +1116,17 @@ function SupervisorPanel({ operatorName, onClose }) {
           </div>
           <button onClick={send} style={{ ...bigBtn, fontSize: 14 }}>Send to stations</button>
           {msg && <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 10 }}>{msg}</div>}
-          <div style={{ fontWeight: 800, fontSize: 13, margin: "22px 0 8px" }}>Rosters waiting ({rosters.length})</div>
+          <div style={{ fontWeight: 800, fontSize: 13, margin: "22px 0 8px" }}>Rosters sent ({rosters.length}) <span style={{ fontWeight: 400, color: "#64748b" }}>· one station per order; a finished order leaves this list</span></div>
           {rosters.map(r => (
             <div key={r.id} style={{ ...card, padding: "8px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount}</span>{r.forStation ? <span style={{ fontWeight: 600, color: "#60a5fa", marginLeft: 6 }}>→ {stationLabel(r.forStation)}</span> : <span style={{ fontWeight: 400, color: "#64748b", marginLeft: 6 }}>· any station</span>}</div>
-                <div style={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.fileName} · {new Date(r.createdAt).toLocaleTimeString()}</div>
+                <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount}</span>{r.takenBy ? <span style={{ fontWeight: 600, color: "#4ade80", marginLeft: 6 }}>· on {stationLabel(r.takenBy.station)} · {r.takenBy.operator || "—"}</span> : r.forStation ? <span style={{ fontWeight: 600, color: "#60a5fa", marginLeft: 6 }}>→ {stationLabel(r.forStation)}</span> : <span style={{ fontWeight: 400, color: "#64748b", marginLeft: 6 }}>· waiting · any station</span>}</div>
+                <div style={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.fileName} · sent {new Date(r.createdAt).toLocaleTimeString()}{r.takenBy ? ` · started ${new Date(r.takenBy.at).toLocaleTimeString()}` : ""}</div>
               </div>
-              <button onClick={() => hub.removeRoster(r.id).then(refresh).catch(() => {})} style={{ ...btnGhost, padding: "2px 8px", fontSize: 11 }}>Remove</button>
+              <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                {r.takenBy && <button onClick={() => hub.releaseRoster(r.id).then(refresh).catch(() => {})} title="Let another station take this order (the station that has it keeps working until it finishes)" style={{ ...btnGhost, padding: "2px 8px", fontSize: 11, borderColor: "#f59e0b", color: "#fcd34d" }}>Release</button>}
+                <button onClick={() => hub.removeRoster(r.id).then(refresh).catch(() => {})} style={{ ...btnGhost, padding: "2px 8px", fontSize: 11 }}>Remove</button>
+              </span>
             </div>
           ))}
         </div>
@@ -1834,6 +1855,8 @@ export default function App() {
   const [roster,             setRoster]             = useState([]);
   const [rosterFile,         setRosterFile]         = useState(null);
   const [orderNumber,        setOrderNumber]        = useState("");
+  const [orderRun,           setOrderRun]           = useState(0);      // when this order was started here; the hub keeps one record per run
+  const [hubRosterId,        setHubRosterId]        = useState(null);   // the hub roster this order came from, taken by this station; Finish order removes it
   const [operatorName,       setOperatorName]       = useState(() => savedSignIn?.name || "");
   const [notes,              setNotes]              = useState("");
   const [jerseyType,         setJerseyType]         = useState("");   // echl | echl_replica | sublimated | "" 
@@ -1971,8 +1994,8 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, checksLeft, inspect]);
+    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, checksLeft, inspect]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -1987,7 +2010,7 @@ export default function App() {
   useEffect(() => {
     if (!signedIn || (role === "supervisor" && !sessionStarted)) return;
     const id = stationId();
-    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", notes, jerseyType, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap }))
+    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", orderRun: sessionStarted ? orderRun : 0, notes, jerseyType, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap }))
       .then(r => {
         setHubOk(true);
         // The supervisor named this order from the board: take the number; the next report confirms it.
@@ -1997,7 +2020,7 @@ export default function App() {
     send();
     const t = setInterval(send, 5000);
     return () => clearInterval(t);
-  }, [signedIn, sessionStarted, operatorName, role, orderNumber, notes, jerseyType, rosterFile, roster, log, lastConfirmed, binMap]);
+  }, [signedIn, sessionStarted, operatorName, role, orderNumber, orderRun, notes, jerseyType, rosterFile, roster, log, lastConfirmed, binMap]);
 
   // Open the complete modal once every row is accounted for (after at least one scan).
   useEffect(() => {
@@ -2023,7 +2046,7 @@ export default function App() {
   const resumeSession = useCallback(() => {
     const s = savedSession;
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
-    setOrderNumber(s.orderNumber || ""); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
+    setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []);
     vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
     inspectRef.current.load(s.inspect); syncInspect();
@@ -2040,14 +2063,18 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setIdleSpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setIdleSpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false);
   }, []);
 
   // Finish order: the confirm screen, then back to waiting for an order.
   const [showFinish, setShowFinish] = useState(false);
   const askFinish    = useCallback(() => { setShowRosterComplete(false); setShowFinish(true); }, []);
-  const finishOrder  = useCallback(() => { setShowFinish(false); resetOrder(); }, [resetOrder]);
+  const finishOrder  = useCallback(() => {
+    setShowFinish(false);
+    if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});   // the hub keeps the order's record and sheets in its ledger
+    resetOrder();
+  }, [resetOrder, hubRosterId]);
 
   // Sign out leaves the station, not the order: an unfinished order stays saved
   // on this PC and is offered to the next person who signs in here (a mistaken
@@ -2626,11 +2653,11 @@ export default function App() {
       {sessionStarted && !showSupervisor && <IdleWatch pulse={log.filter(l => l.status === S_PASS || l.status === S_MANUAL || l.status === S_FLAGGED).length} onSpell={recordIdle} />}
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
-        <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onSupervisor={() => setShowSupervisor(true)}
-          onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile }) => {
+        <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onSupervisor={() => setShowSupervisor(true)} stationLabel={stationLabel}
+          onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile, hubRosterId = null }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team" });
-            setOrderNumber(orderNumber); setNotes(notes); setJerseyType(jerseyType || "");
+            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || "");
             setSessionStarted(true); setResumeDecided(true);
           }} />
       )}
