@@ -13,7 +13,7 @@ import { useVoice } from "./useVoice.js";
 import { VoiceBadge, VoiceLegend } from "./VoiceBadge.jsx";
 import { speak } from "./lib/voice.js";
 const SECOND_LOOK = false;
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf } from "./config.js";
 
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
 
@@ -623,7 +623,7 @@ function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto 
                       <td style={{ ...td, color: colour(r.scanned), fontWeight: 700, whiteSpace: "nowrap" }}>{label(r.scanned)}</td>
                       <td style={td}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{r.size || ""}</td>
                       <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binFor(rec.bins, r.team) !== null ? `Bin ${binFor(rec.bins, r.team)}` : ""}</td>
-                      <td style={{ ...td, color: "#cbd5e1" }}>{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
+                      <td style={{ ...td, color: "#cbd5e1" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                       <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
                       {tab === "problems" && <td style={td}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} /></td>}
                     </tr>
@@ -633,7 +633,7 @@ function OrderView({ station, order, stationLabel, onClose, onDownload, onPhoto 
                   <tr key={"off" + i} style={{ background: "rgba(239,68,68,0.07)" }}>
                     <td style={{ ...td, color: "#ef4444", fontWeight: 700, whiteSpace: "nowrap" }}>NOT ON ROSTER</td>
                     <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{e.size || ""}</td><td style={td}></td>
-                    <td style={{ ...td, color: "#cbd5e1" }}>{e.reason}{e.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
+                    <td style={{ ...td, color: "#cbd5e1" }}><RouteTag item={e} /> {e.reason}{e.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                     <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
                     <td style={td}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} /></td>
                   </tr>
@@ -673,6 +673,18 @@ const stationLabel = id => { const n = String(id || "").replace(/^st-/, ""); con
 const attnIcon   = s => s === "manual" ? "✍" : s === "missing" ? "❓" : s === "short" ? "📦" : "🛑";
 const attnColour = s => (s === "manual" || s === "missing" || s === "short") ? "#f59e0b" : "#ef4444";
 const attnNote   = s => s === "manual" ? "Entered by hand — needs your sign-off" : s === "missing" ? "Not in the box — the operator marked it missing" : s === "short" ? "Marked short-shipped" : "Jersey is on its way to you";
+// How much an item weighs: a flag by where it goes (REMAKE over DECORATION and
+// STITCHER over CLEANING over DECIDE); by-hand, missing and short are light.
+// Open items come before resolved ones, then the heavier, then the newer.
+const attnSeverity = a => a.status === "flagged" ? severityOf(a.reason) : { tag: a.status === "manual" ? "SIGN OFF" : a.status === "missing" ? "MISSING" : "SHORT", weight: 1, colour: "#f59e0b" };
+const bySeverity = (a, b) => ((a.resolution ? 1 : 0) - (b.resolution ? 1 : 0)) || (attnSeverity(b).weight - attnSeverity(a).weight) || String(b.time || b.t || "").localeCompare(String(a.time || a.t || ""));
+function RouteTag({ item, size = 10 }) {
+  const s = attnSeverity(item);
+  const hot = s.weight >= 4;
+  return <span title={s.route || ""} style={{ fontSize: size, fontWeight: 800, letterSpacing: 0.5, padding: "1px 6px", borderRadius: 4, background: hot ? s.colour : `${s.colour}22`, color: hot ? "#fff" : s.colour, border: `1px solid ${s.colour}66`, whiteSpace: "nowrap", flexShrink: 0, verticalAlign: "middle" }}>{s.tag}</span>;
+}
+// A station that has not reported for this long steps back off the cards.
+const GONE_MS = 2 * 3600 * 1000;
 function SupervisorPanel({ operatorName, onClose }) {
   const [data,    setData]    = useState(() => ({ stations: [], now: Date.now() }));
   const [rosters, setRosters] = useState([]);
@@ -714,15 +726,16 @@ function SupervisorPanel({ operatorName, onClose }) {
       // Announce every unresolved attention item that was not in the previous
       // report. The first report seeds the set and becomes the backlog banner.
       const keys = new Set(), fresh = [];
-      d.stations.forEach(s => (s.attention || []).forEach(a => {
+      d.stations.forEach(s => (d.now - s.updatedAt > GONE_MS ? [] : (s.attention || [])).forEach(a => {   // a station gone for hours has nothing new to say
         if (a.resolution) return;
         const k = `${s.id}|${a.time}|${a.jersey}|${a.status}`;
         keys.add(k);
         if (seenRef.current && !seenRef.current.has(k)) fresh.push({ key: k, at: Date.now(), station: stationLabel(s.id), operator: s.operatorName || "—", status: a.status, jersey: a.jersey, reason: a.reason, time: a.time, photo: a.photo || null, damagePhotos: a.damagePhotos || [] });
       }));
       if (!seenRef.current) {
-        const stations = d.stations.filter(s => keys.size && [...keys].some(k => k.startsWith(s.id + "|")) || (s.carried || []).length);
-        const items = keys.size + d.stations.reduce((n, s) => n + (s.carried || []).length, 0);
+        const here = d.stations.filter(s => d.now - s.updatedAt <= GONE_MS);
+        const stations = here.filter(s => keys.size && [...keys].some(k => k.startsWith(s.id + "|")) || (s.carried || []).length);
+        const items = keys.size + here.reduce((n, s) => n + (s.carried || []).length, 0);
         setBacklog(items ? { items, stations: stations.length } : null);
       }
       // Remember every key ever announced, not just the ones in this report: a
@@ -751,7 +764,14 @@ function SupervisorPanel({ operatorName, onClose }) {
     Notification.requestPermission().then(p => { setDesktop(p); if (p === "granted") new Notification("Jersey QC alerts are on", { body: "You will be told here when a station needs you." }); }).catch(() => {});
   };
   const markCarriedDone = (stationIdValue, key) => hub.clearCarried(stationIdValue, key).then(refresh).catch(() => setMsg("Could not update the hub."));
+  const removeStation = s => { if (window.confirm(`Remove ${stationLabel(s.id)} · ${s.operatorName || "—"} from the board? It comes back by itself if that station reports again.`)) hub.removeStation(s.id).then(refresh).catch(() => setMsg("Could not update the hub.")); };
   useEffect(() => { refresh(); const t = setInterval(refresh, 4000); return () => clearInterval(t); }, [refresh]);
+  // Wall view: one row per station in letters readable across the floor, for
+  // a TV. ?view=wall opens straight into it; a click or Esc comes back.
+  const [wall, setWall] = useState(() => { try { return new URLSearchParams(window.location.search).get("view") === "wall"; } catch { return false; } });
+  useEffect(() => { if (!wall) return; const h = e => { if (e.key === "Escape") { e.stopPropagation(); setWall(false); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [wall]);
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => { if (!wall) return; const t = setInterval(() => setClock(Date.now()), 15000); return () => clearInterval(t); }, [wall]);
 
   const send = async () => {
     if (!order.trim()) { setMsg("Type the order number first — stations list rosters by it."); return; }
@@ -768,18 +788,71 @@ function SupervisorPanel({ operatorName, onClose }) {
   };
 
   const age = s => Math.round((data.now - s.updatedAt) / 1000);
-  const openCount = data.stations.reduce((n, s) => n + (s.attention || []).filter(a => !a.resolution).length + (s.carried || []).length, 0);
+  const openOn = s => (s.attention || []).filter(a => !a.resolution).length + (s.carried || []).length;
+  // Stations gone for hours (a test PC, a station shut down for the day) step
+  // back into one quiet strip, so the live ones stand out and their old open
+  // items do not count against the day.
+  const parked = data.stations.filter(s => age(s) * 1000 > GONE_MS);
+  const active = data.stations.filter(s => age(s) * 1000 <= GONE_MS);
+  const openCount = active.reduce((n, s) => n + openOn(s), 0);
+  const parkedOpen = parked.reduce((n, s) => n + openOn(s), 0);
   const pct = s => s.counts?.total ? Math.round(((s.counts.total - s.counts.remaining) / s.counts.total) * 100) : 0;
   const todayStr   = data.today || new Date().toLocaleDateString("en-CA");
   const todayTotal = data.stations.reduce((n, s) => n + (s.day?.date === todayStr ? s.day.done : 0), 0);
-  const liveCount  = data.stations.filter(s => age(s) <= 30).length;
+  const liveCount  = active.filter(s => age(s) <= 30).length;
   const fmtMin = m => m == null ? "—" : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+  const byName = (a, b) => stationLabel(a.id).localeCompare(stationLabel(b.id), undefined, { numeric: true });
+
+  if (wall) {
+    // Sized by container-query units, not vh: the page is zoomed on big
+    // monitors, and cqh follows the box, not the screen.
+    const rows = Math.max(active.length, 1), rowH = Math.min(18, 82 / rows);
+    const f = k => `${(rowH * k).toFixed(2)}cqh`;
+    return (
+      <div onClick={() => setWall(false)} style={{ position: "fixed", inset: 0, zIndex: 1950, background: "#000", color: "#fff", fontFamily: FONT_UI, display: "flex", flexDirection: "column", padding: "2cqh 2cqw", boxSizing: "border-box", containerType: "size", cursor: "pointer", userSelect: "none" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "1.5cqh", flexShrink: 0 }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "7cqh", fontWeight: 900, lineHeight: 1, color: openCount > 0 ? "#f87171" : "#4ade80" }}>{openCount > 0 ? `${openCount} NEED YOU` : "ALL CLEAR"}</div>
+          <div style={{ fontSize: "3cqh", color: "#94a3b8" }}>{todayTotal} {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {active.length} live · {new Date(clock).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+        </div>
+        {hubDown && <div style={{ background: "#7f1d1d", fontSize: "3cqh", fontWeight: 700, padding: "1cqh 2cqw", borderRadius: "1cqh", marginBottom: "1.5cqh" }}>⚠ The hub stopped answering at {new Date(hubDown).toLocaleTimeString()} — nothing here is live.</div>}
+        <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: `repeat(${rows}, 1fr)`, gap: "1.2cqh" }}>
+          {active.slice().sort(byName).map(s => {
+            const open = openOn(s), stale = age(s) > 30, c = s.counts || {};
+            const total = c.total ?? 0, done = total - (c.remaining ?? 0);
+            const col = open ? "#ef4444" : stale ? "#475569" : (c.manual > 0 || c.missing > 0 || c.short > 0) ? "#f59e0b" : "#22c55e";
+            const top = (s.attention || []).filter(a => !a.resolution).sort(bySeverity)[0];
+            const line = open
+              ? (top ? <><RouteTag item={top} size={f(0.2)} /> {top.jersey} — {top.reason}{open > 1 ? ` · +${open - 1} more` : ""}</> : `${open} still open from earlier orders`)
+              : stale ? `not reporting · last seen ${fmtMin(Math.round(age(s) / 60))} ago`
+              : total > 0 ? (c.remaining === 0 ? "order done" : s.lastScan ? `now at ${s.lastScan.text}` : "scanning") : "waiting for an order";
+            return (
+              <div key={s.id} style={{ display: "grid", gridTemplateColumns: "26cqw 1fr 20cqw", alignItems: "center", gap: "2cqw", background: `${col}26`, borderLeft: `2.5cqw solid ${col}`, borderRadius: "1cqh", padding: "0 2cqw", minHeight: 0, overflow: "hidden" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: FONT_DISPLAY, fontSize: f(0.46), fontWeight: 900, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{stationLabel(s.id)}</div>
+                  <div style={{ fontSize: f(0.2), color: "#cbd5e1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.operatorName || "—"} · order {s.orderNumber || "—"}</div>
+                </div>
+                <div style={{ fontSize: f(0.26), fontWeight: 700, color: stale && !open ? "#94a3b8" : "#fff", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{line}</div>
+                <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <span style={{ fontFamily: FONT_DISPLAY, fontSize: f(0.5), fontWeight: 900, lineHeight: 1 }}>{total > 0 ? done : "—"}</span>
+                  {total > 0 && <span style={{ fontSize: f(0.24), color: "#94a3b8" }}> / {total}</span>}
+                  {total > 0 && c.remaining > 0 && !stale && s.rate ? <div style={{ fontSize: f(0.18), color: "#94a3b8" }}>{Math.round(s.rate)}/h · {fmtMin(s.etaMin)} left</div> : null}
+                </div>
+              </div>
+            );
+          })}
+          {active.length === 0 && <div style={{ fontSize: "5cqh", color: "#64748b", alignSelf: "center", textAlign: "center" }}>No station reporting</div>}
+        </div>
+        <div style={{ fontSize: "2cqh", color: "#475569", marginTop: "1cqh", textAlign: "right", flexShrink: 0 }}>Wall view{parked.length ? ` · ${parked.length} ${parked.length === 1 ? "station" : "stations"} not reporting` : ""} · click or press Esc to go back</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 1800, display: "flex", flexDirection: "column", color: "#e2e8f0", fontFamily: FONT_UI }}>
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="#ef4444">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {data.stations.length} {data.stations.length === 1 ? "station" : "stations"} live</div></div>
+        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="#ef4444">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => setWall(true)} title="One row per station in big letters, for a TV on the floor. Click or Esc comes back; ?view=wall in the address opens straight into it." style={{ ...btnGhost, padding: "6px 12px" }}>📺 Wall</button>
           {desktop === "denied" && <span style={{ fontSize: 16 }} title="Desktop alerts are blocked — allow notifications for this site in the browser's address bar">🔕</span>}
           {desktop === "default" && <button onClick={enableDesktop} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#f59e0b", color: "#fcd34d" }}>🔔 Turn on alerts</button>}
           <button onClick={onClose} style={{ ...btnGhost, padding: "6px 14px" }}>← Back to scanning</button>
@@ -810,7 +883,7 @@ function SupervisorPanel({ operatorName, onClose }) {
               </div>
               <div style={{ marginTop: 3, display: "flex", gap: 10, alignItems: "flex-start" }}>
                 <PhotoThumbs photo={a.photo} damagePhotos={a.damagePhotos} w={96} h={72} onOpen={setBigPhoto} />
-                <div><strong>{a.jersey}</strong> — {a.reason}</div>
+                <div><RouteTag item={a} /> <strong>{a.jersey}</strong> — {a.reason}</div>
               </div>
               <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 3 }}>{attnNote(a.status)} · {a.time}</div>
             </div>
@@ -825,7 +898,7 @@ function SupervisorPanel({ operatorName, onClose }) {
             <div style={{ gridColumn: "1 / -1", order: 99, marginTop: 8 }}>
               <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>Orders today ({orders.length})</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {orders.slice().sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0)).map(o => {
+                {orders.slice().sort((a, b) => ((((a.counts?.total ?? 0) > 0 && a.counts?.remaining === 0) ? 1 : 0) - (((b.counts?.total ?? 0) > 0 && b.counts?.remaining === 0) ? 1 : 0)) || ((b.lastSeen || 0) - (a.lastSeen || 0))).map(o => {   /* in progress first, then the newest */
                   const c = o.counts || {}; const total = c.total ?? 0; const done = total - (c.remaining ?? 0); const finished = total > 0 && c.remaining === 0;
                   const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
                   return (
@@ -847,7 +920,21 @@ function SupervisorPanel({ operatorName, onClose }) {
               </div>
             </div>
           )}
-          {data.stations.slice().sort((a, b) => stationLabel(a.id).localeCompare(stationLabel(b.id), undefined, { numeric: true })).map(s => {   /* a fixed order: cards must not jump as reports arrive */
+          {parked.length > 0 && (
+            <div style={{ gridColumn: "1 / -1", order: 98, marginTop: 8, ...card, padding: "8px 12px", opacity: 0.75 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8" }}>Not reporting for over {Math.round(GONE_MS / 3600000)} hours ({parked.length}) — stepped back so the live stations stand out{parkedOpen > 0 ? `; ${parkedOpen} old open ${parkedOpen === 1 ? "item" : "items"} on them` : ""}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                {parked.slice().sort(byName).map(s => (
+                  <span key={s.id} style={{ fontSize: 12, color: "#cbd5e1", display: "inline-flex", gap: 8, alignItems: "center", padding: "3px 4px 3px 10px", border: "1px solid #334155", borderRadius: 6 }}>
+                    {stationLabel(s.id)} · {s.operatorName || "—"} · order {s.orderNumber || "—"} · last seen {fmtMin(Math.round(age(s) / 60))} ago{openOn(s) > 0 && <span style={{ color: "#f87171" }}>· {openOn(s)} open</span>}
+                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber })} disabled={!s.orderNumber} title="Open its last order" style={{ ...btnGhost, padding: "2px 8px", fontSize: 11, opacity: s.orderNumber ? 1 : 0.4 }}>Open</button>
+                    <button onClick={() => removeStation(s)} title="Take it off the board" style={{ ...btnGhost, padding: "2px 8px", fontSize: 11 }}>Remove</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {active.slice().sort(byName).map(s => {   /* a fixed order: cards must not jump as reports arrive */
             const stale = age(s) > 30;
             return (
               <div key={s.id} style={{ ...card, padding: 14, border: `1px solid ${stale ? "#334155" : s.counts?.flag ? "#ef4444" : "#21262d"}`, opacity: stale ? 0.6 : 1 }}>
@@ -856,7 +943,7 @@ function SupervisorPanel({ operatorName, onClose }) {
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <div style={{ fontSize: 11, color: stale ? "#f87171" : "#22c55e" }}>{stale ? `last seen ${fmtMin(Math.round(age(s) / 60))} ago` : "● live"}</div>
                     {(stale || (s.counts?.total > 0 && s.counts?.remaining === 0)) && (
-                      <button onClick={() => { if (window.confirm(`Remove ${stationLabel(s.id)} · ${s.operatorName || "—"} from the board? It comes back by itself if that station reports again.`)) hub.removeStation(s.id).then(refresh).catch(() => setMsg("Could not update the hub.")); }}
+                      <button onClick={() => removeStation(s)}
                         title="Take this card off the board" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>Remove</button>
                     )}
                   </div>
@@ -895,12 +982,12 @@ function SupervisorPanel({ operatorName, onClose }) {
                 {s.attention?.length > 0 && (
                   <div style={{ marginTop: 10, borderTop: "1px solid #21262d", paddingTop: 8 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#f87171", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Needs you ({s.attention.length})</div>
-                    {s.attention.length > 3 && <div style={{ fontSize: 11, color: "#64748b", marginBottom: 3 }}>newest three — the rest are in the station's log</div>}
-                    {s.attention.slice(0, 3).map((a, i) => (
+                    {s.attention.length > 3 && <div style={{ fontSize: 11, color: "#64748b", marginBottom: 3 }}>the three that weigh most — the rest are in the order</div>}
+                    {s.attention.slice().sort(bySeverity).slice(0, 3).map((a, i) => (
                       <div key={i} style={{ fontSize: 12, marginBottom: 3, display: "flex", gap: 8, alignItems: "flex-start" }}>
                         <PhotoThumbs photo={a.photo} damagePhotos={a.damagePhotos} w={56} h={42} onOpen={setBigPhoto} />
                         <div>
-                          <span style={{ color: attnColour(a.status), fontWeight: 700 }}>{attnIcon(a.status)} {a.jersey}</span>
+                          <RouteTag item={a} /> <span style={{ color: attnColour(a.status), fontWeight: 700 }}>{attnIcon(a.status)} {a.jersey}</span>
                           <span style={{ color: "#94a3b8" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
                         </div>
                       </div>

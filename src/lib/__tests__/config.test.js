@@ -39,3 +39,26 @@ describe("jersey types and their reason menus", () => {
     expect(jerseyTypeLabel("")).toBe("");
   });
 });
+
+describe("where a flag goes, and its weight on the board", () => {
+  it("maps every reason label of every jersey type to its route", async () => {
+    const { routeOfReason, severityOf, REASONS_BY_CONSTRUCTION } = await import("../../config.js");
+    expect(routeOfReason("Sublimation error")).toBe("Supervisor → full remake");
+    expect(routeOfReason("Loose, missing or broken stitching")).toBe("Supervisor → stitcher");
+    expect(routeOfReason("Print error — ghosting, fading, misaligned — found after it passed")).toBe("Supervisor → full remake");
+    expect(routeOfReason("Not on the roster — operator typed #77 KIM")).toBe("Supervisor → check the order");
+    expect(routeOfReason("Duplicate — scanned again after passing")).toBe("Supervisor → check the order");
+    expect(routeOfReason("a loose thread on the collar")).toBe("Supervisor decides");
+    for (const list of Object.values(REASONS_BY_CONSTRUCTION)) for (const r of list) expect(routeOfReason(r.label)).toBe(r.route);
+  });
+  it("weighs a remake over decoration over cleaning over a decision", async () => {
+    const { severityOf } = await import("../../config.js");
+    const w = r => severityOf(r).weight;
+    expect(w("Sublimation error")).toBeGreaterThan(w("Missing or wrong logo"));
+    expect(w("Missing or wrong logo")).toBeGreaterThan(w("Cleaning not done"));
+    expect(w("Cleaning not done")).toBeGreaterThan(w("something odd"));
+    expect(severityOf("Sublimation error").tag).toBe("REMAKE");
+    expect(severityOf("Stitching or seam").tag).toBe("STITCHER");
+    expect(severityOf("").tag).toBe("DECIDE");
+  });
+});

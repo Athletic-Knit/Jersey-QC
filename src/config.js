@@ -106,3 +106,34 @@ export const DEFAULT_SETTINGS = {
   micId: "",              // "" = browser default microphone
   voiceSpeak: true,       // read the result back through the headset ("40, bin 2")
 };
+
+// ── Where a flagged jersey goes, from the reason the operator picked ────────
+// The board weighs flags by their route: a full remake outranks a stitch,
+// which outranks a clean. Works from the reason's label alone, so flags
+// recorded before any route was kept on the entry still get a tag, and a
+// "— found after it passed" suffix does not change where it goes.
+const ALL_REASONS = [...REASONS, ...REASONS_BY_CONSTRUCTION.stitched, ...REASONS_BY_CONSTRUCTION.sublimated];
+export function routeOfReason(reason) {
+  const label = String(reason || "").replace(/ — found after it passed$/, "").trim().toLowerCase();
+  if (!label) return "Supervisor decides";
+  const r = ALL_REASONS.find(x => x.label.toLowerCase() === label);
+  if (r) return r.route;
+  if (/not on the roster|duplicate/.test(label)) return "Supervisor → check the order";
+  if (/could not read|entered by operator/.test(label)) return "Supervisor → sign off";
+  return "Supervisor decides";
+}
+// The tag the board shows for a route, its colour, and its weight (higher first).
+export const SEVERITY = [
+  { tag: "REMAKE",      weight: 4, colour: "#ef4444", test: /full remake/i },
+  { tag: "DECORATION",  weight: 3, colour: "#f97316", test: /decoration/i },
+  { tag: "STITCHER",    weight: 3, colour: "#f97316", test: /stitcher/i },
+  { tag: "CLEANING",    weight: 2, colour: "#eab308", test: /cleaning/i },
+  { tag: "CHECK ORDER", weight: 2, colour: "#eab308", test: /check the order/i },
+  { tag: "SIGN OFF",    weight: 1, colour: "#94a3b8", test: /sign off/i },
+  { tag: "DECIDE",      weight: 1, colour: "#94a3b8", test: /decides/i },
+];
+export function severityOf(reason) {
+  const route = routeOfReason(reason);
+  const s = SEVERITY.find(x => x.test.test(route)) || SEVERITY[SEVERITY.length - 1];
+  return { tag: s.tag, weight: s.weight, colour: s.colour, route };
+}
