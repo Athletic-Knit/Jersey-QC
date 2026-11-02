@@ -683,8 +683,16 @@ function RouteTag({ item, size = 10 }) {
   const hot = s.weight >= 4;
   return <span title={s.route || ""} style={{ fontSize: size, fontWeight: 800, letterSpacing: 0.5, padding: "1px 6px", borderRadius: 4, background: hot ? s.colour : `${s.colour}22`, color: hot ? "#fff" : s.colour, border: `1px solid ${s.colour}66`, whiteSpace: "nowrap", flexShrink: 0, verticalAlign: "middle" }}>{s.tag}</span>;
 }
+// "2 REMAKE, 3 STITCHER, 1 SIGN OFF": what gathered while nobody watched, heaviest first.
+const awaySummary = items => {
+  const m = new Map();
+  items.forEach(a => { const s = attnSeverity(a); const e = m.get(s.tag) || { n: 0, weight: s.weight }; e.n++; m.set(s.tag, e); });
+  return [...m.entries()].sort((a, b) => b[1].weight - a[1].weight).map(([tag, e]) => `${e.n} ${tag}`).join(", ");
+};
 // A station that has not reported for this long steps back off the cards.
 const GONE_MS = 2 * 3600 * 1000;
+// Someone is "at the board" for this long after the last mouse or key.
+const WATCH_MS = 2 * 60 * 1000;
 function SupervisorPanel({ operatorName, onClose }) {
   const [data,    setData]    = useState(() => ({ stations: [], now: Date.now() }));
   const [rosters, setRosters] = useState([]);
@@ -714,7 +722,37 @@ function SupervisorPanel({ operatorName, onClose }) {
   const TOAST_MS = 12000;
   useEffect(() => { const t = setInterval(() => setAlerts(a => a.some(x => Date.now() - x.at > TOAST_MS) ? a.filter(x => Date.now() - x.at <= TOAST_MS) : a), 1000); return () => clearInterval(t); }, []);
   const [bigPhoto, setBigPhoto] = useState(null); // a flag photo shown large
-  const [backlog, setBacklog] = useState(null);   // what was already open when this view opened
+  // Quiet alerts. A pop-up only while someone is at the board (tab visible,
+  // mouse or key in the last two minutes); what arrives otherwise waits in one
+  // "new since you left" line. Desktop notifications: one a minute at most,
+  // the newest replacing the last, never pinned open. The cards hold the
+  // truth; the messages only say "look".
+  const lastActiveRef = useRef(0);
+  useEffect(() => {
+    const touch = () => { lastActiveRef.current = Date.now(); };
+    touch();
+    const evs = ["mousemove", "mousedown", "keydown", "touchstart", "wheel"];
+    evs.forEach(e => window.addEventListener(e, touch, { passive: true }));
+    document.addEventListener("visibilitychange", touch);
+    return () => { evs.forEach(e => window.removeEventListener(e, touch)); document.removeEventListener("visibilitychange", touch); };
+  }, []);
+  const isWatching = useCallback(() => !document.hidden && Date.now() - lastActiveRef.current < WATCH_MS, []);
+  const [away, setAway] = useState(null);         // { since, items } gathered while nobody was watching
+  const pendingRef = useRef([]), notifyAtRef = useRef(0), notifyTimerRef = useRef(null);
+  const notifyLater = useCallback((items) => {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    pendingRef.current.push(...items);
+    if (notifyTimerRef.current) return;
+    const wait = Math.max(0, 60000 - (Date.now() - notifyAtRef.current));
+    notifyTimerRef.current = setTimeout(() => {
+      notifyTimerRef.current = null; notifyAtRef.current = Date.now();
+      const p = pendingRef.current; pendingRef.current = [];
+      if (!p.length) return;
+      const body = p.length === 1 ? `${p[0].station}: ${p[0].jersey} — ${p[0].reason}` : [...new Set(p.map(a => a.station))].join(", ");
+      try { new Notification(`${p.length} ${p.length === 1 ? "jersey needs" : "jerseys need"} you`, { body, tag: "jerseyqc-needs-you" }); } catch { /* the browser refused */ }
+    }, wait);
+  }, []);
+  useEffect(() => () => clearTimeout(notifyTimerRef.current), []);
   const [hubDown, setHubDown] = useState(null);   // when the hub stopped answering, or null
   const [desktop, setDesktop] = useState(() => (typeof Notification === "undefined" ? "unsupported" : Notification.permission));
   const seenRef = useRef(null);                   // keys already announced; null until the first report
@@ -724,37 +762,27 @@ function SupervisorPanel({ operatorName, onClose }) {
     hub.stations().then(d => {
       setData(d); setHubDown(null);
       // Announce every unresolved attention item that was not in the previous
-      // report. The first report seeds the set and becomes the backlog banner.
+      // report. The first report only seeds the set: what is already open is on the cards.
       const keys = new Set(), fresh = [];
       d.stations.forEach(s => (d.now - s.updatedAt > GONE_MS ? [] : (s.attention || [])).forEach(a => {   // a station gone for hours has nothing new to say
         if (a.resolution) return;
         const k = `${s.id}|${a.time}|${a.jersey}|${a.status}`;
         keys.add(k);
-        if (seenRef.current && !seenRef.current.has(k)) fresh.push({ key: k, at: Date.now(), station: stationLabel(s.id), operator: s.operatorName || "—", status: a.status, jersey: a.jersey, reason: a.reason, time: a.time, photo: a.photo || null, damagePhotos: a.damagePhotos || [] });
+        if (seenRef.current && !seenRef.current.has(k)) fresh.push({ key: k, at: Date.now(), stationId: s.id, station: stationLabel(s.id), operator: s.operatorName || "—", status: a.status, jersey: a.jersey, reason: a.reason, time: a.time, photo: a.photo || null, damagePhotos: a.damagePhotos || [] });
       }));
-      if (!seenRef.current) {
-        const here = d.stations.filter(s => d.now - s.updatedAt <= GONE_MS);
-        const stations = here.filter(s => keys.size && [...keys].some(k => k.startsWith(s.id + "|")) || (s.carried || []).length);
-        const items = keys.size + here.reduce((n, s) => n + (s.carried || []).length, 0);
-        setBacklog(items ? { items, stations: stations.length } : null);
-      }
       // Remember every key ever announced, not just the ones in this report: a
       // station that drops out for a reload and comes back must not re-announce
       // the same flag, and an alert already on screen is never added twice.
       if (!seenRef.current) seenRef.current = keys; else keys.forEach(k => seenRef.current.add(k));
       if (fresh.length) {
-        setAlerts(prev => [...fresh.reverse().filter(f => !prev.some(p => p.key === f.key)), ...prev].slice(0, 50));
         playTone("flag");
-        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          try {
-            if (fresh.length <= 3) fresh.forEach(a => new Notification(`${a.station} · ${a.operator}`, { body: `${a.jersey} — ${a.reason}`, tag: a.key, requireInteraction: true }));
-            else new Notification(`${fresh.length} jerseys need you`, { body: fresh.map(a => `${a.station}: ${a.jersey}`).join(" · "), tag: "batch-" + Date.now(), requireInteraction: true });
-          } catch { /* the browser refused; the toast and tone still happened */ }
-        }
+        if (isWatching()) setAlerts(prev => [...fresh.reverse().filter(f => !prev.some(p => p.key === f.key)), ...prev].slice(0, 50));
+        else setAway(a => ({ since: a?.since || fresh[0].time, items: [...(a?.items || []), ...fresh] }));
+        notifyLater(fresh);
       }
     }).catch(() => setHubDown(t => t || Date.now()));
     hub.rosters().then(r => setRosters(r.rosters || [])).catch(() => {});
-  }, []);
+  }, [isWatching, notifyLater]);
   const dismiss = key => setAlerts(a => a.filter(x => x.key !== key));
   // A click unlocks the browser's audio and asks for desktop notifications,
   // which pop up even when this tab is hidden or the browser is behind a window.
@@ -864,10 +892,13 @@ function SupervisorPanel({ operatorName, onClose }) {
           <button onClick={refresh} style={{ ...btnGhost, padding: "4px 10px", color: "#fff", borderColor: "#fff" }}>Retry</button>
         </div>
       )}
-      {backlog && !hubDown && (
-        <div style={{ background: "#422006", color: "#fde68a", padding: "8px 16px", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-          <span><strong>{backlog.items} {backlog.items === 1 ? "jersey was" : "jerseys were"} already waiting for you</strong> across {backlog.stations} {backlog.stations === 1 ? "station" : "stations"} when this screen opened — see the red lists on the cards.</span>
-          <button onClick={() => setBacklog(null)} style={{ background: "transparent", border: 0, color: "#fde68a", cursor: "pointer", fontSize: 15 }}>✕</button>
+      {away && !hubDown && (
+        <div style={{ background: "#422006", color: "#fde68a", padding: "8px 16px", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexShrink: 0 }}>
+          <span><strong>{away.items.length} new since {String(away.since).slice(11, 16)}</strong> — {awaySummary(away.items)} · on {[...new Set(away.items.map(a => a.station))].join(", ")}</span>
+          <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={() => document.getElementById("card-" + away.items[0]?.stationId)?.scrollIntoView({ block: "start", behavior: "smooth" })} style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, color: "#fde68a", borderColor: "#fde68a" }}>Show me</button>
+            <button onClick={() => setAway(null)} title="Seen" style={{ background: "transparent", border: 0, color: "#fde68a", cursor: "pointer", fontSize: 15 }}>✕</button>
+          </span>
         </div>
       )}
       {openOrder && <OrderView station={openOrder.station} order={openOrder.order} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}
@@ -937,7 +968,7 @@ function SupervisorPanel({ operatorName, onClose }) {
           {active.slice().sort(byName).map(s => {   /* a fixed order: cards must not jump as reports arrive */
             const stale = age(s) > 30;
             return (
-              <div key={s.id} style={{ ...card, padding: 14, border: `1px solid ${stale ? "#334155" : s.counts?.flag ? "#ef4444" : "#21262d"}`, opacity: stale ? 0.6 : 1 }}>
+              <div key={s.id} id={"card-" + s.id} style={{ ...card, padding: 14, border: `1px solid ${stale ? "#334155" : s.counts?.flag ? "#ef4444" : "#21262d"}`, opacity: stale ? 0.6 : 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <div style={{ fontWeight: 800, fontSize: 17 }}><span style={{ color: "#60a5fa" }}>{stationLabel(s.id)}</span> · {s.operatorName || "—"}</div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
