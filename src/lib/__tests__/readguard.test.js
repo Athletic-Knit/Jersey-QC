@@ -151,9 +151,9 @@ describe("no alternative, no yellow", () => {
     const r = [row(0, "Samuel", "40"), row(1, "Nguyen", "23")];
     expect(findMatches(r, "SAMU", "40", { nameComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
   });
-  it("STEPHENSON with no number and one Stephenson → green; with #5 read as well → yellow (contradiction)", () => {
+  it("STEPHENSON with no number and one #22 Stephenson → a soft question on that row (the number was not seen); with #5 read as well → yellow (contradiction)", () => {
     const r = [row(0, "Stephenson", "22"), row(1, "", "5")];
-    expect(findMatches(r, "STEPHENSON", "")).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches(r, "STEPHENSON", "")).toMatchObject({ type: "pick", soft: true, candidates: [{ _id: 0 }] });   // was green until 2026-11-02: the two-jerseys frame turned 90° passed as #22 on the name alone
     expect(findMatches(r, "STEPHENSON", "5").type).toBe("pick");
     expect(findMatches(r, "STEPHENSON", "5", { numberComplete: false }).type).toBe("pick");
   });

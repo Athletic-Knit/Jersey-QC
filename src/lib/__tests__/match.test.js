@@ -111,3 +111,30 @@ describe("helpers", () => {
     expect(differingFields([roster[0], roster[1]], ["name", "number", "team", "size"])).toEqual(["name", "team", "size"]);
   });
 });
+
+describe("a name with no number, from the camera", () => {
+  const two = [{ _id: 1, number: "22", name: "Stephenson" }, { _id: 2, number: "5", name: "" }];
+  it("is a question when the row carries a number the camera did not read (the two-jerseys frame)", () => {
+    const m = findMatches(two, "STEPHENSON", "", {});
+    expect(m.type).toBe("pick");
+    expect(m.soft).toBe(true);
+    expect(m.candidates.map(r => r._id)).toEqual([1]);
+    expect(m.reason).toMatch(/no number/);
+  });
+  it("is still a question when every other row has passed", () => {
+    const m = findMatches([{ _id: 1, number: "22", name: "Stephenson" }, { _id: 2, number: "5", name: "", scanned: "pass" }], "STEPHENSON", "", {});
+    expect(m.type).toBe("pick");
+  });
+  it("goes green on a row that has no number of its own", () => {
+    const m = findMatches([{ _id: 1, number: "", name: "Tremblay" }, { _id: 2, number: "7", name: "Ng" }], "TREMBLAY", "", {});
+    expect(m).toMatchObject({ type: "exact", match: { _id: 1 } });
+  });
+  it("typed by the operator, the name alone settles", () => {
+    const m = findMatches(two, "Stephenson", "", { typed: true });
+    expect(m).toMatchObject({ type: "exact", match: { _id: 1 } });
+  });
+  it("a passed row is a duplicate, not a question", () => {
+    const m = findMatches([{ _id: 1, number: "22", name: "Stephenson", scanned: "pass" }], "STEPHENSON", "", {});
+    expect(m.type).toBe("duplicate");
+  });
+});

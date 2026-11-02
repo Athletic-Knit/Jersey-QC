@@ -319,8 +319,14 @@ function findMatchesInner(roster, name, number, read = {}) {
       // misread #36 is not the #34 Nguyen, it is a question.
       // A cut-short name ("Mar…") settles only through the exact number (byBoth):
       // with no number read it is two missing pieces, not a match.
+      // From the camera, a name with NO number read settles only a row that has
+      // no number of its own (the jersey has none to read). A row that carries a
+      // number was not seen whole — the number is under a fold, out of frame, or
+      // on the other jersey in the picture — and stays a question. Typed by the
+      // operator, the name alone is their word.
+      const nameSettles = r => typed || !!nNum || !normNum(r.number);
       const direct = byBoth[0]
-        || (!partialName && byName.length === 1 && byNum.length === 0 && (!nNum || normNum(byName[0].number) === nNum) ? byName[0] : null)
+        || (!partialName && byName.length === 1 && byNum.length === 0 && (nNum ? normNum(byName[0].number) === nNum : nameSettles(byName[0])) ? byName[0] : null)
         || (byNum.length === 1 && byName.length === 0 && !norm(byNum[0].name) ? byNum[0] : null);
       const sure = soleOpen(direct, cands);
       if (sure) return sure;
@@ -395,7 +401,8 @@ function findMatchesInner(roster, name, number, read = {}) {
       if (typed) return single(byName) || { type: "pick", candidates: byName, reason: "Name matches more than one row" };
       if (byName.length === 1 && isDone(byName[0])) return { type: "duplicate", match: byName[0] };
       const nums = [...new Set(byName.map(r => r.number))].join(" / ");
-      return soleOpen(byName.length === 1 ? byName[0] : null, byName) || { type: "pick", candidates: byName, reason: `Read "${String(name).trim()}" but no number — is #${nums} hidden or out of frame? Is it this jersey?`, soft: true };
+      const settles = byName.length === 1 && !normNum(byName[0].number) ? byName[0] : null;   // a row with no number: the name is the whole jersey
+      return soleOpen(settles, byName) || { type: "pick", candidates: byName, reason: `Read "${String(name).trim()}" but no number — is #${nums} hidden or out of frame? Is it this jersey?`, soft: true };
     }
     return { type: "pick", candidates: byName, reason: `Name matches #${[...new Set(byName.map(r => r.number))].join(" / ")} but the number read as #${nNum}` };
   }
