@@ -1335,14 +1335,15 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
               <div style={{ containerType: "size", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", gap: "3cqh" }}>
                 {hasSize && (
                   <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid #22c55e", background: "rgba(34,197,94,0.14)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
-                    <div style={{ fontSize: `min(${binNum !== null ? 6 : 8}cqh, 10cqw)`, color: "#86efac", fontWeight: 800, letterSpacing: 2 }}>SIZE</div>
-                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${binNum !== null ? 32 : 62}cqh, ${String(match.size).length > 4 ? 30 : 42}cqw)`, fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
+                    <div style={{ fontSize: `min(${binNum !== null ? 7 : 12}cqh, ${binNum !== null ? 14 : 20}cqw)`, color: "#86efac", fontWeight: 900, letterSpacing: 3, lineHeight: 1 }}>SIZE</div>
+                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${binNum !== null ? 34 : 70}cqh, ${String(match.size).length > 4 ? 38 : String(match.size).length > 2 ? 55 : 80}cqw)`, fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
                   </div>
                 )}
                 {binNum !== null && (
                   <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid #3b82f6", background: "rgba(59,130,246,0.16)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
-                    <div style={{ fontSize: `min(${hasSize ? 6 : 8}cqh, 10cqw)`, color: "#93c5fd", fontWeight: 800, letterSpacing: 2 }}>BIN</div>
-                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${hasSize ? 34 : 66}cqh, 60cqw)`, fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
+                    <div style={{ fontSize: `min(${hasSize ? 7 : 12}cqh, ${hasSize ? 14 : 20}cqw)`, color: "#93c5fd", fontWeight: 900, letterSpacing: 3, lineHeight: 1 }}>BIN</div>
+                    {/* The digit is limited by the box width: one digit may be wider than two, two than three (Barlow Condensed is about half an em a digit). */}
+                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${hasSize ? 36 : 72}cqh, ${String(binNum).length === 1 ? 120 : String(binNum).length === 2 ? 80 : 55}cqw)`, fontWeight: 900, color: "#fff", lineHeight: 0.95 }}>{binNum}</div>
                   </div>
                 )}
               </div>
