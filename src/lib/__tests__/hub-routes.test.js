@@ -7,9 +7,9 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { createHub } from "../../../hub-plugin.js";
 
-function makeHub() {
+function makeHub(opts = {}) {
   let t = 1_700_000_000_000;
-  const hub = createHub({ file: path.join(os.tmpdir(), `hub-routes-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}.json`), now: () => t });
+  const hub = createHub({ file: path.join(os.tmpdir(), `hub-routes-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}.json`), now: () => t, ...opts });
   const call = (method, url, body) => new Promise(resolve => {
     const req = new EventEmitter(); req.method = method; req.url = url;
     const res = { statusCode: 200, setHeader() {}, end(s) { resolve({ status: res.statusCode, body: JSON.parse(s) }); } };
@@ -96,5 +96,96 @@ describe("one ledger record per run of an order", () => {
     const { orders } = (await call("GET", "/ledger")).body;
     expect(orders.length).toBe(1);
     expect(orders[0].run).toBe(0);
+  });
+});
+
+// The bin labels: the hub finds the Zebra among the PC's print queues (or is
+// told the queue by JERSEY_PRINTER), builds the ZPL and sends it raw. Both the
+// queue list and the send are injected here.
+describe("bin labels on the hub's printer", () => {
+  const queues = [
+    { name: "RICOH SP C360DNw", driver: "PCL6 V4 Driver for Universal Print", port: "WSD", status: 7 },
+    { name: "ZDesigner ZD411-203dpi ZPL", driver: "ZDesigner ZD411-203dpi ZPL", port: "USB001", status: 0 },
+  ];
+  const labels = [{ bin: 1, label: "Navy", by: "team", count: 2, orderNumber: "264247" }, { bin: 2, label: "Red", by: "team", count: 1, orderNumber: "264247" }];
+  const fakes = (list = queues) => {
+    const printed = [];
+    let lists = 0;
+    return { printed, listsMade: () => lists, opts: { listPrinters: async () => { lists++; return list; }, print: async (printer, zpl) => { printed.push({ printer, zpl }); } } };
+  };
+
+  it("GET /print: the first Zebra queue, and every queue", async () => {
+    const f = fakes();
+    const { call } = makeHub(f.opts);
+    const { status, body } = await call("GET", "/print");
+    expect(status).toBe(200);
+    expect(body.printer).toBe("ZDesigner ZD411-203dpi ZPL");
+    expect(body.printers.map(p => p.name)).toEqual(["RICOH SP C360DNw", "ZDesigner ZD411-203dpi ZPL"]);
+    expect(body.labelSize).toBe("2.25x1.25");
+  });
+  it("a queue matches on its driver too, and JERSEY_PRINTER wins over the search", async () => {
+    const byDriver = makeHub(fakes([{ name: "Labels", driver: "Zebra ZPL", port: "USB001" }]).opts);
+    expect((await byDriver.call("GET", "/print")).body.printer).toBe("Labels");
+    const named = makeHub({ ...fakes().opts, printer: "RICOH SP C360DNw", labelSize: "4x6" });
+    const { body } = await named.call("GET", "/print");
+    expect(body.printer).toBe("RICOH SP C360DNw");
+    expect(body.labelSize).toBe("4x6");
+  });
+  it("no label printer: GET says null, POST says 503", async () => {
+    const f = fakes([queues[0]]);
+    const { call } = makeHub(f.opts);
+    expect((await call("GET", "/print")).body.printer).toBeNull();
+    const { status, body } = await call("POST", "/print", { labels });
+    expect(status).toBe(503);
+    expect(body.error).toBe("no label printer");
+    expect(f.printed.length).toBe(0);
+  });
+  it("POST /print sends one ZPL block per label to the Zebra", async () => {
+    const f = fakes();
+    const { call } = makeHub(f.opts);
+    const { status, body } = await call("POST", "/print", { labels });
+    expect(status).toBe(200);
+    expect(body).toEqual({ ok: true, printer: "ZDesigner ZD411-203dpi ZPL", count: 2 });
+    expect(f.printed.length).toBe(1);
+    expect(f.printed[0].printer).toBe("ZDesigner ZD411-203dpi ZPL");
+    const { zpl } = f.printed[0];
+    expect((zpl.match(/\^XA/g) || []).length).toBe(2);
+    expect(zpl).toContain("^PW457");
+    expect(zpl).toContain("^LL254");
+    expect(zpl).toContain("^FDBIN 1^FS");
+    expect(zpl).toContain("^FDNavy^FS");
+    expect(zpl).toContain("^FDBIN 2^FS");
+    expect(zpl).toContain("Order 264247");
+  });
+  it("JERSEY_LABEL_SIZE sets the label's dots", async () => {
+    const f = fakes();
+    const { call } = makeHub({ ...f.opts, labelSize: "4x6" });
+    await call("POST", "/print", { labels });
+    expect(f.printed[0].zpl).toContain("^PW812");
+    expect(f.printed[0].zpl).toContain("^LL1218");
+  });
+  it("POST without labels is a 400; a failed send is a 502 with the reason", async () => {
+    const f = fakes();
+    const { call } = makeHub({ ...f.opts, print: async () => { throw new Error("OpenPrinter failed (1801)"); } });
+    expect((await call("POST", "/print", {})).status).toBe(400);
+    expect((await call("POST", "/print", { labels: [] })).status).toBe(400);
+    const { status, body } = await call("POST", "/print", { labels });
+    expect(status).toBe(502);
+    expect(body.error).toContain("OpenPrinter failed");
+  });
+  it("the queue list is kept for a minute", async () => {
+    const f = fakes();
+    const { call, tick } = makeHub(f.opts);
+    await call("GET", "/print"); await call("GET", "/print"); await call("POST", "/print", { labels });
+    expect(f.listsMade()).toBe(1);
+    tick(61000);
+    await call("GET", "/print");
+    expect(f.listsMade()).toBe(2);
+  });
+  it("a PC whose queues cannot be listed has no label printer, and the hub keeps working", async () => {
+    const { call } = makeHub({ listPrinters: async () => { throw new Error("powershell not found"); }, print: async () => {} });
+    expect((await call("GET", "/print")).body).toMatchObject({ printer: null, printers: [] });
+    expect((await call("POST", "/print", { labels })).status).toBe(503);
+    expect((await call("GET", "/rosters")).status).toBe(200);
   });
 });

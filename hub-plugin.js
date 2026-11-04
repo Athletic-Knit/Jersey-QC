@@ -15,8 +15,36 @@
 //   POST   /api/hub/rosters/:id/take    { station, operator } — a station starts it; 409 if another station already has it
 //   POST   /api/hub/rosters/:id/release the supervisor frees it for another station
 //   DELETE /api/hub/rosters/:id         the station finished it, or the supervisor removes it
+//   GET    /api/hub/print               { printer, printers } — the label printer on the hub PC (JERSEY_PRINTER, else the first Zebra queue)
+//   POST   /api/hub/print               { labels } — prints one bin label per entry (labels.js); 503 when there is no label printer
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { labelsZPL, labelSize as labelDots } from "./src/lib/labels.js";
+
+// ── Bin labels: the Zebra on the hub PC ──────────────────────────────────────
+// The ZPL goes to a Windows print queue as raw bytes through tools/print-raw.ps1
+// (no driver rendering). Both steps are injectable so the routes can be tested
+// without a printer.
+const PRINT_PS1 = path.join(path.dirname(fileURLToPath(import.meta.url)), "tools", "print-raw.ps1");
+const runPs1 = args => new Promise((resolve, reject) =>
+  execFile("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", PRINT_PS1, ...args], { windowsHide: true, timeout: 30000 },
+    (err, stdout, stderr) => err ? reject(new Error(String(stderr || err.message).trim().split(/\r?\n/)[0] || "powershell failed")) : resolve(String(stdout))));
+
+// The print queues on this PC: [{ name, driver, port, status }].
+export async function listPrintersWindows() {
+  const out = JSON.parse((await runPs1(["-List"])).trim() || "[]");
+  return (Array.isArray(out) ? out : [out]).filter(p => p?.Name).map(p => ({ name: p.Name, driver: p.DriverName || "", port: p.PortName || "", status: p.PrinterStatus }));
+}
+export async function printRawWindows(printer, zpl) {
+  const tmp = path.join(os.tmpdir(), `jerseyqc-labels-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.zpl`);
+  fs.writeFileSync(tmp, zpl, "utf8");   // ^CI28: the printer reads the data as UTF-8
+  try { await runPs1(["-Printer", printer, "-File", tmp]); }
+  finally { try { fs.unlinkSync(tmp); } catch { /* already gone */ } }
+}
+export const isLabelPrinter = p => /zebra|zd4|zdesigner/i.test(`${p?.name || ""} ${p?.driver || ""}`);
 
 // The ledger keeps `keepDays` of days; the photos (the weight, ~40 KB each)
 // only on the newest `photoDays`. An event whose photos went says so.
@@ -29,7 +57,7 @@ export function pruneLedger(led, { keepDays = 90, photoDays = 14 } = {}) {
   return led;
 }
 
-export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now() } = {}) {
+export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", labelSize = "", print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
   let state = { stations: {}, rosters: {} };
   try { state = { ...state, ...JSON.parse(fs.readFileSync(file, "utf8")) }; } catch { /* first run */ }
 
@@ -51,6 +79,18 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
     req.on("end", () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } });
     req.on("error", reject);
   });
+  // The label printer: JERSEY_PRINTER when set, else the first Zebra queue on this
+  // PC. The queue list costs a PowerShell start, so it is kept for a minute.
+  const printerName = String(printer || "").trim(), labelSpec = String(labelSize || "").trim() || "2.25x1.25";
+  let printers = { at: -Infinity, list: [] };
+  const printerList = async () => {
+    if (now_() - printers.at < 60000) return printers.list;
+    let list = [];
+    try { list = await listPrinters(); } catch (e) { console.error("[hub] could not list printers:", e.message); }
+    printers = { at: now_(), list };
+    return list;
+  };
+  const labelPrinter = async () => printerName || (await printerList()).find(isLabelPrinter)?.name || null;
   const summary = r => ({ id: r.id, orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
 
   async function handle(req, res) {
@@ -164,6 +204,19 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           return json(res, 200, { ok: true });
         }
         if (req.method === "DELETE" && id) { delete state.rosters[id]; save(); return json(res, 200, { ok: true }); }
+      }
+      if (kind === "print" && !id) {
+        if (req.method === "GET") return json(res, 200, { printer: await labelPrinter(), printers: await printerList(), labelSize: labelSpec });
+        if (req.method === "POST") {
+          const body = await readBody(req);
+          const labels = Array.isArray(body.labels) ? body.labels.slice(0, 100) : [];
+          if (!labels.length) return json(res, 400, { error: "labels required" });
+          const name = await labelPrinter(); if (!name) return json(res, 503, { error: "no label printer" });
+          try { await print(name, labelsZPL(labels, labelDots(labelSpec))); }
+          catch (e) { console.error(`[hub] print on ${name} failed: ${e.message}`); return json(res, 502, { error: `print failed: ${e.message}` }); }
+          console.log(`[hub] ${new Date().toLocaleTimeString()} printed ${labels.length} bin label${labels.length === 1 ? "" : "s"} on ${name}${labels[0]?.orderNumber ? ` for order ${labels[0].orderNumber}` : ""}`);
+          return json(res, 200, { ok: true, printer: name, count: labels.length });
+        }
       }
       return json(res, 404, { error: "unknown hub route" });
     } catch (e) {

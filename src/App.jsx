@@ -9,6 +9,7 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
+import { binLabels } from "./lib/labels.js";
 import { useVoice } from "./useVoice.js";
 import { VoiceBadge, VoiceLegend } from "./VoiceBadge.jsx";
 import { speak } from "./lib/voice.js";
@@ -1608,7 +1609,24 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
 }
 
 // ── Bin setup modal ───────────────────────────────────────────────────────────
-function BinSetupModal({ entries, by = "team", onConfirm }) {
+// Opens when an order with bins starts. The bin labels print on the hub's Zebra
+// by themselves the first time it opens for a run of the order (`autoPrint`,
+// not again after a reload); the button prints them again at any time.
+function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, onPrinted, onConfirm }) {
+  const [print, setPrint] = useState({ status: autoPrint && labels.length ? "printing" : "idle" });
+  const fired = useRef(false);
+  const send = useCallback(() => hub.printLabels(labels)
+    .then(r => { setPrint({ status: "done", printer: r.printer, count: r.count }); onPrinted?.(); })
+    .catch(e => setPrint(e.status === 503 ? { status: "none" } : { status: "error", message: e.status ? e.message : "could not reach the server" })), [labels, onPrinted]);
+  const doPrint = () => { if (labels.length) { setPrint({ status: "printing" }); send(); } };
+  useEffect(() => { if (autoPrint && labels.length && !fired.current) { fired.current = true; send(); } }, [autoPrint, labels.length, send]);   // the state already says "printing"
+  const printLine = {
+    idle:     "",
+    printing: "🖨 Printing the bin labels…",
+    done:     `🖨 Printed ${print.count} ${print.count === 1 ? "label" : "labels"} on ${print.printer}`,
+    none:     "No label printer on the server — write the bin numbers by hand",
+    error:    `Could not print the labels: ${print.message}`,
+  }[print.status];
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 44, maxWidth: 680, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
@@ -1625,9 +1643,20 @@ function BinSetupModal({ entries, by = "team", onConfirm }) {
             </div>
           ))}
         </div>
-        <button onClick={onConfirm} style={{ padding: "16px 40px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 21, cursor: "pointer" }}>
-          Bins ready — start scanning
-        </button>
+        <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
+          <button onClick={onConfirm} style={{ padding: "16px 40px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 21, cursor: "pointer" }}>
+            Bins ready — start scanning
+          </button>
+          {labels.length > 0 && (
+            <button onClick={doPrint} disabled={print.status === "printing"} title="Print one label per bin on the server's label printer"
+              style={{ padding: "16px 28px", borderRadius: 10, border: "1px solid #475569", background: "#1e293b", color: "#e2e8f0", fontWeight: 700, fontSize: 19, cursor: print.status === "printing" ? "wait" : "pointer", opacity: print.status === "printing" ? 0.6 : 1 }}>
+              🖨 Print bin labels
+            </button>
+          )}
+        </div>
+        {printLine && (
+          <div style={{ marginTop: 16, fontSize: 17, fontWeight: 600, color: print.status === "done" ? "#4ade80" : print.status === "printing" ? "#94a3b8" : "#fbbf24" }}>{printLine}</div>
+        )}
       </div>
     </div>
   );
@@ -1783,6 +1812,7 @@ export default function App() {
   const [rosterFile,         setRosterFile]         = useState(null);
   const [orderNumber,        setOrderNumber]        = useState("");
   const [orderRun,           setOrderRun]           = useState(0);      // when this order was started here; the hub keeps one record per run
+  const [labelsPrintedRun,   setLabelsPrintedRun]   = useState(0);      // the run whose bin labels went to the printer (printed once per run, not again on reload)
   const [hubRosterId,        setHubRosterId]        = useState(null);   // the hub roster this order came from, taken by this station; Finish order removes it
   const [operatorName,       setOperatorName]       = useState(() => savedSignIn?.name || "");
   const [notes,              setNotes]              = useState("");
@@ -1928,8 +1958,8 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, checksLeft, inspect]);
+    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, labelsPrintedRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, labelsPrintedRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, checksLeft, inspect]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -1980,7 +2010,7 @@ export default function App() {
   const resumeSession = useCallback(() => {
     const s = savedSession;
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
-    setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
+    setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setLabelsPrintedRun(s.labelsPrintedRun || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []);
     vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
     inspectRef.current.load(s.inspect); syncInspect();
@@ -1997,7 +2027,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setIdleSpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setLabelsPrintedRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setIdleSpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false);
   }, []);
 
@@ -2605,13 +2635,14 @@ export default function App() {
           onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile, hubRosterId = null }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team" });
-            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || "");
+            setOrderNumber(orderNumber); setOrderRun(Date.now()); setLabelsPrintedRun(0); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || "");
             setSessionStarted(true); setResumeDecided(true);
           }} />
       )}
 
       {showBinSetup && binMap && (
-        <BinSetupModal entries={binEntries(roster, binMap)} by={binFieldOf(binMap)} onConfirm={() => setShowBinSetup(false)} />
+        <BinSetupModal entries={binEntries(roster, binMap)} by={binFieldOf(binMap)} labels={binLabels(roster, binMap, { orderNumber })}
+          autoPrint={labelsPrintedRun !== orderRun} onPrinted={() => setLabelsPrintedRun(orderRun)} onConfirm={() => setShowBinSetup(false)} />
       )}
 
       {overlay && !wide && (
