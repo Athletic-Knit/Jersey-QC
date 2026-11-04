@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, binCount, binFieldOf, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey } from "./lib/roster.js";
+import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, binCount, binFieldOf, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -1311,26 +1311,32 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   };
 
   return (
-    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "safe center", userSelect: "none", padding: state.scan?.thumb && !isGreen ? "16px 0 116px" : "16px 0", overflowY: "auto" }}>
+    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "safe center", userSelect: "none", padding: state.scan?.thumb && !isGreen ? "16px 0 116px" : "16px 0", overflowY: "auto", containerType: "size" }}>
 
       {/* ── GREEN ── */}
       {isGreen && match && (
         <>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, 7.5vw, 100px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 2, maxWidth: "100%", boxSizing: "border-box", overflowWrap: "anywhere" }}>
-            #{match.number}{match.name ? ` · ${match.name}` : ""}
+          {/* The number on its own line, the name under it: both as big as the panel allows (cq units follow the panel, not the window). */}
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(64px, min(20cqh, 28cqw), 190px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.92, marginTop: 2, maxWidth: "100%", boxSizing: "border-box" }}>
+            #{match.number}
           </div>
-          {match.team && <div style={{ fontSize: "clamp(24px, 3.5vw, 36px)", color: "#86efac", marginTop: 6, fontWeight: 700, textAlign: "center", lineHeight: 1.1 }}>{match.team}</div>}
-          <div style={{ display: "flex", gap: 14, marginTop: 10, flexWrap: "wrap", justifyContent: "center" }}>
+          {match.name && (
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(36px, min(9cqh, 12cqw), 86px)", fontWeight: 800, color: "#fff", textAlign: "center", padding: "0 24px", lineHeight: 1, marginTop: 6, maxWidth: "100%", boxSizing: "border-box", overflowWrap: "anywhere", letterSpacing: 1 }}>
+              {match.name}
+            </div>
+          )}
+          {match.team && <div style={{ fontSize: "clamp(24px, 4.5cqh, 44px)", color: "#86efac", marginTop: 8, fontWeight: 700, textAlign: "center", lineHeight: 1.1 }}>{match.team}</div>}
+          <div style={{ display: "flex", gap: 18, marginTop: 14, flexWrap: "wrap", justifyContent: "center" }}>
             {hasSize && (
-              <div style={{ padding: "6px 32px 8px", borderRadius: 18, border: "4px solid #22c55e", background: "rgba(34,197,94,0.12)", textAlign: "center", minWidth: 150 }}>
-                <div style={{ fontSize: 18, color: "#86efac", fontWeight: 700, marginBottom: 2 }}>Size</div>
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, 8vw, 92px)", fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
+              <div style={{ padding: "6px 40px 10px", borderRadius: 22, border: "5px solid #22c55e", background: "rgba(34,197,94,0.14)", textAlign: "center", minWidth: 200 }}>
+                <div style={{ fontSize: "clamp(18px, 3cqh, 26px)", color: "#86efac", fontWeight: 800, marginBottom: 2, letterSpacing: 1 }}>SIZE</div>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, min(15cqh, 20cqw), 150px)", fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
               </div>
             )}
             {binNum !== null && (
-              <div style={{ padding: "6px 32px 8px", borderRadius: 18, border: "4px solid #3b82f6", background: "rgba(59,130,246,0.12)", textAlign: "center", minWidth: 150 }}>
-                <div style={{ fontSize: 18, color: "#93c5fd", fontWeight: 700, marginBottom: 2 }}>Bin</div>
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, 8vw, 92px)", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
+              <div style={{ padding: "6px 40px 10px", borderRadius: 22, border: "5px solid #3b82f6", background: "rgba(59,130,246,0.16)", textAlign: "center", minWidth: 200 }}>
+                <div style={{ fontSize: "clamp(18px, 3cqh, 26px)", color: "#93c5fd", fontWeight: 800, marginBottom: 2, letterSpacing: 1 }}>BIN</div>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, min(15cqh, 20cqw), 150px)", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
               </div>
             )}
           </div>
@@ -1465,8 +1471,22 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         <>
           <div style={{ fontSize: 72, lineHeight: 1, marginBottom: 4 }}>✍</div>
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, 6vw, 72px)", fontWeight: 900, color: accent, textAlign: "center", lineHeight: 1 }}>ENTERED BY HAND</div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, 6vw, 80px)", fontWeight: 800, color: "#fff", marginTop: 12, textAlign: "center", lineHeight: 1 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}</div>
-          <div style={{ fontSize: 26, color: "#fcd34d", marginTop: 10, textAlign: "center" }}>{[match.team, match.size].filter(Boolean).join(" · ")}</div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, min(12cqh, 14cqw), 96px)", fontWeight: 800, color: "#fff", marginTop: 12, textAlign: "center", lineHeight: 1, padding: "0 24px", overflowWrap: "anywhere" }}>#{match.number}{match.name ? ` · ${match.name}` : ""}</div>
+          {match.team && <div style={{ fontSize: "clamp(22px, 4cqh, 36px)", color: "#fcd34d", marginTop: 8, textAlign: "center", fontWeight: 700 }}>{match.team}</div>}
+          <div style={{ display: "flex", gap: 18, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
+            {hasSize && (
+              <div style={{ padding: "6px 36px 10px", borderRadius: 22, border: "5px solid #f59e0b", background: "rgba(245,158,11,0.14)", textAlign: "center", minWidth: 180 }}>
+                <div style={{ fontSize: "clamp(18px, 3cqh, 26px)", color: "#fcd34d", fontWeight: 800, marginBottom: 2, letterSpacing: 1 }}>SIZE</div>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, min(13cqh, 18cqw), 120px)", fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
+              </div>
+            )}
+            {binNum !== null && (
+              <div style={{ padding: "6px 36px 10px", borderRadius: 22, border: "5px solid #3b82f6", background: "rgba(59,130,246,0.16)", textAlign: "center", minWidth: 180 }}>
+                <div style={{ fontSize: "clamp(18px, 3cqh, 26px)", color: "#93c5fd", fontWeight: 800, marginBottom: 2, letterSpacing: 1 }}>BIN</div>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, min(13cqh, 18cqw), 120px)", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
+              </div>
+            )}
+          </div>
           {state.reason && <div style={{ fontSize: 21, color: "#fde68a", marginTop: 10, opacity: 0.9, textAlign: "center", padding: "0 24px" }}>{state.reason}</div>}
           <div style={{ marginTop: 28, display: "flex", gap: 14 }}>{options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}</div>
         </>
@@ -1872,6 +1892,7 @@ export default function App() {
   const [log,                setLog]                = useState([]);
   const [view,               setView]               = useState("roster");
   const [rosterFilter,       setRosterFilter]       = useState(null);
+  const [rosterSort,         setRosterSort]         = useState("size");   // the roster table's order; size (the rack order) by default
   const [showHistory,        setShowHistory]        = useState(false);   // every jersey scanned this order, latest first   // "pass" | "flag" | "manual" | null — set by clicking a header pill
   const filterRoster = useCallback(kind => { setRosterFilter(f => (f === kind ? null : kind)); setView("roster"); }, []);
   const [error,              setError]              = useState(null);
@@ -2938,10 +2959,21 @@ export default function App() {
 
           {view === "roster" && (
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {rosterFilter && (
-                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", background: "#161b22", borderBottom: "1px solid #21262d", fontSize: 15, fontWeight: 700, color: rosterFilter === "pass" ? "#22c55e" : rosterFilter === "flag" ? "#f87171" : "#fbbf24" }}>
-                  <span>{roster.filter(r => r.scanned === rosterFilter).length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : "by hand"}</span>
-                  <button onClick={() => setRosterFilter(null)} style={{ ...btnGhost, padding: "3px 10px", fontSize: 13 }}>Show all</button>
+              {roster.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 14px", background: "#161b22", borderBottom: "1px solid #21262d", fontSize: 15, flexWrap: "wrap" }}>
+                  <span style={{ color: "#94a3b8", fontWeight: 700 }}>Sort by</span>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {ROSTER_SORTS.filter(s => s.id !== "bin" || binMap).map(s => (
+                      <button key={s.id} onClick={() => setRosterSort(s.id)} title={s.id === "size" ? "Rack order: youth before adult, XS before 3XL" : s.id === "status" ? "Still to do first, then flagged, by hand, missing, short, passed" : undefined}
+                        style={{ ...btnGhost, padding: "3px 12px", fontSize: 14, borderColor: rosterSort === s.id ? "#60a5fa" : "#334155", color: rosterSort === s.id ? "#fff" : "#94a3b8", background: rosterSort === s.id ? "rgba(96,165,250,0.15)" : "transparent", fontWeight: rosterSort === s.id ? 800 : 500 }}>{s.label}</button>
+                    ))}
+                  </div>
+                  {rosterFilter && (
+                    <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, fontWeight: 700, color: rosterFilter === "pass" ? "#22c55e" : rosterFilter === "flag" ? "#f87171" : "#fbbf24" }}>
+                      <span>{roster.filter(r => r.scanned === rosterFilter).length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : "by hand"}</span>
+                      <button onClick={() => setRosterFilter(null)} style={{ ...btnGhost, padding: "3px 10px", fontSize: 13 }}>Show all</button>
+                    </span>
+                  )}
                 </div>
               )}
               {roster.length === 0
@@ -2957,7 +2989,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {roster.filter(r => !rosterFilter || r.scanned === rosterFilter).map(r => (
+                      {sortRoster(roster.filter(r => !rosterFilter || r.scanned === rosterFilter), rosterSort, binMap).map(r => (
                         <tr key={r._id} style={{
                           background: r.scanned === "pass" ? "rgba(34,197,94,0.07)" : r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned ? "rgba(245,158,11,0.07)" : "transparent",
                           borderBottom: "1px solid #1e293b",

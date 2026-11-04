@@ -173,7 +173,35 @@ export function sizeRank(size) {
   const i = SIZE_ORDER.indexOf(m?.[2] || k);
   return [group, i < 0 ? 99 : i, k];
 }
-const bySize = (a, b) => { const x = sizeRank(a), y = sizeRank(b); return (x[0] - y[0]) || (x[1] - y[1]) || x[2].localeCompare(y[2]); };
+export const bySize = (a, b) => { const x = sizeRank(a), y = sizeRank(b); return (x[0] - y[0]) || (x[1] - y[1]) || x[2].localeCompare(y[2]); };
+
+// ── The roster table's sort ──────────────────────────────────────────────────
+// Size is the default: the rack order (youth before adult, XS before 3XL), the
+// numbers within a size. Status puts what is still to do first. Ties keep the
+// file's order (the sort is stable).
+export const ROSTER_SORTS = [
+  { id: "size",   label: "Size" },
+  { id: "status", label: "Status" },
+  { id: "name",   label: "Name" },
+  { id: "number", label: "Number" },
+  { id: "team",   label: "Team" },
+  { id: "bin",    label: "Bin" },
+];
+const STATUS_ORDER = { false: 0, undefined: 0, "": 0, flag: 1, manual: 2, missing: 3, short: 4, pass: 5 };
+const numOf = r => { const n = parseInt(String(r.number ?? "").replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : 1e9; };
+const byNumber = (a, b) => numOf(a) - numOf(b) || String(a.number ?? "").localeCompare(String(b.number ?? ""));
+const byText = k => (a, b) => String(a[k] ?? "").localeCompare(String(b[k] ?? ""), undefined, { sensitivity: "base" });
+export function sortRoster(roster, by = "size", binMap = null) {
+  const cmp = {
+    size:   (a, b) => bySize(a.size, b.size) || byNumber(a, b),
+    status: (a, b) => (STATUS_ORDER[a.scanned] ?? 0) - (STATUS_ORDER[b.scanned] ?? 0) || bySize(a.size, b.size) || byNumber(a, b),
+    name:   (a, b) => byText("name")(a, b) || byNumber(a, b),
+    number: (a, b) => byNumber(a, b) || byText("name")(a, b),
+    team:   (a, b) => byText("team")(a, b) || bySize(a.size, b.size) || byNumber(a, b),
+    bin:    (a, b) => ((binFor(binMap, a) ?? 1e9) - (binFor(binMap, b) ?? 1e9)) || bySize(a.size, b.size) || byNumber(a, b),
+  }[by];
+  return cmp ? roster.slice().sort(cmp) : roster;
+}
 
 export function buildBinMap(roster, existing = {}, by) {
   const field = by === "size" || by === "team" ? by : binFieldOf(existing);
