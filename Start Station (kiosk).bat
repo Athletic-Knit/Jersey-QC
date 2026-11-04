@@ -16,20 +16,17 @@ if exist "%CFG%" (
     if /i "%%a"=="station" set "STATION=%%b"
   )
 )
-if not defined SERVER (
-  echo.
-  echo  Jersey QC - station set-up ^(asked once^)
-  echo.
-  echo  The server address is shown in the "Jersey QC Scanner - server"
-  echo  window on the supervisor's PC, e.g. https://10.61.28.136:5173
-  set /p "SERVER=  Server address: "
-)
-if not defined STATION (
-  set /p "STATION=  Which station is this PC? (station1 / station2 / station3 / packing): "
-)
+rem  The questions are dialog boxes, not console prompts: the exe built from
+rem  this file runs it in a hidden window, where a console prompt would wait
+rem  for ever unseen.
+if not defined SERVER call :ask "Server address - shown in the 'Jersey QC Scanner - server' window on the supervisor's PC, e.g. https://10.61.28.136:5173" "https://" SERVER
+if not defined SERVER exit /b 1
+if not defined STATION call :ask "Which station is this PC?  station1 / station2 / station3 / packing" "station1" STATION
+if not defined STATION exit /b 1
 set "SERVER=%SERVER: =%"
 set "STATION=%STATION: =%"
 if "%SERVER:~-1%"=="/" set "SERVER=%SERVER:~0,-1%"
+if "%SERVER%"=="https:" call :say "No server address given. Run this again and type the address shown in the server window, e.g. https://10.61.28.136:5173" & exit /b 1
 if not exist "%APPDATA%\JerseyQC" mkdir "%APPDATA%\JerseyQC"
 > "%CFG%" echo server=%SERVER%
 >> "%CFG%" echo station=%STATION%
@@ -60,7 +57,21 @@ if exist "%CHROME%" (
   exit /b 0
 )
 
-echo.
-echo  Neither Microsoft Edge nor Google Chrome was found on this PC.
-echo  Install one, then run this file again.
-pause
+call :say "Neither Microsoft Edge nor Google Chrome was found on this PC. Install one, then run this again."
+exit /b 1
+
+rem ---- A question in a dialog box: :ask "prompt" "default" VARIABLE ----
+:ask
+set "VBS=%TEMP%\jerseyqc-ask.vbs"
+> "%VBS%" echo WScript.Echo InputBox(WScript.Arguments(0), "Jersey QC station", WScript.Arguments(1))
+for /f "delims=" %%i in ('cscript //nologo "%VBS%" "%~1" "%~2"') do set "%~3=%%i"
+del "%VBS%" >nul 2>&1
+exit /b 0
+
+rem ---- A message in a dialog box: :say "text" ----
+:say
+set "VBS=%TEMP%\jerseyqc-say.vbs"
+> "%VBS%" echo MsgBox WScript.Arguments(0), 48, "Jersey QC station"
+cscript //nologo "%VBS%" "%~1" >nul
+del "%VBS%" >nul 2>&1
+exit /b 0
