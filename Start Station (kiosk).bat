@@ -45,16 +45,18 @@ set "EDGE=%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
 if not exist "%EDGE%" set "EDGE=%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"
 if not exist "%EDGE%" set "EDGE=%LocalAppData%\Microsoft\Edge\Application\msedge.exe"
 if exist "%EDGE%" (
-  start "" "%EDGE%" --kiosk "%URL%" --edge-kiosk-type=fullscreen --no-first-run --user-data-dir="%APPDATA%\JerseyQC\edge-profile" --autoplay-policy=no-user-gesture-required
+  start "" /D "%USERPROFILE%" "%EDGE%" --kiosk "%URL%" --edge-kiosk-type=fullscreen --no-first-run --user-data-dir="%APPDATA%\JerseyQC\edge-profile" --autoplay-policy=no-user-gesture-required
   exit /b 0
 )
 
-rem  No Edge: Chrome's kiosk mode is the same idea.
+rem  No Edge: Chrome's kiosk mode is the same idea. (/D: the packed exe runs this
+rem  file from a temp folder that is deleted at once, so the browser must not
+rem  start there.)
 set "CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
 if not exist "%CHROME%" set "CHROME=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
 if not exist "%CHROME%" set "CHROME=%LocalAppData%\Google\Chrome\Application\chrome.exe"
 if exist "%CHROME%" (
-  start "" "%CHROME%" --kiosk "%URL%" --no-first-run --user-data-dir="%APPDATA%\JerseyQC\chrome-profile" --autoplay-policy=no-user-gesture-required
+  start "" /D "%USERPROFILE%" "%CHROME%" --kiosk "%URL%" --no-first-run --user-data-dir="%APPDATA%\JerseyQC\chrome-profile" --autoplay-policy=no-user-gesture-required
   exit /b 0
 )
 
