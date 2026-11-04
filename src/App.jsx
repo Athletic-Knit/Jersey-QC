@@ -1316,32 +1316,40 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       {/* ── GREEN ── */}
       {isGreen && match && (
         <>
-          {/* The number on its own line, the name under it: both as big as the panel allows (cq units follow the panel, not the window). */}
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(64px, min(20cqh, 28cqw), 190px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.92, marginTop: 2, maxWidth: "100%", boxSizing: "border-box" }}>
-            #{match.number}
-          </div>
-          {match.name && (
-            <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(36px, min(9cqh, 12cqw), 86px)", fontWeight: 800, color: "#fff", textAlign: "center", padding: "0 24px", lineHeight: 1, marginTop: 6, maxWidth: "100%", boxSizing: "border-box", overflowWrap: "anywhere", letterSpacing: 1 }}>
-              {match.name}
-            </div>
-          )}
-          {match.team && <div style={{ fontSize: "clamp(24px, 4.5cqh, 44px)", color: "#86efac", marginTop: 8, fontWeight: 700, textAlign: "center", lineHeight: 1.1 }}>{match.team}</div>}
-          <div style={{ display: "flex", gap: 18, marginTop: 14, flexWrap: "wrap", justifyContent: "center" }}>
-            {hasSize && (
-              <div style={{ padding: "6px 40px 10px", borderRadius: 22, border: "5px solid #22c55e", background: "rgba(34,197,94,0.14)", textAlign: "center", minWidth: 200 }}>
-                <div style={{ fontSize: "clamp(18px, 3cqh, 26px)", color: "#86efac", fontWeight: 800, marginBottom: 2, letterSpacing: 1 }}>SIZE</div>
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, min(15cqh, 20cqw), 150px)", fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
+          {/* Two columns that take the room above the buttons: the number and
+              name on the left, SIZE and BIN on the right, each column a size
+              container so its text is sized by the column itself. */}
+          <div style={{ flex: 1, minHeight: 0, width: "100%", display: "grid", gridTemplateColumns: hasSize || binNum !== null ? "3fr 2fr" : "1fr", gap: 16, padding: "0 20px", boxSizing: "border-box", alignItems: "stretch" }}>
+            <div style={{ containerType: "size", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${match.name ? 52 : 70}cqh, ${String(match.number ?? "").length > 2 ? 40 : 52}cqw)`, fontWeight: 900, color: accent, lineHeight: 0.9, maxWidth: "100%" }}>
+                #{match.number}
               </div>
-            )}
-            {binNum !== null && (
-              <div style={{ padding: "6px 40px 10px", borderRadius: 22, border: "5px solid #3b82f6", background: "rgba(59,130,246,0.16)", textAlign: "center", minWidth: 200 }}>
-                <div style={{ fontSize: "clamp(18px, 3cqh, 26px)", color: "#93c5fd", fontWeight: 800, marginBottom: 2, letterSpacing: 1 }}>BIN</div>
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, min(15cqh, 20cqw), 150px)", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
+              {match.name && (
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(20cqh, ${Math.min(22, 170 / Math.max(6, String(match.name).length))}cqw)`, fontWeight: 800, color: "#fff", lineHeight: 1, marginTop: "2cqh", maxWidth: "100%", overflowWrap: "anywhere", letterSpacing: 1 }}>
+                  {match.name}
+                </div>
+              )}
+              {match.team && <div style={{ fontSize: "min(9cqh, 8cqw)", color: "#86efac", marginTop: "2cqh", fontWeight: 700, lineHeight: 1.1, maxWidth: "100%", overflowWrap: "anywhere" }}>{match.team}</div>}
+            </div>
+            {(hasSize || binNum !== null) && (
+              <div style={{ containerType: "size", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", gap: "3cqh" }}>
+                {hasSize && (
+                  <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid #22c55e", background: "rgba(34,197,94,0.14)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
+                    <div style={{ fontSize: `min(${binNum !== null ? 6 : 8}cqh, 10cqw)`, color: "#86efac", fontWeight: 800, letterSpacing: 2 }}>SIZE</div>
+                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${binNum !== null ? 32 : 62}cqh, ${String(match.size).length > 4 ? 30 : 42}cqw)`, fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
+                  </div>
+                )}
+                {binNum !== null && (
+                  <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid #3b82f6", background: "rgba(59,130,246,0.16)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
+                    <div style={{ fontSize: `min(${hasSize ? 6 : 8}cqh, 10cqw)`, color: "#93c5fd", fontWeight: 800, letterSpacing: 2 }}>BIN</div>
+                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${hasSize ? 34 : 66}cqh, 60cqw)`, fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
+                  </div>
+                )}
               </div>
             )}
           </div>
           {extras.length > 0 && (
-            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", justifyContent: "center" }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", justifyContent: "center", flexShrink: 0 }}>
               {extras.map(x => <span key={x} style={{ padding: "8px 18px", borderRadius: 12, border: "3px solid #f59e0b", background: "rgba(245,158,11,0.15)", color: "#fff", fontWeight: 900, fontSize: "clamp(20px, 3vw, 32px)" }}>{x}</span>)}
             </div>
           )}
