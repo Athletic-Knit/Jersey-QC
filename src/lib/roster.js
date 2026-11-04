@@ -187,20 +187,31 @@ export const ROSTER_SORTS = [
   { id: "team",   label: "Team" },
   { id: "bin",    label: "Bin" },
 ];
-const STATUS_ORDER = { false: 0, undefined: 0, "": 0, flag: 1, manual: 2, missing: 3, short: 4, pass: 5 };
+// Status, done first (the default): passed, by hand, flagged, missing, short,
+// then what is still to scan. To-do first turns it round: to scan, flagged,
+// by hand, missing, short, passed.
+const DONE_FIRST = { pass: 0, manual: 1, flag: 2, missing: 3, short: 4, false: 5, undefined: 5, "": 5 };
+const TODO_FIRST = { false: 0, undefined: 0, "": 0, flag: 1, manual: 2, missing: 3, short: 4, pass: 5 };
 const numOf = r => { const n = parseInt(String(r.number ?? "").replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : 1e9; };
 const byNumber = (a, b) => numOf(a) - numOf(b) || String(a.number ?? "").localeCompare(String(b.number ?? ""));
 const byText = k => (a, b) => String(a[k] ?? "").localeCompare(String(b[k] ?? ""), undefined, { sensitivity: "base" });
-export function sortRoster(roster, by = "size", binMap = null) {
+export function sortRoster(roster, by = "size", binMap = null, { doneFirst = true } = {}) {
+  const order = doneFirst ? DONE_FIRST : TODO_FIRST;
   const cmp = {
     size:   (a, b) => bySize(a.size, b.size) || byNumber(a, b),
-    status: (a, b) => (STATUS_ORDER[a.scanned] ?? 0) - (STATUS_ORDER[b.scanned] ?? 0) || bySize(a.size, b.size) || byNumber(a, b),
+    status: (a, b) => (order[a.scanned] ?? 5) - (order[b.scanned] ?? 5) || bySize(a.size, b.size) || byNumber(a, b),
     name:   (a, b) => byText("name")(a, b) || byNumber(a, b),
     number: (a, b) => byNumber(a, b) || byText("name")(a, b),
     team:   (a, b) => byText("team")(a, b) || bySize(a.size, b.size) || byNumber(a, b),
     bin:    (a, b) => ((binFor(binMap, a) ?? 1e9) - (binFor(binMap, b) ?? 1e9)) || bySize(a.size, b.size) || byNumber(a, b),
   }[by];
   return cmp ? roster.slice().sort(cmp) : roster;
+}
+
+// The sizes and teams an order has, for the table's filter: sizes in rack order, teams as named.
+export function rosterChoices(roster) {
+  const uniq = k => [...new Set(roster.map(r => String(r[k] ?? "").trim()).filter(Boolean))];
+  return { sizes: uniq("size").sort(bySize), teams: uniq("team").sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })) };
 }
 
 export function buildBinMap(roster, existing = {}, by) {

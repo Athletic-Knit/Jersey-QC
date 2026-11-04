@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sortRoster, ROSTER_SORTS, buildBinMap } from "../roster.js";
+import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices } from "../roster.js";
 
 const roster = [
   { _id: 1, name: "ZED",   number: "10", team: "Red",  size: "A-L",  scanned: "pass" },
@@ -15,8 +15,14 @@ describe("the roster table's sort", () => {
   it("by size is the rack order: youth, then adult XS … 3XL; numbers within a size", () => {
     expect(ids(sortRoster(roster, "size"))).toEqual([2, 3, 1, 4, 5]);
   });
-  it("by status puts what is still to do first, then flagged, by hand, passed", () => {
-    expect(ids(sortRoster(roster, "status"))).toEqual([2, 4, 3, 5, 1]);
+  it("by status puts the done ones on top: passed, by hand, flagged, then still to scan", () => {
+    expect(ids(sortRoster(roster, "status"))).toEqual([1, 5, 3, 2, 4]);
+  });
+  it("by status, to-do on top: still to scan, flagged, by hand, passed", () => {
+    expect(ids(sortRoster(roster, "status", null, { doneFirst: false }))).toEqual([2, 4, 3, 5, 1]);
+  });
+  it("offers the order's sizes in rack order and its teams by name, for the filter", () => {
+    expect(rosterChoices(roster)).toEqual({ sizes: ["Y-M", "A-XS", "A-L", "A-3XL"], teams: ["Blue", "Red"] });
   });
   it("by number is numeric, not text (3 before 10 before 22)", () => {
     expect(ids(sortRoster(roster, "number"))).toEqual([5, 2, 3, 1, 4]);

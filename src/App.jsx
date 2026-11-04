@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, binCount, binFieldOf, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS } from "./lib/roster.js";
+import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, binCount, binFieldOf, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -1902,6 +1902,9 @@ export default function App() {
   const [view,               setView]               = useState("roster");
   const [rosterFilter,       setRosterFilter]       = useState(null);
   const [rosterSort,         setRosterSort]         = useState("size");   // the roster table's order; size (the rack order) by default
+  const [doneFirst,          setDoneFirst]          = useState(true);     // the status sort: done on top, or still-to-do on top
+  const [sizeFilter,         setSizeFilter]         = useState("");       // the table shows one size only ("" = all)
+  const [teamFilter,         setTeamFilter]         = useState("");       // … or one team only
   const [showHistory,        setShowHistory]        = useState(false);   // every jersey scanned this order, latest first   // "pass" | "flag" | "manual" | null — set by clicking a header pill
   const filterRoster = useCallback(kind => { setRosterFilter(f => (f === kind ? null : kind)); setView("roster"); }, []);
   const [error,              setError]              = useState(null);
@@ -1999,6 +2002,8 @@ export default function App() {
   const canSupervise   = role === "supervisor" || role === "admin";
   const openCount      = roster.filter(r => r.scanned === "flag" || r.scanned === "missing" || r.scanned === "short").length;
   const rosterComplete = roster.length > 0 && remaining === 0;
+  // The roster table: the header pill's status, then the size and team filters, in the chosen order.
+  const shownRows = useMemo(() => sortRoster(roster.filter(r => (!rosterFilter || r.scanned === rosterFilter) && (!sizeFilter || String(r.size ?? "").trim() === sizeFilter) && (!teamFilter || String(r.team ?? "").trim() === teamFilter)), rosterSort, binMap, { doneFirst }), [roster, rosterFilter, sizeFilter, teamFilter, rosterSort, binMap, doneFirst]);
   const elapsedMin     = firstScanTime ? (now - firstScanTime) / 60000 : 0;
   const scanRate       = elapsedMin > 1 && passCount > 0 ? passCount / elapsedMin : null;
   const etaMin         = scanRate && remaining > 0 ? Math.ceil(remaining / scanRate) : null;
@@ -2481,6 +2486,7 @@ export default function App() {
     // Back leaves it passed.
     reopen(c) {
       if (!c?.match) return;
+      // also reached from the roster table (flagRow) and the history list
       const scan = { id: c.id, detected: c.detected, thumb: c.thumb, smallThumb: c.thumb, photo: null };
       setOverlay({ mode: "reasons", scan, match: c.match, returnTo: null, reopened: true });
     },
@@ -2634,6 +2640,14 @@ export default function App() {
   // and must be scanned again. The earlier log lines stay; a new line says who
   // un-checked it, and any open flag or by-hand entry for it is closed so the
   // supervisor's list drops it.
+  // Flag a jersey that already passed, from the roster table: the reasons menu
+  // opens for it, as "Flag it" does for the last one. The scan is looked up in
+  // the log for its picture; a row with no scan on record (an old session) is
+  // flagged from the row itself.
+  const flagRow = (r) => {
+    const l = log.find(x => x.match?._id === r._id && (x.status === S_PASS || x.status === S_MANUAL));
+    actions.reopen(l || { id: Date.now(), match: r, detected: null, thumb: null });
+  };
   const unscan = useCallback((id) => {
     const row = roster.find(r => r._id === id); if (!row || !row.scanned) return;
     const was = { pass: "passed", manual: "entered by hand", flag: "with the supervisor", missing: "marked missing", short: "marked short-shipped" }[row.scanned] || row.scanned;
@@ -2672,7 +2686,12 @@ export default function App() {
 
       {!signedIn && (
         <SignInModal initial={savedSignIn}
-          onSignIn={({ role, name }) => { setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name }); if ((role === "supervisor" || role === "admin") && !showResume) setShowSupervisor(true); }} />
+          onSignIn={({ role, name }) => {
+            setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name });
+            if ((role === "supervisor" || role === "admin") && !showResume) setShowSupervisor(true);
+            // An operator's station goes full screen by itself: no tabs, no address bar. (The kiosk launcher locks the browser down for good.)
+            else if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+          }} />
       )}
 
       {signedIn && showResume && <ResumeModal session={savedSession} onResume={resumeSession} onDiscard={discardSession} />}
@@ -2751,7 +2770,6 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
           {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
-          {sessionStarted && <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>History</button>}
           {sessionStarted && <button onClick={askFinish} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#22c55e", color: "#4ade80" }}>🏁 Finish order</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
           <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>
@@ -2913,6 +2931,14 @@ export default function App() {
                 </div>
               )}
 
+              {/* Bottom-left, under the last pass: the order's history, where the hand already is. */}
+              {sessionStarted && (
+                <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                  <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
+                  <span style={{ fontSize: 13, color: "#7c8ba1" }}>Every jersey scanned this order — flag one after the fact</span>
+                </div>
+              )}
+
             </>
           )}
         </div>
@@ -2973,14 +2999,34 @@ export default function App() {
                   <span style={{ color: "#94a3b8", fontWeight: 700 }}>Sort by</span>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                     {ROSTER_SORTS.filter(s => s.id !== "bin" || binMap).map(s => (
-                      <button key={s.id} onClick={() => setRosterSort(s.id)} title={s.id === "size" ? "Rack order: youth before adult, XS before 3XL" : s.id === "status" ? "Still to do first, then flagged, by hand, missing, short, passed" : undefined}
+                      <button key={s.id} onClick={() => setRosterSort(s.id)} title={s.id === "size" ? "Rack order: youth before adult, XS before 3XL" : s.id === "status" ? "Done on top: passed, by hand, flagged, missing, short, then still to scan — the toggle turns it round" : undefined}
                         style={{ ...btnGhost, padding: "3px 12px", fontSize: 14, borderColor: rosterSort === s.id ? "#60a5fa" : "#334155", color: rosterSort === s.id ? "#fff" : "#94a3b8", background: rosterSort === s.id ? "rgba(96,165,250,0.15)" : "transparent", fontWeight: rosterSort === s.id ? 800 : 500 }}>{s.label}</button>
                     ))}
                   </div>
-                  {rosterFilter && (
-                    <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, fontWeight: 700, color: rosterFilter === "pass" ? "#22c55e" : rosterFilter === "flag" ? "#f87171" : "#fbbf24" }}>
-                      <span>{roster.filter(r => r.scanned === rosterFilter).length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : "by hand"}</span>
-                      <button onClick={() => setRosterFilter(null)} style={{ ...btnGhost, padding: "3px 10px", fontSize: 13 }}>Show all</button>
+                  {rosterSort === "status" && (
+                    <button onClick={() => setDoneFirst(d => !d)} title="Which end of the list the finished jerseys sit at" style={{ ...btnGhost, padding: "3px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>{doneFirst ? "✓ Done on top" : "— To do on top"} ⇅</button>
+                  )}
+                  {(() => { const ch = rosterChoices(roster); return (ch.sizes.length > 1 || ch.teams.length > 1) && (
+                    <span style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 6 }}>
+                      <span style={{ color: "#94a3b8", fontWeight: 700 }}>Show</span>
+                      {ch.sizes.length > 1 && (
+                        <select value={sizeFilter} onChange={e => setSizeFilter(e.target.value)} title="Only this size" style={{ background: "#1e293b", color: sizeFilter ? "#fbbf24" : "#cbd5e1", border: `1px solid ${sizeFilter ? "#f59e0b" : "#3f4b5c"}`, borderRadius: 6, fontSize: 14, padding: "4px 8px", fontWeight: sizeFilter ? 800 : 500 }}>
+                          <option value="">All sizes</option>
+                          {ch.sizes.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      )}
+                      {ch.teams.length > 1 && (
+                        <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} title="Only this team or colour" style={{ background: "#1e293b", color: teamFilter ? "#93c5fd" : "#cbd5e1", border: `1px solid ${teamFilter ? "#3b82f6" : "#3f4b5c"}`, borderRadius: 6, fontSize: 14, padding: "4px 8px", fontWeight: teamFilter ? 800 : 500 }}>
+                          <option value="">All teams</option>
+                          {ch.teams.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      )}
+                    </span>
+                  ); })()}
+                  {(rosterFilter || sizeFilter || teamFilter) && (
+                    <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, fontWeight: 700, color: rosterFilter === "pass" ? "#22c55e" : rosterFilter === "flag" ? "#f87171" : rosterFilter ? "#fbbf24" : "#cbd5e1" }}>
+                      <span>{shownRows.length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : rosterFilter ? "by hand" : "shown"}{sizeFilter ? ` · ${sizeFilter}` : ""}{teamFilter ? ` · ${teamFilter}` : ""}</span>
+                      <button onClick={() => { setRosterFilter(null); setSizeFilter(""); setTeamFilter(""); }} style={{ ...btnGhost, padding: "3px 10px", fontSize: 13 }}>Show all</button>
                     </span>
                   )}
                 </div>
@@ -2998,7 +3044,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {sortRoster(roster.filter(r => !rosterFilter || r.scanned === rosterFilter), rosterSort, binMap).map(r => (
+                      {shownRows.map(r => (
                         <tr key={r._id} style={{
                           background: r.scanned === "pass" ? "rgba(34,197,94,0.07)" : r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned ? "rgba(245,158,11,0.07)" : "transparent",
                           borderBottom: "1px solid #1e293b",
@@ -3012,12 +3058,15 @@ export default function App() {
                           {binMap && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{binOf(r) !== null ? `Bin ${binOf(r)}` : "—"}</td>}
                           <td style={{ ...tdSt, padding: "2px 6px" }}>
                             <select value={["missing", "short"].includes(r.scanned) ? r.scanned : ""}
-                              onChange={e => { const v = e.target.value; if (v === "unscan") unscan(r._id); else markRow(r._id, v || false); }}
+                              onChange={e => { const v = e.target.value; if (v === "unscan") unscan(r._id); else if (v === "flag") flagRow(r); else markRow(r._id, v || false); }}
                               style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
                               <option value="">—</option>
                               {(!r.scanned || ["missing", "short"].includes(r.scanned))
                                 ? <><option value="missing">Missing</option><option value="short">Short-shipped</option></>
-                                : (r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check</option>}
+                                : <>
+                                    {(r.scanned === "pass" || r.scanned === "manual") && <option value="flag">🚩 Flag / damage</option>}
+                                    {(r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check</option>}
+                                  </>}
                             </select>
                           </td>
                         </tr>
