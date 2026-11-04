@@ -321,7 +321,7 @@ function JerseyTypePicker({ value, onChange }) {
   );
 }
 
-function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, onSupervisor, stationLabel = id => String(id || "").replace(/^st-/, "") }) {
+function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, stationLabel = id => String(id || "").replace(/^st-/, "") }) {
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [jerseyType, setJerseyType] = useState("");
@@ -407,7 +407,6 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         <div style={{ fontWeight: 900, fontSize: 28, textAlign: "center", marginBottom: 4 }}>Set up the order</div>
         <div style={{ fontSize: 17, color: "#94a3b8", textAlign: "center", marginBottom: 24, display: "flex", gap: 8, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
           <span>{operatorName} · {cap(role || "")}</span>
-          {canSupervise && <button onClick={onSupervisor} style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>Supervisor view</button>}
           <button onClick={onSignOut} style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>Sign out</button>
         </div>
         {hubRosters.length === 0 && (
@@ -707,7 +706,6 @@ const stationLabel = id => { const n = String(id || "").replace(/^st-/, ""); con
 // amber questions, a flag is a red stop.
 const attnIcon   = s => s === "manual" ? "✍" : s === "missing" ? "❓" : s === "short" ? "📦" : "🛑";
 const attnColour = s => (s === "manual" || s === "missing" || s === "short") ? "#f59e0b" : "#ef4444";
-const attnNote   = s => s === "manual" ? "Entered by hand — needs your sign-off" : s === "missing" ? "Not in the box — the operator marked it missing" : s === "short" ? "Marked short-shipped" : "Jersey is on its way to you";
 // How much an item weighs: a flag by where it goes (REMAKE over DECORATION and
 // STITCHER over CLEANING over DECIDE); by-hand, missing and short are light.
 // Open items come before resolved ones, then the heavier, then the newer.
@@ -718,17 +716,10 @@ function RouteTag({ item, size = 10 }) {
   const hot = s.weight >= 4;
   return <span title={s.route || ""} style={{ fontSize: size, fontWeight: 800, letterSpacing: 0.5, padding: "1px 6px", borderRadius: 4, background: hot ? s.colour : `${s.colour}22`, color: hot ? "#fff" : s.colour, border: `1px solid ${s.colour}66`, whiteSpace: "nowrap", flexShrink: 0, verticalAlign: "middle" }}>{s.tag}</span>;
 }
-// "2 REMAKE, 3 STITCHER, 1 SIGN OFF": what gathered while nobody watched, heaviest first.
-const awaySummary = items => {
-  const m = new Map();
-  items.forEach(a => { const s = attnSeverity(a); const e = m.get(s.tag) || { n: 0, weight: s.weight }; e.n++; m.set(s.tag, e); });
-  return [...m.entries()].sort((a, b) => b[1].weight - a[1].weight).map(([tag, e]) => `${e.n} ${tag}`).join(", ");
-};
 // A station that has not reported for this long steps back off the cards.
 const GONE_MS = 2 * 3600 * 1000;
 // Someone is "at the board" for this long after the last mouse or key.
-const WATCH_MS = 2 * 60 * 1000;
-function SupervisorPanel({ operatorName, onClose }) {
+function SupervisorPanel({ operatorName, onSignOut }) {
   const [data,    setData]    = useState(() => ({ stations: [], now: Date.now() }));
   const [rosters, setRosters] = useState([]);
   const [orders,  setOrders]  = useState([]);     // every order any station worked on the chosen day (from the hub's ledger)
@@ -759,79 +750,16 @@ function SupervisorPanel({ operatorName, onClose }) {
   const [file,    setFile]    = useState(null);
   const [target,  setTarget]  = useState("");     // station id to send the roster to; "" = any station may take it
   const [msg,     setMsg]     = useState(null);
-  const [alerts,  setAlerts]  = useState([]);     // toasts for flags that just happened; each shows ~12 s
-  const TOAST_MS = 12000;
-  useEffect(() => { const t = setInterval(() => setAlerts(a => a.some(x => Date.now() - x.at > TOAST_MS) ? a.filter(x => Date.now() - x.at <= TOAST_MS) : a), 1000); return () => clearInterval(t); }, []);
   const [bigPhoto, setBigPhoto] = useState(null); // a flag photo shown large
-  // Quiet alerts. A pop-up only while someone is at the board (tab visible,
-  // mouse or key in the last two minutes); what arrives otherwise waits in one
-  // "new since you left" line. Desktop notifications: one a minute at most,
-  // the newest replacing the last, never pinned open. The cards hold the
-  // truth; the messages only say "look".
-  const lastActiveRef = useRef(0);
-  useEffect(() => {
-    const touch = () => { lastActiveRef.current = Date.now(); };
-    touch();
-    const evs = ["mousemove", "mousedown", "keydown", "touchstart", "wheel"];
-    evs.forEach(e => window.addEventListener(e, touch, { passive: true }));
-    document.addEventListener("visibilitychange", touch);
-    return () => { evs.forEach(e => window.removeEventListener(e, touch)); document.removeEventListener("visibilitychange", touch); };
-  }, []);
-  const isWatching = useCallback(() => !document.hidden && Date.now() - lastActiveRef.current < WATCH_MS, []);
-  const [away, setAway] = useState(null);         // { since, items } gathered while nobody was watching
-  const pendingRef = useRef([]), notifyAtRef = useRef(0), notifyTimerRef = useRef(null);
-  const notifyLater = useCallback((items) => {
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    pendingRef.current.push(...items);
-    if (notifyTimerRef.current) return;
-    const wait = Math.max(0, 60000 - (Date.now() - notifyAtRef.current));
-    notifyTimerRef.current = setTimeout(() => {
-      notifyTimerRef.current = null; notifyAtRef.current = Date.now();
-      const p = pendingRef.current; pendingRef.current = [];
-      if (!p.length) return;
-      const body = p.length === 1 ? `${p[0].station}: ${p[0].jersey} — ${p[0].reason}` : [...new Set(p.map(a => a.station))].join(", ");
-      try { new Notification(`${p.length} ${p.length === 1 ? "jersey needs" : "jerseys need"} you`, { body, tag: "jerseyqc-needs-you" }); } catch { /* the browser refused */ }
-    }, wait);
-  }, []);
-  useEffect(() => () => clearTimeout(notifyTimerRef.current), []);
   const [hubDown, setHubDown] = useState(null);   // when the hub stopped answering, or null
-  const [desktop, setDesktop] = useState(() => (typeof Notification === "undefined" ? "unsupported" : Notification.permission));
-  const seenRef = useRef(null);                   // keys already announced; null until the first report
   const fileRef = useRef(null);
 
   const refresh = useCallback(() => {
     hub.stations().then(d => {
       setData(d); setHubDown(null);
-      // Announce every unresolved attention item that was not in the previous
-      // report. The first report only seeds the set: what is already open is on the cards.
-      const keys = new Set(), fresh = [];
-      d.stations.forEach(s => (d.now - s.updatedAt > GONE_MS ? [] : (s.attention || [])).forEach(a => {   // a station gone for hours has nothing new to say
-        if (a.resolution) return;
-        const k = `${s.id}|${a.time}|${a.jersey}|${a.status}`;
-        keys.add(k);
-        if (seenRef.current && !seenRef.current.has(k)) fresh.push({ key: k, at: Date.now(), stationId: s.id, station: stationLabel(s.id), operator: s.operatorName || "—", status: a.status, jersey: a.jersey, reason: a.reason, time: a.time, photo: a.photo || null, damagePhotos: a.damagePhotos || [] });
-      }));
-      // Remember every key ever announced, not just the ones in this report: a
-      // station that drops out for a reload and comes back must not re-announce
-      // the same flag, and an alert already on screen is never added twice.
-      if (!seenRef.current) seenRef.current = keys; else keys.forEach(k => seenRef.current.add(k));
-      if (fresh.length) {
-        playTone("flag");
-        if (isWatching()) setAlerts(prev => [...fresh.reverse().filter(f => !prev.some(p => p.key === f.key)), ...prev].slice(0, 50));
-        else setAway(a => ({ since: a?.since || fresh[0].time, items: [...(a?.items || []), ...fresh] }));
-        notifyLater(fresh);
-      }
     }).catch(() => setHubDown(t => t || Date.now()));
     hub.rosters().then(r => setRosters(r.rosters || [])).catch(() => {});
-  }, [isWatching, notifyLater]);
-  const dismiss = key => setAlerts(a => a.filter(x => x.key !== key));
-  // A click unlocks the browser's audio and asks for desktop notifications,
-  // which pop up even when this tab is hidden or the browser is behind a window.
-  const enableDesktop = () => {
-    playTone("scan");
-    if (typeof Notification === "undefined") { setDesktop("unsupported"); return; }
-    Notification.requestPermission().then(p => { setDesktop(p); if (p === "granted") new Notification("Jersey QC alerts are on", { body: "You will be told here when a station needs you." }); }).catch(() => {});
-  };
+  }, []);
   const markCarriedDone = (stationIdValue, key) => hub.clearCarried(stationIdValue, key).then(refresh).catch(() => setMsg("Could not update the hub."));
   const removeStation = s => { if (window.confirm(`Remove ${stationLabel(s.id)} · ${s.operatorName || "—"} from the board? It comes back by itself if that station reports again.`)) hub.removeStation(s.id).then(refresh).catch(() => setMsg("Could not update the hub.")); };
   useEffect(() => { refresh(); const t = setInterval(refresh, 4000); return () => clearInterval(t); }, [refresh]);
@@ -922,9 +850,7 @@ function SupervisorPanel({ operatorName, onClose }) {
         <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="#ef4444">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={() => setWall(true)} title="One row per station in big letters, for a TV on the floor. Click or Esc comes back; ?view=wall in the address opens straight into it." style={{ ...btnGhost, padding: "6px 12px" }}>📺 Wall</button>
-          {desktop === "denied" && <span style={{ fontSize: 16 }} title="Desktop alerts are blocked — allow notifications for this site in the browser's address bar">🔕</span>}
-          {desktop === "default" && <button onClick={enableDesktop} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#f59e0b", color: "#fcd34d" }}>🔔 Turn on alerts</button>}
-          <button onClick={onClose} style={{ ...btnGhost, padding: "6px 14px" }}>← Back to scanning</button>
+          <button onClick={onSignOut} title="End your shift on this PC" style={{ ...btnGhost, padding: "6px 14px" }}>Sign out</button>
         </div>
       </div>
       {hubDown && (
@@ -933,36 +859,8 @@ function SupervisorPanel({ operatorName, onClose }) {
           <button onClick={refresh} style={{ ...btnGhost, padding: "4px 10px", color: "#fff", borderColor: "#fff" }}>Retry</button>
         </div>
       )}
-      {away && !hubDown && (
-        <div style={{ background: "#422006", color: "#fde68a", padding: "8px 16px", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexShrink: 0 }}>
-          <span><strong>{away.items.length} new since {String(away.since).slice(11, 16)}</strong> — {awaySummary(away.items)} · on {[...new Set(away.items.map(a => a.station))].join(", ")}</span>
-          <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={() => document.getElementById("card-" + away.items[0]?.stationId)?.scrollIntoView({ block: "start", behavior: "smooth" })} style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, color: "#fde68a", borderColor: "#fde68a" }}>Show me</button>
-            <button onClick={() => setAway(null)} title="Seen" style={{ background: "transparent", border: 0, color: "#fde68a", cursor: "pointer", fontSize: 15 }}>✕</button>
-          </span>
-        </div>
-      )}
       {openOrder && <OrderView station={openOrder.station} order={openOrder.order} run={openOrder.run || 0} date={day} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}
       {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
-      {alerts.length > 0 && (
-        <div style={{ position: "absolute", top: 54, right: 16, width: 380, maxWidth: "calc(100% - 32px)", zIndex: 1900, display: "flex", flexDirection: "column", gap: 8 }}>
-          {alerts.length > 2 && <div style={{ textAlign: "right", fontSize: 12, color: "#fca5a5" }}>{alerts.length - 2} more just now — see the cards</div>}
-          {alerts.slice(0, 2).map(a => (
-            <div key={a.key} role="alert" style={{ background: attnColour(a.status) === "#f59e0b" ? "#3b2a06" : "#4a0d0d", border: `1px solid ${attnColour(a.status)}`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 24px rgba(0,0,0,0.55)", color: "#fff", fontSize: 13 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                <div style={{ fontWeight: 800 }}>{attnIcon(a.status)} {a.station} · {a.operator}</div>
-                <button onClick={() => dismiss(a.key)} title="Dismiss" style={{ background: "transparent", border: 0, color: "#94a3b8", cursor: "pointer", fontSize: 15, lineHeight: 1 }}>✕</button>
-              </div>
-              <div style={{ marginTop: 3, display: "flex", gap: 10, alignItems: "flex-start" }}>
-                <PhotoThumbs photo={a.photo} damagePhotos={a.damagePhotos} w={96} h={72} onOpen={setBigPhoto} />
-                <div><RouteTag item={a} /> <strong>{a.jersey}</strong> — {a.reason}</div>
-              </div>
-              <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 3 }}>{attnNote(a.status)} · {a.time}</div>
-            </div>
-          ))}
-          {alerts.length > 1 && <button onClick={() => setAlerts([])} style={{ ...btnGhost, alignSelf: "flex-end", padding: "4px 10px", fontSize: 11 }}>Dismiss all</button>}
-        </div>
-      )}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12, alignContent: "start" }}>
           {data.stations.length === 0 && <div style={{ color: "#64748b", padding: 24 }}>No station has reported yet. A station appears here within a few seconds of starting an order.</div>}
@@ -1953,7 +1851,8 @@ export default function App() {
   // it is, whatever the screen size: one layout to learn, on every PC.
   const wide = true;
   const [showBinSetup,       setShowBinSetup]       = useState(false);
-  const [showSupervisor,     setShowSupervisor]     = useState(() => (savedSignIn?.role === "supervisor" || savedSignIn?.role === "admin") && !savedSession);
+  // A supervisor's sign-in is the board and nothing else: no station, no scanning, no saved order to resume.
+  const [showSupervisor,     setShowSupervisor]     = useState(() => savedSignIn?.role === "supervisor" || savedSignIn?.role === "admin");
   const [binMap,             setBinMap]             = useState(null);
   const [firstScanTime,      setFirstScanTime]      = useState(null);
   const [now,                setNow]                = useState(() => Date.now());
@@ -2010,7 +1909,7 @@ export default function App() {
   const rosterCols     = useMemo(() => displayColumns(roster), [roster]);
   const extraCols      = useMemo(() => extraColumns(roster), [roster]);
   const keyLabel       = formatKey(scanKey);
-  const showResume     = !!savedSession && !resumeDecided && !sessionStarted;
+  const showResume     = !!savedSession && !resumeDecided && !sessionStarted && !canSupervise;
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
   useEffect(() => { saveSettings(settings); }, [settings]);
@@ -2688,7 +2587,7 @@ export default function App() {
         <SignInModal initial={savedSignIn}
           onSignIn={({ role, name }) => {
             setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name });
-            if ((role === "supervisor" || role === "admin") && !showResume) setShowSupervisor(true);
+            if (role === "supervisor" || role === "admin") { setShowSupervisor(true); return; }
             // An operator's station goes full screen by itself: no tabs, no address bar. (The kiosk launcher locks the browser down for good.)
             else if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
           }} />
@@ -2697,12 +2596,12 @@ export default function App() {
       {signedIn && showResume && <ResumeModal session={savedSession} onResume={resumeSession} onDiscard={discardSession} />}
 
 
-      {showSupervisor && <SupervisorPanel operatorName={operatorName} onClose={() => closeDialog(() => setShowSupervisor(false))} />}
+      {showSupervisor && <SupervisorPanel operatorName={operatorName} onSignOut={signOut} />}
 
       {sessionStarted && !showSupervisor && <IdleWatch pulse={log.filter(l => l.status === S_PASS || l.status === S_MANUAL || l.status === S_FLAGGED).length} onSpell={recordIdle} />}
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
-        <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onSupervisor={() => setShowSupervisor(true)} stationLabel={stationLabel}
+        <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} stationLabel={stationLabel}
           onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile, hubRosterId = null }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team" });
@@ -2769,7 +2668,6 @@ export default function App() {
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
-          {canSupervise && <button onClick={() => setShowSupervisor(true)} title="See every station and send rosters" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>Stations</button>}
           {sessionStarted && <button onClick={askFinish} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#22c55e", color: "#4ade80" }}>🏁 Finish order</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
           <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>
