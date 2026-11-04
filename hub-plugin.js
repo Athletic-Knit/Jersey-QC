@@ -15,14 +15,14 @@
 //   POST   /api/hub/rosters/:id/take    { station, operator } — a station starts it; 409 if another station already has it
 //   POST   /api/hub/rosters/:id/release the supervisor frees it for another station
 //   DELETE /api/hub/rosters/:id         the station finished it, or the supervisor removes it
-//   GET    /api/hub/print               { printer, printers } — the label printer on the hub PC (JERSEY_PRINTER, else the first Zebra queue)
-//   POST   /api/hub/print               { labels } — prints one bin label per entry (labels.js); 503 when there is no label printer
+//   GET    /api/hub/print?station=…     { printer, printers } — the label printer for that station (JERSEY_PRINTER_<STATION>), else the hub's (JERSEY_PRINTER, else the first Zebra queue)
+//   POST   /api/hub/print               { labels, kind, station } — prints one label per entry (labels.js: kind "jersey" = the sticker on a pass, "bin" = a bin label); 503 when there is no label printer
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { labelsZPL, labelSize as labelDots } from "./src/lib/labels.js";
+import { labelsZPL, labelSize as labelDots, DEFAULT_LABEL_SIZE } from "./src/lib/labels.js";
 
 // ── Bin labels: the Zebra on the hub PC ──────────────────────────────────────
 // The ZPL goes to a Windows print queue as raw bytes through tools/print-raw.ps1
@@ -57,7 +57,7 @@ export function pruneLedger(led, { keepDays = 90, photoDays = 14 } = {}) {
   return led;
 }
 
-export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", labelSize = "", print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
+export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", printers: stationPrinters = {}, labelSize = "", print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
   let state = { stations: {}, rosters: {} };
   try { state = { ...state, ...JSON.parse(fs.readFileSync(file, "utf8")) }; } catch { /* first run */ }
 
@@ -79,9 +79,12 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
     req.on("end", () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } });
     req.on("error", reject);
   });
-  // The label printer: JERSEY_PRINTER when set, else the first Zebra queue on this
-  // PC. The queue list costs a PowerShell start, so it is kept for a minute.
-  const printerName = String(printer || "").trim(), labelSpec = String(labelSize || "").trim() || "2.25x1.25";
+  // The label printer: the station's own (JERSEY_PRINTER_STATION1 = a queue on
+  // this PC, which may be a shared printer on the station PC, \\AK-NB-164\Zebra),
+  // else JERSEY_PRINTER, else the first Zebra queue on this PC. The queue list
+  // costs a PowerShell start, so it is kept for a minute.
+  const printerName = String(printer || "").trim(), labelSpec = String(labelSize || "").trim() || DEFAULT_LABEL_SIZE;
+  const perStation = Object.fromEntries(Object.entries(stationPrinters || {}).filter(([, v]) => String(v || "").trim()).map(([k, v]) => [String(k).trim().toLowerCase(), String(v).trim()]));
   let printers = { at: -Infinity, list: [] };
   const printerList = async () => {
     if (now_() - printers.at < 60000) return printers.list;
@@ -90,7 +93,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
     printers = { at: now_(), list };
     return list;
   };
-  const labelPrinter = async () => printerName || (await printerList()).find(isLabelPrinter)?.name || null;
+  const labelPrinter = async station => perStation[String(station || "").trim().toLowerCase()] || printerName || (await printerList()).find(isLabelPrinter)?.name || null;
   const summary = r => ({ id: r.id, orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
 
   async function handle(req, res) {
@@ -206,15 +209,17 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
         if (req.method === "DELETE" && id) { delete state.rosters[id]; save(); return json(res, 200, { ok: true }); }
       }
       if (kind === "print" && !id) {
-        if (req.method === "GET") return json(res, 200, { printer: await labelPrinter(), printers: await printerList(), labelSize: labelSpec });
+        if (req.method === "GET") { const station = new URL(req.url, "http://hub").searchParams.get("station"); return json(res, 200, { printer: await labelPrinter(station), printers: await printerList(), labelSize: labelSpec }); }
         if (req.method === "POST") {
           const body = await readBody(req);
           const labels = Array.isArray(body.labels) ? body.labels.slice(0, 100) : [];
           if (!labels.length) return json(res, 400, { error: "labels required" });
-          const name = await labelPrinter(); if (!name) return json(res, 503, { error: "no label printer" });
-          try { await print(name, labelsZPL(labels, labelDots(labelSpec))); }
+          const kind = body.kind === "jersey" ? "jersey" : "bin";
+          const name = await labelPrinter(body.station); if (!name) return json(res, 503, { error: "no label printer" });
+          try { await print(name, labelsZPL(labels, labelDots(labelSpec), kind)); }
           catch (e) { console.error(`[hub] print on ${name} failed: ${e.message}`); return json(res, 502, { error: `print failed: ${e.message}` }); }
-          console.log(`[hub] ${new Date().toLocaleTimeString()} printed ${labels.length} bin label${labels.length === 1 ? "" : "s"} on ${name}${labels[0]?.orderNumber ? ` for order ${labels[0].orderNumber}` : ""}`);
+          const what = kind === "jersey" ? (labels.length === 1 ? `sticker bin ${labels[0].bin || "—"} ${labels[0].value || ""}` : `${labels.length} stickers`) : `${labels.length} bin label${labels.length === 1 ? "" : "s"}`;
+          console.log(`[hub] ${new Date().toLocaleTimeString()} ${body.station ? body.station + ": " : ""}printed ${what} on ${name}${labels[0]?.orderNumber ? ` for order ${labels[0].orderNumber}` : ""}`);
           return json(res, 200, { ok: true, printer: name, count: labels.length });
         }
       }

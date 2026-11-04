@@ -121,7 +121,7 @@ describe("bin labels on the hub's printer", () => {
     expect(status).toBe(200);
     expect(body.printer).toBe("ZDesigner ZD411-203dpi ZPL");
     expect(body.printers.map(p => p.name)).toEqual(["RICOH SP C360DNw", "ZDesigner ZD411-203dpi ZPL"]);
-    expect(body.labelSize).toBe("2.25x1.25");
+    expect(body.labelSize).toBe("1x0.5");
   });
   it("a queue matches on its driver too, and JERSEY_PRINTER wins over the search", async () => {
     const byDriver = makeHub(fakes([{ name: "Labels", driver: "Zebra ZPL", port: "USB001" }]).opts);
@@ -130,6 +130,32 @@ describe("bin labels on the hub's printer", () => {
     const { body } = await named.call("GET", "/print");
     expect(body.printer).toBe("RICOH SP C360DNw");
     expect(body.labelSize).toBe("4x6");
+  });
+  it("a station's own printer (JERSEY_PRINTER_STATION1) wins for that station only", async () => {
+    const f = fakes();
+    const { call } = makeHub({ ...f.opts, printers: { "st-station1": "\\\\AK-NB-164\\ZDesigner ZD411-203dpi ZPL", "st-station2": "" } });
+    expect((await call("GET", "/print?station=st-station1")).body.printer).toBe("\\\\AK-NB-164\\ZDesigner ZD411-203dpi ZPL");
+    expect((await call("GET", "/print?station=st-Station1")).body.printer).toBe("\\\\AK-NB-164\\ZDesigner ZD411-203dpi ZPL");   // the id's case does not matter
+    expect((await call("GET", "/print?station=st-station2")).body.printer).toBe("ZDesigner ZD411-203dpi ZPL");         // the hub's own
+    expect((await call("GET", "/print")).body.printer).toBe("ZDesigner ZD411-203dpi ZPL");
+    await call("POST", "/print", { labels, station: "st-station1" });
+    expect(f.printed[0].printer).toBe("\\\\AK-NB-164\\ZDesigner ZD411-203dpi ZPL");
+  });
+  it("a jersey sticker on a pass: kind jersey, the station's printer", async () => {
+    const f = fakes();
+    const { call } = makeHub(f.opts);
+    const { status, body } = await call("POST", "/print", { kind: "jersey", station: "st-station1", labels: [{ bin: 3, by: "team", value: "Navy", orderNumber: "264247" }] });
+    expect(status).toBe(200);
+    expect(body).toEqual({ ok: true, printer: "ZDesigner ZD411-203dpi ZPL", count: 1 });
+    const { zpl } = f.printed[0];
+    expect(zpl).toContain("^PW203");
+    expect(zpl).toContain("^LL102");
+    expect(zpl).toContain("^FDBIN^FS");
+    expect(zpl).toContain("^FD3^FS");
+    expect(zpl).toContain("^FDTEAM^FS");
+    expect(zpl).toContain("^FDNavy^FS");
+    expect(zpl).toContain("^FDOrder 264247^FS");
+    expect(zpl).not.toContain("^FDBIN 3^FS");   // not the bin-label layout
   });
   it("no label printer: GET says null, POST says 503", async () => {
     const f = fakes([queues[0]]);
@@ -150,8 +176,8 @@ describe("bin labels on the hub's printer", () => {
     expect(f.printed[0].printer).toBe("ZDesigner ZD411-203dpi ZPL");
     const { zpl } = f.printed[0];
     expect((zpl.match(/\^XA/g) || []).length).toBe(2);
-    expect(zpl).toContain("^PW457");
-    expect(zpl).toContain("^LL254");
+    expect(zpl).toContain("^PW203");
+    expect(zpl).toContain("^LL102");
     expect(zpl).toContain("^FDBIN 1^FS");
     expect(zpl).toContain("^FDNavy^FS");
     expect(zpl).toContain("^FDBIN 2^FS");

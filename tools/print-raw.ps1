@@ -28,7 +28,7 @@ public class RawPrint {
     IntPtr h;
     if (!OpenPrinter(printer, out h, IntPtr.Zero)) throw new Exception("OpenPrinter failed (" + Marshal.GetLastWin32Error() + "): is '" + printer + "' the printer's exact name?");
     try {
-      DOCINFO di = new DOCINFO(); di.pDocName = "Jersey QC bin labels"; di.pDataType = "RAW";
+      DOCINFO di = new DOCINFO(); di.pDocName = "Jersey QC labels"; di.pDataType = "RAW";
       if (StartDocPrinter(h, 1, ref di) == 0) throw new Exception("StartDocPrinter failed (" + Marshal.GetLastWin32Error() + ")");
       StartPagePrinter(h);
       IntPtr p = Marshal.AllocHGlobal(bytes.Length);

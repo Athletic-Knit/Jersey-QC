@@ -4,16 +4,23 @@ import hubPlugin from './hub-plugin.js'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import process from 'node:process'
 
-// JERSEY_PRINTER (a print queue's exact name) and JERSEY_LABEL_SIZE ("2.25x1.25",
-// inches) come from .env.local for the hub's bin-label printing; without them the
-// hub uses the first Zebra queue on this PC and 2.25 x 1.25 in labels.
+// Label printing (.env.local): JERSEY_PRINTER_STATION1 … a print queue on this PC
+// for each station's stickers (a printer shared from the station PC works:
+// \\AK-NB-164\ZDesigner ZD411-203dpi ZPL), JERSEY_PRINTER the queue for any
+// station without one (default: the first Zebra queue on this PC), and
+// JERSEY_LABEL_SIZE the roll ("1x0.5", inches, width x height).
+export function printerEnv(env) {
+  const printers = {}
+  for (const [k, v] of Object.entries(env)) { const m = /^JERSEY_PRINTER_(.+)$/.exec(k); if (m && v) printers["st-" + m[1].toLowerCase()] = v }
+  return { printer: env.JERSEY_PRINTER, printers, labelSize: env.JERSEY_LABEL_SIZE }
+}
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
   return {
   // basicSsl serves over HTTPS with a self-signed cert.
   // Required: browsers only allow getUserMedia (the camera) on a secure
   // origin, so scanning stations on the LAN cannot use http://<ip>:5173.
-  plugins: [react(), basicSsl(), hubPlugin({ printer: env.JERSEY_PRINTER, labelSize: env.JERSEY_LABEL_SIZE })],
+  plugins: [react(), basicSsl(), hubPlugin(printerEnv(env))],
   server: {
     host: true,          // bind all interfaces so other PCs on the network can reach it
     port: 5173,

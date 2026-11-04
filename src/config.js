@@ -103,6 +103,7 @@ export const DEFAULT_SETTINGS = {
   autoScan: true,         // hands-free: scan when the jersey changes and settles
   autoScanDelay: 3,       // seconds after a confirm before hands-free may scan again
   voice: false,           // answer result screens by voice through a headset (Vosk, on this PC)
+  stickers: true,         // print a sticker (bin + team or size) on the server's label printer for every passed jersey
   micId: "",              // "" = browser default microphone
   voiceSpeak: true,       // read the result back through the headset ("40, bin 2")
 };

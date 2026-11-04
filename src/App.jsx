@@ -9,7 +9,7 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
-import { binLabels } from "./lib/labels.js";
+import { binLabels, jerseyLabel } from "./lib/labels.js";
 import { useVoice } from "./useVoice.js";
 import { VoiceBadge, VoiceLegend } from "./VoiceBadge.jsx";
 import { speak } from "./lib/voice.js";
@@ -1562,6 +1562,14 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
         </div>
 
         <div style={{ marginBottom: 18 }}>
+          <div style={labelSt}>Stickers</div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
+            <input type="checkbox" checked={temp.stickers !== false} onChange={e => setTemp(t => ({ ...t, stickers: e.target.checked }))} />
+            Print a sticker for every passed jersey (its bin, and the team or size) on this station's label printer
+          </label>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
           <div style={labelSt}>Answer the result screen with</div>
           <div style={{ display: "flex", gap: 6 }}>
             {[[false, "⌨️ Keys or pedals", "Normal"], [true, "🎤 Voice", "Headset"]].map(([on, label, sub]) => (
@@ -1609,9 +1617,10 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
 }
 
 // ── Bin setup modal ───────────────────────────────────────────────────────────
-// Opens when an order with bins starts. The bin labels print on the hub's Zebra
-// by themselves the first time it opens for a run of the order (`autoPrint`,
-// not again after a reload); the button prints them again at any time.
+// Opens when an order with bins starts. The button prints one bin label per
+// bin on the hub's Zebra (on request only: the roll holds the per-jersey
+// stickers, and a bin may not need a label at all); `autoPrint` would print
+// them as the screen opens.
 function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, onPrinted, onConfirm }) {
   const [print, setPrint] = useState({ status: autoPrint && labels.length ? "printing" : "idle" });
   const fired = useRef(false);
@@ -1812,7 +1821,6 @@ export default function App() {
   const [rosterFile,         setRosterFile]         = useState(null);
   const [orderNumber,        setOrderNumber]        = useState("");
   const [orderRun,           setOrderRun]           = useState(0);      // when this order was started here; the hub keeps one record per run
-  const [labelsPrintedRun,   setLabelsPrintedRun]   = useState(0);      // the run whose bin labels went to the printer (printed once per run, not again on reload)
   const [hubRosterId,        setHubRosterId]        = useState(null);   // the hub roster this order came from, taken by this station; Finish order removes it
   const [operatorName,       setOperatorName]       = useState(() => savedSignIn?.name || "");
   const [notes,              setNotes]              = useState("");
@@ -1888,6 +1896,28 @@ export default function App() {
   const [now,                setNow]                = useState(() => Date.now());
 
   const binOf          = useCallback(row => binFor(binMap, row), [binMap]);
+
+  // ── The sticker on every pass ─────────────────────────────────────────────
+  // A pass (a green confirmed, a pick from the list, a by-hand pass) sets
+  // `lastConfirmed`; each new one prints a sticker — the bin and the team or
+  // size — on this station's label printer through the hub, without holding
+  // the operator up. `sticker` is how the last one went, shown on the Last
+  // passed strip with a Reprint button. Nothing prints on a flag, or on a
+  // resumed order (lastConfirmed is not saved).
+  const [sticker, setSticker] = useState(null);   // { id, status: "done" | "none" | "error", printer, message }
+  const stickerPrinted = useRef(null);            // the log id of the last pass sent to the printer
+  const printSticker = useCallback(entry => {
+    if (!entry?.match) return Promise.resolve();
+    const label = jerseyLabel(entry.match, binMap, { orderNumber });
+    return hub.printLabels([label], { kind: "jersey", station: stationId() })
+      .then(r => setSticker({ id: entry.id, status: "done", printer: r.printer }))
+      .catch(e => setSticker({ id: entry.id, status: e.status === 503 ? "none" : "error", message: e.status ? e.message : "could not reach the server" }));
+  }, [binMap, orderNumber]);
+  useEffect(() => {
+    if (!settings.stickers || !lastConfirmed || stickerPrinted.current === lastConfirmed.id) return;
+    stickerPrinted.current = lastConfirmed.id;
+    printSticker(lastConfirmed);
+  }, [lastConfirmed, settings.stickers, printSticker]);
   const scannedRows    = roster.filter(r => r.scanned && r.scanned !== false);
   const remaining      = roster.filter(r => !r.scanned).length;
   // Hands-free runs only while it is on in Settings, not paused by the operator,
@@ -1958,8 +1988,8 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, labelsPrintedRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, labelsPrintedRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, checksLeft, inspect]);
+    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, checksLeft, inspect]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -2010,7 +2040,7 @@ export default function App() {
   const resumeSession = useCallback(() => {
     const s = savedSession;
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
-    setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setLabelsPrintedRun(s.labelsPrintedRun || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
+    setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []);
     vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
     inspectRef.current.load(s.inspect); syncInspect();
@@ -2027,7 +2057,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setLabelsPrintedRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setIdleSpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setIdleSpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false);
   }, []);
 
@@ -2635,14 +2665,13 @@ export default function App() {
           onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile, hubRosterId = null }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team" });
-            setOrderNumber(orderNumber); setOrderRun(Date.now()); setLabelsPrintedRun(0); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || "");
+            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || "");
             setSessionStarted(true); setResumeDecided(true);
           }} />
       )}
 
       {showBinSetup && binMap && (
-        <BinSetupModal entries={binEntries(roster, binMap)} by={binFieldOf(binMap)} labels={binLabels(roster, binMap, { orderNumber })}
-          autoPrint={labelsPrintedRun !== orderRun} onPrinted={() => setLabelsPrintedRun(orderRun)} onConfirm={() => setShowBinSetup(false)} />
+        <BinSetupModal entries={binEntries(roster, binMap)} by={binFieldOf(binMap)} labels={binLabels(roster, binMap, { orderNumber })} onConfirm={() => setShowBinSetup(false)} />
       )}
 
       {overlay && !wide && (
@@ -2849,6 +2878,14 @@ export default function App() {
                   )}
                   {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && (r.scanned === "pass" || r.scanned === "manual")) && (
                     <button onClick={actions.reopenLast} title="Found a problem after confirming? Flag this jersey" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#ef4444", color: "#fca5a5", whiteSpace: "nowrap" }}>🚩 Flag it</button>
+                  )}
+                  {settings.stickers && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, whiteSpace: "nowrap", color: sticker?.id === lastConfirmed.id && sticker.status === "done" ? "#4ade80" : sticker?.id === lastConfirmed.id ? "#fbbf24" : "#7c8ba1" }}>
+                      {sticker?.id !== lastConfirmed.id ? "🖨 Printing the sticker…" : sticker.status === "done" ? "🖨 Sticker printed" : sticker.status === "none" ? "🖨 No label printer for this station" : `🖨 Sticker not printed: ${sticker.message}`}
+                      {sticker?.id === lastConfirmed.id && (
+                        <button onClick={() => { setSticker(null); printSticker(lastConfirmed); }} title="Print this jersey's sticker again" style={{ ...btnGhost, padding: "4px 10px", fontSize: 13, whiteSpace: "nowrap" }}>Reprint</button>
+                      )}
+                    </span>
                   )}
                   <span style={{ fontSize: 14, color: "#7c8ba1", marginLeft: "auto" }}>{lastConfirmed.timestamp}</span>
                 </div>
