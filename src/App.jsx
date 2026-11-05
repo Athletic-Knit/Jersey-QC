@@ -10,9 +10,6 @@ import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { binLabels, jerseyLabel } from "./lib/labels.js";
-import { useVoice } from "./useVoice.js";
-import { VoiceBadge, VoiceLegend } from "./VoiceBadge.jsx";
-import { speak } from "./lib/voice.js";
 const SECOND_LOOK = false;
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf } from "./config.js";
 
@@ -1095,7 +1092,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   // The retry pedal on a green: the read is right, there is nothing to retry,
   // and a retry here looks exactly like a confirm from the operator's side
   // (both end on the camera screen) — a jersey went in the bin unchecked that
-  // way on 5 Nov 2026. So the pedal (and "again" by voice) only shows a nudge;
+  // way on 5 Nov 2026. So the pedal only shows a nudge;
   // the Retry button stays for a deliberate click or an arrow-key pick.
   const [nudge, setNudge] = useState("");
   const nudgeTimer = useRef(null);
@@ -1183,17 +1180,8 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (e.code === cancelKey || e.code === "ArrowDown") { e.preventDefault(); lastKeyRef.current = Date.now(); move(1); return; }
       if (e.code === upKey || e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
     };
-    // Voice on a result screen: "next" selects what is highlighted (the mouse
-    // moves the highlight, voice never does); "again" retries the scan.
-    const onVoice = (e) => {
-      const c = e.detail?.command; if (!c || mode === "done") return;
-      if (mode === "manual" || mode === "reasonText") return;        // typing
-      if (c === "retry")    { if (mode === "confirm") { showNudge(); return; } const o = options.find(x => x.id === "retry");    if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } return; }
-      if (c === "select")   { const o = options[selectedIdx]; if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } }
-    };
     window.addEventListener("keydown", onKey);
-    window.addEventListener("jerseyqc:voice", onVoice);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("jerseyqc:voice", onVoice); };
+    return () => window.removeEventListener("keydown", onKey);
   }, [options, selectedIdx, mode, confirmKey, cancelKey, upKey, retryKey, byHandKey, actions, showNudge]);
 
   // A bumped mouse never overrides a key press made in the last moment.
@@ -1495,7 +1483,7 @@ function ResultCard({ result, onResolve, canResolve = true }) {
 }
 
 // ── Settings panel ────────────────────────────────────────────────────────────
-function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
+function SettingsPanel({ settings, cameras, onSave, onClose }) {
   const [temp,      setTemp]      = useState(settings);
   const [listening, setListening] = useState(null);
 
@@ -1584,38 +1572,6 @@ function SettingsPanel({ settings, cameras, mics = [], onSave, onClose }) {
             <input type="checkbox" checked={temp.stickers !== false} onChange={e => setTemp(t => ({ ...t, stickers: e.target.checked }))} />
             Print a sticker for every passed jersey (its bin, and the team or size) on this station's label printer
           </label>
-        </div>
-
-        <div style={{ marginBottom: 18 }}>
-          <div style={labelSt}>Answer the result screen with</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {[[false, "⌨️ Keys or pedals", "Normal"], [true, "🎤 Voice", "Headset"]].map(([on, label, sub]) => (
-              <button key={String(on)} onClick={() => setTemp(t => ({ ...t, voice: on }))}
-                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, cursor: "pointer", textAlign: "left", border: `1px solid ${!!temp.voice === on ? "#3b82f6" : "#334155"}`, background: !!temp.voice === on ? "rgba(59,130,246,0.14)" : "#1e293b", color: !!temp.voice === on ? "#e2e8f0" : "#94a3b8" }}>
-                <div style={{ fontSize: 17, fontWeight: 700 }}>{label}</div>
-                <div style={{ fontSize: 14, color: "#94a3b8" }}>{sub}</div>
-              </button>
-            ))}
-          </div>
-          {!temp.voice && <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 8 }}>The keys above, or a foot pedal programmed to send them.</div>}
-          {temp.voice && (
-            <>
-              <VoiceLegend />
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-                <div style={{ fontSize: 16, color: "#cbd5e1", width: 150, flexShrink: 0 }}>Microphone</div>
-                <select value={temp.micId || ""} onChange={e => setTemp(t => ({ ...t, micId: e.target.value }))} style={{ ...selSt, flex: 1 }}>
-                  <option value="">Browser default</option>
-                  {mics.map(m => <option key={m.deviceId} value={m.deviceId}>{m.label || `Microphone ${m.deviceId.slice(0, 6)}`}</option>)}
-                </select>
-              </div>
-              {mics.length === 0 && <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 4 }}>Turn voice on and save once to list the microphones; a headset with a boom mic works best.</div>}
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
-                <input type="checkbox" checked={temp.voiceSpeak !== false} onChange={e => setTemp(t => ({ ...t, voiceSpeak: e.target.checked }))} />
-                Read the result back through the headset ("40, bin 2")
-              </label>
-              <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 8 }}>Runs on this PC: the ~40 MB model loads once, then nothing leaves the machine. It only knows these words, so talk is ignored. Commands work only while a result is on screen.</div>
-            </>
-          )}
         </div>
 
         {problems.length > 0 && (
@@ -1864,7 +1820,6 @@ export default function App() {
   const [xlsxReady,          setXlsxReady]          = useState(!!window.XLSX);
   const [showSettings,       setShowSettings]       = useState(false);
   const [bigPhoto,           setBigPhoto]           = useState(null);    // a flag photo from the log, shown large
-  const [mics,               setMics]               = useState([]);
   const [showRosterComplete, setShowRosterComplete] = useState(false);
   const [idleSpells,         setIdleSpells]         = useState([]);      // { start, end, minutes } — the station sat untouched
   const [hubOk, setHubOk] = useState(null);       // did the last progress report reach the hub? null = never tried
@@ -1943,34 +1898,8 @@ export default function App() {
   // reading the empty table.
   const handsFree      = !!settings.autoScan && !handsFreePaused && remaining > 0;
 
-  // Voice commands: the headset listens all shift; a command fires only while a
-  // result screen is up and nothing is scanning. Each fire acts on the screen
-  // like the matching key would.
-  const voice = useVoice({ enabled: !!settings.voice && signedIn && sessionStarted, active: !!overlay && !scanning, deviceId: settings.micId || "" });
-  // "scan" by voice: only when no result screen is up, exactly like the Scan key.
   const triggerRef = useRef(null);
   const armRef     = useRef(() => {});   // re-arm hands-free from inside a scan (set once armAutoScan exists)
-  useEffect(() => {
-    const h = e => { if (e.detail?.command === "scan" && !overlay && !scanning) triggerRef.current?.(); };
-    window.addEventListener("jerseyqc:voice", h);
-    return () => window.removeEventListener("jerseyqc:voice", h);
-  }, [overlay, scanning]);
-  const voiceUp = voice.status !== null;   // once the mic is open the device list carries names
-  useEffect(() => {
-    if (!settings.voice || !signedIn) return;
-    navigator.mediaDevices?.enumerateDevices?.().then(devs => setMics(devs.filter(d => d.kind === "audioinput"))).catch(() => {});
-  }, [settings.voice, signedIn, voiceUp]);
-  // What the headset says when a result screen appears.
-  useEffect(() => {
-    if (!settings.voice || settings.voiceSpeak === false || !overlay) return;
-    const m = overlay.match, mode = overlay.mode;
-    if (mode === "confirm" && m) { const b = binFor(binMap, m); speak(`${m.number}${m.name ? ", " + m.name : ""}${b !== null ? ", bin " + b : ""}`); }
-    else if (mode === "pick" || mode === "close") speak("check it, which jersey");
-    else if (mode === "flag") speak(overlay.title === "COULD NOT READ" ? "could not read" : overlay.title === "SCAN FAILED" ? "scan failed" : "not found");
-    else if (mode === "duplicate") speak("already done");
-    else if (mode === "supervisor") speak("go to supervisor");
-    else if (mode === "reasons") speak("what is wrong");
-  }, [overlay?.mode, overlay?.match?._id]);   // eslint-disable-line react-hooks/exhaustive-deps
   const passCount      = roster.filter(r => r.scanned === "pass").length;
   const offRosterFlags = log.filter(l => l.status === S_FLAGGED && l.match?.offRoster && !l.resolution).length;   // typed jerseys that are not on the roster have no row
   const flagCount      = roster.filter(r => r.scanned === "flag").length + offRosterFlags;
@@ -2130,7 +2059,7 @@ export default function App() {
       if (videoRef.current) videoRef.current.srcObject = stream;
       stream.getVideoTracks().forEach(t => { t.onended = () => { setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); }; });
       setCameraOn(true);
-      try { const devs = await navigator.mediaDevices.enumerateDevices(); setCameras(devs.filter(d => d.kind === "videoinput")); setMics(devs.filter(d => d.kind === "audioinput")); } catch { /* no device list; the dropdown stays on default */ }
+      try { const devs = await navigator.mediaDevices.enumerateDevices(); setCameras(devs.filter(d => d.kind === "videoinput")); } catch { /* no device list; the dropdown stays on default */ }
     } catch (e) {
       setError(e?.name === "NotFoundError" || e?.name === "OverconstrainedError"
         ? "No camera found on this PC. Plug one in, or choose another in Settings."
@@ -2702,7 +2631,7 @@ export default function App() {
       )}
 
       {showSettings && (
-        <SettingsPanel settings={settings} cameras={cameras} mics={mics} onSave={setSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
+        <SettingsPanel settings={settings} cameras={cameras} onSave={setSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
       )}
       {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
 
@@ -2840,7 +2769,6 @@ export default function App() {
                     )}
                     {cameraOn && !scanning && (
                       <>
-                        {settings.voice && <div style={{ position: "absolute", top: 8, left: 8 }}><VoiceBadge status={voice.status} error={voice.error} loading={voice.loading} active={!!overlay && !scanning} /></div>}
                         <div style={{ position: "absolute", top: 10, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(0,0,0,0.65)", padding: "8px 16px", borderRadius: 999 }}>
                           <div style={{ width: 12, height: 12, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e"}` }} />
                           <span style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? "Hands-free paused — B to scan" : !settings.autoScan ? "Hands-free off — B to scan" : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : "Ready"}</span>
