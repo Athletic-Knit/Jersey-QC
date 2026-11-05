@@ -2959,9 +2959,10 @@ export default function App() {
           </div>
 
           {view === "roster" && (
-            <div style={{ flex: 1, overflowY: "auto" }}>
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              {/* Sort by / Show stay put above the list; only the table scrolls. */}
               {roster.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 14px", background: "#161b22", borderBottom: "1px solid #21262d", fontSize: 15, flexWrap: "wrap" }}>
+                <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "6px 14px", background: "#161b22", borderBottom: "1px solid #21262d", fontSize: 15, flexWrap: "wrap" }}>
                   <span style={{ color: "#94a3b8", fontWeight: 700 }}>Sort by</span>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                     {ROSTER_SORTS.filter(s => s.id !== "bin" || binMap).map(s => (
@@ -2997,6 +2998,7 @@ export default function App() {
                   )}
                 </div>
               )}
+              <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
               {roster.length === 0
                 ? <div style={{ padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 17 }}>No roster loaded.</div>
                 : (
@@ -3041,6 +3043,7 @@ export default function App() {
                   </table>
                 )
               }
+              </div>
             </div>
           )}
 
