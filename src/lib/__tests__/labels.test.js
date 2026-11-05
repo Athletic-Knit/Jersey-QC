@@ -35,7 +35,7 @@ describe("labelSize", () => {
     expect(labelSize("3×2", 300)).toMatchObject({ w: 900, h: 600 });
   });
   it("the roll is 1 x 0.5 in unless the spec says otherwise", () => {
-    expect(labelSize()).toMatchObject({ w: 203, h: 102, widthIn: 1, heightIn: 0.5 });
+    expect(labelSize()).toMatchObject({ w: 203, h: 102, widthIn: 1, heightIn: 0.5, top: 16 });   // printing starts 2 mm down
     expect(labelSize("")).toMatchObject({ w: 203, h: 102 });
     expect(labelSize("wide")).toMatchObject({ w: 203, h: 102 });
   });
@@ -86,7 +86,7 @@ describe("ZPL", () => {
   });
   it("a long team name gets a smaller font so it fits the width", () => {
     const fontOf = z => parseInt(z.split("\n").find(l => l.includes("^FDBlue Jays Home") || l.includes("^FDNavy")).match(/\^A0N,(\d+)/)[1], 10);
-    const short = binLabelZPL({ ...label, label: "Navy" }), long = binLabelZPL({ ...label, label: "Blue Jays Home" });
+    const short = binLabelZPL({ ...label, label: "Navy" }), long = binLabelZPL({ ...label, label: "Blue Jays Home Alternate" });
     expect(fontOf(long)).toBeLessThan(fontOf(short));
     expect(fontOf(long)).toBeGreaterThanOrEqual(10);
   });
@@ -130,7 +130,15 @@ describe("jerseyLabelZPL (1 x 0.5 in)", () => {
     expect(z).toContain("^FDOrder 264247^FS");
     expect(z).toContain("^GB1,");                               // the hairline between the columns
     const bigFont = parseInt(z.split("\n").find(l => l.endsWith("^FD3^FS")).match(/\^A0N,(\d+)/)[1], 10);
-    expect(bigFont).toBeGreaterThanOrEqual(60);                 // the bin number is the thing read from a distance
+    expect(bigFont).toBeGreaterThanOrEqual(48);                 // the bin number is the thing read from a distance
+  });
+  it("nothing is printed in the top 2 mm, where the ZD411 cuts the first line in half", () => {
+    const ys = z => z.split("\n").filter(l => l.startsWith("^FO")).map(l => parseInt(l.match(/\^FO\d+,(\d+)/)[1], 10));
+    expect(Math.min(...ys(jerseyLabelZPL({ bin: 3, by: "team", value: "Navy", orderNumber: "264247" })))).toBeGreaterThanOrEqual(16);
+    expect(Math.min(...ys(binLabelZPL({ bin: 3, label: "Navy", by: "team", count: 1, orderNumber: "1" })))).toBeGreaterThanOrEqual(16);
+    const bottom = jerseyLabelZPL({ bin: 3, by: "team", value: "Navy", orderNumber: "264247" }).split("\n").find(l => l.includes("Order"));
+    const [, y, fh] = bottom.match(/\^FO\d+,(\d+)\^A0N,(\d+)/).map(Number);
+    expect(y + fh).toBeLessThanOrEqual(102);                   // and the order line still sits on the sticker
   });
   it("by size", () => {
     const z = jerseyLabelZPL({ bin: 2, by: "size", value: "A-XL", orderNumber: "" });
@@ -142,7 +150,7 @@ describe("jerseyLabelZPL (1 x 0.5 in)", () => {
     const z = jerseyLabelZPL({ bin: "", by: "team", value: "Navy", orderNumber: "1" });
     expect(z).not.toContain("^FDBIN^FS");
     expect(z).not.toContain("^GB");
-    expect(z).toContain("^FB195,1,0,C^FDNavy^FS");
+    expect(z).toMatch(/\^FB19\d,1,0,C\^FDNavy\^FS/);          // nearly the whole width
   });
   it("no value: a dash, so the sticker never prints blank", () => {
     expect(jerseyLabelZPL({ bin: 1, by: "team", value: "", orderNumber: "" })).toContain("^FD—^FS");

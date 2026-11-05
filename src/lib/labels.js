@@ -11,11 +11,15 @@
 import { binEntries, binFieldOf, binFor } from "./roster.js";
 
 // "1x0.5" (inches, width x height) → dots at the printer's resolution.
+// `top` is where printing starts: the ZD411 begins its label about 2 mm
+// above the sticker's edge, so the first 2 mm are left blank or the top
+// line comes out cut in half (seen on the floor, 5 Nov 2026).
 export const DEFAULT_LABEL_SIZE = "1x0.5";
+export const LABEL_TOP_MM = 2;
 export function labelSize(spec = DEFAULT_LABEL_SIZE, dpi = 203) {
   const m = String(spec || "").match(/^\s*([\d.]+)\s*[x×]\s*([\d.]+)\s*$/i);
   const w = m ? parseFloat(m[1]) : 1, h = m ? parseFloat(m[2]) : 0.5;
-  return { w: Math.round(w * dpi), h: Math.round(h * dpi), dpi, widthIn: w, heightIn: h };
+  return { w: Math.round(w * dpi), h: Math.round(h * dpi), dpi, widthIn: w, heightIn: h, top: Math.round(dpi * LABEL_TOP_MM / 25.4) };
 }
 
 // ZPL field data may not contain the control characters ^ and ~.
@@ -41,22 +45,23 @@ export function jerseyLabel(row, binMap, { orderNumber = "" } = {}) {
 // allows, the sort (TEAM or SIZE) and its value on the right, the order
 // number small under it.
 export function jerseyLabelZPL(l, size = labelSize()) {
-  const { w, h } = size;
-  const pad  = Math.round(h * 0.04);
-  const tag  = Math.max(12, Math.round(h * 0.16));
+  const { w, h, top = 0 } = size;
+  const a    = h - top;                                         // the printable height
+  const pad  = Math.round(a * 0.04);
+  const tag  = Math.max(12, Math.round(a * 0.16));
   const hasBin = l.bin !== "" && l.bin !== null && l.bin !== undefined;
   const lw   = hasBin ? Math.round(w * 0.36) : 0;              // the BIN column
   const rx   = hasBin ? lw + pad : pad, rw = w - rx - pad;      // the sort column
   const out  = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0"];
   if (hasBin) {
-    const big = Math.round(h * 0.62);
-    out.push(line(0, pad, tag, lw, "C", "BIN"));
-    out.push(line(0, pad + tag + 2, fit(l.bin, lw, big), lw, "C", l.bin));
-    out.push(`^FO${lw},${pad}^GB1,${h - 2 * pad},1^FS`);           // a hairline between the columns
+    const big = Math.round(a * 0.58);
+    out.push(line(0, top + pad, tag, lw, "C", "BIN"));
+    out.push(line(0, top + pad + tag + 2, fit(l.bin, lw, big), lw, "C", l.bin));
+    out.push(`^FO${lw},${top + pad}^GB1,${a - 2 * pad},1^FS`);     // a hairline between the columns
   }
-  const valueH = fit(l.value || "—", rw, Math.round(h * 0.42));
-  out.push(line(rx, pad, tag, rw, "C", l.by === "size" ? "SIZE" : "TEAM"));
-  out.push(line(rx, pad + tag + 2, valueH, rw, "C", l.value || "—"));
+  const valueH = fit(l.value || "—", rw, Math.round(a * 0.42));
+  out.push(line(rx, top + pad, tag, rw, "C", l.by === "size" ? "SIZE" : "TEAM"));
+  out.push(line(rx, top + pad + tag + 2, valueH, rw, "C", l.value || "—"));
   if (l.orderNumber) out.push(line(rx, h - tag - pad, fit(`Order ${l.orderNumber}`, rw, tag), rw, "C", `Order ${l.orderNumber}`));
   out.push("^PQ1", "^XZ");
   return out.join("\n");
@@ -75,19 +80,20 @@ export function binLabels(roster, binMap, { orderNumber = "" } = {}) {
 // "by team" / "by size" and the jersey count (just the order number on a
 // small label).
 export function binLabelZPL(l, size = labelSize()) {
-  const { w, h } = size;
-  const pad   = Math.round(h * 0.04);
-  const small = Math.max(12, Math.round(h * 0.14));              // the footer
-  const big   = Math.round(h * 0.42);                             // "BIN 3"
-  const mid   = Math.round(h * 0.26);                             // the team or size
+  const { w, h, top = 0 } = size;
+  const a     = h - top;                                          // the printable height
+  const pad   = Math.round(a * 0.04);
+  const small = Math.max(12, Math.round(a * 0.14));              // the footer
+  const big   = Math.round(a * 0.42);                             // "BIN 3"
+  const mid   = Math.round(a * 0.26);                             // the team or size
   const wide  = w >= 300;
   const footer = (wide
     ? [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : "by team", l.count ? `${l.count} ${l.count === 1 ? "jersey" : "jerseys"}` : ""]
     : [l.orderNumber ? `Order ${l.orderNumber}` : ""]).filter(Boolean).join("   ");
   return [
     "^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0",
-    line(0, pad, fit(`BIN ${l.bin}`, w, big), w, "C", `BIN ${l.bin}`),
-    line(0, pad + big + Math.round(h * 0.03), fit(l.label, w, mid), w, "C", l.label),
+    line(0, top + pad, fit(`BIN ${l.bin}`, w, big), w, "C", `BIN ${l.bin}`),
+    line(0, top + pad + big + Math.round(a * 0.03), fit(l.label, w, mid), w, "C", l.label),
     ...(footer ? [line(0, h - small - pad, fit(footer, w, small), w, "C", footer)] : []),
     "^PQ1", "^XZ",
   ].join("\n");
