@@ -20,6 +20,11 @@ export function playTone(type) {
       osc.frequency.setValueAtTime(300, t); osc.frequency.setValueAtTime(220, t + 0.15);
       gain.gain.setValueAtTime(0.4, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
       osc.start(t); osc.stop(t + 0.5);
+    } else if (type === "retry") {            // the scan is dropped, nothing recorded: two flat low blips, unlike the rising pass
+      osc.frequency.setValueAtTime(440, t);
+      gain.gain.setValueAtTime(0.35, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      gain.gain.setValueAtTime(0.35, t + 0.18); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      osc.start(t); osc.stop(t + 0.3);
     } else if (type === "count") {            // one tick per second of the damage-photo countdown
       osc.frequency.setValueAtTime(880, t);
       gain.gain.setValueAtTime(0.3, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);

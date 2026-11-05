@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { parseCSV, parseExcel, buildBinMap, binFor, binEntries, binCount, binFieldOf, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -388,7 +388,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, st
           if (e.status === 409) { const t = e.body?.takenBy || {}; setError(`${stationLabel(t.station)} (${t.operator || "someone"}) is already working on order ${picked.orderNumber || ""}. One station works an order — ask the supervisor to release it from the board if that is wrong.`); setPicked(null); setLoading(false); loadRef.current(); return; }
           /* no hub answer: start anyway, the station still works from the roster it has */
         }
-        onStart({ roster: picked.rows, orderNumber: order.trim(), notes: notes.trim(), jerseyType, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})`, hubRosterId: picked.id }); return;
+        onStart({ roster: normaliseRosterRows(picked.rows), orderNumber: order.trim(), notes: notes.trim(), jerseyType, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})`, hubRosterId: picked.id }); return;
       }
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
@@ -1092,6 +1092,18 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const [count, setCount] = useState(null);
   const damagePhotos = state.damagePhotos || [];
   const startCount = useCallback(() => { setCount(3); playTone("count"); }, []);
+  // The retry pedal on a green: the read is right, there is nothing to retry,
+  // and a retry here looks exactly like a confirm from the operator's side
+  // (both end on the camera screen) — a jersey went in the bin unchecked that
+  // way on 5 Nov 2026. So the pedal (and "again" by voice) only shows a nudge;
+  // the Retry button stays for a deliberate click or an arrow-key pick.
+  const [nudge, setNudge] = useState("");
+  const nudgeTimer = useRef(null);
+  const showNudge = useCallback(() => {
+    setNudge(`That's the retry pedal — ${formatKey(confirmKey)} confirms`);
+    clearTimeout(nudgeTimer.current); nudgeTimer.current = setTimeout(() => setNudge(""), 1800);
+  }, [confirmKey]);
+  useEffect(() => () => clearTimeout(nudgeTimer.current), []);
   const actionsRef = useRef(actions);
   useEffect(() => { actionsRef.current = actions; }, [actions]);
 
@@ -1165,7 +1177,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (mode === "manual" || mode === "reasonText") { if (e.code === "Escape") { e.preventDefault(); actions.back(); } return; }   // typing, not navigating
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target?.tagName)) return;   // the Enter that submitted the form is still bubbling: it must not also pick the first row of the list it opened
-      if (e.code === retryKey) { const o = options.find(x => x.id === "retry"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }
+      if (e.code === retryKey) { if (mode === "confirm") { e.preventDefault(); showNudge(); return; } const o = options.find(x => x.id === "retry"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }
       if (e.code === byHandKey) { const o = options.find(x => x.id === "manual"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }   // straight to the form, like R goes straight to retry
       if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled) o.run(); return; }
       if (e.code === cancelKey || e.code === "ArrowDown") { e.preventDefault(); lastKeyRef.current = Date.now(); move(1); return; }
@@ -1176,13 +1188,13 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     const onVoice = (e) => {
       const c = e.detail?.command; if (!c || mode === "done") return;
       if (mode === "manual" || mode === "reasonText") return;        // typing
-      if (c === "retry")    { const o = options.find(x => x.id === "retry");    if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } return; }
+      if (c === "retry")    { if (mode === "confirm") { showNudge(); return; } const o = options.find(x => x.id === "retry");    if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } return; }
       if (c === "select")   { const o = options[selectedIdx]; if (o && !o.disabled) { lastKeyRef.current = Date.now(); o.run(); } }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("jerseyqc:voice", onVoice);
     return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("jerseyqc:voice", onVoice); };
-  }, [options, selectedIdx, mode, confirmKey, cancelKey, upKey, retryKey, byHandKey, actions]);
+  }, [options, selectedIdx, mode, confirmKey, cancelKey, upKey, retryKey, byHandKey, actions, showNudge]);
 
   // A bumped mouse never overrides a key press made in the last moment.
   const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) setSelectedIdx(i); }, []);
@@ -1203,7 +1215,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     return (
       <button onClick={o.run} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
         style={{ padding: "13px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.22)"}`, background: o.primary ? accent : "transparent", color: o.primary ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 20, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
-        <span>{o.label} {o.id === "retry" ? <Kbd light>{formatKey(retryKey)}</Kbd> : o.id === "manual" ? <Kbd light>{formatKey(byHandKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
+        <span>{o.label} {o.id === "retry" && mode !== "confirm" ? <Kbd light>{formatKey(retryKey)}</Kbd> : o.id === "manual" ? <Kbd light>{formatKey(byHandKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
         {o.hint && <span style={{ fontSize: 15, fontWeight: 400, opacity: 0.8 }}>{o.hint}</span>}
       </button>
     );
@@ -1256,6 +1268,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           {state.note && <div style={{ marginTop: 12, fontSize: 20, color: "#fcd34d" }}>✎ {state.note}</div>}
           {mode === "confirm" && (
             <>
+              {nudge && (
+                <div style={{ marginTop: 12, padding: "8px 24px", borderRadius: 14, background: "#0d1117", color: "#fcd34d", border: "3px solid #f59e0b", fontWeight: 900, fontSize: "clamp(20px, 2.6vw, 26px)" }}>
+                  ↻ {nudge}
+                </div>
+              )}
               {inspect && inspect.phase !== "quick" && (
                 <div style={{ marginTop: 12, padding: "8px 24px", borderRadius: 14, background: "#f59e0b", color: "#0d1117", fontWeight: 900, fontSize: "clamp(20px, 2.6vw, 26px)", letterSpacing: 0.5 }}>
                   🔍 {inspectLabel(inspect)}
@@ -1861,6 +1878,7 @@ export default function App() {
   const vigilRef = useRef(createVigilance({ log: m => console.log(m) }));
   const [checksLeft, setChecksLeft] = useState(0);
   const [noJersey, setNoJersey] = useState("");      // a B press that read nothing: a quiet notice for a moment, no screen
+  const [retried, setRetried] = useState(null);      // the last read dropped by Retry: { number, name }, shown until the next scan so a retry never passes for a pass
   const noJerseyTimer = useRef(null);
   const noteMistake = useCallback(kind => { vigilRef.current.noteMistake(kind); setChecksLeft(vigilRef.current.remaining); }, []);
   // The operator's own regime: full inspection of the next 5 after a defect,
@@ -2058,7 +2076,7 @@ export default function App() {
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
     setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setIdleSpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
-    setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false);
+    setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
   }, []);
 
   // Finish order: the confirm screen, then back to waiting for an order.
@@ -2127,7 +2145,7 @@ export default function App() {
     const version = rosterVersion.current;
     if (!firstScanTime) setFirstScanTime(Date.now());
     gateRef.current.disarm(); setArmed(false);
-    setScanning(true);
+    setScanning(true); setRetried(null);
     setThumb(dataUrl);
     playTone("scan");
 
@@ -2431,7 +2449,11 @@ export default function App() {
       setOverlay({ mode: "done", scan, match: overlay.match });
       playTone("pass");
     },
-    retry()  { setOverlay(null); armAutoScan(); },
+    retry()  {
+      const read = overlay?.match || overlay?.scan?.detected || {};
+      setRetried({ number: read.number || "", name: read.name || "" });
+      setOverlay(null); playTone("retry"); armAutoScan();
+    },
     // A row picked from a list, by key or by mouse. On a list the operator
     // typed for, the pick IS the hand entry: it goes in as entered by hand.
     pick(c)  {
@@ -2684,6 +2706,11 @@ export default function App() {
       )}
       {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
 
+      {retried && !overlay && !noJersey && (
+        <div style={{ position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 1950, background: "#1e293b", color: "#fcd34d", border: "2px solid #f59e0b", borderRadius: 999, padding: "10px 22px", fontSize: 20, fontWeight: 800, boxShadow: "0 8px 30px rgba(0,0,0,0.5)", whiteSpace: "nowrap" }}>
+          ↻ Scanned again · {retried.number || retried.name ? `#${retried.number || "?"}${retried.name ? " " + retried.name : ""} is` : "that jersey is"} NOT checked — no sticker, no bin
+        </div>
+      )}
       {noJersey && (
         <div style={{ position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 1950, background: "#1e293b", color: "#e2e8f0", border: "1px solid #3f4b5c", borderRadius: 999, padding: "10px 22px", fontSize: 20, fontWeight: 700, boxShadow: "0 8px 30px rgba(0,0,0,0.5)", pointerEvents: "none" }}>
           {noJersey}
