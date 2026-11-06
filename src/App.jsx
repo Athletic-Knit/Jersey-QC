@@ -1092,13 +1092,14 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   // The retry pedal on a green: the read is right, there is nothing to retry,
   // and a retry here looks exactly like a confirm from the operator's side
   // (both end on the camera screen) — a jersey went in the bin unchecked that
-  // way on 5 Nov 2026. So the pedal only shows a nudge;
-  // the Retry button stays for a deliberate click or an arrow-key pick.
+  // way on 5 Nov 2026. So the pedal only shows a nudge, laid over the screen
+  // for 5 s with nothing moving underneath; the Retry button is a mouse click
+  // only (no key reaches it: the arrows skip it, B never runs it).
   const [nudge, setNudge] = useState("");
   const nudgeTimer = useRef(null);
   const showNudge = useCallback(() => {
     setNudge(`That's the retry pedal — ${formatKey(confirmKey)} confirms`);
-    clearTimeout(nudgeTimer.current); nudgeTimer.current = setTimeout(() => setNudge(""), 1800);
+    clearTimeout(nudgeTimer.current); nudgeTimer.current = setTimeout(() => setNudge(""), 5000);
   }, [confirmKey]);
   useEffect(() => () => clearTimeout(nudgeTimer.current), []);
   const actionsRef = useRef(actions);
@@ -1114,7 +1115,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     const retry    = { id: "retry",    label: "↻ Retry scan",    run: actions.retry };
     const notRight = { id: "notright", label: "🚩 Flag",          run: actions.reasons };
     const byHand   = { id: "manual",   label: "⌨ Enter by hand", run: actions.manual };
-    if (mode === "confirm")    return [{ id: "confirm", label: "✓ Confirm", primary: true, run: actions.confirm }, retry, notRight];
+    if (mode === "confirm")    return [{ id: "confirm", label: "✓ Confirm", primary: true, run: actions.confirm }, { ...retry, mouseOnly: true }, notRight];   // Retry on a green is a mouse click only (see showNudge)
     if (isList) {
       const t = state.typed;
       const none = t
@@ -1165,7 +1166,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     const move = dir => {
       const n = options.length; if (!n) return;
       let next = selectedIdx, tries = 0;
-      do { next = (next + dir + n) % n; tries++; } while (options[next]?.disabled && tries < n);
+      do { next = (next + dir + n) % n; tries++; } while ((options[next]?.disabled || options[next]?.mouseOnly) && tries < n);
       setSelectedIdx(next);
     };
     const onKey = (e) => {
@@ -1176,7 +1177,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target?.tagName)) return;   // the Enter that submitted the form is still bubbling: it must not also pick the first row of the list it opened
       if (e.code === retryKey) { if (mode === "confirm") { e.preventDefault(); showNudge(); return; } const o = options.find(x => x.id === "retry"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }
       if (e.code === byHandKey) { const o = options.find(x => x.id === "manual"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }   // straight to the form, like R goes straight to retry
-      if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled) o.run(); return; }
+      if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled && !o.mouseOnly) o.run(); return; }
       if (e.code === cancelKey || e.code === "ArrowDown") { e.preventDefault(); lastKeyRef.current = Date.now(); move(1); return; }
       if (e.code === upKey || e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
     };
@@ -1213,12 +1214,17 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "safe center", userSelect: "none", padding: state.scan?.thumb && !isGreen ? "16px 0 116px" : "16px 0", overflowY: "auto", containerType: "size" }}>
 
       {/* ── GREEN ── */}
+      {nudge && (
+        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 5, padding: "18px 36px", borderRadius: 18, background: "#0d1117", color: "#fcd34d", border: "4px solid #f59e0b", fontWeight: 900, fontSize: "clamp(24px, 3.4vw, 40px)", boxShadow: "0 12px 40px rgba(0,0,0,0.6)", maxWidth: "90%", textAlign: "center", boxSizing: "border-box", pointerEvents: "none" }}>
+          ↻ {nudge}
+        </div>
+      )}
       {isGreen && match && (
         <>
-          {/* Two columns that take the room above the buttons: the number and
-              name on the left, SIZE and BIN on the right, each column a size
-              container so its text is sized by the column itself. */}
-          <div style={{ flex: 1, minHeight: 0, width: "100%", display: "grid", gridTemplateColumns: hasSize || binNum !== null ? "3fr 2fr" : "1fr", gap: 16, padding: "0 20px", boxSizing: "border-box", alignItems: "stretch" }}>
+          {/* Two halves that take the room above the buttons: the number and
+              name on the left, SIZE and BIN on the right, each half a size
+              container so its text is sized by the half itself. */}
+          <div style={{ flex: 1, minHeight: 0, width: "100%", display: "grid", gridTemplateColumns: hasSize || binNum !== null ? "1fr 1fr" : "1fr", gap: 16, padding: "0 20px", boxSizing: "border-box", alignItems: "stretch" }}>
             <div style={{ containerType: "size", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${match.name ? 52 : 70}cqh, ${String(match.number ?? "").length > 2 ? 40 : 52}cqw)`, fontWeight: 900, color: accent, lineHeight: 0.9, maxWidth: "100%" }}>
                 #{match.number}
@@ -1256,11 +1262,6 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           {state.note && <div style={{ marginTop: 12, fontSize: 20, color: "#fcd34d" }}>✎ {state.note}</div>}
           {mode === "confirm" && (
             <>
-              {nudge && (
-                <div style={{ marginTop: 12, padding: "8px 24px", borderRadius: 14, background: "#0d1117", color: "#fcd34d", border: "3px solid #f59e0b", fontWeight: 900, fontSize: "clamp(20px, 2.6vw, 26px)" }}>
-                  ↻ {nudge}
-                </div>
-              )}
               {inspect && inspect.phase !== "quick" && (
                 <div style={{ marginTop: 12, padding: "8px 24px", borderRadius: 14, background: "#f59e0b", color: "#0d1117", fontWeight: 900, fontSize: "clamp(20px, 2.6vw, 26px)", letterSpacing: 0.5 }}>
                   🔍 {inspectLabel(inspect)}
