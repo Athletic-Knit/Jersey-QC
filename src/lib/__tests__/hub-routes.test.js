@@ -238,6 +238,20 @@ describe("bin labels on the hub's printer", () => {
     await call("GET", "/print");
     expect(f.listsMade()).toBe(2);
   });
+  it("a listing that fails keeps the last good list and is tried again after 5 s", async () => {
+    let fail = false, lists = 0;
+    const printed = [];
+    const { call, tick } = makeHub({ listPrinters: async () => { lists++; if (fail) throw new Error("timed out"); return queues; }, print: async (printer, zpl) => printed.push({ printer, zpl }) });
+    expect((await call("GET", "/print")).body.printer).toBe("ZDesigner ZD411-203dpi ZPL");
+    tick(61000); fail = true;
+    expect((await call("GET", "/print")).body.printer).toBe("ZDesigner ZD411-203dpi ZPL");    // the last good list, not "no printer"
+    expect((await call("POST", "/print", { kind: "flag", station: "st-station1", labels: ticket })).status).toBe(200);
+    expect(printed[0].printer).toBe("ZDesigner ZD411-203dpi ZPL");
+    expect(lists).toBe(2);                                                                      // the failure is not asked again at once …
+    tick(6000); fail = false;
+    await call("GET", "/print");
+    expect(lists).toBe(3);                                                                      // … but after 5 s
+  });
   it("a PC whose queues cannot be listed has no label printer, and the hub keeps working", async () => {
     const { call } = makeHub({ listPrinters: async () => { throw new Error("powershell not found"); }, print: async () => {} });
     expect((await call("GET", "/print")).body).toMatchObject({ printer: null, printers: [] });

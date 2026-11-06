@@ -85,18 +85,20 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   // tickets go on a 2 x 1 in roll, so they have their own printer the same
   // way (JERSEY_FLAG_PRINTER_STATION1, else JERSEY_FLAG_PRINTER) and fall
   // back to the label printer when none is set. The queue list costs a
-  // PowerShell start, so it is kept for a minute.
+  // PowerShell start, so it is kept for a minute; a listing that fails (a
+  // slow Get-Printer past the 30 s limit, seen on the floor 6 Nov 2026 as
+  // "No label printer" on a ticket) keeps the last good list and is tried
+  // again after 5 s, so one bad call does not blank the printer for a minute.
   const printerName = String(printer || "").trim(), labelSpec = String(labelSize || "").trim() || DEFAULT_LABEL_SIZE;
   const flagName = String(flagPrinter || "").trim(), flagSpec = String(flagLabelSize || "").trim() || DEFAULT_FLAG_LABEL_SIZE;
   const byStation = map => Object.fromEntries(Object.entries(map || {}).filter(([, v]) => String(v || "").trim()).map(([k, v]) => [String(k).trim().toLowerCase(), String(v).trim()]));
   const perStation = byStation(stationPrinters), perStationFlag = byStation(stationFlagPrinters);
-  let printers = { at: -Infinity, list: [] };
+  let printers = { at: -Infinity, list: [], ok: false };
   const printerList = async () => {
-    if (now_() - printers.at < 60000) return printers.list;
-    let list = [];
-    try { list = await listPrinters(); } catch (e) { console.error("[hub] could not list printers:", e.message); }
-    printers = { at: now_(), list };
-    return list;
+    if (now_() - printers.at < (printers.ok ? 60000 : 5000)) return printers.list;
+    try { printers = { at: now_(), list: await listPrinters(), ok: true }; }
+    catch (e) { console.error("[hub] could not list printers:", e.message); printers = { at: now_(), list: printers.list, ok: false }; }
+    return printers.list;
   };
   const labelPrinter = async station => perStation[String(station || "").trim().toLowerCase()] || printerName || (await printerList()).find(isLabelPrinter)?.name || null;
   const ticketPrinter = async station => perStationFlag[String(station || "").trim().toLowerCase()] || flagName || labelPrinter(station);
