@@ -9,7 +9,7 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
-import { binLabels, jerseyLabel } from "./lib/labels.js";
+import { binLabels, jerseyLabel, flagLabel } from "./lib/labels.js";
 const SECOND_LOOK = false;
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf } from "./config.js";
 
@@ -1066,7 +1066,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket }) {
   const reasons = reasonsFor(jerseyType);
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
@@ -1362,6 +1362,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
               {state.photoFirst ? "Hold the problem under the camera and take a photo for the supervisor." : "The scan photo goes with it. If the problem is somewhere else — the front, a sleeve — take a photo of that."}
             </div>
           )}
+          {mode === "supervisor" && ticket && (
+            <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, fontSize: 19, color: ticket.status === "done" ? "#fecaca" : ticket.status === "printing" ? "#fca5a5" : "#fbbf24" }}>
+              <span>{ticket.status === "printing" ? "🖨 Printing the flag ticket…" : ticket.status === "done" ? "🖨 Flag ticket printed — stick it on the jersey" : ticket.status === "none" ? "🖨 No label printer for this station — write the ticket by hand" : `🖨 Ticket not printed: ${ticket.message}`}</span>
+              {ticket.status !== "printing" && <button onClick={() => reprintTicket?.(state.entryId)} title="Print this jersey's flag ticket again" style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, borderColor: "#fca5a5", color: "#fecaca" }}>Reprint</button>}
+            </div>
+          )}
           {mode === "flag" && state.title === "SCAN FAILED" && (
             <div style={{ fontSize: 21, color: "#fed7aa", marginTop: 16, textAlign: "center" }}>Check the network.</div>
           )}
@@ -1570,7 +1576,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           <div style={labelSt}>Stickers</div>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
             <input type="checkbox" checked={temp.stickers !== false} onChange={e => setTemp(t => ({ ...t, stickers: e.target.checked }))} />
-            Print a sticker for every passed jersey (its bin, and the team or size) on this station's label printer
+            Print a sticker for every passed jersey (its bin, and the team or size) and a flag ticket for every flagged one on this station's label printer
           </label>
         </div>
 
@@ -1891,6 +1897,32 @@ export default function App() {
     stickerPrinted.current = lastConfirmed.id;
     printSticker(lastConfirmed);
   }, [lastConfirmed, settings.stickers, printSticker]);
+
+  // ── The ticket on every flag ──────────────────────────────────────────────
+  // The newest log entry, when it is a flag, prints a ticket — the mirror of
+  // the sticker, black down the left so the packer never boxes it — once
+  // (`ticketPrinted`); a resumed order starts with its last entry already
+  // counted, so nothing reprints. `ticket` is how the last one went, shown on
+  // the GO TO SUPERVISOR screen with a Reprint button. The Stickers switch
+  // covers tickets too.
+  const [ticket, setTicket] = useState(null);      // { id, status: "done" | "none" | "error", printer, message }
+  const ticketPrinted = useRef(0);                 // the log id of the last flag sent to the printer
+  const printTicket = useCallback(entry => {
+    if (!entry) return Promise.resolve();
+    const label = flagLabel(entry, binMap, { orderNumber, station: stationId(), tag: severityOf(entry.reason).tag });
+    return hub.printLabels([label], { kind: "flag", station: stationId() })
+      .then(r => setTicket({ id: entry.id, status: "done", printer: r.printer }))
+      .catch(e => setTicket({ id: entry.id, status: e.status === 503 ? "none" : "error", message: e.status ? e.message : "could not reach the server" }));
+  }, [binMap, orderNumber]);
+  const newestEntry = log[0];
+  useEffect(() => {
+    if (!settings.stickers || !newestEntry || newestEntry.status !== S_FLAGGED || ticketPrinted.current === newestEntry.id) return;
+    ticketPrinted.current = newestEntry.id;
+    printTicket(newestEntry);
+  }, [newestEntry, settings.stickers, printTicket]);
+  // What the supervisor screen shows for its entry: how the ticket went, or that it is printing.
+  const ticketFor = entryId => !settings.stickers || !entryId ? null : ticket?.id === entryId ? ticket : { id: entryId, status: "printing" };
+  const reprintTicket = entryId => { const e = log.find(l => l.id === entryId); if (e) { setTicket(null); printTicket(e); } };
   const scannedRows    = roster.filter(r => r.scanned && r.scanned !== false);
   const remaining      = roster.filter(r => !r.scanned).length;
   // Hands-free runs only while it is on in Settings, not paused by the operator,
@@ -1989,6 +2021,7 @@ export default function App() {
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
     setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []);
+    ticketPrinted.current = (s.log || [])[0]?.id ?? 0;             // its last flag's ticket was printed when it happened
     vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
     inspectRef.current.load(s.inspect); syncInspect();
     setSessionStarted(true); setResumeDecided(true);
@@ -2626,7 +2659,7 @@ export default function App() {
       )}
 
       {overlay && !wide && (
-        <ScanOverlay key={overlayKey} inspect={inspect} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey}
+        <ScanOverlay key={overlayKey} inspect={inspect} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket}
           stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
       )}
 
@@ -2867,7 +2900,7 @@ export default function App() {
         {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && wide && (
-            <ScanOverlay key={overlayKey} inspect={inspect} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey}
+            <ScanOverlay key={overlayKey} inspect={inspect} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket}
               stream={null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
           )}
 

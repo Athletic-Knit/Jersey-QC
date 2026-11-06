@@ -4,6 +4,10 @@
 //   • a jersey sticker, printed on every pass: the bin the jersey goes in and
 //     what the order is sorted by (the team or the size), for the packer who
 //     stacks the folded jerseys by bin;
+//   • a flag ticket, printed on every flag: the mirror of the sticker, with
+//     the left column solid black so a flagged jersey is never packed — the
+//     number on the black, where the jersey goes (STITCHER, REMAKE …) and
+//     why on the right;
 //   • a bin label (on request from the Bin setup screen): "BIN 3" and what
 //     the bin holds.
 // The roll is 1 in wide by 0.5 in tall (JERSEY_LABEL_SIZE); every layout is
@@ -28,7 +32,9 @@ const safe = s => String(s ?? "").replace(/[\^~]/g, " ");
 // character: the tallest font that still fits `text` in `width` dots.
 const fit = (text, width, maxH) => Math.max(10, Math.min(maxH, Math.floor(width / (0.58 * Math.max(1, String(text).length)))));
 // One line of text in a box: ^FB wraps it to `width`, one line, aligned.
-const line = (x, y, fh, width, align, text) => `^FO${x},${y}^A0N,${fh},${fh}^FB${width},1,0,${align}^FD${safe(text)}^FS`;
+// `lines` > 1 wraps onto that many lines; `reverse` prints white on black.
+const line = (x, y, fh, width, align, text, { lines = 1, reverse = false } = {}) =>
+  `^FO${x},${y}^A0N,${fh},${fh}^FB${width},${lines},0,${align}${reverse ? "^FR" : ""}^FD${safe(text)}^FS`;
 
 // ── The jersey sticker ───────────────────────────────────────────────────────
 // What a passed jersey's sticker says, from its roster row and the order's
@@ -67,6 +73,78 @@ export function jerseyLabelZPL(l, size = labelSize()) {
   return out.join("\n");
 }
 
+// ── The flag ticket ──────────────────────────────────────────────────────────
+// What a flagged jersey's ticket says, from its log entry: the number and
+// name (from the roster row when there is one, else what the camera read),
+// where it goes (`tag`: the board's tag for the reason's route, from
+// severityOf in config.js — the caller passes it, as config.js needs Vite's
+// env and this file also runs on the hub), the reason, the team, size and
+// bin, and the order, station and time.
+const stationShort = id => String(id || "").replace(/^st-/, "").replace(/^station\s*/i, "St ").trim();
+export function flagLabel(entry, binMap, { orderNumber = "", station = "", tag = "DECIDE" } = {}) {
+  const row = entry?.match || null, read = entry?.detected || null;
+  const bin = row ? binFor(binMap, row) : null;
+  const time = String(entry?.timestamp || "").match(/(\d\d:\d\d)(?::\d\d)?\s*$/)?.[1] || "";
+  return {
+    number: String(row?.number ?? read?.number ?? "").trim() || "?",
+    name:   String(row?.name ?? read?.name ?? "").trim(),
+    tag:    String(tag || "DECIDE"),
+    reason: String(entry?.reason || "").replace(/ — found after it passed$/, "").trim(),
+    team:   String(row?.team ?? "").trim(),
+    size:   String(row?.size ?? "").trim(),
+    bin:    bin === null ? "" : bin,
+    orderNumber: String(orderNumber || ""),
+    station: stationShort(station),
+    time,
+  };
+}
+
+// 1 x 0.5 in, the mirror of the sticker: a solid black column on the left
+// with FLAG, the number and the name in white; on the right the route tag
+// as big as it fits, the reason on up to three lines, team · size · bin,
+// and order · station · time small at the bottom.
+export function flagLabelZPL(l, size = labelSize()) {
+  const { w, h, top = 0 } = size;
+  const a    = h - top;
+  const pad  = Math.round(a * 0.04);
+  const lw   = Math.round(w * 0.36);
+  const rx   = lw + 2 * pad, rw = w - rx - pad;
+  const tag  = Math.max(12, Math.round(a * 0.16));
+  const tiny = Math.max(12, Math.round(a * 0.14));
+  const out  = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0"];
+  // The black column: a box filled by a border as thick as the box is wide.
+  out.push(`^FO0,${top}^GB${lw},${a},${lw}^FS`);
+  const nameH = l.name ? tiny : 0;
+  const big   = fit(l.number, lw - 2, Math.round(a * 0.52));
+  out.push(line(0, top + pad, tag, lw, "C", "FLAG", { reverse: true }));
+  out.push(line(0, top + pad + tag + 1, big, lw, "C", l.number, { reverse: true }));
+  if (l.name) out.push(line(0, top + a - pad - nameH, fit(l.name, lw - 2, tiny), lw, "C", l.name, { reverse: true }));
+  // The right column.
+  const tagH = fit(l.tag || "DECIDE", rw, Math.round(a * 0.22));
+  let y = top + pad;
+  out.push(line(rx, y, tagH, rw, "C", l.tag || "DECIDE"));
+  y += tagH + 2;
+  const parts = [l.team, l.size, l.bin !== "" ? `Bin ${l.bin}` : ""].filter(Boolean).join(" · ");
+  const footer = [l.orderNumber ? `Ord ${l.orderNumber}` : "", l.station, l.time].filter(Boolean).join(" · ");
+  const bottom = top + a - pad;                                   // the lines stack up from here
+  let fy = bottom;
+  if (footer) { fy -= tiny; out.push(line(rx, fy, fit(footer, rw, tiny), rw, "C", footer)); }
+  if (parts)  { fy -= tiny + 1; out.push(line(rx, fy, fit(parts, rw, tiny), rw, "C", parts)); }
+  const room = fy - 2 - y;                                        // what is left for the reason
+  if (l.reason && room >= 10) {
+    // As many lines as the room allows (up to 3); when the reason still
+    // does not fit, a smaller font down to 10 dots rather than a cut line.
+    let fh = Math.min(tiny, room), lines = 1;
+    for (; fh >= 10; fh--) {
+      lines = Math.max(1, Math.min(3, Math.floor(room / fh)));
+      if (lines * Math.floor(rw / (0.58 * fh)) >= l.reason.length) break;
+    }
+    out.push(line(rx, y, Math.max(10, fh), rw, "C", l.reason, { lines }));
+  }
+  out.push("^PQ1", "^XZ");
+  return out.join("\n");
+}
+
 // ── Bin labels ───────────────────────────────────────────────────────────────
 // One entry per bin: { bin, label (the team or size), by, count, orderNumber }.
 export function binLabels(roster, binMap, { orderNumber = "" } = {}) {
@@ -99,8 +177,8 @@ export function binLabelZPL(l, size = labelSize()) {
   ].join("\n");
 }
 
-// Every label of one kind, back to back. `kind`: "bin" (default) or "jersey".
+// Every label of one kind, back to back. `kind`: "bin" (default), "jersey" or "flag".
 export function labelsZPL(labels, size = labelSize(), kind = "bin") {
-  const one = kind === "jersey" ? jerseyLabelZPL : binLabelZPL;
+  const one = kind === "jersey" ? jerseyLabelZPL : kind === "flag" ? flagLabelZPL : binLabelZPL;
   return labels.map(l => one(l, size)).join("\n") + "\n";
 }

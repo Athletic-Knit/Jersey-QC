@@ -1,6 +1,6 @@
 // Bin labels for the Zebra: what each label says, and the ZPL that says it.
 import { describe, it, expect } from "vitest";
-import { binLabels, labelSize, binLabelZPL, labelsZPL, jerseyLabel, jerseyLabelZPL } from "../labels.js";
+import { binLabels, labelSize, binLabelZPL, labelsZPL, jerseyLabel, jerseyLabelZPL, flagLabel, flagLabelZPL } from "../labels.js";
 import { buildBinMap } from "../roster.js";
 
 const roster = [
@@ -166,5 +166,64 @@ describe("jerseyLabelZPL (1 x 0.5 in)", () => {
     expect(z).toContain("^FDRed XZ^FS");
     expect(z).toContain("Order 1 2");
     expect(z).toContain("^FDTEAM^FS");
+  });
+});
+
+// The ticket on every flagged jersey: the mirror of the sticker, black on the left.
+describe("flagLabel", () => {
+  const byTeam = buildBinMap(roster, {}, "team");
+  const entry = { id: 5, match: roster[2], status: "flagged", reason: "Loose, missing or broken stitching", timestamp: "2026-11-06 14:05:12", operator: "Priya" };
+  it("from a log entry with a roster row: number, name, team, size, bin, the tag the caller gives, the reason, order, station and time", () => {
+    expect(flagLabel(entry, byTeam, { orderNumber: 264247, station: "st-station1", tag: "STITCHER" })).toEqual({
+      number: "3", name: "LEE", tag: "STITCHER", reason: "Loose, missing or broken stitching", team: "Red", size: "A-L", bin: 2,
+      orderNumber: "264247", station: "St 1", time: "14:05",
+    });
+  });
+  it("no roster row (not on the roster, could not read): what the camera read, or ?", () => {
+    expect(flagLabel({ detected: { number: "88", name: "NOBODY" }, reason: "Not on the roster." }, byTeam, { tag: "CHECK ORDER" })).toMatchObject({ number: "88", name: "NOBODY", tag: "CHECK ORDER", team: "", size: "", bin: "", station: "", time: "" });
+    expect(flagLabel({ detected: {}, reason: "Could not read" }, null)).toMatchObject({ number: "?", name: "", tag: "DECIDE" });
+  });
+  it("a flag found after it passed loses the suffix on the ticket", () => {
+    expect(flagLabel({ ...entry, reason: "Seam, hem or construction — found after it passed" }, byTeam).reason).toBe("Seam, hem or construction");
+  });
+});
+
+describe("flagLabelZPL (1 x 0.5 in)", () => {
+  const l = { number: "7", name: "SMITH", tag: "STITCHER", reason: "Loose, missing or broken stitching", team: "Navy", size: "A-L", bin: 2, orderNumber: "264247", station: "St 1", time: "14:05" };
+  const lines = z => z.split("\n");
+  const fontOf = (z, text) => parseInt(lines(z).find(x => x.endsWith(`^FD${text}^FS`)).match(/\^A0N,(\d+)/)[1], 10);
+  it("a solid black column on the left with FLAG, the number and the name in white", () => {
+    const z = flagLabelZPL(l);
+    expect(z).toContain("^FO0,16^GB73,86,73^FS");                  // a box filled by its own border, from 2 mm down
+    expect(z).toContain("^FR^FDFLAG^FS");
+    expect(z).toContain("^FR^FD7^FS");
+    expect(z).toContain("^FR^FDSMITH^FS");
+    expect(fontOf(z, "7")).toBeGreaterThanOrEqual(40);
+  });
+  it("the route tag big on the right, the reason wrapped, team · size · bin, and order · station · time at the bottom", () => {
+    const z = flagLabelZPL(l);
+    expect(z).toContain("^FDSTITCHER^FS");
+    expect(fontOf(z, "STITCHER")).toBeGreaterThanOrEqual(18);
+    expect(z).toMatch(/\^FB12\d,[23],0,C\^FDLoose, missing or broken stitching\^FS/);
+    expect(z).toContain("^FDNavy · A-L · Bin 2^FS");
+    expect(z).toContain("^FDOrd 264247 · St 1 · 14:05^FS");
+    expect(lines(z).filter(x => x.startsWith("^FO")).every(x => parseInt(x.match(/\^FO\d+,(\d+)/)[1], 10) >= 16)).toBe(true);
+    expect(z).not.toContain("^FR^FDSTITCHER");                      // the right column is black on white
+  });
+  it("a long reason shrinks a little rather than losing its end", () => {
+    const long = flagLabelZPL({ ...l, reason: "Print error — ghosting, fading, misaligned" });
+    expect(long).toMatch(/\^A0N,1[01],1[01]\^FB12\d,3,0,C\^FDPrint error — ghosting, fading, misaligned\^FS/);
+    expect(fontOf(flagLabelZPL({ ...l, reason: "Cleaning not done" }), "Cleaning not done")).toBe(12);
+  });
+  it("nothing to say: no name, no reason, no team — the ticket still prints", () => {
+    const z = flagLabelZPL({ number: "?", name: "", tag: "DECIDE", reason: "", team: "", size: "", bin: "", orderNumber: "", station: "", time: "" });
+    expect(z).toContain("^FR^FD?^FS");
+    expect(z).toContain("^FDDECIDE^FS");
+    expect(z).not.toContain("^FD^FS");
+  });
+  it("labelsZPL with kind flag uses this layout", () => {
+    const z = labelsZPL([l, { ...l, number: "9" }], labelSize(), "flag");
+    expect((z.match(/\^XA/g) || []).length).toBe(2);
+    expect(z).toContain("^FR^FD9^FS");
   });
 });

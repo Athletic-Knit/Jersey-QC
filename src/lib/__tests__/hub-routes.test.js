@@ -157,6 +157,18 @@ describe("bin labels on the hub's printer", () => {
     expect(zpl).toContain("^FDOrder 264247^FS");
     expect(zpl).not.toContain("^FDBIN 3^FS");   // not the bin-label layout
   });
+  it("a flag ticket on a flag: kind flag, the station's printer", async () => {
+    const f = fakes();
+    const { call } = makeHub(f.opts);
+    const { status, body } = await call("POST", "/print", { kind: "flag", station: "st-station1", labels: [{ number: "7", name: "SMITH", tag: "STITCHER", reason: "Loose stitching", team: "Navy", size: "A-L", bin: 2, orderNumber: "264247", station: "St 1", time: "14:05" }] });
+    expect(status).toBe(200);
+    expect(body).toEqual({ ok: true, printer: "ZDesigner ZD411-203dpi ZPL", count: 1 });
+    const { zpl } = f.printed[0];
+    expect(zpl).toContain("^FR^FDFLAG^FS");
+    expect(zpl).toContain("^FR^FD7^FS");
+    expect(zpl).toContain("^FDSTITCHER^FS");
+    expect(zpl).not.toContain("^FDBIN^FS");    // not the sticker layout
+  });
   it("no label printer: GET says null, POST says 503", async () => {
     const f = fakes([queues[0]]);
     const { call } = makeHub(f.opts);

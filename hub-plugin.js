@@ -16,7 +16,7 @@
 //   POST   /api/hub/rosters/:id/release the supervisor frees it for another station
 //   DELETE /api/hub/rosters/:id         the station finished it, or the supervisor removes it
 //   GET    /api/hub/print?station=…     { printer, printers } — the label printer for that station (JERSEY_PRINTER_<STATION>), else the hub's (JERSEY_PRINTER, else the first Zebra queue)
-//   POST   /api/hub/print               { labels, kind, station } — prints one label per entry (labels.js: kind "jersey" = the sticker on a pass, "bin" = a bin label); 503 when there is no label printer
+//   POST   /api/hub/print               { labels, kind, station } — prints one label per entry (labels.js: kind "jersey" = the sticker on a pass, "flag" = the ticket on a flag, "bin" = a bin label); 503 when there is no label printer
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -214,11 +214,13 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           const body = await readBody(req);
           const labels = Array.isArray(body.labels) ? body.labels.slice(0, 100) : [];
           if (!labels.length) return json(res, 400, { error: "labels required" });
-          const kind = body.kind === "jersey" ? "jersey" : "bin";
+          const kind = body.kind === "jersey" || body.kind === "flag" ? body.kind : "bin";
           const name = await labelPrinter(body.station); if (!name) return json(res, 503, { error: "no label printer" });
           try { await print(name, labelsZPL(labels, labelDots(labelSpec), kind)); }
           catch (e) { console.error(`[hub] print on ${name} failed: ${e.message}`); return json(res, 502, { error: `print failed: ${e.message}` }); }
-          const what = kind === "jersey" ? (labels.length === 1 ? `sticker bin ${labels[0].bin || "—"} ${labels[0].value || ""}` : `${labels.length} stickers`) : `${labels.length} bin label${labels.length === 1 ? "" : "s"}`;
+          const what = kind === "jersey" ? (labels.length === 1 ? `sticker bin ${labels[0].bin || "—"} ${labels[0].value || ""}` : `${labels.length} stickers`)
+            : kind === "flag" ? (labels.length === 1 ? `flag ticket #${labels[0].number || "?"} ${labels[0].tag || ""}` : `${labels.length} flag tickets`)
+            : `${labels.length} bin label${labels.length === 1 ? "" : "s"}`;
           console.log(`[hub] ${new Date().toLocaleTimeString()} ${body.station ? body.station + ": " : ""}printed ${what} on ${name}${labels[0]?.orderNumber ? ` for order ${labels[0].orderNumber}` : ""}`);
           return json(res, 200, { ok: true, printer: name, count: labels.length });
         }
