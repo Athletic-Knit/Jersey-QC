@@ -15,14 +15,14 @@
 //   POST   /api/hub/rosters/:id/take    { station, operator } — a station starts it; 409 if another station already has it
 //   POST   /api/hub/rosters/:id/release the supervisor frees it for another station
 //   DELETE /api/hub/rosters/:id         the station finished it, or the supervisor removes it
-//   GET    /api/hub/print?station=…     { printer, printers } — the label printer for that station (JERSEY_PRINTER_<STATION>), else the hub's (JERSEY_PRINTER, else the first Zebra queue)
-//   POST   /api/hub/print               { labels, kind, station } — prints one label per entry (labels.js: kind "jersey" = the sticker on a pass, "flag" = the ticket on a flag, "bin" = a bin label); 503 when there is no label printer
+//   GET    /api/hub/print?station=…     { printer, printers, labelSize, flagPrinter, flagLabelSize } — the label printer for that station (JERSEY_PRINTER_<STATION>), else the hub's (JERSEY_PRINTER, else the first Zebra queue); the flag-ticket printer likewise (JERSEY_FLAG_PRINTER_<STATION>, JERSEY_FLAG_PRINTER), else the label printer
+//   POST   /api/hub/print               { labels, kind, station } — prints one label per entry (labels.js: kind "jersey" = the sticker on a pass, "flag" = the ticket on a flag, on the flag printer and its 2 x 1 in roll, "bin" = a bin label); 503 when there is no label printer
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { labelsZPL, labelSize as labelDots, DEFAULT_LABEL_SIZE } from "./src/lib/labels.js";
+import { labelsZPL, labelSize as labelDots, DEFAULT_LABEL_SIZE, DEFAULT_FLAG_LABEL_SIZE } from "./src/lib/labels.js";
 
 // ── Bin labels: the Zebra on the hub PC ──────────────────────────────────────
 // The ZPL goes to a Windows print queue as raw bytes through tools/print-raw.ps1
@@ -57,7 +57,7 @@ export function pruneLedger(led, { keepDays = 90, photoDays = 14 } = {}) {
   return led;
 }
 
-export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", printers: stationPrinters = {}, labelSize = "", print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
+export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", printers: stationPrinters = {}, labelSize = "", flagPrinter = "", flagPrinters: stationFlagPrinters = {}, flagLabelSize = "", print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
   let state = { stations: {}, rosters: {} };
   try { state = { ...state, ...JSON.parse(fs.readFileSync(file, "utf8")) }; } catch { /* first run */ }
 
@@ -81,10 +81,15 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   });
   // The label printer: the station's own (JERSEY_PRINTER_STATION1 = a queue on
   // this PC, which may be a shared printer on the station PC, \\AK-NB-164\Zebra),
-  // else JERSEY_PRINTER, else the first Zebra queue on this PC. The queue list
-  // costs a PowerShell start, so it is kept for a minute.
+  // else JERSEY_PRINTER, else the first Zebra queue on this PC. The flag
+  // tickets go on a 2 x 1 in roll, so they have their own printer the same
+  // way (JERSEY_FLAG_PRINTER_STATION1, else JERSEY_FLAG_PRINTER) and fall
+  // back to the label printer when none is set. The queue list costs a
+  // PowerShell start, so it is kept for a minute.
   const printerName = String(printer || "").trim(), labelSpec = String(labelSize || "").trim() || DEFAULT_LABEL_SIZE;
-  const perStation = Object.fromEntries(Object.entries(stationPrinters || {}).filter(([, v]) => String(v || "").trim()).map(([k, v]) => [String(k).trim().toLowerCase(), String(v).trim()]));
+  const flagName = String(flagPrinter || "").trim(), flagSpec = String(flagLabelSize || "").trim() || DEFAULT_FLAG_LABEL_SIZE;
+  const byStation = map => Object.fromEntries(Object.entries(map || {}).filter(([, v]) => String(v || "").trim()).map(([k, v]) => [String(k).trim().toLowerCase(), String(v).trim()]));
+  const perStation = byStation(stationPrinters), perStationFlag = byStation(stationFlagPrinters);
   let printers = { at: -Infinity, list: [] };
   const printerList = async () => {
     if (now_() - printers.at < 60000) return printers.list;
@@ -94,6 +99,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
     return list;
   };
   const labelPrinter = async station => perStation[String(station || "").trim().toLowerCase()] || printerName || (await printerList()).find(isLabelPrinter)?.name || null;
+  const ticketPrinter = async station => perStationFlag[String(station || "").trim().toLowerCase()] || flagName || labelPrinter(station);
   const summary = r => ({ id: r.id, orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
 
   async function handle(req, res) {
@@ -209,14 +215,14 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
         if (req.method === "DELETE" && id) { delete state.rosters[id]; save(); return json(res, 200, { ok: true }); }
       }
       if (kind === "print" && !id) {
-        if (req.method === "GET") { const station = new URL(req.url, "http://hub").searchParams.get("station"); return json(res, 200, { printer: await labelPrinter(station), printers: await printerList(), labelSize: labelSpec }); }
+        if (req.method === "GET") { const station = new URL(req.url, "http://hub").searchParams.get("station"); return json(res, 200, { printer: await labelPrinter(station), printers: await printerList(), labelSize: labelSpec, flagPrinter: await ticketPrinter(station), flagLabelSize: flagSpec }); }
         if (req.method === "POST") {
           const body = await readBody(req);
           const labels = Array.isArray(body.labels) ? body.labels.slice(0, 100) : [];
           if (!labels.length) return json(res, 400, { error: "labels required" });
           const kind = body.kind === "jersey" || body.kind === "flag" ? body.kind : "bin";
-          const name = await labelPrinter(body.station); if (!name) return json(res, 503, { error: "no label printer" });
-          try { await print(name, labelsZPL(labels, labelDots(labelSpec), kind)); }
+          const name = await (kind === "flag" ? ticketPrinter : labelPrinter)(body.station); if (!name) return json(res, 503, { error: "no label printer" });
+          try { await print(name, labelsZPL(labels, labelDots(kind === "flag" ? flagSpec : labelSpec), kind)); }
           catch (e) { console.error(`[hub] print on ${name} failed: ${e.message}`); return json(res, 502, { error: `print failed: ${e.message}` }); }
           const what = kind === "jersey" ? (labels.length === 1 ? `sticker bin ${labels[0].bin || "—"} ${labels[0].value || ""}` : `${labels.length} stickers`)
             : kind === "flag" ? (labels.length === 1 ? `flag ticket #${labels[0].number || "?"} ${labels[0].tag || ""}` : `${labels.length} flag tickets`)

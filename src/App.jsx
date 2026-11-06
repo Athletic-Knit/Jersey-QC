@@ -1573,10 +1573,14 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <div style={labelSt}>Stickers</div>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
+          <div style={labelSt}>Label printer</div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginBottom: 8 }}>
             <input type="checkbox" checked={temp.stickers !== false} onChange={e => setTemp(t => ({ ...t, stickers: e.target.checked }))} />
-            Print a sticker for every passed jersey (its bin, and the team or size) and a flag ticket for every flagged one on this station's label printer
+            Print a sticker for every passed jersey (its bin, and the team or size) — the 1 × ½ in roll
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
+            <input type="checkbox" checked={temp.flagTickets !== false} onChange={e => setTemp(t => ({ ...t, flagTickets: e.target.checked }))} />
+            Print a flag ticket for every flagged jersey (where it goes and why) — the 2 × 1 in roll
           </label>
         </div>
 
@@ -1903,8 +1907,8 @@ export default function App() {
   // the sticker, black down the left so the packer never boxes it — once
   // (`ticketPrinted`); a resumed order starts with its last entry already
   // counted, so nothing reprints. `ticket` is how the last one went, shown on
-  // the GO TO SUPERVISOR screen with a Reprint button. The Stickers switch
-  // covers tickets too.
+  // the GO TO SUPERVISOR screen with a Reprint button. Its own switch in
+  // Settings (`flagTickets`), apart from the stickers'.
   const [ticket, setTicket] = useState(null);      // { id, status: "done" | "none" | "error", printer, message }
   const ticketPrinted = useRef(0);                 // the log id of the last flag sent to the printer
   const printTicket = useCallback(entry => {
@@ -1916,12 +1920,12 @@ export default function App() {
   }, [binMap, orderNumber]);
   const newestEntry = log[0];
   useEffect(() => {
-    if (!settings.stickers || !newestEntry || newestEntry.status !== S_FLAGGED || ticketPrinted.current === newestEntry.id) return;
+    if (!settings.flagTickets || !newestEntry || newestEntry.status !== S_FLAGGED || ticketPrinted.current === newestEntry.id) return;
     ticketPrinted.current = newestEntry.id;
     printTicket(newestEntry);
-  }, [newestEntry, settings.stickers, printTicket]);
+  }, [newestEntry, settings.flagTickets, printTicket]);
   // What the supervisor screen shows for its entry: how the ticket went, or that it is printing.
-  const ticketFor = entryId => !settings.stickers || !entryId ? null : ticket?.id === entryId ? ticket : { id: entryId, status: "printing" };
+  const ticketFor = entryId => !settings.flagTickets || !entryId ? null : ticket?.id === entryId ? ticket : { id: entryId, status: "printing" };
   const reprintTicket = entryId => { const e = log.find(l => l.id === entryId); if (e) { setTicket(null); printTicket(e); } };
   const scannedRows    = roster.filter(r => r.scanned && r.scanned !== false);
   const remaining      = roster.filter(r => !r.scanned).length;

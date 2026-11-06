@@ -122,6 +122,8 @@ describe("bin labels on the hub's printer", () => {
     expect(body.printer).toBe("ZDesigner ZD411-203dpi ZPL");
     expect(body.printers.map(p => p.name)).toEqual(["RICOH SP C360DNw", "ZDesigner ZD411-203dpi ZPL"]);
     expect(body.labelSize).toBe("1x0.5");
+    expect(body.flagPrinter).toBe("ZDesigner ZD411-203dpi ZPL");    // no flag printer set: the tickets go to the label printer
+    expect(body.flagLabelSize).toBe("2x1");
   });
   it("a queue matches on its driver too, and JERSEY_PRINTER wins over the search", async () => {
     const byDriver = makeHub(fakes([{ name: "Labels", driver: "Zebra ZPL", port: "USB001" }]).opts);
@@ -157,17 +159,33 @@ describe("bin labels on the hub's printer", () => {
     expect(zpl).toContain("^FDOrder 264247^FS");
     expect(zpl).not.toContain("^FDBIN 3^FS");   // not the bin-label layout
   });
-  it("a flag ticket on a flag: kind flag, the station's printer", async () => {
+  const ticket = [{ number: "7", name: "SMITH", tag: "STITCHER", reason: "Loose stitching", team: "Navy", size: "A-L", bin: 2, orderNumber: "264247", station: "St 1", time: "14:05" }];
+  it("a flag ticket on a flag: kind flag, 2 x 1 in, on the station's printer when no flag printer is set", async () => {
     const f = fakes();
     const { call } = makeHub(f.opts);
-    const { status, body } = await call("POST", "/print", { kind: "flag", station: "st-station1", labels: [{ number: "7", name: "SMITH", tag: "STITCHER", reason: "Loose stitching", team: "Navy", size: "A-L", bin: 2, orderNumber: "264247", station: "St 1", time: "14:05" }] });
+    const { status, body } = await call("POST", "/print", { kind: "flag", station: "st-station1", labels: ticket });
     expect(status).toBe(200);
     expect(body).toEqual({ ok: true, printer: "ZDesigner ZD411-203dpi ZPL", count: 1 });
     const { zpl } = f.printed[0];
+    expect(zpl).toContain("^PW406");
+    expect(zpl).toContain("^LL203");
     expect(zpl).toContain("^FR^FDFLAG^FS");
     expect(zpl).toContain("^FR^FD7^FS");
     expect(zpl).toContain("^FDSTITCHER^FS");
     expect(zpl).not.toContain("^FDBIN^FS");    // not the sticker layout
+  });
+  it("the flag printer (JERSEY_FLAG_PRINTER_STATION1, else JERSEY_FLAG_PRINTER) takes the tickets; the stickers stay on the label printer", async () => {
+    const f = fakes();
+    const { call } = makeHub({ ...f.opts, printers: { "st-station1": "Zebra at station 1" }, flagPrinter: "Zebra 2x1 on the server", flagPrinters: { "st-station2": "Zebra 2x1 at station 2" }, flagLabelSize: "2.25x1.25" });
+    expect((await call("GET", "/print?station=st-station1")).body).toMatchObject({ printer: "Zebra at station 1", flagPrinter: "Zebra 2x1 on the server", flagLabelSize: "2.25x1.25" });
+    expect((await call("GET", "/print?station=st-Station2")).body).toMatchObject({ printer: "ZDesigner ZD411-203dpi ZPL", flagPrinter: "Zebra 2x1 at station 2" });
+    await call("POST", "/print", { kind: "flag", station: "st-station1", labels: ticket });
+    await call("POST", "/print", { kind: "flag", station: "st-station2", labels: ticket });
+    await call("POST", "/print", { kind: "jersey", station: "st-station1", labels: [{ bin: 3, by: "team", value: "Navy", orderNumber: "264247" }] });
+    expect(f.printed.map(p => p.printer)).toEqual(["Zebra 2x1 on the server", "Zebra 2x1 at station 2", "Zebra at station 1"]);
+    expect(f.printed[0].zpl).toContain("^PW457");                     // JERSEY_FLAG_LABEL_SIZE
+    expect(f.printed[0].zpl).toContain("^LL254");
+    expect(f.printed[2].zpl).toContain("^PW203");                     // the sticker roll is untouched
   });
   it("no label printer: GET says null, POST says 503", async () => {
     const f = fakes([queues[0]]);

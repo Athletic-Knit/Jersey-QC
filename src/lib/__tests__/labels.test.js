@@ -188,32 +188,50 @@ describe("flagLabel", () => {
   });
 });
 
-describe("flagLabelZPL (1 x 0.5 in)", () => {
+describe("flagLabelZPL (2 x 1 in)", () => {
   const l = { number: "7", name: "SMITH", tag: "STITCHER", reason: "Loose, missing or broken stitching", team: "Navy", size: "A-L", bin: 2, orderNumber: "264247", station: "St 1", time: "14:05" };
   const lines = z => z.split("\n");
   const fontOf = (z, text) => parseInt(lines(z).find(x => x.endsWith(`^FD${text}^FS`)).match(/\^A0N,(\d+)/)[1], 10);
+  const topOf = z => lines(z).filter(x => x.startsWith("^FO")).map(x => parseInt(x.match(/\^FO\d+,(\d+)/)[1], 10));
+  it("the ticket is 2 in wide by 1 in tall by default", () => {
+    expect(labelSize("2x1")).toMatchObject({ w: 406, h: 203, top: 16 });
+    const z = flagLabelZPL(l);
+    expect(z).toContain("^PW406");
+    expect(z).toContain("^LL203");
+  });
   it("a solid black column on the left with FLAG, the number and the name in white", () => {
     const z = flagLabelZPL(l);
-    expect(z).toContain("^FO0,16^GB73,86,73^FS");                  // a box filled by its own border, from 2 mm down
+    expect(z).toContain("^FO0,16^GB130,187,130^FS");                // a box filled by its own border, from 2 mm down
     expect(z).toContain("^FR^FDFLAG^FS");
     expect(z).toContain("^FR^FD7^FS");
     expect(z).toContain("^FR^FDSMITH^FS");
-    expect(fontOf(z, "7")).toBeGreaterThanOrEqual(40);
+    expect(fontOf(z, "7")).toBeGreaterThanOrEqual(90);               // ~11 mm, read from across the table
+    expect(fontOf(z, "SMITH")).toBeGreaterThanOrEqual(24);
   });
   it("the route tag big on the right, the reason wrapped, team · size · bin, and order · station · time at the bottom", () => {
     const z = flagLabelZPL(l);
     expect(z).toContain("^FDSTITCHER^FS");
-    expect(fontOf(z, "STITCHER")).toBeGreaterThanOrEqual(18);
-    expect(z).toMatch(/\^FB12\d,[23],0,C\^FDLoose, missing or broken stitching\^FS/);
+    expect(fontOf(z, "STITCHER")).toBeGreaterThanOrEqual(45);
+    expect(z).toMatch(/\^A0N,2[0-6],2[0-6]\^FB25\d,[23],0,C\^FDLoose, missing or broken stitching\^FS/);
     expect(z).toContain("^FDNavy · A-L · Bin 2^FS");
+    expect(fontOf(z, "Navy · A-L · Bin 2")).toBeGreaterThanOrEqual(22);
     expect(z).toContain("^FDOrd 264247 · St 1 · 14:05^FS");
-    expect(lines(z).filter(x => x.startsWith("^FO")).every(x => parseInt(x.match(/\^FO\d+,(\d+)/)[1], 10) >= 16)).toBe(true);
+    expect(topOf(z).every(y => y >= 16)).toBe(true);
     expect(z).not.toContain("^FR^FDSTITCHER");                      // the right column is black on white
   });
-  it("a long reason shrinks a little rather than losing its end", () => {
+  it("a long reason takes three lines, a little smaller, rather than losing its end", () => {
     const long = flagLabelZPL({ ...l, reason: "Print error — ghosting, fading, misaligned" });
-    expect(long).toMatch(/\^A0N,1[01],1[01]\^FB12\d,3,0,C\^FDPrint error — ghosting, fading, misaligned\^FS/);
-    expect(fontOf(flagLabelZPL({ ...l, reason: "Cleaning not done" }), "Cleaning not done")).toBe(12);
+    expect(long).toMatch(/\^A0N,2[0-3],2[0-3]\^FB25\d,3,0,C\^FDPrint error — ghosting, fading, misaligned\^FS/);
+    expect(fontOf(flagLabelZPL({ ...l, reason: "Cleaning not done" }), "Cleaning not done")).toBe(26);
+  });
+  it("on the 1 x 0.5 in sticker roll the same layout still fits, smaller", () => {
+    const z = flagLabelZPL(l, labelSize("1x0.5"));
+    expect(z).toContain("^PW203");
+    expect(z).toContain("^FO0,16^GB65,86,65^FS");
+    expect(z).toContain("^FR^FD7^FS");
+    expect(z).toContain("^FDSTITCHER^FS");
+    expect(topOf(z).every(y => y >= 16 && y < 102)).toBe(true);
+    expect(lines(z).filter(x => x.includes("^A0N")).every(x => parseInt(x.match(/\^A0N,(\d+)/)[1], 10) >= 10)).toBe(true);
   });
   it("nothing to say: no name, no reason, no team — the ticket still prints", () => {
     const z = flagLabelZPL({ number: "?", name: "", tag: "DECIDE", reason: "", team: "", size: "", bin: "", orderNumber: "", station: "", time: "" });
@@ -222,8 +240,9 @@ describe("flagLabelZPL (1 x 0.5 in)", () => {
     expect(z).not.toContain("^FD^FS");
   });
   it("labelsZPL with kind flag uses this layout", () => {
-    const z = labelsZPL([l, { ...l, number: "9" }], labelSize(), "flag");
+    const z = labelsZPL([l, { ...l, number: "9" }], labelSize("2x1"), "flag");
     expect((z.match(/\^XA/g) || []).length).toBe(2);
+    expect(z).toContain("^PW406");
     expect(z).toContain("^FR^FD9^FS");
   });
 });

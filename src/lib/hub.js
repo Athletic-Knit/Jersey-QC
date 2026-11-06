@@ -59,7 +59,7 @@ export const hub = {
   takeRoster:    (id, body)     => call(`/api/hub/rosters/${id}/take`, { method: "POST", body: JSON.stringify(body) }),     // a station starts it; throws "already taken" with .takenBy
   releaseRoster: id             => call(`/api/hub/rosters/${id}/release`, { method: "POST" }),                            // supervisor frees it for another station
   printStatus:   station       => call(`/api/hub/print${station ? "?station=" + encodeURIComponent(station) : ""}`),        // { printer, printers } — the label printer for this station
-  printLabels:   (labels, o = {}) => call("/api/hub/print", { method: "POST", body: JSON.stringify({ labels, ...o }) }),    // o: { kind: "jersey" | "bin", station }; throws 503 "no label printer"
+  printLabels:   (labels, o = {}) => call("/api/hub/print", { method: "POST", body: JSON.stringify({ labels, ...o }) }),    // o: { kind: "jersey" | "flag" | "bin", station }; throws 503 "no label printer"
   removeRoster:  id             => call(`/api/hub/rosters/${id}`, { method: "DELETE" }),
   ledger:        date           => call(`/api/hub/ledger${date ? "?date=" + encodeURIComponent(date) : ""}`),   // every scan event of a day, all stations
 };

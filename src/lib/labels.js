@@ -7,11 +7,12 @@
 //   • a flag ticket, printed on every flag: the mirror of the sticker, with
 //     the left column solid black so a flagged jersey is never packed — the
 //     number on the black, where the jersey goes (STITCHER, REMAKE …) and
-//     why on the right;
+//     why on the right. It goes on its own, bigger roll: 2 in wide by 1 in
+//     tall (JERSEY_FLAG_LABEL_SIZE), on the flag printer when there is one;
 //   • a bin label (on request from the Bin setup screen): "BIN 3" and what
 //     the bin holds.
-// The roll is 1 in wide by 0.5 in tall (JERSEY_LABEL_SIZE); every layout is
-// in fractions of the label so another roll only needs the setting.
+// The sticker roll is 1 in wide by 0.5 in tall (JERSEY_LABEL_SIZE); every
+// layout is in fractions of the label so another roll only needs the setting.
 import { binEntries, binFieldOf, binFor } from "./roster.js";
 
 // "1x0.5" (inches, width x height) → dots at the printer's resolution.
@@ -19,6 +20,7 @@ import { binEntries, binFieldOf, binFor } from "./roster.js";
 // above the sticker's edge, so the first 2 mm are left blank or the top
 // line comes out cut in half (seen on the floor, 5 Nov 2026).
 export const DEFAULT_LABEL_SIZE = "1x0.5";
+export const DEFAULT_FLAG_LABEL_SIZE = "2x1";
 export const LABEL_TOP_MM = 2;
 export function labelSize(spec = DEFAULT_LABEL_SIZE, dpi = 203) {
   const m = String(spec || "").match(/^\s*([\d.]+)\s*[x×]\s*([\d.]+)\s*$/i);
@@ -99,37 +101,40 @@ export function flagLabel(entry, binMap, { orderNumber = "", station = "", tag =
   };
 }
 
-// 1 x 0.5 in, the mirror of the sticker: a solid black column on the left
+// 2 x 1 in, the mirror of the sticker: a solid black column on the left
 // with FLAG, the number and the name in white; on the right the route tag
 // as big as it fits, the reason on up to three lines, team · size · bin,
-// and order · station · time small at the bottom.
-export function flagLabelZPL(l, size = labelSize()) {
+// and order · station · time small at the bottom. In fractions of the
+// label, so it also comes out (small) on the 1 x 0.5 in sticker roll.
+export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const { w, h, top = 0 } = size;
-  const a    = h - top;
-  const pad  = Math.round(a * 0.04);
-  const lw   = Math.round(w * 0.36);
-  const rx   = lw + 2 * pad, rw = w - rx - pad;
-  const tag  = Math.max(12, Math.round(a * 0.16));
-  const tiny = Math.max(12, Math.round(a * 0.14));
-  const out  = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0"];
+  const a     = h - top;
+  const pad   = Math.round(a * 0.04);
+  const lw    = Math.round(w * 0.32);                             // the black column
+  const rx    = lw + 2 * pad, rw = w - rx - pad;                  // the right column
+  const tag   = Math.max(12, Math.round(a * 0.16));               // FLAG
+  const tiny  = Math.max(12, Math.round(a * 0.14));               // the name, the reason
+  const mid   = Math.max(12, Math.round(a * 0.13));               // team · size · bin
+  const small = Math.max(10, Math.round(a * 0.12));               // order · station · time
+  const out   = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0"];
   // The black column: a box filled by a border as thick as the box is wide.
   out.push(`^FO0,${top}^GB${lw},${a},${lw}^FS`);
   const nameH = l.name ? tiny : 0;
-  const big   = fit(l.number, lw - 2, Math.round(a * 0.52));
+  const big   = fit(l.number, lw - 4, Math.round(a * 0.5));
   out.push(line(0, top + pad, tag, lw, "C", "FLAG", { reverse: true }));
   out.push(line(0, top + pad + tag + 1, big, lw, "C", l.number, { reverse: true }));
-  if (l.name) out.push(line(0, top + a - pad - nameH, fit(l.name, lw - 2, tiny), lw, "C", l.name, { reverse: true }));
+  if (l.name) out.push(line(0, top + a - pad - nameH, fit(l.name, lw - 4, tiny), lw, "C", l.name, { reverse: true }));
   // The right column.
-  const tagH = fit(l.tag || "DECIDE", rw, Math.round(a * 0.22));
+  const tagH = fit(l.tag || "DECIDE", rw, Math.round(a * 0.26));
   let y = top + pad;
   out.push(line(rx, y, tagH, rw, "C", l.tag || "DECIDE"));
-  y += tagH + 2;
+  y += tagH + pad;
   const parts = [l.team, l.size, l.bin !== "" ? `Bin ${l.bin}` : ""].filter(Boolean).join(" · ");
   const footer = [l.orderNumber ? `Ord ${l.orderNumber}` : "", l.station, l.time].filter(Boolean).join(" · ");
   const bottom = top + a - pad;                                   // the lines stack up from here
   let fy = bottom;
-  if (footer) { fy -= tiny; out.push(line(rx, fy, fit(footer, rw, tiny), rw, "C", footer)); }
-  if (parts)  { fy -= tiny + 1; out.push(line(rx, fy, fit(parts, rw, tiny), rw, "C", parts)); }
+  if (footer) { fy -= small; out.push(line(rx, fy, fit(footer, rw, small), rw, "C", footer)); }
+  if (parts)  { fy -= mid + 1; out.push(line(rx, fy, fit(parts, rw, mid), rw, "C", parts)); }
   const room = fy - 2 - y;                                        // what is left for the reason
   if (l.reason && room >= 10) {
     // As many lines as the room allows (up to 3); when the reason still

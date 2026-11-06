@@ -103,6 +103,7 @@ export const DEFAULT_SETTINGS = {
   autoScan: true,         // hands-free: scan when the jersey changes and settles
   autoScanDelay: 3,       // seconds after a confirm before hands-free may scan again
   stickers: true,         // print a sticker (bin + team or size) on the server's label printer for every passed jersey
+  flagTickets: true,      // print a flag ticket (2 x 1 in: where it goes and why) for every flagged jersey
 };
 
 // ── Where a flagged jersey goes, from the reason the operator picked ────────
