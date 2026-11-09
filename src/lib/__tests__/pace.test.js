@@ -1,9 +1,10 @@
 // Pace from working time: a night with the tab left open is not working time.
 import { describe, it, expect } from "vitest";
 import { workingMinutes, pace, entryTime, CAP_MIN } from "../pace.js";
+import { localTimeStamp } from "../export.js";
 
 const T0 = new Date("2026-11-08T14:00:00").getTime();
-const at = min => ({ id: T0 + min * 60000, timestamp: new Date(T0 + min * 60000).toISOString().slice(0, 19).replace("T", " "), status: "pass" });
+const at = min => ({ id: T0 + min * 60000, timestamp: localTimeStamp(new Date(T0 + min * 60000)), status: "pass" });   // stamped the way the station stamps, in local time
 const MIN = 60000;
 
 describe("workingMinutes", () => {
@@ -35,11 +36,11 @@ describe("workingMinutes", () => {
 
 describe("pace", () => {
   it("rate and ETA from working time, not the clock", () => {
-    const log = [at(0), at(2), at(4), at(6), at(8 + 16 * 60)];       // 4 passes in 8 min, then one the next morning
-    const p = pace(log, 5, 20, T0 + (8 + 16 * 60 + 2) * MIN);
-    expect(p.workingMin).toBeCloseTo(8 + CAP_MIN + 2);
-    expect(p.rate).toBeCloseTo(5 / 20);
-    expect(p.etaMin).toBe(80);                                        // 20 left at 4 a minute... 20 / 0.25
+    const log = [at(0), at(2), at(4), at(6), at(6 + 16 * 60)];       // 4 passes over 6 min, then one the next morning
+    const p = pace(log, 5, 20, T0 + (6 + 16 * 60 + 2) * MIN);
+    expect(p.workingMin).toBeCloseTo(6 + CAP_MIN + 2);               // 18 min worked, not 16 hours
+    expect(p.rate).toBeCloseTo(5 / 18);
+    expect(p.etaMin).toBe(72);                                        // 20 left at 5 per 18 min
   });
   it("no rate until a minute of work and one pass", () => {
     expect(pace([at(0)], 1, 5, T0 + 30000).rate).toBeNull();
