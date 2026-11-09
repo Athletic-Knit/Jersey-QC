@@ -1039,7 +1039,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
 // retried without writing a record.
 const HEADLINE_FIELDS = ["number", "name"];
 
-// Two columns, filled down the left and then down the right, when there are
+// Two columns, filled row by row, when there are
 // more than three rows; the list uses the whole panel and scrolls only when
 // both columns are full. The rows run in likelihood order reading left to
 // right, top to bottom, and Down follows that reading order (9 Nov 2026).
