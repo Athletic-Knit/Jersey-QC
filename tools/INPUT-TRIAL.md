@@ -40,23 +40,28 @@ down a long list, the mouse does not; and the setup someone is used to will
 win on their own numbers. The 12-item reasons menu an order with no jersey
 type shows is the one place the keys are slower by design.
 
-## 2. The stand-alone simulator (people, no app)
+## 2. The stand-alone simulator (people, no app): lists only
 
-`tools/input-trial.html` — open the file in a browser, no server. The jersey
-under the camera (number, name, size, team, and anything wrong with it) is in
-the top-left; the station's green / yellow / red screens are on the right.
-A run is 30 jerseys: 20 greens, 4 yellow lists, 1 list without the jersey,
-1 unreadable number (by hand), 2 damaged jerseys (flag → reason → photo),
-1 wrong green, 1 duplicate. The same 30 come up again for the other setup, so
-each tester works both setups on identical jerseys. Only the time from a
-screen appearing to the choice on it counts: how long someone looks at a
-jersey never enters it. Wrong choices and reaches for the wrong device (a
-click under the keys setup, an arrow under the mouse setup) are counted.
+`tools/input-trial.html` — open the file in a browser, no server. It tests
+the one thing the two setups do differently: going up and down a list. The
+jersey (number, name, size, and any damage) is on the left; on the right is
+the station's yellow list, 2–6 players with that number, one of them the
+jersey (the others are other players or the same name in another size, and
+some rows are greyed as already passed, which the keys skip). Every fifth
+jersey carries damage, and the flag reasons menu follows the list: pick the
+reason that fits. A run is 50 jerseys (60 lists); the same 50 come up again
+for the other setup, so each tester works both setups on identical lists.
+Only the time from a list appearing to the pick on it counts; a short black
+gap between lists gives the clock a clean start. Wrong picks and reaches for
+the wrong device (a click under the keys setup, a key under the mouse setup)
+are counted.
 
-Pedal = Enter, B or Space. Keys setup: A or ↓ down, ↑ up. Results stay in
-that browser; 📊 Results shows the comparison and exports a CSV. Three runs
-each by at least two people before deciding; the first run with any setup is
-a learning run.
+Keys setup: A or ↓ down, ↑ up, the pedal (Enter, B or Space) picks. Mouse
+setup: click the row; the pointer moves the highlight, as it does at the
+station. 📊 Results shows the comparison per setup, split by yellow list and
+reasons menu and by how far down the right row was, with a verdict, and
+exports a CSV. Results stay in that browser. Three runs each by at least two
+people before deciding; the first run with any setup is a learning run.
 
 ## 3. Recording on the real stations (people, real orders)
 

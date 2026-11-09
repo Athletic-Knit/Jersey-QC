@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Input trial — mouse + pedal against keys + pedal</title>
+<title>Input trial — picking from a list: mouse or keys</title>
 <!--
-  A stand-alone trial of the two ways to drive the station's result screens.
-  Not part of the app: open this file in a browser (double-click), no server.
+  A stand-alone trial of the one thing the two setups do differently: going
+  up and down a list. Not part of the app: open this file in a browser
+  (double-click), no server.
 
-  Left: the jersey under the camera (number, name, size, team, and anything
-  wrong with it). Right: the screen the station would show. The tester works
-  through 30 jerseys with one setup, then the same 30 with the other. Only
-  the time from a screen appearing to the choice on it is measured, so how
-  long someone looks at a jersey never enters the numbers.
+  Left: the jersey (number, name, size, and any damage). Right: the station's
+  yellow list, where one row is that jersey, or the flag-reasons menu, where
+  one reason is that damage. The tester picks the right one, 50 jerseys per
+  run, with one setup; then the same 50 with the other setup. Only the time
+  from a list appearing to the pick on it is measured.
 
-  Pedal = Enter, B or Space (the pedal types the Select key on the floor).
-  Keys setup: A or ↓ moves down, ↑ moves up; clicks on the options are refused.
-  Mouse setup: click the option; the arrow keys are refused.
-  Results stay in this browser (localStorage) and export as CSV.
+  Keys setup: A or ↓ moves down, ↑ moves up, the pedal (Enter, B or Space)
+  picks the highlighted row; clicks are refused. Mouse setup: click the row;
+  the arrow keys are refused. Results stay in this browser and export as CSV.
 -->
 <style>
   :root { --bg: #0d1117; --panel: #161b22; --line: #21262d; --text: #e2e8f0; --muted: #94a3b8; --dim: #64748b; }
@@ -40,34 +40,29 @@
   #cam .cap { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
   #cam .num { font: 900 128px/1 "Barlow Condensed", "Arial Narrow", Impact, sans-serif; letter-spacing: -2px; }
   #cam .name { font-size: 34px; font-weight: 800; letter-spacing: .04em; }
-  #cam .meta { font-size: 20px; color: #cbd5e1; }
-  #cam .note { margin-top: 8px; padding: 10px 12px; border-radius: 8px; font-size: 17px; font-weight: 700; }
-  #cam .note.bad { background: rgba(239,68,68,.15); border: 1px solid #ef4444; color: #fca5a5; }
-  #cam .note.info { background: rgba(245,158,11,.12); border: 1px solid #f59e0b; color: #fcd34d; }
-  #cam .hint { margin-top: auto; color: var(--dim); font-size: 13px; }
+  #cam .meta { font-size: 26px; color: #fbbf24; font-weight: 700; }
+  #cam .note { margin-top: 8px; padding: 10px 12px; border-radius: 8px; font-size: 17px; font-weight: 700; background: rgba(239,68,68,.15); border: 1px solid #ef4444; color: #fca5a5; }
+  #cam .hint { margin-top: auto; color: var(--dim); font-size: 13px; line-height: 1.5; }
   #screen { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px; position: relative; }
-  #screen.idle { background: #0d1117; }
-  #screen.green { background: #052e16; } #screen.yellow { background: #1c1a06; } #screen.red { background: #450a0a; } #screen.purple { background: #1a1033; }
-  .big { font: 900 clamp(40px, 7vw, 96px)/1 "Barlow Condensed", "Arial Narrow", Impact, sans-serif; text-align: center; }
-  .title { font-size: clamp(24px, 3.4vw, 40px); font-weight: 900; margin-bottom: 6px; text-align: center; }
+  #screen.idle { background: #0d1117; } #screen.yellow { background: #1c1a06; } #screen.purple { background: #1a1033; }
+  .title { font-size: clamp(24px, 3.4vw, 40px); font-weight: 900; margin-bottom: 6px; text-align: center; color: var(--accent); }
   .sub { font-size: 20px; color: #cbd5e1; margin-bottom: 18px; text-align: center; }
-  .opts { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 18px; max-width: 1100px; }
-  .opts.col { flex-direction: column; align-items: stretch; width: 100%; max-width: 860px; }
-  .opts.two { display: grid; grid-template-columns: 1fr 1fr; width: 100%; max-width: 1100px; }
-  .opt { padding: 13px 20px; border-radius: 12px; border: 3px solid rgba(255,255,255,.22); background: transparent; color: #fff; font: inherit; font-weight: 700; font-size: 20px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-  .opt.primary { background: var(--accent); color: #0d1117; }
-  .opt.sel { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .opts { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 860px; }
+  .opts.two { display: grid; grid-template-columns: 1fr 1fr; max-width: 1100px; }
+  .opt { padding: 12px 18px; border-radius: 12px; border: 3px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); color: #fff; font: inherit; font-weight: 700; font-size: 22px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 58px; }
+  .opt.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
   .opt.dis { opacity: .4; cursor: default; }
-  .opt .kbd { font-size: 13px; border: 1px solid rgba(255,255,255,.4); border-radius: 5px; padding: 1px 6px; font-weight: 600; opacity: .85; }
+  .opt .kbd { font-size: 13px; border: 1px solid rgba(255,255,255,.4); border-radius: 5px; padding: 1px 6px; font-weight: 600; opacity: .85; white-space: nowrap; }
   .opt .cand { display: flex; gap: 18px; align-items: baseline; }
   .opt .cand .n { font: 900 40px/1 "Barlow Condensed", "Arial Narrow", Impact, sans-serif; min-width: 70px; }
-  .opt .cand .d { font-size: 18px; color: #e2e8f0; font-weight: 600; }
-  .opt .cand .d small { color: #94a3b8; font-weight: 400; margin-left: 8px; }
+  .opt .cand .d { font-size: 22px; color: #e2e8f0; font-weight: 700; }
+  .opt .cand .d b { color: #fbbf24; margin-left: 14px; }
+  .opt .cand .d small { color: #94a3b8; font-weight: 400; margin-left: 10px; font-size: 16px; }
   .flash { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); padding: 10px 18px; border-radius: 10px; font-weight: 800; font-size: 20px; pointer-events: none; opacity: 0; transition: opacity .15s; }
   .flash.show { opacity: 1; }
-  .flash.err { background: #ef4444; color: #fff; } .flash.ok { background: #22c55e; color: #052e16; } .flash.warn { background: #f59e0b; color: #1c1a06; }
-  .idlebox { text-align: center; color: var(--muted); }
-  .idlebox .big { color: #e2e8f0; font-size: 48px; }
+  .flash.err { background: #ef4444; color: #fff; } .flash.warn { background: #f59e0b; color: #1c1a06; }
+  .idlebox { text-align: center; color: var(--muted); max-width: 640px; font-size: 18px; line-height: 1.5; }
+  .idlebox .big { color: #e2e8f0; font-size: 44px; font-weight: 900; margin-bottom: 10px; }
   dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 24px; width: min(960px, 94vw); max-height: 92vh; }
   dialog::backdrop { background: rgba(0,0,0,.7); }
   table { border-collapse: collapse; width: 100%; margin-top: 12px; }
@@ -79,21 +74,21 @@
 </head>
 <body>
 <header>
-  <h1>⏱ Input trial</h1>
+  <h1>⏱ Input trial — picking from a list</h1>
   <span class="seg" id="setup">
-    <button data-id="mouse" class="on">🖱 Mouse + pedal</button>
+    <button data-id="mouse" class="on">🖱 Mouse</button>
     <button data-id="keys">⬆⬇ Keys + pedal</button>
   </span>
   <input type="text" id="tester" placeholder="Your name">
-  <button class="btn pri" id="start">Start a run (30 jerseys)</button>
+  <button class="btn pri" id="start">Start a run (50 jerseys)</button>
   <span class="prog" id="prog"></span>
   <span class="spacer"></span>
   <button class="btn" id="results">📊 Results</button>
 </header>
 <main>
   <aside id="cam">
-    <div class="cap">Under the camera</div>
-    <div id="camBody"><div class="hint">Pick a setup, type your name, press Start. The jersey appears here; the screen on the right is what the station would show. Work it exactly as you would on the floor.</div></div>
+    <div class="cap">The jersey</div>
+    <div id="camBody"><div class="hint">Pick a setup, type your name, press Start. The jersey appears here; on the right is the station's yellow list — pick the row that is this jersey. When the jersey shows damage, the flag reasons menu follows — pick the reason that fits. 50 jerseys, then the same 50 with the other setup.</div></div>
   </aside>
   <section id="screen" class="idle"><div class="idlebox"><div class="big">—</div></div><div class="flash" id="flash"></div></section>
 </main>
@@ -103,14 +98,15 @@
 // ── Setup ────────────────────────────────────────────────────────────────────
 const PEDAL = new Set(["Enter", "KeyB", "Space"]);
 const DOWN  = new Set(["KeyA", "ArrowDown"]), UP = new Set(["ArrowUp"]);
-const RUN_LEN = 30;
-const STORE = "jerseyqc.inputtrial.sim.v1";
-const SETUPS = { mouse: "Mouse + pedal", keys: "Keys + pedal" };
+const RUN_LEN = 50;
+const DAMAGE_EVERY = 5;   // every 5th jersey carries damage → the reasons menu follows the list
+const STORE = "jerseyqc.inputtrial.lists.v1";
+const SETUPS = { mouse: "Mouse", keys: "Keys + pedal" };
+// The station's stitched reasons menu, as it is on an ECHL order, plus Back.
 const REASONS = ["Wrong name, number or team", "Missing, wrong or crooked crest or logo", "Twill lifting, peeling or torn", "Loose, missing or broken stitching", "Seam, hem or construction", "Cleaning not done", "Mark or dirt — clean it here", "Something else — type it"];
-const DAMAGE  = [["loose stitching on the number", 3], ["twill peeling on the crest", 2], ["crest is crooked", 1], ["hem seam open", 4], ["oil mark on the sleeve", 5]];
-const NAMES = ["SMITH", "JONES", "NGUYEN", "TREMBLAY", "GARCIA", "PATEL", "O'NEIL", "KOWALSKI", "LEBLANC", "MARTIN", "SINGH", "ROY", "WILSON", "BROWN", "LEE", "GAGNON", "TAYLOR", "CHEN", "MILLER", "DAVIS"];
-const SIZES = ["Y-M", "Y-L", "A-S", "A-M", "A-L", "A-XL"];
-const TEAMS = ["Navy", "Red"];
+const DAMAGE  = [["number stitching is loose", 3], ["twill is peeling off the crest", 2], ["crest sewn on crooked", 1], ["hem seam has opened", 4], ["oil mark on the sleeve", 5], ["loose threads were not cleaned", 5], ["wrong name on the back", 0], ["sleeve seam is coming apart", 4], ["a dirty smudge on the front", 6]];
+const NAMES = ["SMITH", "JONES", "NGUYEN", "TREMBLAY", "GARCIA", "PATEL", "O'NEIL", "KOWALSKI", "LEBLANC", "MARTIN", "SINGH", "ROY", "WILSON", "BROWN", "LEE", "GAGNON", "TAYLOR", "CHEN", "MILLER", "DAVIS", "MORIN", "FORTIN", "KHAN", "WALKER", "SCOTT"];
+const SIZES = ["Y-M", "Y-L", "A-S", "A-M", "A-L", "A-XL", "A-2XL"];
 
 let setup = "mouse", run = null, records = load();
 const $ = s => document.querySelector(s);
@@ -122,33 +118,33 @@ $("#results").onclick = showResults;
 function load() { try { const a = JSON.parse(localStorage.getItem(STORE) || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } }
 function save() { try { localStorage.setItem(STORE, JSON.stringify(records)); } catch {} }
 
-// ── The run: the same 30 jerseys for both setups (seeded by round) ─────────
+// ── The run: the same 50 jerseys for both setups (seeded by round) ─────────
 function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const pick = (r, a) => a[Math.floor(r() * a.length)];
 function shuffle(r, a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-
 // A round is one tester doing both setups on the same jerseys: the round
 // number is how many runs this tester has done with the setup they start with.
 function roundFor(name, s) { return records.filter(x => x.tester === name && x.setup === s && x.kind === "run").length; }
 
 function buildJerseys(seed) {
   const r = rng(seed);
-  const roster = shuffle(r, NAMES.slice()).slice(0, 14).map((name, i) => ({ name, number: String(2 + i * 7 % 89), size: pick(r, SIZES), team: pick(r, TEAMS) }));
-  const kinds = [...Array(20).fill("green"), "list", "list", "list", "list", "listnone", "byhand", "damage", "damage", "wronggreen", "dup"];
-  shuffle(r, kinds);
-  return kinds.map(kind => {
-    const j = { ...pick(r, roster), kind };
-    if (kind === "list" || kind === "listnone") {
-      const n = 2 + Math.floor(r() * 3);
-      const others = shuffle(r, roster.filter(x => x.name !== j.name)).slice(0, n - 1).map(x => ({ ...x, number: j.number }));   // same number, other players
-      let cands = shuffle(r, [j, ...others].map(c => ({ ...c, done: false })));
-      if (kind === "listnone") cands = cands.map(c => c.name === j.name ? { ...c, name: pick(r, NAMES.filter(x => !cands.some(y => y.name === x))) } : c);
-      if (r() < 0.4) { const k = cands.findIndex(c => c.name !== j.name); if (k >= 0) cands[k].done = true; }
-      j.cands = cands;
+  return [...Array(RUN_LEN)].map((_, i) => {
+    const j = { number: String(1 + Math.floor(r() * 98)), name: pick(r, NAMES), size: pick(r, SIZES) };
+    // The list: 2–6 rows with this number; the jersey is one of them, the
+    // others are other players or the same player in another size (the
+    // real list on a team order, where two sizes of one name are open).
+    const n = 2 + Math.floor(r() * 5);
+    const rows = [{ ...j, done: false }];
+    while (rows.length < n) {
+      const sameName = r() < 0.3;
+      const row = sameName ? { ...j, size: pick(r, SIZES.filter(s => !rows.some(x => x.name === j.name && x.size === s))), done: false } : { number: j.number, name: pick(r, NAMES.filter(x => !rows.some(y => y.name === x))), size: pick(r, SIZES), done: false };
+      if (row.size) rows.push(row);
     }
-    if (kind === "damage") { const d = pick(r, DAMAGE); j.damage = d[0]; j.reasonIdx = d[1]; }
-    if (kind === "wronggreen") { j.shown = { ...pick(r, roster.filter(x => x.name !== j.name)), number: j.number }; }   // the camera read the number right but matched another player
-    if (kind === "dup") { j.again = r() < 0.5; }
+    shuffle(r, rows);
+    if (n >= 3 && r() < 0.35) { const k = rows.findIndex(x => !(x.name === j.name && x.size === j.size)); if (k >= 0) rows[k].done = true; }   // a row that already passed: greyed, the keys skip it
+    j.rows = rows;
+    j.correct = rows.findIndex(x => x.name === j.name && x.size === j.size);
+    if ((i + 1) % DAMAGE_EVERY === 0) { const d = pick(r, DAMAGE); j.damage = d[0]; j.reasonIdx = d[1]; }
     return j;
   });
 }
@@ -157,79 +153,57 @@ function startRun() {
   const tester = $("#tester").value.trim();
   if (!tester) { $("#tester").focus(); flash("Type your name first", "warn"); return; }
   const round = roundFor(tester, setup);
-  run = { id: Date.now(), tester, setup, round, seed: 1000 + round, jerseys: buildJerseys(1000 + round), i: -1, chain: [], screens: [], errors: 0, wrongDevice: 0, startedAt: Date.now() };
+  run = { id: Date.now(), tester, setup, round, seed: 1000 + round, jerseys: buildJerseys(1000 + round), i: -1, screens: [], errors: 0, wrongDevice: 0, startedAt: Date.now() };
   $("#start").disabled = true; $("#tester").disabled = true;
   nextJersey();
 }
 
 // ── Screens ─────────────────────────────────────────────────────────────────
-let cur = null;   // { kind, cls, options:[{label, primary, mouseOnly, dis, cand}], correct, shownAt, sel, moves, onDone(idx) }
+let cur = null;   // { kind, cls, title, sub, options:[{label | cand, dis}], correct, layout, sel, moves, shownAt, onDone }
 
 function nextJersey() {
   run.i++;
   if (run.i >= run.jerseys.length) return finishRun();
   const j = run.jerseys[run.i];
-  showCamera(j);
+  $("#camBody").innerHTML = `<div class="num">${j.number}</div><div class="name">${j.name}</div><div class="meta">${j.size}</div>${j.damage ? `<div class="note">Damage: ${j.damage}</div>` : ""}<div class="hint">${run.setup === "keys" ? "A or ↓ moves down, ↑ moves up; the pedal (Enter, B or Space) picks the highlighted row." : "Click the row."}</div>`;
   $("#prog").textContent = `${run.i + 1} / ${run.jerseys.length} · ${SETUPS[run.setup]} · ${run.tester}`;
-  cur = { kind: "camera", cls: "idle", options: [{ label: "📷 Scan", primary: true }], correct: 0, sel: 0, moves: 0, shownAt: performance.now(), onDone: () => firstScreen(j) };
-  render();
+  // A moment of black between jerseys, so the list's appearance is a clean start for the clock.
+  cur = null; $("#screen").className = "idle"; $("#screen").innerHTML = `<div class="idlebox"><div class="big">·</div></div><div class="flash" id="flash"></div>`;
+  setTimeout(() => listScreen(j), 350);
 }
 
-function showCamera(j) {
-  const notes = [];
-  if (j.kind === "damage") notes.push(`<div class="note bad">Damage: ${j.damage}</div>`);
-  if (j.kind === "dup") notes.push(j.again ? `<div class="note info">You already scanned this very jersey — it slipped back on the pile</div>` : `<div class="note info">A second jersey with this name and number — the first one already passed</div>`);
-  if (j.kind === "byhand") notes.push(`<div class="note info">The number is half under a fold — the camera may not read it</div>`);
-  $("#camBody").innerHTML = `<div class="num">${j.number}</div><div class="name">${j.name}</div><div class="meta">${j.size} · ${j.team}</div>${notes.join("")}<div class="hint">Pedal: Enter, B or Space. ${run.setup === "keys" ? "A / ↓ down, ↑ up." : "Click the option."}</div>`;
+function listScreen(j) {
+  const opts = j.rows.map(c => ({ cand: c, dis: c.done }));
+  screen("list", "yellow", `#${j.number} — which one?`, `${j.rows.length} players have this number`, opts, j.correct, () => j.damage ? reasonsScreen(j) : nextJersey());
 }
-
-const GREEN_OPTS = () => [{ label: "✓ Confirm", primary: true }, { label: "↻ Retry scan", mouseOnly: true }, { label: "🚩 Flag" }];
-function firstScreen(j) {
-  if (j.kind === "green")      return screen("green", "green", `#${j.number}`, `${j.name} · ${j.size} · ${j.team} · Bin ${j.team === "Navy" ? 1 : 2}`, GREEN_OPTS(), 0, () => nextJersey());
-  if (j.kind === "damage")     return screen("green", "green", `#${j.number}`, `${j.name} · ${j.size} · ${j.team} · Bin ${j.team === "Navy" ? 1 : 2}`, GREEN_OPTS(), 2, () => reasonsScreen(j, j.reasonIdx, () => supervisorScreen(true)));
-  if (j.kind === "wronggreen") return screen("green", "green", `#${j.shown.number}`, `${j.shown.name} · ${j.shown.size} · ${j.shown.team} · Bin ${j.shown.team === "Navy" ? 1 : 2}`, GREEN_OPTS(), 2, () => reasonsScreen(j, 0, () => supervisorScreen(false)));
-  if (j.kind === "list" || j.kind === "listnone") {
-    const opts = [...j.cands.map(c => ({ cand: c, dis: c.done })), { label: "↻ Retry scan" }, { label: "⌨ None of these" }, { label: "🚩 Flag" }];
-    const correct = j.kind === "list" ? j.cands.findIndex(c => c.name === j.name) : j.cands.length + 1;
-    return screen("list", "yellow", `#${j.number} — which one?`, `the camera read the number; ${j.cands.length} players have it`, opts, correct, () => j.kind === "list" ? nextJersey() : byHandScreen());
-  }
-  if (j.kind === "byhand") return screen("red", "red", "Could not read it", `the camera saw a number but is not sure of it`, [{ label: "↻ Retry scan", primary: true }, { label: "⌨ Enter by hand" }, { label: "🚩 Flag & continue" }, { label: "🚩 Bad jersey" }], 1, () => byHandScreen());
-  if (j.kind === "dup")    return screen("red", "red", `#${j.number} ${j.name} already passed`, `scanned earlier in this order`, [{ label: "✓ Skip", primary: true }, { label: "↻ Retry scan" }, { label: "🚩 Duplicate" }], j.again ? 0 : 2, () => j.again ? nextJersey() : supervisorScreen(false));
+function reasonsScreen(j) {
+  cur = null; $("#screen").className = "idle"; $("#screen").innerHTML = `<div class="idlebox"><div class="big">·</div></div><div class="flash" id="flash"></div>`;
+  setTimeout(() => screen("reasons", "purple", "What's wrong with it?", `#${j.number} · ${j.name} · ${j.size}`, [...REASONS.map(label => ({ label })), { label: "← Back" }], j.reasonIdx, () => nextJersey(), "two"), 350);
 }
-function reasonsScreen(j, correct, then) { screen("reasons", "purple", "What's wrong with it?", `#${j.number} · ${j.name} · ${j.size}`, [...REASONS.map(label => ({ label })), { label: "← Back" }], correct, then, "two"); }
-function supervisorScreen(photoFirst) {
-  if (photoFirst) screen("supervisor", "red", "GO TO SUPERVISOR", "a defect wants a photo first", [{ label: "📷 Photo of the damage", primary: true }, { label: "✓ Continue" }], 0, () => screen("supervisor", "red", "GO TO SUPERVISOR", "damage photo kept", [{ label: "✓ Continue", primary: true }, { label: "📷 Take another" }, { label: "↻ Retake" }], 0, () => nextJersey()));
-  else screen("supervisor", "red", "GO TO SUPERVISOR", "flag ticket printed", [{ label: "✓ Continue", primary: true }, { label: "📷 Photo of the damage" }], 0, () => nextJersey());
-}
-function byHandScreen() { screen("byhand", "yellow", "Entered by hand", "the form is typed the same with either setup — not timed here", [{ label: "✓ Continue", primary: true }, { label: "← Back" }, { label: "🚩 Flag" }], 0, () => nextJersey()); }
 
 function screen(kind, cls, title, sub, options, correct, onDone, layout) {
-  cur = { kind, cls, title, sub, options, correct, onDone, layout, sel: firstEnabled(options, 0), moves: 0, shownAt: performance.now() };
+  cur = { kind, cls, title, sub, options, correct, onDone, layout, sel: firstEnabled(options), moves: 0, shownAt: performance.now() };
   render();
 }
-function firstEnabled(opts, from) { for (let i = from; i < opts.length; i++) if (!opts[i].dis && !opts[i].mouseOnly) return i; return 0; }
+function firstEnabled(opts) { for (let i = 0; i < opts.length; i++) if (!opts[i].dis) return i; return 0; }
 
-const ACCENT = { idle: "#60a5fa", green: "#22c55e", yellow: "#f59e0b", red: "#ef4444", purple: "#a78bfa" };
+const ACCENT = { idle: "#60a5fa", yellow: "#f59e0b", purple: "#a78bfa" };
 function render() {
   const el = $("#screen");
   el.className = cur.cls; el.style.setProperty("--accent", ACCENT[cur.cls]);
-  if (cur.kind === "camera") {
-    el.innerHTML = `<div class="idlebox"><div class="big">Camera</div><div style="margin-top:10px;font-size:20px">Place the jersey, then press the pedal${run.setup === "mouse" ? " or click Scan" : ""}</div><div class="opts"><button class="opt primary sel" data-i="0">📷 Scan <span class="kbd">pedal</span></button></div></div><div class="flash" id="flash"></div>`;
-  } else {
-    const opts = cur.options.map((o, i) => {
-      const sel = i === cur.sel;
-      const body = o.cand ? `<span class="cand"><span class="n">${o.cand.number}</span><span class="d">${o.cand.name}<small>${o.cand.size} · ${o.cand.team}${o.cand.done ? " · passed" : ""}</small></span></span>` : `<span>${o.label}</span>`;
-      return `<button class="opt ${o.primary ? "primary" : ""} ${sel ? "sel" : ""} ${o.dis ? "dis" : ""}" data-i="${i}">${body}${sel && !o.mouseOnly ? `<span class="kbd">pedal</span>` : o.mouseOnly ? `<span class="kbd">mouse only</span>` : ""}</button>`;
-    }).join("");
-    el.innerHTML = `<div class="title">${cur.title}</div><div class="sub">${cur.sub}</div><div class="opts ${cur.layout === "two" ? "two" : cur.kind === "list" ? "col" : ""}">${opts}</div><div class="flash" id="flash"></div>`;
-  }
+  const opts = cur.options.map((o, i) => {
+    const sel = i === cur.sel;
+    const body = o.cand ? `<span class="cand"><span class="n">${o.cand.number}</span><span class="d">${o.cand.name}<b>${o.cand.size}</b>${o.cand.done ? "<small>passed</small>" : ""}</span></span>` : `<span>${o.label}</span>`;
+    return `<button class="opt ${sel ? "sel" : ""} ${o.dis ? "dis" : ""}" data-i="${i}">${body}<span class="kbd">${sel && run.setup === "keys" ? "pedal" : ""}</span></button>`;
+  }).join("");
+  el.innerHTML = `<div class="title">${cur.title}</div><div class="sub">${cur.sub}</div><div class="opts ${cur.layout === "two" ? "two" : ""}">${opts}</div><div class="flash" id="flash"></div>`;
   el.querySelectorAll(".opt").forEach(b => {
     const i = Number(b.dataset.i);
     b.onclick = () => choose(i, "pointer");
-    b.onmouseenter = () => { if (run.setup === "mouse" && !cur.options[i].dis) { cur.sel = i; paintSel(); } };
+    b.onmouseenter = () => { if (run.setup === "mouse" && cur && !cur.options[i].dis) { cur.sel = i; paintSel(); } };   // as the station does: the pointer moves the highlight
   });
 }
-function paintSel() { $("#screen").querySelectorAll(".opt").forEach((b, i) => { b.classList.toggle("sel", i === cur.sel); const k = b.querySelector(".kbd"); if (k && !cur.options[i].mouseOnly) k.textContent = i === cur.sel ? "pedal" : ""; }); }
+function paintSel() { $("#screen").querySelectorAll(".opt").forEach((b, i) => { b.classList.toggle("sel", i === cur.sel); b.querySelector(".kbd").textContent = i === cur.sel && run.setup === "keys" ? "pedal" : ""; }); }
 
 let flashTimer = null;
 function flash(text, cls) { const f = $("#flash"); if (!f) return; f.textContent = text; f.className = `flash show ${cls}`; clearTimeout(flashTimer); flashTimer = setTimeout(() => f.classList.remove("show"), 1400); }
@@ -238,13 +212,16 @@ function flash(text, cls) { const f = $("#flash"); if (!f) return; f.textContent
 window.addEventListener("keydown", e => {
   if (!run || !cur || e.repeat || $("#dlg").open) return;
   if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
-  if (PEDAL.has(e.code)) { e.preventDefault(); choose(cur.sel, "pedal"); return; }
+  if (PEDAL.has(e.code)) {
+    e.preventDefault();
+    if (run.setup === "mouse") { run.wrongDevice++; flash("Mouse setup — click the row", "warn"); return; }
+    choose(cur.sel, "pedal"); return;
+  }
   if (DOWN.has(e.code) || UP.has(e.code)) {
     e.preventDefault();
-    if (cur.kind === "camera") return;
-    if (run.setup === "mouse") { run.wrongDevice++; flash("Mouse setup — click the option", "warn"); return; }
+    if (run.setup === "mouse") { run.wrongDevice++; flash("Mouse setup — click the row", "warn"); return; }
     const n = cur.options.length; let next = cur.sel, tries = 0; const dir = DOWN.has(e.code) ? 1 : -1;
-    do { next = (next + dir + n) % n; tries++; } while ((cur.options[next].dis || cur.options[next].mouseOnly) && tries < n);
+    do { next = (next + dir + n) % n; tries++; } while (cur.options[next].dis && tries < n);
     cur.sel = next; cur.moves++; paintSel();
   }
 });
@@ -253,14 +230,14 @@ function choose(i, via) {
   if (!cur) return;
   const o = cur.options[i];
   if (!o || o.dis) return;
-  if (via === "pointer" && cur.kind !== "camera" && run.setup === "keys") { run.wrongDevice++; flash("Keys setup — use the keys and the pedal", "warn"); return; }
-  if (via === "pedal" && o.mouseOnly) { flash("That's the pedal — it confirms", "warn"); return; }
+  if (via === "pointer" && run.setup === "keys") { run.wrongDevice++; flash("Keys setup — the keys and the pedal", "warn"); return; }
   const ms = performance.now() - cur.shownAt;
   const ok = i === cur.correct;
-  if (cur.kind !== "camera") {
-    run.screens.push({ kind: "screen", run: run.id, tester: run.tester, setup: run.setup, round: run.round, jersey: run.i + 1, jerseyKind: run.jerseys[run.i].kind, screen: cur.kind, options: cur.options.length, correct: cur.correct, chosen: i, ok, ms: Math.round(ms), steps: cur.moves, via, t: Date.now() });
-    if (!ok) { run.errors++; flash(`Wrong — it was "${labelOf(cur.options[cur.correct])}"`, "err"); const next = () => nextJersey(); cur = null; setTimeout(next, 900); return; }
-  }
+  // Steps the keys needed: the gap from the first enabled row to the right
+  // one, skipping greyed rows (what a perfect keys run would press).
+  const need = cur.options.slice(Math.min(firstEnabled(cur.options), cur.correct), Math.max(firstEnabled(cur.options), cur.correct)).filter(x => !x.dis).length;
+  run.screens.push({ kind: "screen", run: run.id, tester: run.tester, setup: run.setup, round: run.round, jersey: run.i + 1, screen: cur.kind, options: cur.options.length, correct: cur.correct, stepsNeeded: need, chosen: i, ok, ms: Math.round(ms), steps: cur.moves, via, t: Date.now() });
+  if (!ok) { run.errors++; flash(`Wrong — it was "${labelOf(cur.options[cur.correct])}"`, "err"); cur = null; setTimeout(nextJersey, 1100); return; }
   const done = cur.onDone; cur = null; done();
 }
 const labelOf = o => o.cand ? `#${o.cand.number} ${o.cand.name} ${o.cand.size}` : o.label;
@@ -272,23 +249,26 @@ function finishRun() {
   const other = run.setup === "mouse" ? "keys" : "mouse";
   const s = run; run = null; cur = null;
   $("#start").disabled = false; $("#tester").disabled = false; $("#prog").textContent = "";
-  $("#camBody").innerHTML = `<div class="hint">Run done. Now the same 30 jerseys with <b>${SETUPS[other]}</b>: pick it above and press Start.</div>`;
+  $("#camBody").innerHTML = `<div class="hint">Run done. Now the same 50 jerseys with <b>${SETUPS[other]}</b>: it is selected above — press Start.</div>`;
   $("#screen").className = "idle";
-  $("#screen").innerHTML = `<div class="idlebox"><div class="big">Done</div><div style="margin-top:12px;font-size:22px;color:#e2e8f0">${SETUPS[s.setup]} · ${s.jerseys.length} jerseys · ${(nav / 1000).toFixed(1)} s on the screens · ${s.errors} wrong choice${s.errors === 1 ? "" : "s"}${s.wrongDevice ? ` · ${s.wrongDevice} reach${s.wrongDevice === 1 ? "" : "es"} for the wrong device` : ""}</div><div style="margin-top:8px">Now do the same jerseys with ${SETUPS[other]}.</div></div><div class="flash" id="flash"></div>`;
+  $("#screen").innerHTML = `<div class="idlebox"><div class="big">Done</div>${SETUPS[s.setup]} · ${s.jerseys.length} jerseys · ${s.screens.length} lists · ${(nav / 1000).toFixed(1)} s picking (${(nav / 1000 / s.screens.length).toFixed(2)} s a list) · ${s.errors} wrong pick${s.errors === 1 ? "" : "s"}${s.wrongDevice ? ` · ${s.wrongDevice} reach${s.wrongDevice === 1 ? "" : "es"} for the wrong device` : ""}<div style="margin-top:10px">Now the same jerseys with ${SETUPS[other]}.</div></div><div class="flash" id="flash"></div>`;
   document.querySelectorAll("#setup button").forEach(x => x.classList.toggle("on", x.dataset.id === other)); setup = other;
 }
 
 // ── Results ─────────────────────────────────────────────────────────────────
 const median = xs => { const a = xs.slice().sort((p, q) => p - q); if (!a.length) return null; const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
 const r1 = x => x == null ? "—" : (Math.round(x * 10) / 10).toFixed(1);
+const r2 = x => x == null ? "—" : (Math.round(x * 100) / 100).toFixed(2);
 function summarise() {
   const out = {};
   for (const s of Object.keys(SETUPS)) {
     const runs = records.filter(x => x.kind === "run" && x.setup === s), scr = records.filter(x => x.kind === "screen" && x.setup === s);
-    const jerseys = runs.reduce((t, x) => t + x.jerseys, 0);
-    out[s] = { runs: runs.length, testers: new Set(runs.map(x => x.tester)).size, jerseys, screens: scr.length, errors: scr.filter(x => !x.ok).length, wrongDevice: runs.reduce((t, x) => t + x.wrongDevice, 0),
-      perJersey: jerseys ? scr.reduce((t, x) => t + x.ms, 0) / 1000 / jerseys : null,
-      byKind: Object.fromEntries(["green", "list", "red", "reasons", "supervisor", "byhand"].map(k => { const xs = scr.filter(x => x.screen === k); return [k, { n: xs.length, med: xs.length ? median(xs.map(x => x.ms)) / 1000 : null, steps: xs.length ? xs.reduce((t, x) => t + x.steps, 0) / xs.length : null, errors: xs.filter(x => !x.ok).length }]; })) };
+    const by = f => { const xs = scr.filter(f); return { n: xs.length, med: xs.length ? median(xs.map(x => x.ms)) / 1000 : null, mean: xs.length ? xs.reduce((t, x) => t + x.ms, 0) / 1000 / xs.length : null, errors: xs.filter(x => !x.ok).length }; };
+    out[s] = { runs: runs.length, testers: new Set(runs.map(x => x.tester)).size, screens: scr.length, errors: scr.filter(x => !x.ok).length, wrongDevice: runs.reduce((t, x) => t + x.wrongDevice, 0),
+      perList: scr.length ? scr.reduce((t, x) => t + x.ms, 0) / 1000 / scr.length : null,
+      all: by(() => true), list: by(x => x.screen === "list"), reasons: by(x => x.screen === "reasons"),
+      // How far down the right row was: the mouse should not care, the keys should.
+      byDistance: Object.fromEntries([["0", x => x.stepsNeeded === 0], ["1", x => x.stepsNeeded === 1], ["2", x => x.stepsNeeded === 2], ["3+", x => x.stepsNeeded >= 3]].map(([k, f]) => [k, by(f)])) };
   }
   return out;
 }
@@ -296,24 +276,29 @@ function verdict(sum) {
   const a = sum.mouse, b = sum.keys;
   if (!a.runs && !b.runs) return "No runs yet.";
   if (!a.runs || !b.runs) return `Only ${SETUPS[a.runs ? "mouse" : "keys"]} has runs. Do the same jerseys with the other setup to compare.`;
-  const d = a.perJersey - b.perJersey, lines = [];
-  if (Math.abs(d) < 0.3) lines.push(`A tie: ${r1(a.perJersey)} s per jersey on the screens with the mouse, ${r1(b.perJersey)} s with the keys — under a third of a second apart.`);
-  else lines.push(`${SETUPS[d < 0 ? "mouse" : "keys"]} is faster: ${r1(Math.min(a.perJersey, b.perJersey))} s per jersey on the screens against ${r1(Math.max(a.perJersey, b.perJersey))} s — about ${Math.round(Math.abs(d) * 100)} s per 100 jerseys.`);
-  if (a.errors !== b.errors) lines.push(`Wrong choices: ${a.errors} with the mouse, ${b.errors} with the keys (over ${a.screens} and ${b.screens} screens).`);
-  if (a.runs < 3 || b.runs < 3 || a.testers < 2 || b.testers < 2) lines.push(`Thin: ${a.runs} mouse run${a.runs === 1 ? "" : "s"}, ${b.runs} keys run${b.runs === 1 ? "" : "s"}, ${Math.max(a.testers, b.testers)} tester${Math.max(a.testers, b.testers) === 1 ? "" : "s"}. Three runs each by at least two people before deciding — the first run with any setup is a learning run.`);
+  const d = a.perList - b.perList, lines = [];
+  if (Math.abs(d) < 0.2) lines.push(`A tie: ${r2(a.perList)} s a list with the mouse, ${r2(b.perList)} s with the keys — under a fifth of a second apart.`);
+  else lines.push(`${SETUPS[d < 0 ? "mouse" : "keys"]} is faster: ${r2(Math.min(a.perList, b.perList))} s a list against ${r2(Math.max(a.perList, b.perList))} s — ${r1(Math.abs(d) * 100)} s over 100 lists.`);
+  const far = a.byDistance["3+"], farK = b.byDistance["3+"];
+  if (far.n >= 10 && farK.n >= 10 && far.med != null) lines.push(`When the row is 3 or more down: mouse ${r2(far.med)} s, keys ${r2(farK.med)} s.`);
+  if (a.errors !== b.errors) lines.push(`Wrong picks: ${a.errors} with the mouse, ${b.errors} with the keys (over ${a.screens} and ${b.screens} lists).`);
+  if (a.runs < 3 || b.runs < 3 || a.testers < 2 || b.testers < 2) lines.push(`Thin: ${a.runs} mouse run${a.runs === 1 ? "" : "s"}, ${b.runs} keys run${b.runs === 1 ? "" : "s"}, ${Math.max(a.testers, b.testers)} tester${Math.max(a.testers, b.testers) === 1 ? "" : "s"}. Three runs each by at least two people before deciding; the first run with any setup is a learning run.`);
   return lines.join(" ");
 }
 function showResults() {
   const sum = summarise(); const dlg = $("#dlg");
-  const kinds = { green: "Green (confirm)", list: "Yellow list (pick)", red: "Red (not read / duplicate)", reasons: "Flag reasons menu", supervisor: "Go to supervisor", byhand: "By hand — continue" };
-  const cell = c => `<td>${c.n || "—"}${c.n && c.steps ? ` <span style="color:#94a3b8">· ${r1(c.steps)} steps</span>` : ""}${c.errors ? ` <span style="color:#f87171">· ${c.errors} wrong</span>` : ""}</td><td>${c.med == null ? "—" : r1(c.med) + " s"}</td>`;
-  dlg.innerHTML = `<h2 style="margin:0 0 4px;font-size:22px">📊 Mouse + pedal against keys + pedal</h2>
-    <div style="color:#7c8ba1;font-size:14px">${records.filter(x => x.kind === "run").length} runs in this browser. Screen time runs from a screen appearing to the choice on it; looking at the jersey is not in it.</div>
+  const cell = c => `<td>${c.n || "—"}${c.errors ? ` <span style="color:#f87171">· ${c.errors} wrong</span>` : ""}</td><td>${c.med == null ? "—" : r2(c.med) + " s"}</td><td>${c.mean == null ? "—" : r2(c.mean) + " s"}</td>`;
+  const row = (label, k) => `<tr><td>${label}</td>${cell(sum.mouse[k] || sum.mouse.byDistance[k])}${cell(sum.keys[k] || sum.keys.byDistance[k])}</tr>`;
+  dlg.innerHTML = `<h2 style="margin:0 0 4px;font-size:22px">📊 Picking from a list: mouse against keys + pedal</h2>
+    <div style="color:#7c8ba1;font-size:14px">${records.filter(x => x.kind === "run").length} runs in this browser. Time runs from the list appearing to the pick on it.</div>
     <div class="verdict">${verdict(sum)}</div>
-    <table><thead><tr><th></th><th colspan="2">Mouse + pedal</th><th colspan="2">Keys + pedal</th></tr><tr><th>Screen</th><th>decisions</th><th>median</th><th>decisions</th><th>median</th></tr></thead><tbody>
-      <tr style="font-weight:700"><td>All screens · s per jersey</td><td>${sum.mouse.screens}</td><td>${r1(sum.mouse.perJersey)} s</td><td>${sum.keys.screens}</td><td>${r1(sum.keys.perJersey)} s</td></tr>
-      ${Object.entries(kinds).map(([k, l]) => `<tr><td>${l}</td>${cell(sum.mouse.byKind[k])}${cell(sum.keys.byKind[k])}</tr>`).join("")}
-      <tr><td style="color:#94a3b8">Runs · testers · wrong choices · wrong device</td><td colspan="2">${sum.mouse.runs} · ${sum.mouse.testers} · ${sum.mouse.errors} · ${sum.mouse.wrongDevice}</td><td colspan="2">${sum.keys.runs} · ${sum.keys.testers} · ${sum.keys.errors} · ${sum.keys.wrongDevice}</td></tr>
+    <table><thead><tr><th></th><th colspan="3">Mouse</th><th colspan="3">Keys + pedal</th></tr><tr><th></th><th>lists</th><th>median</th><th>mean</th><th>lists</th><th>median</th><th>mean</th></tr></thead><tbody>
+      <tr style="font-weight:700"><td>Every list</td>${cell(sum.mouse.all)}${cell(sum.keys.all)}</tr>
+      ${row("Yellow list (players)", "list")}
+      ${row("Flag reasons menu", "reasons")}
+      <tr><td colspan="7" style="color:#94a3b8;text-align:left;padding-top:12px">By how far down the right row was (greyed rows not counted)</td></tr>
+      ${row("First row", "0")}${row("1 down", "1")}${row("2 down", "2")}${row("3 or more down", "3+")}
+      <tr><td style="color:#94a3b8">Runs · testers · wrong picks · wrong device</td><td colspan="3">${sum.mouse.runs} · ${sum.mouse.testers} · ${sum.mouse.errors} · ${sum.mouse.wrongDevice}</td><td colspan="3">${sum.keys.runs} · ${sum.keys.testers} · ${sum.keys.errors} · ${sum.keys.wrongDevice}</td></tr>
     </tbody></table>
     <div class="row"><button class="btn pri" id="csv" ${records.length ? "" : "disabled"}>⬇ Export CSV</button><button class="btn" id="wipe" style="border-color:#ef4444;color:#f87171" ${records.length ? "" : "disabled"}>Delete the records</button><span class="spacer"></span><button class="btn" id="close">Close</button></div>`;
   dlg.querySelector("#close").onclick = () => dlg.close();
@@ -323,11 +308,11 @@ function showResults() {
 }
 const csvCell = v => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s)) s = " " + s; return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 function exportCSV() {
-  const cols = ["time", "tester", "setup", "round", "run", "jersey", "jersey kind", "screen", "options", "correct index", "chosen index", "right", "seconds", "key steps", "via"];
-  const rows = records.filter(x => x.kind === "screen").map(x => [new Date(x.t).toISOString().slice(0, 19).replace("T", " "), x.tester, SETUPS[x.setup], x.round + 1, x.run, x.jersey, x.jerseyKind, x.screen, x.options, x.correct, x.chosen, x.ok ? "yes" : "no", (x.ms / 1000).toFixed(2), x.steps, x.via]);
+  const cols = ["time", "tester", "setup", "round", "run", "jersey", "screen", "rows", "correct index", "rows down to it", "chosen index", "right", "seconds", "key steps pressed", "via"];
+  const rows = records.filter(x => x.kind === "screen").map(x => [new Date(x.t).toISOString().slice(0, 19).replace("T", " "), x.tester, SETUPS[x.setup], x.round + 1, x.run, x.jersey, x.screen, x.options, x.correct, x.stepsNeeded, x.chosen, x.ok ? "yes" : "no", (x.ms / 1000).toFixed(2), x.steps, x.via]);
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["﻿" + [cols, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" }));
-  a.download = `input-trial_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  a.download = `input-trial-lists_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 </script>
 </body>
