@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
 import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
-import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp } from "./lib/export.js";
+import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { playTone } from "./lib/audio.js";
@@ -11,6 +11,7 @@ import { createVigilance, reconcile, turnMatters, settleTurned, createInspection
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { binLabels, jerseyLabel, flagLabel } from "./lib/labels.js";
 const SECOND_LOOK = false;
+import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf } from "./config.js";
 
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
@@ -1067,8 +1068,17 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, onTrial = null }) {
   const reasons = reasonsFor(jerseyType);
+  // Input trial (src/lib/trial.js): the overlay is mounted anew for every
+  // screen (its key is the mode and the scan), so "shown" is the mount; every
+  // option that runs goes through `fire`, which says how it was reached.
+  const shownAt = useRef(Date.now());
+  const trialMoves = useRef(0), trialHovers = useRef(0);
+  const fire = useCallback((o, i, via, key = "", opts = null) => {
+    if (onTrial && o) onTrial({ screen: state.mode, n: opts ? opts.length : null, idx: i, id: o.id, via, key, ms: Date.now() - shownAt.current, moves: trialMoves.current, hovers: trialHovers.current });
+    o.run();
+  }, [onTrial, state.mode]);
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
   const isList  = mode === "pick" || mode === "close";
@@ -1168,6 +1178,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       const n = options.length; if (!n) return;
       let next = selectedIdx, tries = 0;
       do { next = (next + dir + n) % n; tries++; } while ((options[next]?.disabled || options[next]?.mouseOnly) && tries < n);
+      trialMoves.current++;
       setSelectedIdx(next);
     };
     const onKey = (e) => {
@@ -1176,9 +1187,9 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (mode === "manual" || mode === "reasonText") { if (e.code === "Escape") { e.preventDefault(); actions.back(); } return; }   // typing, not navigating
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target?.tagName)) return;   // the Enter that submitted the form is still bubbling: it must not also pick the first row of the list it opened
-      if (e.code === retryKey) { if (mode === "confirm") { e.preventDefault(); showNudge(); return; } const o = options.find(x => x.id === "retry"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }
-      if (e.code === byHandKey) { const o = options.find(x => x.id === "manual"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }   // straight to the form, like R goes straight to retry
-      if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled && !o.mouseOnly) o.run(); return; }
+      if (e.code === retryKey) { if (mode === "confirm") { e.preventDefault(); showNudge(); return; } const i = options.findIndex(x => x.id === "retry"); if (i >= 0) { e.preventDefault(); lastKeyRef.current = Date.now(); fire(options[i], i, "key", e.code, options); } return; }
+      if (e.code === byHandKey) { const i = options.findIndex(x => x.id === "manual"); if (i >= 0) { e.preventDefault(); lastKeyRef.current = Date.now(); fire(options[i], i, "key", e.code, options); } return; }   // straight to the form, like R goes straight to retry
+      if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled && !o.mouseOnly) fire(o, selectedIdx, "key", e.code, options); return; }
       // The assigned keys come first; a plain arrow only moves its own way when
       // it is not assigned to the other direction (a pedal board wired the
       // other way round sets Down = ArrowUp and Up = ArrowDown, 9 Nov 2026).
@@ -1188,10 +1199,10 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [options, selectedIdx, mode, confirmKey, cancelKey, upKey, retryKey, byHandKey, actions, showNudge]);
+  }, [options, selectedIdx, mode, confirmKey, cancelKey, upKey, retryKey, byHandKey, actions, showNudge, fire]);
 
   // A bumped mouse never overrides a key press made in the last moment.
-  const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) setSelectedIdx(i); }, []);
+  const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) { trialHovers.current++; setSelectedIdx(i); } }, []);
 
   // The highlighted option follows the key down a long list: the list scrolls
   // so the row the Select key would take is always on screen.
@@ -1207,7 +1218,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const OptionButton = ({ o, i }) => {
     const sel = i === selectedIdx;
     return (
-      <button onClick={o.run} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
+      <button onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
         style={{ padding: "13px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.22)"}`, background: o.primary ? accent : "transparent", color: o.primary ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 20, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
         <span>{o.label} {o.id === "retry" && mode !== "confirm" ? <Kbd light>{formatKey(retryKey)}</Kbd> : o.id === "manual" ? <Kbd light>{formatKey(byHandKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
         {o.hint && <span style={{ fontSize: 15, fontWeight: 400, opacity: 0.8 }}>{o.hint}</span>}
@@ -1320,7 +1331,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             <div style={twoColumns(candidates.length)}>
               {options.map((o, i) => o.candidate && (
                 <CandidateRow key={o.id} c={o.candidate} primary={primary} secondary={secondary} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent}
-                  onClick={o.run} onHover={() => hover(i)} confirmKey={confirmKey} />
+                  onClick={() => fire(o, i, "pointer", "", options)} onHover={() => hover(i)} confirmKey={confirmKey} />
               ))}
             </div>
           </div>
@@ -1427,7 +1438,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             {options.map((o, i) => {
               const sel = i === selectedIdx;
               return (
-                <div key={o.id} onClick={o.run} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
+                <div key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
                   style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 12, minWidth: 0, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.12)"}`, background: sel ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.04)", cursor: "pointer" }}>
                   <div>
                     <div style={{ fontSize: 24, fontWeight: 700, color: "#fff" }}>{o.label}</div>
@@ -1498,6 +1509,7 @@ function ResultCard({ result, onResolve, canResolve = true }) {
 function SettingsPanel({ settings, cameras, onSave, onClose }) {
   const [temp,      setTemp]      = useState(settings);
   const [listening, setListening] = useState(null);
+  const [showTrial, setShowTrial] = useState(false);
 
   useEffect(() => {
     if (!listening) return;
@@ -1507,10 +1519,10 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
   }, [listening]);
 
   useEffect(() => {
-    const h = e => { if (e.key === "Escape" && !listening) onClose(); };
+    const h = e => { if (e.key === "Escape" && !listening && !showTrial) onClose(); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [onClose, listening]);
+  }, [onClose, listening, showTrial]);
 
   const keyRows = [
     { label: "Scan",       key: "scanKey" },
@@ -1590,6 +1602,20 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           </label>
         </div>
 
+        <div style={{ marginBottom: 18 }}>
+          <div style={labelSt}>Input trial — which setup is this station trying?</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+            {TRIAL_METHODS.map(m => (
+              <button key={m.id} type="button" onClick={() => setTemp(t => ({ ...t, trialMethod: m.id }))} title={m.hint}
+                style={{ ...btnGhost, padding: "8px 12px", fontSize: 15, borderColor: (temp.trialMethod || "") === m.id ? "#c084fc" : "#3f4b5c", background: (temp.trialMethod || "") === m.id ? "rgba(192,132,252,0.15)" : "transparent", color: (temp.trialMethod || "") === m.id ? "#e9d5ff" : "#cbd5e1", fontWeight: (temp.trialMethod || "") === m.id ? 700 : 400 }}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 14, color: "#7c8ba1", marginBottom: 8 }}>With a setup named, every decision on a result screen is timed (which screen, by click or by key, how many steps, how long) and kept in this browser across orders. Nothing goes to the board.</div>
+          <button type="button" onClick={() => setShowTrial(true)} style={{ ...btnGhost, padding: "8px 14px", fontSize: 15 }}>📊 Compare the setups</button>
+        </div>
+
         {problems.length > 0 && (
           <div style={{ fontSize: 15, color: "#f87171", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 }}>
             {problems.map(p => <div key={p}>{p}</div>)}
@@ -1599,6 +1625,61 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
         <div style={{ display: "flex", gap: 8 }}>
           <button disabled={problems.length > 0} onClick={() => { onSave(temp); onClose(temp); }} style={{ ...btnPri, flex: 1, opacity: problems.length ? 0.5 : 1 }}>Save</button>
           <button onClick={onClose} style={btnGhost}>Cancel</button>
+        </div>
+      </div>
+      {showTrial && <TrialPanel onClose={() => setShowTrial(false)} />}
+    </div>
+  );
+}
+
+// ── Input trial: the comparison ──────────────────────────────────────────────
+// Per setup, what the records in this browser say: passes, screen time per
+// pass, and the median by screen kind; the verdict in words; the CSV.
+function TrialPanel({ onClose }) {
+  const [records, setRecords] = useState(() => loadTrial());
+  const sum = useMemo(() => summariseTrial(records), [records]);
+  const verdict = useMemo(() => trialVerdict(sum), [sum]);
+  const methods = TRIAL_METHODS.filter(m => m.id);
+  useEffect(() => {
+    const h = e => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [onClose]);
+  const download = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([String.fromCharCode(0xfeff) + trialCSV(records)], { type: "text/csv;charset=utf-8" }));
+    a.download = `input-trial_${localDateStamp()}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const wipe = () => { if (window.confirm(`Delete all ${records.length} trial records in this browser? Export first if anyone wants them.`)) { clearTrial(); setRecords([]); } };
+  const td = { padding: "6px 10px", borderBottom: "1px solid #21262d", fontSize: 15, textAlign: "right", whiteSpace: "nowrap" };
+  const th = { ...td, color: "#94a3b8", fontWeight: 600 };
+  const secs = v => v == null ? "—" : `${v}s`;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#161b22", borderRadius: 12, border: "1px solid #21262d", padding: 28, width: 900, maxWidth: "94vw", maxHeight: "92%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 4 }}>📊 Mouse + pedal against up/down keys + pedal</div>
+        <div style={{ fontSize: 14, color: "#7c8ba1", marginBottom: 14 }}>{records.length} decisions recorded in this browser. Screen time runs from a screen appearing to the operator's choice on it; the scan trigger is shown but not counted, it is the pedal either way.</div>
+        <div style={{ padding: "12px 16px", borderRadius: 8, background: "rgba(192,132,252,0.10)", border: "1px solid rgba(192,132,252,0.4)", color: "#e9d5ff", fontSize: 16, lineHeight: 1.45, marginBottom: 16 }}>{verdict}</div>
+        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+          <thead>
+            <tr><th style={{ ...th, textAlign: "left" }}></th>{methods.map(m => <th key={m.id} style={th} colSpan={2}>{m.label}</th>)}</tr>
+            <tr><th style={{ ...th, textAlign: "left" }}>Screen</th>{methods.map(m => <Fragment key={m.id}><th style={th}>decisions</th><th style={th}>median</th></Fragment>)}</tr>
+          </thead>
+          <tbody>
+            <tr style={{ fontWeight: 700 }}><td style={{ ...td, textAlign: "left" }}>Every screen · passes · screen time per pass</td>
+              {methods.map(m => { const s = sum[m.id]; return <Fragment key={m.id}><td style={td}>{s.all.n} · {s.passes}</td><td style={td}>{secs(s.secondsPerPass)}</td></Fragment>; })}</tr>
+            {SCREEN_KINDS.map(k => (
+              <tr key={k.id}><td style={{ ...td, textAlign: "left", color: "#cbd5e1" }}>{k.label}</td>
+                {methods.map(m => { const c = sum[m.id].byKind[k.id]; return <Fragment key={m.id}><td style={td}>{c.n || "—"}{c.n && c.movesPer ? <span style={{ color: "#94a3b8" }}> · {c.movesPer} steps</span> : null}{c.n && c.pointerShare ? <span style={{ color: "#94a3b8" }}> · {c.pointerShare}% click</span> : null}</td><td style={td}>{secs(c.medianS)}</td></Fragment>; })}</tr>
+            ))}
+            <tr><td style={{ ...td, textAlign: "left", color: "#94a3b8" }}>Orders · operators</td>{methods.map(m => <Fragment key={m.id}><td style={td} colSpan={2}>{sum[m.id].orders} · {sum[m.id].operators}</td></Fragment>)}</tr>
+          </tbody>
+        </table>
+        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+          <button onClick={download} disabled={!records.length} style={{ ...btnPri, opacity: records.length ? 1 : 0.5 }}>⬇ Export CSV</button>
+          <button onClick={wipe} disabled={!records.length} style={{ ...btnGhost, borderColor: "#ef4444", color: "#f87171", opacity: records.length ? 1 : 0.5 }}>Delete the records</button>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={btnGhost}>Close</button>
         </div>
       </div>
     </div>
@@ -2615,6 +2696,16 @@ export default function App() {
     setLastResult(r => (r?.match?._id === id ? null : r)); setLastConfirmed(c => (c?.match?._id === id ? null : c));
   }, [roster, operatorName, stamp, noteMistake]);
 
+  // Input trial: while Settings → Input trial names a setup, every decision on
+  // a result screen (and every scan trigger) is kept in this browser, across
+  // orders, with the setup's name on it. Compare under Settings.
+  const trialMethod = settings.trialMethod || "";
+  const lastScreenClosed = useRef(Date.now());
+  useEffect(() => { if (!overlay) lastScreenClosed.current = Date.now(); }, [overlay]);
+  const onTrial = useCallback(rec => {
+    if (!trialMethod) return;
+    appendTrial({ t: Date.now(), method: trialMethod, station: stationId(), operator: operatorName, order: orderNumber, run: orderRun, ...rec });
+  }, [trialMethod, operatorName, orderNumber, orderRun]);
   // ── Global keyboard: scan trigger only ───────────────────────────────────
   useEffect(() => {
     const onKey = (e) => {
@@ -2624,11 +2715,12 @@ export default function App() {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       e.preventDefault();
       gateRef.current.disarm(); setArmed(false);
+      onTrial({ screen: "camera", n: 1, idx: 0, id: "scan", via: "key", key: e.code, ms: Date.now() - lastScreenClosed.current, moves: 0, hovers: 0 });
       doTriggerScan();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, sessionStarted, scanKey, doTriggerScan]);
+  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, sessionStarted, scanKey, doTriggerScan, onTrial]);
 
   const overlayKey = overlay ? `${overlay.mode}:${overlay.scan?.id}:${(overlay.candidates || []).map(c => c._id).join(",")}` : "";
   const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType) };
@@ -2669,7 +2761,7 @@ export default function App() {
       )}
 
       {overlay && !wide && (
-        <ScanOverlay key={overlayKey} inspect={inspect} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket}
+        <ScanOverlay key={overlayKey} inspect={inspect} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial}
           stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
       )}
 
@@ -2724,6 +2816,7 @@ export default function App() {
           {sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect)}</Pill></span>}
           {manualCount > 0 && <Pill color="#f59e0b" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the jerseys entered by hand">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
+          {trialMethod && <span title="Input trial: every decision on a result screen is being timed for this setup (Settings → Input trial)"><Pill color="#c084fc" onClick={() => setShowSettings(true)}>⏱ {trialMethodLabel(trialMethod)}</Pill></span>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
@@ -2834,7 +2927,7 @@ export default function App() {
                           <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 56, fontSize: 18 }}>■</button>
                           <button onClick={toggleHandsFree} title={!settings.autoScan ? "Turn hands-free scanning on" : handsFreePaused ? "Resume hands-free scanning" : "Pause hands-free — the camera stays on and B still scans"}
                             style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, borderColor: "#f59e0b", color: "#fcd34d", background: handsFree ? "rgba(245,158,11,0.14)" : "transparent", whiteSpace: "nowrap" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
-                          <button onClick={() => { gateRef.current.disarm(); setArmed(false); doTriggerScan(); }} disabled={scanning}
+                          <button onClick={() => { gateRef.current.disarm(); setArmed(false); onTrial({ screen: "camera", n: 1, idx: 0, id: "scan", via: "pointer", key: "", ms: Date.now() - lastScreenClosed.current, moves: 0, hovers: 0 }); doTriggerScan(); }} disabled={scanning}
                             style={{ ...btnPri, flex: 1, fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, letterSpacing: 1, padding: "14px", opacity: scanning ? 0.4 : 1 }}>
                             {scanning ? "Reading…" : "⚡ SCAN"}
                           </button>
@@ -2910,7 +3003,7 @@ export default function App() {
         {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && wide && (
-            <ScanOverlay key={overlayKey} inspect={inspect} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket}
+            <ScanOverlay key={overlayKey} inspect={inspect} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial}
               stream={null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
           )}
 

@@ -38,6 +38,7 @@ import { saveSession, loadSession, clearSession } from "../persist.js";
 import { buildDamageRows } from "../damage.js";
 import { createVigilance, reconcile } from "../vigilance.js";
 import { reasonsFor, JERSEY_TYPES } from "../../config.js";
+import { modelScreens, KLM } from "../trial.js";
 
 function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 const pick = (r, a) => a[Math.floor(r() * a.length)];
@@ -136,6 +137,32 @@ const sameJersey = (a, b) => a === b || (norm(a.name) === norm(b.name) && normNu
 // Seconds the floor spends on each thing (from the pilot: a scan answers in ~1.2 s).
 const T = { place: 2, scan: 1.3, green: 0.6, yellow: 2.5, duplicate: 2, byHand: 15, flag: 6, retry: 1.5, unscan: 5 };
 
+// ── Input trial: mouse + pedal against up/down keys + pedal ─────────────────
+// SIM_INPUT=1 prints what the Keystroke-Level Model says each setup costs over
+// the screens these orders showed. The pedal confirms the first option in
+// both setups, so only screens where the operator wants another option differ.
+function inputReport(stats) {
+  const t = modelScreens(stats.screens);
+  const per = x => (x / stats.orders).toFixed(1);
+  const per100 = x => (100 * x / stats.jerseys).toFixed(1);
+  const first = stats.screens.filter(s => s.idx === 0).length;
+  const lines = [
+    ``,
+    `  INPUT TRIAL (Keystroke-Level Model: point ${KLM.P}s, click ${KLM.B}s, home the hand ${KLM.H}s, key step ${KLM.STEP}s, pedal ${KLM.F}s, decide ${KLM.M}s)`,
+    `  ${stats.screens.length} result screens over ${stats.orders} orders / ${stats.jerseys} jerseys; ${(100 * first / stats.screens.length).toFixed(1)}% take the first option — the pedal, identical in both setups`,
+    `  screen time per order:      mouse + pedal ${per(t.mouse)} s   keys + pedal ${per(t.keys)} s   difference ${per(t.keys - t.mouse)} s (${t.keys > t.mouse ? "mouse" : "keys"} faster)`,
+    `  screen time per 100 jerseys: mouse + pedal ${per100(t.mouse)} s   keys + pedal ${per100(t.keys)} s   difference ${per100(t.keys - t.mouse)} s`,
+    `  by screen (seconds over the whole run):`,
+    ...Object.entries(t.byKind).sort((a, b) => b[1].n - a[1].n).map(([k, v]) => {
+      const idx0 = stats.screens.filter(s => s.kind === k && s.idx === 0).length;
+      const steps = stats.screens.filter(s => s.kind === k && s.idx > 0).map(s => s.idx - Math.min(s.skipped, s.idx));
+      const avgSteps = steps.length ? (steps.reduce((a, b) => a + b, 0) / steps.length).toFixed(1) : "—";
+      return `    ${k.padEnd(11)} ${String(v.n).padStart(6)} screens  ${(100 * idx0 / v.n).toFixed(0).padStart(3)}% first option  avg key steps when not ${avgSteps.padStart(4)}   mouse ${v.mouse.toFixed(0).padStart(7)} s   keys ${v.keys.toFixed(0).padStart(7)} s   diff ${(v.keys - v.mouse).toFixed(0).padStart(6)} s`;
+    }),
+  ];
+  return lines;
+}
+
 // ── One order, start to finish, as the operator lives it ─────────────────────
 function workOrder(r, seed, k, stats, findings) {
   const order = makeOrder(r);
@@ -157,6 +184,14 @@ function workOrder(r, seed, k, stats, findings) {
   const stamp = () => ({ timestamp: localTimeStamp(new Date(2026, 9, 22, 8, 0, Math.floor(seconds))), operator });
   const setRow = (id, scanned) => { roster = roster.map(x => x._id === id ? { ...x, scanned } : x); };
   const add = entry => { log = [{ id: nextId++, ...entry, ...stamp() }, ...log]; return log[0]; };
+  // Input trial model (src/lib/trial.js): every result screen the operator
+  // would see, with the index of the option they take and how many options
+  // before it the keys skip (disabled rows, the mouse-only Retry on a green).
+  const scr = (kind, idx = 0, skipped = 0) => stats.screens.push({ kind, idx, skipped });
+  const fullReasons = reasonsFor(order.jerseyType);
+  // On the yellow list: the candidate's index, and the done rows before it.
+  const listPick = (cands, c) => { const i = cands.indexOf(c); scr("list", i, cands.slice(0, i).filter(isDone).length); };
+  const listNone = cands => scr("list", cands.length + 1, cands.filter(isDone).length);   // "None of these" sits after the candidates and Retry/Back
 
   // The pile: every jersey once, in a random order, plus a stray from another
   // order and a jersey that gets scanned twice.
@@ -174,13 +209,13 @@ function workOrder(r, seed, k, stats, findings) {
     seconds += T.byHand; stats.byHand++; stats.byHandWhy[why] = (stats.byHandWhy[why] || 0) + 1;
     const m = findMatches(roster, truth.name, truth.number, { typed: true });
     if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace]    BY HAND #${truth.number} "${truth.name}" → ${m.type} ${m.match ? `#${m.match.number} ${m.match.team} ${m.match.size}` : ""} ${m.candidates ? JSON.stringify(m.candidates.map(c => [c.number, c.team, c.size, c.scanned || "open"])) : ""}`);
-    if (m.type === "exact") { setRow(m.match._id, "manual"); add({ match: m.match, status: "manual", reason: "Entered by operator — the camera could not read it" }); return; }
+    if (m.type === "exact") { scr("byhand", 0); setRow(m.match._id, "manual"); add({ match: m.match, status: "manual", reason: "Entered by operator — the camera could not read it" }); return; }
     if (m.type === "pick" || m.type === "close") {
       const c = m.candidates.find(x => sameJersey(x, truth) && !isDone(x));
-      if (c) { setRow(c._id, "manual"); add({ match: c, status: "manual", reason: "Entered by operator — the camera could not read it" }); return; }
+      if (c) { listPick(m.candidates, c); setRow(c._id, "manual"); add({ match: c, status: "manual", reason: "Entered by operator — the camera could not read it" }); return; }
     }
     if (m.type === "duplicate" || roster.some(x => sameJersey(x, truth) && isDone(x))) { stats.dupOnByHand++; return; }   // its row is done: the list greys it, the operator flags a duplicate
-    if (truth._id === -1) { add({ match: { ...truth, offRoster: true }, status: "flagged", reason: "Not on the roster — operator typed it", photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); seconds += T.flag; stats.offRosterFlag++; return; }
+    if (truth._id === -1) { scr("supervisor", 0); add({ match: { ...truth, offRoster: true }, status: "flagged", reason: "Not on the roster — operator typed it", photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); seconds += T.flag; stats.offRosterFlag++; return; }
     const truthNow = roster.find(x => x._id === truth._id);
     const rel = x => normNum(x.number) === normNum(truth.number) || (truth.name && norm(x.name) === norm(truth.name));
     findings.push(`${ctxHead}: by hand for #${truth.number} ${truth.name} ${truth.team} ${truth.size} [row now ${truthNow?.scanned || "open"}] (${why}) got ${m.type} — ${JSON.stringify(m.candidates?.map(c => [c.number, c.name, c.size, c.scanned || ""]))}; history ${JSON.stringify(log.filter(l => l.match && rel(l.match)).reverse().map(l => [l.status, l.match.number, l.match.size, (l.reason || "").slice(0, 30)]))}`);
@@ -195,7 +230,7 @@ function workOrder(r, seed, k, stats, findings) {
       seconds += T.scan; stats.scans++;
       const { read, kind } = camera(r, truth);
       stats.kinds[kind] = (stats.kinds[kind] || 0) + 1;
-      if (kind === "api error") { seconds += T.retry; stats.retries++; continue; }
+      if (kind === "api error") { scr("red", 0); seconds += T.retry; stats.retries++; continue; }
       let m = matchOf(read);
       // Checks owed: a second, independent read of the same jersey; the two
       // settle the screen. A first read that was green on the wrong row and a
@@ -225,9 +260,10 @@ function workOrder(r, seed, k, stats, findings) {
         // is the correction the self-check starts from.
         if (kind === "digit misread" && !sameJersey(g, truth) && !item.extra && chance(r, 0.5)) {
           stats.misreadGreenCaught++; vig.noteMistake("greenOverridden"); seconds += T.retry;
+          scr("green", 2, 1); scr("reasons", 0); scr("supervisor", 0);
           byHand(truth, "operator caught a wrong green"); done = true; continue;
         }
-        seconds += T.green; stats.greens++; stats.greenByKind[kind] = (stats.greenByKind[kind] || 0) + 1;
+        scr("green", 0); seconds += T.green; stats.greens++; stats.greenByKind[kind] = (stats.greenByKind[kind] || 0) + 1;
         setRow(g._id, "pass"); add({ detected, match: g, status: "pass", thumb: "t".repeat(6_000) });
         done = true; continue;
       }
@@ -235,6 +271,7 @@ function workOrder(r, seed, k, stats, findings) {
         const alreadyDone = !item.extra && roster.some(x => sameJersey(x, truth) && isDone(x)) && !roster.some(x => sameJersey(x, truth) && !isDone(x));
         if (!alreadyDone) { if (kind === "digit misread" || item.extra) stats.misreadDup++; else { findings.push(`B WRONG DUPLICATE: ${ctx()} → "already passed" on #${m.match.number} ${m.match.name}`); stats.wrongDup++; } seconds += T.retry; continue; }
         seconds += T.duplicate; stats.dups++;
+        if (item.again) scr("red", 0); else { scr("red", 2); scr("supervisor", 0); }
         if (!item.again) add({ detected, match: m.match, status: "flagged", reason: "Duplicate — scanned again after passing", photo: "data:image/jpeg;base64," + "x".repeat(40_000) });
         done = true; continue;
       }
@@ -244,15 +281,17 @@ function workOrder(r, seed, k, stats, findings) {
         stats.listLen.push(m.candidates.length);
         const c = m.candidates.find(x => sameJersey(x, truth) && !isDone(x));
         if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace]    operator picks ${c ? `#${c.number} ${c.team} ${c.size}` : "nothing → by hand"}`);
-        if (c) { seconds += T.green; setRow(c._id, "pass"); add({ detected, match: c, status: "pass", thumb: "t".repeat(6_000) }); done = true; continue; }
-        if (item.extra) { seconds += T.flag; stats.offRosterFlag++; add({ detected, match: null, status: "flagged", reason: "Not on the roster", photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); done = true; continue; }
+        if (c) { listPick(m.candidates, c); seconds += T.green; setRow(c._id, "pass"); add({ detected, match: c, status: "pass", thumb: "t".repeat(6_000) }); done = true; continue; }
+        listNone(m.candidates);
+        if (item.extra) { scr("supervisor", 0); seconds += T.flag; stats.offRosterFlag++; add({ detected, match: null, status: "flagged", reason: "Not on the roster", photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); done = true; continue; }
         const open = roster.some(x => sameJersey(x, truth) && !isDone(x));
         if (open) { stats.listMissing++; stats.listMissingByKind[kind] = (stats.listMissingByKind[kind] || 0) + 1; if (kind === "clean") findings.push(`list without the jersey on a CLEAN read: ${ctx()} → ${JSON.stringify(m.candidates.map(x => [x.number, x.name]))}`); }
         if (open) vig.noteMistake("notOnList");
         byHand(truth, "not on the yellow list (" + kind + ")"); done = true; continue;
       }
       // none
-      if (item.extra) { seconds += T.flag; stats.offRosterFlag++; add({ detected, match: null, status: "flagged", reason: `"${read.name}" #${read.number} is not on this roster`, photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); done = true; continue; }
+      if (item.extra) { scr("red", 2); scr("supervisor", 0); seconds += T.flag; stats.offRosterFlag++; add({ detected, match: null, status: "flagged", reason: `"${read.name}" #${read.number} is not on this roster`, photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); done = true; continue; }
+      scr("red", 1);
       stats.notFound++; stats.notFoundByKind[kind] = (stats.notFoundByKind[kind] || 0) + 1;
       if (kind === "clean") findings.push(`NOT FOUND on a CLEAN read: ${ctx()}`);
       vig.noteMistake("couldNotRead");
@@ -262,7 +301,7 @@ function workOrder(r, seed, k, stats, findings) {
 
     // Things the operator does now and then
     if (chance(r, 0.03) && reasons.length) {                       // a damaged jersey: flag it with a reason
-      const last = log[0]; if (last?.status === "pass" && last.match) { const reason = pick(r, reasons); setRow(last.match._id, "flag"); add({ detected: last.detected, match: last.match, status: "flagged", reason: reason.label, reasonId: reason.id, photo: "data:image/jpeg;base64," + "x".repeat(40_000), damagePhotos: ["data:image/jpeg;base64," + "y".repeat(40_000)] }); if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace] FLAG #${last.match.number} ${last.match.team} ${last.match.size} — "${reason.label}" → GO TO SUPERVISOR, operator shows the damage, 3-2-1, damage photo kept with the scan photo`); seconds += T.flag; stats.damageFlags++; }
+      const last = log[0]; if (last?.status === "pass" && last.match) { const reason = pick(r, reasons); setRow(last.match._id, "flag"); add({ detected: last.detected, match: last.match, status: "flagged", reason: reason.label, reasonId: reason.id, photo: "data:image/jpeg;base64," + "x".repeat(40_000), damagePhotos: ["data:image/jpeg;base64," + "y".repeat(40_000)] }); if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace] FLAG #${last.match.number} ${last.match.team} ${last.match.size} — "${reason.label}" → GO TO SUPERVISOR, operator shows the damage, 3-2-1, damage photo kept with the scan photo`); scr("reasons", Math.max(0, fullReasons.indexOf(reason))); scr("supervisor", 0); scr("supervisor", 0); seconds += T.flag; stats.damageFlags++; }
     }
     if (chance(r, 0.01)) {                                         // confirmed the wrong size by mistake: un-check and scan again
       const passed = roster.filter(x => x.scanned === "pass"); if (passed.length) { const u = pick(r, passed); if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace] UN-CHECK #${u.number} ${u.team} ${u.size}`); setRow(u._id, false); add({ match: { ...u, scanned: false }, status: "undo", reason: "Un-checked — was passed; scan it again" }); pile.push({ truth: u, extra: false }); seconds += T.unscan; stats.unscans++; vig.noteMistake("unchecked"); }
@@ -328,7 +367,7 @@ describe("operator simulation: whole orders, the way the floor works them", () =
   it(`${N} orders end to end`, { timeout: 600_000 }, () => {
     const seed = Number(process.env.SIM_SEED) || 20261022;
     const r = rng(seed);
-    const stats = { orders: 0, jerseys: 0, seconds: 0, scans: 0, greens: 0, yellows: 0, dups: 0, retries: 0, byHand: 0, byHandFail: 0, dupOnByHand: 0, offRosterFlag: 0, damageFlags: 0, unscans: 0, notFound: 0, listMissing: 0, wrongGreen: 0, wrongDup: 0, misreadGreen: 0, misreadGreenCaught: 0, misreadDup: 0, misreadChain: 0, twinRescan: 0, checks: 0, checkDisagree: 0, checkCaught: 0, openAtEnd: 0, parseLoss: 0, over400: 0, sessionLost: 0, kinds: {}, greenByKind: {}, yellowByKind: {}, listMissingByKind: {}, notFoundByKind: {}, byHandWhy: {}, listLen: [], perHour: [] };
+    const stats = { orders: 0, jerseys: 0, seconds: 0, scans: 0, greens: 0, yellows: 0, dups: 0, retries: 0, byHand: 0, byHandFail: 0, dupOnByHand: 0, offRosterFlag: 0, damageFlags: 0, unscans: 0, notFound: 0, listMissing: 0, wrongGreen: 0, wrongDup: 0, misreadGreen: 0, misreadGreenCaught: 0, misreadDup: 0, misreadChain: 0, twinRescan: 0, checks: 0, checkDisagree: 0, checkCaught: 0, openAtEnd: 0, parseLoss: 0, over400: 0, sessionLost: 0, kinds: {}, greenByKind: {}, yellowByKind: {}, listMissingByKind: {}, notFoundByKind: {}, byHandWhy: {}, listLen: [], perHour: [], screens: [] };
     const findings = [];
     for (let k = 0; k < N; k++) workOrder(r, seed, k, stats, findings);
 
@@ -351,6 +390,7 @@ describe("operator simulation: whole orders, the way the floor works them", () =
       `  same jersey scanned twice while its twin (another size) was open → the twin offered, caught by the size on screen: ${stats.twinRescan}`,
       `  WRONG GREEN ${stats.wrongGreen} · WRONG DUPLICATE ${stats.wrongDup} · roster rows lost in parsing ${stats.parseLoss} · orders over 400 log lines ${stats.over400} · sessions that could not be saved ${stats.sessionLost}`,
       `  pace: median ${med.toFixed(0)} jerseys/hour (slowest order ${sorted[0]?.toFixed(0)}, fastest ${sorted[sorted.length - 1]?.toFixed(0)}); ${(stats.seconds / stats.jerseys).toFixed(1)} s per jersey`,
+      ...(process.env.SIM_INPUT ? inputReport(stats) : []),
       `  findings: ${findings.length}`,
       ...findings.slice(0, 40).map(f => "    - " + f.slice(0, 600)),
     ].join("\n");
