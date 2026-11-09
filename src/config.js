@@ -17,12 +17,10 @@ export const CHECKLIST = ["name & number", "size tag", "logos", "seams", "spots 
 
 // One tap on the "not right" menu. `route` is where the jersey goes; in Phase 1
 // everything except "mark" shows the same red "Go to supervisor".
-// `only` names the construction a reason belongs to: it never shows on an
-// order of another type, nor on an order whose type is not known.
 export const REASONS = [
   { id: "wrong_decoration", label: "Wrong name, number or team",  route: "Supervisor → pink slip → decoration" },
   { id: "logo",             label: "Missing or wrong logo",        route: "Supervisor → pink slip → decoration" },
-  { id: "sublimation",      label: "Sublimation error",            route: "Supervisor → full remake", only: "sublimated" },
+  { id: "sublimation",      label: "Sublimation error",            route: "Supervisor → full remake" },
   { id: "stitching",        label: "Stitching or seam",            route: "Supervisor → stitcher" },
   { id: "cleaning",         label: "Cleaning not done",            route: "Supervisor → back to cleaning" },
   { id: "mark",             label: "Mark or dirt — clean it here", route: "Clean in place", inPlace: true },
@@ -61,14 +59,20 @@ export const REASONS_BY_CONSTRUCTION = {
     R.cleaning, R.mark, R.other,
   ],
 };
-// The "not right" menu for an order: by its type. Both start forms require
-// the type, so this fallback is only for an order saved before they did: the
-// general list without anything that belongs to one construction (an ECHL
-// order must never be offered "Sublimation error").
-export const GENERAL_REASONS = REASONS.filter(r => !r.only);
+// The "not right" menu for an order: by its type (an ECHL order is never
+// offered "Sublimation error"). With no type set, every reason from both
+// lists, one per id, with the in-place and free-text ones last — nothing is
+// ruled out when nobody said what the order is made of.
+const byId = list => { const seen = new Set(); return list.filter(r => !seen.has(r.id) && seen.add(r.id)); };
+export const ALL_REASONS_MENU = byId([
+  R.wrong_decoration, R.logo,   // the general wording, not one construction's
+  ...REASONS_BY_CONSTRUCTION.stitched.filter(r => !r.inPlace && !r.custom),
+  ...REASONS_BY_CONSTRUCTION.sublimated.filter(r => !r.inPlace && !r.custom),
+  ...REASONS,
+]).sort((a, b) => (a.inPlace || a.custom ? 1 : 0) - (b.inPlace || b.custom ? 1 : 0) || (a.custom ? 1 : 0) - (b.custom ? 1 : 0));
 export function reasonsFor(jerseyType) {
   const t = jerseyTypeOf(jerseyType);
-  return t ? REASONS_BY_CONSTRUCTION[t.construction] : GENERAL_REASONS;
+  return t ? REASONS_BY_CONSTRUCTION[t.construction] : ALL_REASONS_MENU;
 }
 
 // Role gate. This is a convenience gate so a passer-by cannot use a station,

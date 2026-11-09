@@ -305,13 +305,13 @@ function BinByPicker({ value, onChange }) {
   );
 }
 
-// ECHL / ECHL replica / Sublimated as buttons; "" = not set yet. Required
-// before an order starts: the flag reasons follow the type.
+// ECHL / ECHL replica / Sublimated as buttons; "" = not set. The flag reasons
+// follow the type; with none set the station offers every reason.
 function JerseyTypePicker({ value, onChange }) {
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {JERSEY_TYPES.map(t => (
-        <button key={t.id} type="button" onClick={() => onChange(t.id)} title={t.hint}
+        <button key={t.id} type="button" onClick={() => onChange(value === t.id ? "" : t.id)} title={t.hint}
           style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "#60a5fa" : "#3f4b5c", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "#93c5fd" : "#cbd5e1", fontWeight: value === t.id ? 700 : 400 }}>
           {t.label} <span style={{ fontSize: 14, color: "#94a3b8", fontWeight: 400 }}>· {t.construction}</span>
         </button>
@@ -377,7 +377,6 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, st
   const handleStart = async () => {
     if (!order.trim() && !picked) { setError("Enter the order number, or use a roster file that has it."); return; }
     if (!file && !picked) { setError(canSupervise ? "Upload a roster file, or pick one the supervisor sent." : "Pick the order the supervisor sent, or load a roster file."); return; }
-    if (!jerseyTypeOf(jerseyType)) { setError("Pick the jersey type — ECHL, ECHL replica or Sublimated. It decides which flag reasons the station offers."); return; }
     setLoading(true);
     try {
       if (picked) {
@@ -437,7 +436,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, st
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order notes <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. sponsor logo left sleeve · captain C on #19" rows={2} style={{ ...inputSt, resize: "vertical", fontSize: 16 }} />
-          <label style={{ ...labelSt, marginTop: 10 }}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— required; sets the flag reasons and the reports</span></label>
+          <label style={{ ...labelSt, marginTop: 10 }}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the flag reasons and the reports; leave it unset to offer every reason</span></label>
           <JerseyTypePicker value={jerseyType} onChange={setJerseyType} />
           <label style={{ ...labelSt, marginTop: 12 }}>Bins — how the order is sorted{picked?.binBy ? <span style={{ color: "#60a5fa", fontWeight: 400 }}> · set by the supervisor</span> : null}</label>
           <BinByPicker value={binBy} onChange={setBinBy} />
@@ -773,7 +772,6 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   const send = async () => {
     if (!order.trim()) { setMsg("Type the order number first — stations list rosters by it."); return; }
     if (!file) { setMsg("Choose a roster file first."); return; }
-    if (!jerseyTypeOf(jerseyType)) { setMsg("Pick the jersey type — ECHL, ECHL replica or Sublimated. The station's flag reasons follow it."); return; }
     try {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const rows = isExcel ? await parseExcel(file) : parseCSV(await file.text());
@@ -1006,7 +1004,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
           </div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order number</label><input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
-          <div style={{ marginBottom: 10 }}><label style={labelSt}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— required; sets the station's flag reasons</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the station's flag reasons; unset offers every reason</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Bins — how the station sorts it</label><BinByPicker value={binBy} onChange={setBinBy} /></div>
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Roster file</label>

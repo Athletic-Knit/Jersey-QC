@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { JERSEY_TYPES, reasonsFor, jerseyTypeLabel, REASONS, GENERAL_REASONS, STATIONS, stationOf, ROLES } from "../../config.js";
+import { JERSEY_TYPES, reasonsFor, jerseyTypeLabel, REASONS, STATIONS, stationOf, ROLES } from "../../config.js";
 
 describe("stations", () => {
   it("three stations, each with its own PIN, none equal to the supervisor's", () => {
@@ -32,12 +32,14 @@ describe("jersey types and their reason menus", () => {
       expect(rs.some(r => r.inPlace)).toBe(true);
     }
   });
-  it("no type → the general list without any one construction's reasons; labels resolve", () => {
-    expect(reasonsFor("")).toBe(GENERAL_REASONS);
-    expect(reasonsFor("nonsense")).toBe(GENERAL_REASONS);
-    expect(GENERAL_REASONS.map(r => r.id)).not.toContain("sublimation");
-    expect(REASONS.map(r => r.id)).toContain("sublimation");   // kept so old flags still route to REMAKE
-    for (const t of ["echl", "echl_replica", ""]) expect(reasonsFor(t).map(r => r.label)).not.toContain("Sublimation error");
+  it("no type → every reason from both lists, one per id, in-place and free-text last; labels resolve", () => {
+    const all = reasonsFor("");
+    expect(reasonsFor("nonsense")).toBe(all);
+    const ids = all.map(r => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const list of [reasonsFor("echl"), reasonsFor("sublimated"), REASONS]) for (const r of list) expect(ids).toContain(r.id);
+    expect(ids.slice(-2)).toEqual(["mark", "other"]);
+    for (const t of ["echl", "echl_replica"]) expect(reasonsFor(t).map(r => r.label)).not.toContain("Sublimation error");
     expect(jerseyTypeLabel("echl_replica")).toBe("ECHL replica");
     expect(jerseyTypeLabel("")).toBe("");
   });
