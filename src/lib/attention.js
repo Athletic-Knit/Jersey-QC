@@ -44,11 +44,12 @@ export function awaySummary(spells = []) {
 export const fmtMin = seconds => { const m = Math.round((seconds || 0) / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`; };
 
 // The "Attention" sheet of an order's export: every idle spell and every away
-// spell, in time order, with who was signed in.
+// spell, in time order. No names: the sheet says the station's screen was left,
+// not who left it.
 export function buildAttentionSheet(idleSpells = [], awaySpells = [], fmtTime = t => new Date(t).toLocaleString()) {
   const rows = [
-    ...idleSpells.map(s => ({ t: s.start, row: ["Idle — screen up, nobody touched it", fmtTime(s.start), fmtTime(s.end), s.minutes ?? Math.round((s.end - s.start) / 60000), s.operator || ""] })),
-    ...awaySpells.map(s => ({ t: s.start, row: [awayLabel(s.how), fmtTime(s.start), fmtTime(s.end), Math.round((s.seconds || 0) / 60 * 10) / 10, s.operator || ""] })),
+    ...idleSpells.map(s => ({ t: s.start, row: ["Idle — screen up, nobody touched it", fmtTime(s.start), fmtTime(s.end), s.minutes ?? Math.round((s.end - s.start) / 60000)] })),
+    ...awaySpells.map(s => ({ t: s.start, row: [awayLabel(s.how), fmtTime(s.start), fmtTime(s.end), Math.round((s.seconds || 0) / 60 * 10) / 10] })),
   ].sort((a, b) => a.t - b.t).map(x => x.row);
   const away = awaySummary(awaySpells);
   return [
@@ -56,7 +57,7 @@ export function buildAttentionSheet(idleSpells = [], awaySpells = [], fmtTime = 
     ["Idle spells (3 min or more untouched)", idleSpells.length],
     ["Times the screen was left", away.count, "Minutes away", Math.round(away.seconds / 60 * 10) / 10],
     [],
-    ["What", "From", "To", "Minutes", "Signed in"],
+    ["What", "From", "To", "Minutes"],
     ...rows,
     ...(rows.length ? [] : [["—", "nothing recorded"]]),
   ];

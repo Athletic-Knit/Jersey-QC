@@ -2458,16 +2458,16 @@ export default function App() {
 
   // ── Overlay actions ───────────────────────────────────────────────────────
   const stamp = useCallback(() => ({ timestamp: localTimeStamp(), operator: operatorName }), [operatorName]);
-  const recordIdle = useCallback(spell => setIdleSpells(prev => [...prev, { ...spell, operator: operatorName }]), [operatorName]);
+  // Idle and away spells name no one: they say the station's screen sat
+  // untouched, or was left, not who was signed in (owner's decision, 9 Nov 2026).
+  const recordIdle = useCallback(spell => setIdleSpells(prev => [...prev, spell]), []);
   // Where the screen was while an order is open: hidden (minimised, another
   // tab, locked) or with another window in front. Kept with the order, on its
   // Excel export and on the hub's record; the page cannot see where the
   // operator went, only that this screen was left.
-  const operatorRef = useRef(operatorName);
-  useEffect(() => { operatorRef.current = operatorName; }, [operatorName]);
   useEffect(() => {
     if (!sessionStarted) return;
-    const w = createAwayWatch({ onSpell: spell => setAwaySpells(prev => [...prev, { ...spell, operator: operatorRef.current }].slice(-500)) });
+    const w = createAwayWatch({ onSpell: spell => setAwaySpells(prev => [...prev, spell].slice(-500)) });
     return () => w.stop();
   }, [sessionStarted]);
 

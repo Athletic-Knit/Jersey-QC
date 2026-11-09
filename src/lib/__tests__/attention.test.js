@@ -43,13 +43,15 @@ describe("away watch", () => {
 
 describe("attention sheet", () => {
   it("sums the spells and lists them in time order", () => {
-    const idle = [{ start: 3000, end: 243000, minutes: 4, operator: "Sam" }];
-    const away = [{ start: 1000, end: 61000, seconds: 60, how: "hidden", operator: "Sam" }, { start: 500000, end: 509000, seconds: 9, how: "unfocused", operator: "Sam" }];
+    const idle = [{ start: 3000, end: 243000, minutes: 4 }];
+    const away = [{ start: 1000, end: 61000, seconds: 60, how: "hidden" }, { start: 500000, end: 509000, seconds: 9, how: "unfocused" }];
     expect(awaySummary(away)).toEqual({ count: 2, seconds: 69 });
     const sheet = buildAttentionSheet(idle, away, t => String(t));
     expect(sheet[1]).toEqual(["Idle spells (3 min or more untouched)", 1]);
     expect(sheet[2]).toEqual(["Times the screen was left", 2, "Minutes away", 1.2]);
     expect(sheet.slice(5).map(r => r[0])).toEqual([awayLabel("hidden"), "Idle — screen up, nobody touched it", awayLabel("unfocused")]);
     expect(buildAttentionSheet([], []).at(-1)).toEqual(["—", "nothing recorded"]);
+    expect(sheet[4]).toEqual(["What", "From", "To", "Minutes"]);                      // no "Signed in" column: spells name no one
+    expect(JSON.stringify(sheet)).not.toMatch(/Sam/);
   });
 });
