@@ -138,3 +138,39 @@ describe("a name with no number, from the camera", () => {
     expect(m.type).toBe("duplicate");
   });
 });
+
+// A list only ever offers jerseys still to do: a row that has passed is not a
+// choice, and it is not shown greyed out either.
+describe("done rows stay off the list", () => {
+  const roster = [
+    { _id: 0, name: "",      number: "7",  team: "blue",   size: "Y-XL" },
+    { _id: 1, name: "",      number: "70", team: "blue",   size: "A-XL" },
+    { _id: 2, name: "",      number: "37", team: "yellow", size: "A-S", scanned: "pass" },
+    { _id: 3, name: "BROWN", number: "71", team: "blue",   size: "A-M" },
+    { _id: 4, name: "",      number: "72", team: "green",  size: "A-L", scanned: "flag" },
+    { _id: 5, name: "",      number: "17", team: "red",    size: "A-L" },
+  ];
+  const reads = [
+    ["7",  "",      { numberComplete: false, obstruction: "the jersey is not laid flat" }],
+    ["7",  "",      { position: "left" }],
+    ["3",  "",      { numberComplete: false }],
+    ["71", "BROWM", {}],
+    ["77", "",      {}],
+  ];
+  it("no pick or close list carries a passed or flagged row", () => {
+    let lists = 0;
+    for (const [number, name, read] of reads) {
+      const m = findMatches(roster, name, number, read);
+      if (m.type === "pick" || m.type === "close") {
+        lists++;
+        expect(m.candidates.length).toBeGreaterThan(0);
+        expect(m.candidates.some(c => c.scanned)).toBe(false);
+      }
+    }
+    expect(lists).toBeGreaterThan(0);
+  });
+  it("a list on which every row is done is still a duplicate", () => {
+    const all = [{ _id: 0, name: "", number: "84", team: "red", scanned: "pass" }, { _id: 1, name: "", number: "84", team: "blue", scanned: "pass" }];
+    expect(findMatches(all, "", "84", {}).type).toBe("duplicate");
+  });
+});

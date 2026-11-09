@@ -222,6 +222,10 @@ export function findMatches(roster, name, number, read = {}) {
   // A list on which every row has already passed is not a choice: the jersey
   // was scanned before (two #84 rows, both done). Say so.
   if ((m.type === "pick" || m.type === "close") && m.candidates.length && m.candidates.every(isDone)) return { type: "duplicate", match: m.candidates[0] };
+  // Otherwise a row that has passed (or is with the supervisor) is not a
+  // choice either: it leaves the list, so the operator only sees jerseys
+  // still to do (9 Nov 2026: "#37 · Already passed" was cluttering the list).
+  if ((m.type === "pick" || m.type === "close") && m.candidates.some(isDone)) return { ...m, candidates: m.candidates.filter(r => !isDone(r)) };
   return m;
 }
 
