@@ -69,9 +69,14 @@ export const hub = {
 // operator took); the hub keeps a photo once it has seen it, so older flags
 // keep theirs without being re-sent every 5 s.
 const PHOTOS_PER_REPORT = 6;   // the newest log entries that carry their photo in each 5-second report
-export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap }) {
+export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap, idleSpells = [], awaySpells = [] }) {
   const count = s => roster.filter(r => r.scanned === s).length;
+  const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
   return {
+    // Where the screen was: idle (up, untouched) and away (hidden or another
+    // window in front). Counts for the day sheet, the spells for the order sheet.
+    idle: { count: idleSpells.length, minutes: sum(idleSpells, s => s.minutes), spells: idleSpells.slice(-200) },
+    away: { count: awaySpells.length, seconds: sum(awaySpells, s => s.seconds), spells: awaySpells.slice(-200) },
     // orderRun: when this order was started on this station. The same order
     // number started again is a new run with its own record on the hub.
     operatorName, role, orderNumber, orderRun, notes, jerseyType, rosterFile, browserId: browserId(),

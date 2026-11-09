@@ -2,6 +2,7 @@
 
 // Excel opens a UTF-8 CSV with accents intact only when it starts with a BOM.
 const BOM = String.fromCharCode(0xfeff);
+import { buildAttentionSheet } from "./attention.js";
 
 // Quote a CSV cell and neutralise leading formula characters (= + - @).
 export function csvCell(v) {
@@ -52,6 +53,8 @@ export function exportRosterXLSX(roster, log, meta, columns, binOf, XLSX = globa
   const ws = XLSX.utils.aoa_to_sheet(buildRosterSheet(roster, log, meta, columns, binOf));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "QC Results");
+  // Where the screen was while the order was open: idle and away spells.
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildAttentionSheet(meta.idleSpells || [], meta.awaySpells || [], t => localTimeStamp(new Date(t)))), "Attention");
   XLSX.writeFile(wb, `roster_${safeFilename(meta.orderNumber)}_${localDateStamp()}.xlsx`);
 }
 
@@ -136,9 +139,10 @@ export function buildDaySheets(ledger, stationLabel = id => id) {
   const orderRows = orders.map(o => {
     const evs = events.filter(e => e.station === o.station && e.order === o.order);
     const s = summarise(evs); const c = o.counts || {};
-    return [stationLabel(o.station), o.order, o.jerseyType || "", o.operator || "", c.total ?? "", s.passed, s.byHand, s.flagged + s.offRoster, c.remaining ?? "", hhmm(s.first), hhmm(s.last), s.activeMin, s.perHour ?? "", o.rosterFile || ""];
+    const awayMin = o.away ? Math.round((o.away.seconds || 0) / 60 * 10) / 10 : "";
+    return [stationLabel(o.station), o.order, o.jerseyType || "", o.operator || "", c.total ?? "", s.passed, s.byHand, s.flagged + s.offRoster, c.remaining ?? "", hhmm(s.first), hhmm(s.last), s.activeMin, s.perHour ?? "", o.idle ? o.idle.count : "", o.away ? `${o.away.count}${o.away.count ? " · " + awayMin + " min" : ""}` : "", o.rosterFile || ""];
   });
-  const ordersSheet = [["Station", "Order", "Jersey type", "Operator", "Jerseys in order", "Passed", "By hand", "To supervisor", "Still remaining", "First scan", "Last scan", "Active minutes", "Jerseys per active hour", "Roster file"], ...orderRows];
+  const ordersSheet = [["Station", "Order", "Jersey type", "Operator", "Jerseys in order", "Passed", "By hand", "To supervisor", "Still remaining", "First scan", "Last scan", "Active minutes", "Jerseys per active hour", "Idle spells", "Screen left (times · minutes)", "Roster file"], ...orderRows];
   const reasons = {};
   events.filter(e => e.status === "flagged").forEach(e => { const k = e.offRoster ? "Not on the roster" : (e.reason || "—"); reasons[k] = (reasons[k] || 0) + 1; });
   const flagsSheet = [["Reason", "Jerseys"], ...Object.entries(reasons).sort((a, b) => b[1] - a[1]), [], ["Time", "Station", "Operator", "Order", "Jersey", "Reason", "Resolution"],

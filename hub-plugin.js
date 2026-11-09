@@ -157,7 +157,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
             // The order record keeps the latest roster with each jersey's status, so the
             // supervisor can download the order's QC Results sheet at any time.
             const ok = okey(body.orderNumber, body.orderRun); const o = dayLed.orders[ok] || { station: id, order: body.orderNumber, run: body.orderRun || 0, operator: body.operatorName, firstSeen: now };
-            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", jerseyType: body.jerseyType || o.jerseyType || "", rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null };
+            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", jerseyType: body.jerseyType || o.jerseyType || "", rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null, idle: body.idle || o.idle || null, away: body.away || o.away || null };
           }
           pruneLedger(led);   // 90 days; photos on the newest 14
           const setOrder = renamed ? undefined : prev?.setOrder;          // pending until the station reports it
