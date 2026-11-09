@@ -57,7 +57,7 @@ Host PC = server + supervisor; operator PC = station. The full runbook with the 
 - **Enter by hand:** on the roster → that row passes as MANUAL for the supervisor's sign-off; **not on the roster → nothing is added**, GO TO SUPERVISOR, the supervisor is told at once. A list reached after typing has "None of these — #88 X is not on the roster" (W).
 - **Defects:** Not right → reason (with route) or "Something else — type it" → GO TO SUPERVISOR; supervisor's toast carries the words.
 - **Un-check:** "↶ Undo — scan again" on the last-jersey line, or "Un-check — scan again" in the roster's Mark dropdown; one confirm; an `undo` log line; open flags for that row are closed.
-- Missing / short-shipped marks; Accept / Reject / note on flagged and by-hand items; Add or Replace roster mid-order with confirm; Excel export (every row with status) and log CSV; camera picker, rotation, liveness check ("Camera disconnected"); Full screen button; a pill when the hub is unreachable (scanning continues); a banner when the supervisor sends a roster mid-order.
+- Missing marks; Accept / Reject / note on flagged and by-hand items; Add or Replace roster mid-order with confirm; Excel export (every row with status) and log CSV; camera picker, rotation, liveness check ("Camera disconnected"); Full screen button; a pill when the hub is unreachable (scanning continues); a banner when the supervisor sends a roster mid-order.
 
 ## What the supervisor sees
 

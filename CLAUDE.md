@@ -5,7 +5,7 @@
 A React/Vite web app for quality-control scanning of sports jerseys in a manufacturing environment. An operator photographs each jersey with their device camera; Claude Haiku reads the player name and number from the image and matches it against an uploaded roster.
 
 **Workflow:**
-1. Operator enters their name, order number, and uploads a roster file (CSV/TSV or Excel)
+1. Operator enters their name, order number, and uploads a roster file (CSV/TSV or Excel). The jersey type (ECHL / ECHL replica, stitched; Sublimated, printed — `JERSEY_TYPES` in config.js) is required on the station's setup form and on the supervisor's send-roster form: the flag reasons follow it (`reasonsFor`), so an ECHL order is never offered "Sublimation error". The Mark menu on an unscanned roster row offers Missing only (Short-shipped was removed 9 Nov 2026; the `short` status is still read for old sessions).
 2. Bins: the supervisor chooses on the send-roster form (and the station on its setup form) whether the order is sorted by team, by size, or not at all (`BIN_BY`, `binBy` on the hub roster). With more than one team or size a bin screen appears (Bin 1 = Navy, Bin 2 = Red; or Bin 1 = Y-M, Bin 2 = A-L …). A size map carries `__by: "size"` (`binFieldOf`), a team map is flat; `binFor(binMap, row)` takes the roster row.
 3. Camera feed is shown; operator presses a configurable key (default: `B`) to scan a jersey
 4. Claude Haiku extracts name + number from the photo via the Anthropic API

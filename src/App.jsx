@@ -291,7 +291,6 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
 }
 
 // ── Order setup (every order; no PIN) ─────────────────────────────────────────
-// ECHL / ECHL replica / Sublimated as buttons; "" = not set.
 // How the order is sorted at the station: a bin per team, a bin per size, or none.
 function BinByPicker({ value, onChange }) {
   return (
@@ -306,11 +305,13 @@ function BinByPicker({ value, onChange }) {
   );
 }
 
+// ECHL / ECHL replica / Sublimated as buttons; "" = not set yet. Required
+// before an order starts: the flag reasons follow the type.
 function JerseyTypePicker({ value, onChange }) {
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {JERSEY_TYPES.map(t => (
-        <button key={t.id} type="button" onClick={() => onChange(value === t.id ? "" : t.id)} title={t.hint}
+        <button key={t.id} type="button" onClick={() => onChange(t.id)} title={t.hint}
           style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "#60a5fa" : "#3f4b5c", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "#93c5fd" : "#cbd5e1", fontWeight: value === t.id ? 700 : 400 }}>
           {t.label} <span style={{ fontSize: 14, color: "#94a3b8", fontWeight: 400 }}>· {t.construction}</span>
         </button>
@@ -376,6 +377,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, st
   const handleStart = async () => {
     if (!order.trim() && !picked) { setError("Enter the order number, or use a roster file that has it."); return; }
     if (!file && !picked) { setError(canSupervise ? "Upload a roster file, or pick one the supervisor sent." : "Pick the order the supervisor sent, or load a roster file."); return; }
+    if (!jerseyTypeOf(jerseyType)) { setError("Pick the jersey type — ECHL, ECHL replica or Sublimated. It decides which flag reasons the station offers."); return; }
     setLoading(true);
     try {
       if (picked) {
@@ -435,7 +437,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, st
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order notes <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. sponsor logo left sleeve · captain C on #19" rows={2} style={{ ...inputSt, resize: "vertical", fontSize: 16 }} />
-          <label style={{ ...labelSt, marginTop: 10 }}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the "not right" menu and the reports</span></label>
+          <label style={{ ...labelSt, marginTop: 10 }}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— required; sets the flag reasons and the reports</span></label>
           <JerseyTypePicker value={jerseyType} onChange={setJerseyType} />
           <label style={{ ...labelSt, marginTop: 12 }}>Bins — how the order is sorted{picked?.binBy ? <span style={{ color: "#60a5fa", fontWeight: 400 }}> · set by the supervisor</span> : null}</label>
           <BinByPicker value={binBy} onChange={setBinBy} />
@@ -771,6 +773,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   const send = async () => {
     if (!order.trim()) { setMsg("Type the order number first — stations list rosters by it."); return; }
     if (!file) { setMsg("Choose a roster file first."); return; }
+    if (!jerseyTypeOf(jerseyType)) { setMsg("Pick the jersey type — ECHL, ECHL replica or Sublimated. The station's flag reasons follow it."); return; }
     try {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const rows = isExcel ? await parseExcel(file) : parseCSV(await file.text());
@@ -1003,7 +1006,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
           </div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order number</label><input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
-          <div style={{ marginBottom: 10 }}><label style={labelSt}>Jersey type</label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— required; sets the station's flag reasons</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Bins — how the station sorts it</label><BinByPicker value={binBy} onChange={setBinBy} /></div>
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Roster file</label>
@@ -1747,7 +1750,6 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onE
     { label: "By hand",       value: count("manual"),  color: "#f59e0b" },
     { label: "With supervisor", value: count("flag") + offRosterFlags,  color: "#ef4444" },
     { label: "Missing",       value: count("missing"), color: "#f59e0b" },
-    { label: "Short-shipped", value: count("short"),   color: "#f59e0b" },
   ].filter(s => s.value > 0 || s.label === "Passed");
   const open = count("flag") + offRosterFlags + count("manual") + count("missing") + count("short");
   return (
@@ -1756,7 +1758,7 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onE
         <div style={{ fontSize: 64, marginBottom: 12 }}>{open ? "📋" : "🎉"}</div>
         <div style={{ fontSize: 36, fontWeight: 900, color: open ? "#f59e0b" : "#22c55e", marginBottom: 10 }}>{open ? "Every jersey accounted for" : "Order complete"}</div>
         <div style={{ fontSize: 18, color: "#cbd5e1", marginBottom: 8, lineHeight: 1.4 }}>
-          {open ? `${open} still open — with the supervisor, entered by hand, missing, or short-shipped. The box stays open until they are signed off or come back.` : `All ${roster.length} jerseys passed.`}
+          {open ? `${open} still open — with the supervisor, entered by hand, or missing. The box stays open until they are signed off or come back.` : `All ${roster.length} jerseys passed.`}
         </div>
         {canExport && <div style={{ fontSize: 16, color: "#94a3b8", marginBottom: 26 }}>Review the roster before exporting.</div>}
         <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 28, flexWrap: "wrap" }}>
@@ -2567,16 +2569,17 @@ export default function App() {
     }
   }, [log]);
 
-  // Manual marks on roster rows: missing / short-shipped / clear.
-  // Missing / short-shipped go to the log the moment they are marked, so the
-  // supervisor's board hears about it like a flag. Clearing the mark closes
-  // that line.
+  // Manual marks on roster rows: missing / clear. A missing mark goes to the
+  // log the moment it is made, so the supervisor's board hears about it like
+  // a flag. Clearing the mark closes that line. ("short" is read everywhere a
+  // status is, for orders saved before the Short-shipped mark was removed on
+  // 9 Nov 2026, but it can no longer be chosen.)
   const markRow = useCallback((id, mark) => {
     const row = roster.find(r => r._id === id); if (!row) return;
     setRoster(prev => prev.map(r => r._id === id ? { ...r, scanned: mark } : r));
     const isMark = l => l.match?._id === id && (l.status === "missing" || l.status === "short") && !l.resolution;
-    if (mark === "missing" || mark === "short") {
-      const reason = mark === "missing" ? "Marked missing — not in the box" : "Marked short-shipped";
+    if (mark === "missing") {
+      const reason = "Marked missing — not in the box";
       setLog(prev => [{ id: Date.now(), match: { ...row, scanned: mark }, status: mark, reason, ...stamp() }, ...prev.map(l => isMark(l) ? { ...l, resolution: "Mark changed" } : l)]);
     } else {
       const resolution = `Mark removed by ${operatorName || "operator"}`;
@@ -3018,12 +3021,12 @@ export default function App() {
                           ))}
                           {binMap && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{binOf(r) !== null ? `Bin ${binOf(r)}` : "—"}</td>}
                           <td style={{ ...tdSt, padding: "2px 6px" }}>
-                            <select value={["missing", "short"].includes(r.scanned) ? r.scanned : ""}
+                            <select value={["missing", "short"].includes(r.scanned) ? "missing" : ""}
                               onChange={e => { const v = e.target.value; if (v === "unscan") unscan(r._id); else if (v === "flag") flagRow(r); else markRow(r._id, v || false); }}
                               style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
                               <option value="">—</option>
                               {(!r.scanned || ["missing", "short"].includes(r.scanned))
-                                ? <><option value="missing">Missing</option><option value="short">Short-shipped</option></>
+                                ? <option value="missing">Missing</option>
                                 : <>
                                     {(r.scanned === "pass" || r.scanned === "manual") && <option value="flag">🚩 Flag / damage</option>}
                                     {(r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check</option>}

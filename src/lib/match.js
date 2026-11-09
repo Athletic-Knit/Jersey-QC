@@ -7,7 +7,7 @@ import { narrowByColour } from "./colour.js";
 // pink slip to be scanned again, so it stays selectable.
 // A row is done when it passed, was entered by hand, or is FLAGGED: a flagged
 // jersey is with the supervisor until they clear it, so scanning it again shows
-// the flag, never a green. Missing / short-shipped marks are not "done": a
+// the flag, never a green. Missing marks are not "done": a
 // jersey that turns up after all scans normally.
 export const isDone = r => r.scanned === "pass" || r.scanned === "manual" || r.scanned === "flag";
 

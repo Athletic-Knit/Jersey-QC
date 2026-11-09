@@ -277,8 +277,8 @@ function workOrder(r, seed, k, stats, findings) {
     else if (d === "reject") { log = log.map(x => x.id === l.id ? { ...x, status: "manual", resolution: "Rejected — sent back for rework" } : x); }
     else log = log.map(x => x.id === l.id ? { ...x, resolution: "Note added" } : x);
   }
-  // What is still open at the end: the operator marks it missing or short-shipped
-  for (const x of roster.filter(x => !x.scanned)) { stats.openAtEnd++; setRow(x._id, chance(r, 0.5) ? "missing" : "short"); }
+  // What is still open at the end: the operator marks it missing
+  for (const x of roster.filter(x => !x.scanned)) { stats.openAtEnd++; setRow(x._id, "missing"); }
 
   // C. finished
   const remaining = roster.filter(x => !x.scanned).length;
