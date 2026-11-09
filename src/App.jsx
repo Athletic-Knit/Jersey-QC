@@ -4,12 +4,13 @@ import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
-import { createAwayWatch, awaySummary } from "./lib/attention.js";
+import { createAwayWatch } from "./lib/attention.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
+import { pace } from "./lib/pace.js";
 import { binLabels, jerseyLabel, flagLabel } from "./lib/labels.js";
 const SECOND_LOOK = false;
 import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
@@ -1074,7 +1075,8 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   // Input trial (src/lib/trial.js): the overlay is mounted anew for every
   // screen (its key is the mode and the scan), so "shown" is the mount; every
   // option that runs goes through `fire`, which says how it was reached.
-  const shownAt = useRef(Date.now());
+  const shownAt = useRef(0);
+  useEffect(() => { shownAt.current = Date.now(); }, []);   // when the screen mounts (a clock read in render is impure for the linter)
   const trialMoves = useRef(0), trialHovers = useRef(0);
   const fire = useCallback((o, i, via, key = "", opts = null) => {
     if (onTrial && o) onTrial({ screen: state.mode, n: opts ? opts.length : null, idx: i, id: o.id, via, key, ms: Date.now() - shownAt.current, moves: trialMoves.current, hovers: trialHovers.current });
@@ -2034,9 +2036,10 @@ export default function App() {
   const rosterComplete = roster.length > 0 && remaining === 0;
   // The roster table: the header pill's status, then the size and team filters, in the chosen order.
   const shownRows = useMemo(() => sortRoster(roster.filter(r => (!rosterFilter || r.scanned === rosterFilter) && (!sizeFilter || String(r.size ?? "").trim() === sizeFilter) && (!teamFilter || String(r.team ?? "").trim() === teamFilter)), rosterSort, binMap, { doneFirst }), [roster, rosterFilter, sizeFilter, teamFilter, rosterSort, binMap, doneFirst]);
-  const elapsedMin     = firstScanTime ? (now - firstScanTime) / 60000 : 0;
-  const scanRate       = elapsedMin > 1 && passCount > 0 ? passCount / elapsedMin : null;
-  const etaMin         = scanRate && remaining > 0 ? Math.ceil(remaining / scanRate) : null;
+  // Rate and time left from working time (src/lib/pace.js): a night with the
+  // order left open on screen is not working time, so a resumed order does not
+  // come back with an ETA in the thousands.
+  const { etaMin }     = useMemo(() => pace(log, passCount, remaining, now, { start: firstScanTime }), [log, passCount, remaining, now, firstScanTime]);
   const rosterCols     = useMemo(() => displayColumns(roster), [roster]);
   const extraCols      = useMemo(() => extraColumns(roster), [roster]);
   const keyLabel       = formatKey(scanKey);
