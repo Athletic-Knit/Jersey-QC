@@ -1041,11 +1041,11 @@ const HEADLINE_FIELDS = ["number", "name"];
 
 // Two columns, filled down the left and then down the right, when there are
 // more than three rows; the list uses the whole panel and scrolls only when
-// both columns are full. Down walks the left column and carries on at the
-// top of the right one, since the rows are in that order.
+// both columns are full. The rows run in likelihood order reading left to
+// right, top to bottom, and Down follows that reading order (9 Nov 2026).
 function twoColumns(n) {
   return n > 3
-    ? { display: "grid", gridTemplateColumns: "1fr 1fr", gridAutoFlow: "column", gridTemplateRows: `repeat(${Math.ceil(n / 2)}, auto)`, gap: 8, alignItems: "start" }
+    ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "start" }   // row by row: 1st and 2nd across the top, 3rd and 4th under them
     : { display: "flex", flexDirection: "column", gap: 8 };
 }
 
