@@ -1179,8 +1179,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (e.code === retryKey) { if (mode === "confirm") { e.preventDefault(); showNudge(); return; } const o = options.find(x => x.id === "retry"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }
       if (e.code === byHandKey) { const o = options.find(x => x.id === "manual"); if (o) { e.preventDefault(); lastKeyRef.current = Date.now(); o.run(); } return; }   // straight to the form, like R goes straight to retry
       if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled && !o.mouseOnly) o.run(); return; }
-      if (e.code === cancelKey || e.code === "ArrowDown") { e.preventDefault(); lastKeyRef.current = Date.now(); move(1); return; }
-      if (e.code === upKey || e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
+      // The assigned keys come first; a plain arrow only moves its own way when
+      // it is not assigned to the other direction (a pedal board wired the
+      // other way round sets Down = ArrowUp and Up = ArrowDown, 9 Nov 2026).
+      if (e.code === cancelKey || e.code === upKey) { e.preventDefault(); lastKeyRef.current = Date.now(); move(e.code === cancelKey ? 1 : -1); return; }
+      if (e.code === "ArrowDown") { e.preventDefault(); lastKeyRef.current = Date.now(); move(1); return; }
+      if (e.code === "ArrowUp") { e.preventDefault(); lastKeyRef.current = Date.now(); move(-1); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
