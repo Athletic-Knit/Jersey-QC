@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { boxFor, boxLimits, DEFAULT_BOXES } from "../boxes.js";
 import { buildBinMap, binFor, binEntries, binCount, binFieldOf, closeBin, binContents, ALL_LABEL } from "../roster.js";
-import { binListLabels, binListZPL, jerseyLabel, binLabels, binLabelZPL, labelSize } from "../labels.js";
+import { binListLabels, binListZPL, jerseyLabel, binLabels, binLabelZPL, labelSize, textUnits } from "../labels.js";
 import { buildBinsSheet } from "../export.js";
 
 describe("the box a bin is packed in", () => {
@@ -110,5 +110,24 @@ describe("the box on the bin list and the Bins sheet", () => {
     expect(sheet[1]).toEqual([1, "Navy", 12, "Medium box", "Closed (full)", "t5"]);
     expect(sheet[2]).toEqual([2, "Navy", 1, "Bag", "Open", ""]);
     expect(sheet[4]).toEqual(["Total", "", 13]);
+  });
+});
+
+// A wide name must never wrap: the printer prints the wrapped piece over the
+// start of the line ("11-MACDONALD-AXL" came out as "XL-MACDONALD-A").
+describe("long names on the bin list", () => {
+  const rows = [["MACDONALD", 11, "A-XL"], ["VANDENBERGHE", 23, "A-2XL"], ["KONSTANTINOPOULOS", 88, "A-3XL"], ["LEE", 3, "A-M"]].map(([name, number, size]) => ({ name, number: String(number), size }));
+  const zpl = binListZPL(binListLabels(rows, { bin: 1, label: "WINNIPEG WARRIORS MAROON", orderNumber: "264247", box: "Medium box" })[0], labelSize("2x1"));
+  const items = [...zpl.matchAll(/\^FO(\d+),\d+\^A0N,(\d+),(\d+)\^FD([^^]*)\^FS/g)].map(m => ({ x: +m[1], h: +m[2], w: +m[3], text: m[4] }));
+  it("prints each jersey as one field with no wrapping box", () => {
+    expect(items.map(i => i.text)).toEqual(expect.arrayContaining(["11-MACDONALD-AXL", "23-VANDENBERGHE-A2XL", "88-KONSTANTINOPOULOS-A3XL", "3-LEE-AM"]));
+    expect(zpl.split("\n").filter(l => /MACDONALD|VANDENBERGHE|KONSTANTINOPOULOS|WINNIPEG/.test(l)).every(l => !l.includes("^FB"))).toBe(true);
+  });
+  it("squeezes a long name before it shrinks it, and keeps it inside its column", () => {
+    const short = items.find(i => i.text === "3-LEE-AM"), mac = items.find(i => i.text === "11-MACDONALD-AXL"), long = items.find(i => i.text === "88-KONSTANTINOPOULOS-A3XL");
+    expect(mac.h).toBeGreaterThanOrEqual(short.h - 2);   // nearly the same height, narrower letters
+    expect(mac.w).toBeLessThan(mac.h);
+    expect(long.h).toBeLessThan(short.h);
+    items.forEach(i => expect(i.x + textUnits(i.text) * i.w).toBeLessThanOrEqual(labelSize("2x1").w));
   });
 });

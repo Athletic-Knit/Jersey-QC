@@ -30,9 +30,27 @@ export function labelSize(spec = DEFAULT_LABEL_SIZE, dpi = 203) {
 
 // ZPL field data may not contain the control characters ^ and ~.
 const safe = s => String(s ?? "").replace(/[\^~]/g, " ");
-// Font 0 (the printer's scalable font) at height h is about 0.55 h per
-// character: the tallest font that still fits `text` in `width` dots.
-const fit = (text, width, maxH) => Math.max(10, Math.min(maxH, Math.floor(width / (0.58 * Math.max(1, String(text).length)))));
+// How wide a text is in font 0 (the printer's scalable font), in units of the
+// font's width setting. Letter by letter: capitals are much wider than digits
+// and small letters, and a flat "0.58 a character" let "11-MACDONALD-AXL"
+// overflow its box, where the printer wrapped it and printed "XL" over the
+// "11" (seen on the floor, 10 Nov 2026). The figures are on the wide side on
+// purpose: a line a little small is fine, a wrapped one is not.
+const WIDE = "MW", NARROW = "Iijl.,:;'!|", SLIM = "ftr-/() ";
+const charUnits = c =>
+  WIDE.includes(c) ? 0.98 : c === "m" || c === "w" ? 0.92 : NARROW.includes(c) ? 0.34 : SLIM.includes(c) ? 0.4
+  : c >= "A" && c <= "Z" ? 0.72 : c >= "0" && c <= "9" ? 0.63 : 0.6;
+export const textUnits = text => Math.max(0.6, [...String(text ?? "")].reduce((t, c) => t + charUnits(c), 0));
+// The tallest font that still fits `text` in `width` dots.
+const fit = (text, width, maxH) => Math.max(10, Math.min(maxH, Math.floor(width / textUnits(text))));
+// One line that can never wrap: no ^FB, so nothing is printed over. A text
+// too wide for `width` is first squeezed (narrower letters at the same
+// height, down to 70%), and only then made smaller.
+const tight = (x, y, maxH, width, text) => {
+  const fw = Math.max(8, Math.min(maxH, Math.floor(width / textUnits(text))));
+  const fh = Math.max(10, Math.min(maxH, Math.floor(fw / 0.7)));
+  return `^FO${x},${y}^A0N,${fh},${fw}^FD${safe(text)}^FS`;
+};
 // One line of text in a box: ^FB wraps it to `width`, one line, aligned.
 // `lines` > 1 wraps onto that many lines; `reverse` prints white on black.
 const line = (x, y, fh, width, align, text, { lines = 1, reverse = false } = {}) =>
@@ -241,13 +259,13 @@ export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const right = box || facts;
   const lw = Math.round(fullW * 0.5), rw = fullW - lw;
   const out = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0",
-    line(x0, top + pad, fit(left, lw, head), lw, "L", left),
+    tight(x0, top + pad, head, lw, left),
     line(x0 + lw, top + pad, fit(right, rw, head), rw, "R", right),
-    ...(box ? [line(x0, top + pad + head + 1, fit(facts, fullW, sub - 2), fullW, "L", facts)] : []),
+    ...(box ? [tight(x0, top + pad + head + 1, sub - 2, fullW, facts)] : []),
     `^FO${x0},${top + pad + head + sub + 1}^GB${fullW},1,1^FS`];
   (l.items || []).slice(0, BIN_LIST_PER_LABEL).forEach((text, i) => {
     const col = Math.floor(i / rows), row = i % rows;            // down the left column, then down the right
-    out.push(line(x0 + col * (colW + pad), y0 + row * rowH, fit(text, colW, Math.max(10, rowH - 3)), colW, "L", text));
+    out.push(tight(x0 + col * (colW + pad), y0 + row * rowH, Math.max(10, rowH - 3), colW, text));
   });
   out.push("^PQ1", "^XZ");
   return out.join("\n");
