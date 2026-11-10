@@ -1712,7 +1712,7 @@ function TrialPanel({ onClose }) {
 function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, onPrinted, onConfirm }) {
   const [print, setPrint] = useState({ status: autoPrint && labels.length ? "printing" : "idle" });
   const fired = useRef(false);
-  const send = useCallback(() => hub.printLabels(labels)
+  const send = useCallback(() => hub.printLabels(labels, { kind: "binticket", station: stationId() })   // the 2 x 1 in roll, like the label of a bin opened when another was full
     .then(r => { setPrint({ status: "done", printer: r.printer, count: r.count }); onPrinted?.(); })
     .catch(e => setPrint(e.status === 503 ? { status: "none" } : { status: "error", message: e.status ? e.message : "could not reach the server" })), [labels, onPrinted]);
   const doPrint = () => { if (labels.length) { setPrint({ status: "printing" }); send(); } };

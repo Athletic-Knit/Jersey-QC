@@ -159,25 +159,32 @@ export function binLabels(roster, binMap, { orderNumber = "" } = {}) {
   return binEntries(roster, binMap).map(({ label, bin }) => ({ bin, label, by, count: counts[bin] || 0, orderNumber: String(orderNumber || "") }));
 }
 
-// "BIN 3" big, the team or size under it, a footer with the order number,
-// "by team" / "by size" and the jersey count (just the order number on a
-// small label).
+// "BIN 3" as big as the label allows (half its height), the team or size
+// under it, a small footer with the order number, "by team" / "by size" and
+// the jersey count (just the order number on a small label). It is read from
+// across the table, so the bin and what it holds take the room and the footer
+// gets what is left. Bin labels go on the 2 x 1 in roll (kind "binticket"):
+// the ones printed when the order starts and the one for a bin opened when
+// another was full are the same label. On that roll the text keeps 2 mm clear
+// of the left and right edges, where the ZD411 cuts.
 export function binLabelZPL(l, size = labelSize()) {
-  const { w, h, top = 0 } = size;
+  const { w: full, h, top = 0, dpi = 203 } = size;
+  const wide  = full >= 300;
+  const side  = wide ? Math.round(dpi * 2 / 25.4) : 0;
+  const w     = full - 2 * side;
   const a     = h - top;                                          // the printable height
   const pad   = Math.round(a * 0.04);
-  const small = Math.max(12, Math.round(a * 0.14));              // the footer
-  const big   = Math.round(a * 0.42);                             // "BIN 3"
-  const mid   = Math.round(a * 0.26);                             // the team or size
-  const wide  = w >= 300;
+  const small = Math.max(12, Math.round(a * 0.12));              // the footer
+  const big   = Math.round(a * 0.5);                              // "BIN 3"
+  const mid   = Math.round(a * 0.27);                             // the team or size
   const footer = (wide
     ? [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : l.by === "team" ? "by team" : "", l.count ? `${l.count} ${l.count === 1 ? "jersey" : "jerseys"}` : ""]
     : [l.orderNumber ? `Order ${l.orderNumber}` : ""]).filter(Boolean).join("   ");
   return [
-    "^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0",
-    line(0, top + pad, fit(`BIN ${l.bin}`, w, big), w, "C", `BIN ${l.bin}`),
-    line(0, top + pad + big + Math.round(a * 0.03), fit(l.label, w, mid), w, "C", l.label),
-    ...(footer ? [line(0, h - small - pad, fit(footer, w, small), w, "C", footer)] : []),
+    "^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0",
+    line(side, top + pad, fit(`BIN ${l.bin}`, w, big), w, "C", `BIN ${l.bin}`),
+    line(side, top + pad + big + Math.round(a * 0.01), fit(l.label, w, mid), w, "C", l.label),
+    ...(footer ? [line(side, h - small - pad, fit(footer, w, small), w, "C", footer)] : []),
     "^PQ1", "^XZ",
   ].join("\n");
 }

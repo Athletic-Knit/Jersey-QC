@@ -82,7 +82,7 @@ describe("ZPL", () => {
     const small = binLabelZPL(label, labelSize("2.25x1.25")), big = binLabelZPL(label, labelSize("4x6"));
     const fontOf = z => parseInt(z.match(/\^A0N,(\d+)/)[1], 10);
     expect(fontOf(big)).toBeGreaterThan(fontOf(small));
-    expect(big).toContain("^FB812,");
+    expect(big).toContain("^FB780,")   // 4 in less 2 mm each side;
   });
   it("a long team name gets a smaller font so it fits the width", () => {
     const fontOf = z => parseInt(z.split("\n").find(l => l.includes("^FDBlue Jays Home") || l.includes("^FDNavy")).match(/\^A0N,(\d+)/)[1], 10);
