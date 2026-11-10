@@ -128,20 +128,23 @@ export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const { w, h, top = 0 } = size;
   const a     = h - top;
   const pad   = Math.round(a * 0.04);
-  const lw    = Math.round(w * 0.32);                             // the black column
-  const rx    = lw + 2 * pad, rw = w - rx - pad;                  // the right column
+  const side  = w >= 300 ? Math.round((size.dpi || 203) * 2 / 25.4) : 0;   // the 2 x 1 in roll: the ZD411 cuts 2 mm off the left
+  const lw    = Math.round((w - side) * 0.32);                    // the black column
+  const rx    = side + lw + 2 * pad, rw = w - rx - pad;           // the right column
   const tag   = Math.max(12, Math.round(a * 0.16));               // FLAG
   const tiny  = Math.max(12, Math.round(a * 0.14));               // the name, the reason
   const mid   = Math.max(12, Math.round(a * 0.13));               // team · size · bin
   const small = Math.max(10, Math.round(a * 0.12));               // order · station · time
   const out   = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0"];
   // The black column: a box filled by a border as thick as the box is wide.
-  out.push(`^FO0,${top}^GB${lw},${a},${lw}^FS`);
+  // It runs off the top and the left of the label (the text in it keeps
+  // clear of the 2 mm the printer cuts), so no white edge is left around it.
+  out.push(`^FO0,0^GB${side + lw},${h},${side + lw}^FS`);
   const nameH = l.name ? tiny : 0;
   const big   = fit(l.number, lw - 4, Math.round(a * 0.5));
-  out.push(line(0, top + pad, tag, lw, "C", "FLAG", { reverse: true }));
-  out.push(line(0, top + pad + tag + 1, big, lw, "C", l.number, { reverse: true }));
-  if (l.name) out.push(line(0, top + a - pad - nameH, fit(l.name, lw - 4, tiny), lw, "C", l.name, { reverse: true }));
+  out.push(line(side, top + pad, tag, lw, "C", "FLAG", { reverse: true }));
+  out.push(line(side, top + pad + tag + 1, big, lw, "C", l.number, { reverse: true }));
+  if (l.name) out.push(line(side, top + a - pad - nameH, fit(l.name, lw - 4, tiny), lw, "C", l.name, { reverse: true }));
   // The right column.
   const tagH = fit(l.tag || "DECIDE", rw, Math.round(a * 0.26));
   let y = top + pad;
