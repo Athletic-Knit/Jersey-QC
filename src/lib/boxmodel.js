@@ -115,6 +115,7 @@ export function fitBoxModel(obs, prior = PRIOR, { start = null, iters = 200, tau
     FEATURES.forEach((f, i) => { if (o.counts[f]) { idx.push(i); n.push(o.counts[f]); } });
     if (idx.length) data.push({ idx, n, y });
   });
+  if (!data.length) return { ...prior, seen: 0 };                             // nothing learnt yet: the estimates as they are
   // Parameters, all in logs: the room of each kind of jersey, then each box's capacity.
   const p0 = [...FEATURES.map(f => Math.log(prior.units[f])), ...prior.caps.map(Math.log)];
   const from = start || prior;

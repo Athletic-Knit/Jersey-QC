@@ -276,3 +276,27 @@ describe("bin lists and the label of a bin opened mid-order go to the 2 x 1 in r
     expect(sent[1].zpl).toContain("^FDBIN 3^FS");
   });
 });
+
+// The box model: every "this bin went in that box" answer is kept on the hub
+// and the model every station uses is fitted to them.
+describe("box answers on the hub", () => {
+  it("starts from the estimates, keeps answers and learns from them", async () => {
+    const { call, state } = makeHub();
+    const first = (await call("GET", "/boxes")).body;
+    expect(first.answers).toBe(0);
+    expect(first.model.caps).toEqual([8, 18, 36]);
+    // Ten times over: 14 adult 2XL stitched did not fit a medium box.
+    let last;
+    for (let i = 0; i < 10; i++) last = await call("POST", "/boxes", { counts: { "a2x|st": 14 }, box: "large", suggested: "medium", station: "st-station1", order: "5", bin: 1 });
+    expect(last.status).toBe(200);
+    expect(last.body.answers).toBe(10);
+    expect(last.body.model.caps[1] / last.body.model.units["a2x|st"]).toBeLessThan(14);   // a medium now holds fewer than 14 of them
+    expect(state().boxAnswers.length).toBe(10);
+    expect((await call("GET", "/boxes")).body.model.seen).toBe(10);
+  });
+  it("refuses an answer without a box or without jerseys", async () => {
+    const { call } = makeHub();
+    expect((await call("POST", "/boxes", { counts: { "a2x|st": 14 }, box: "crate" })).status).toBe(400);
+    expect((await call("POST", "/boxes", { counts: { nonsense: 3 }, box: "small" })).status).toBe(400);
+  });
+});

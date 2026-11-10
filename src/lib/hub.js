@@ -60,6 +60,8 @@ export const hub = {
   releaseRoster: id             => call(`/api/hub/rosters/${id}/release`, { method: "POST" }),                            // supervisor frees it for another station
   printStatus:   station       => call(`/api/hub/print${station ? "?station=" + encodeURIComponent(station) : ""}`),        // { printer, printers } — the label printer for this station
   printLabels:   (labels, o = {}) => call("/api/hub/print", { method: "POST", body: JSON.stringify({ labels, ...o }) }),    // o: { kind: "jersey" | "flag" | "bin", station }; throws 503 "no label printer"
+  boxModel:      ()             => call("/api/hub/boxes"),                                                                // { model, answers } — the box model fitted to the floor's answers
+  boxAnswer:     answer         => call("/api/hub/boxes", { method: "POST", body: JSON.stringify(answer) }),              // { counts, box, station, order, bin, suggested } → { model, answers }
   removeRoster:  id             => call(`/api/hub/rosters/${id}`, { method: "DELETE" }),
   ledger:        date           => call(`/api/hub/ledger${date ? "?date=" + encodeURIComponent(date) : ""}`),   // every scan event of a day, all stations
 };

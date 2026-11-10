@@ -11,7 +11,7 @@ import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { pace } from "./lib/pace.js";
-import { boxFor, boxLimits } from "./lib/boxes.js";
+import { PRIOR as BOX_PRIOR, BOXES, MORE, predictBox, binCounts } from "./lib/boxmodel.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.js";
 const SECOND_LOOK = false;
 import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
@@ -1611,16 +1611,13 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <div style={labelSt}>Packing — the most jerseys each holds</div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {boxLimits(temp).map(k => (
-              <label key={k.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 16, color: "#cbd5e1" }}>
-                {k.label}
-                <input type="number" min={1} max={999} value={temp[k.key] ?? k.max} onChange={e => setTemp(t => ({ ...t, [k.key]: Math.max(1, Math.min(999, Math.floor(Number(e.target.value)) || 1)) }))} style={{ ...selSt, width: 76 }} />
-              </label>
-            ))}
-          </div>
-          <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>When a bin is closed, the smallest one that holds its jerseys is named on the screen and on the bin's list.</div>
+          <div style={labelSt}>Packing</div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1" }}>
+            No box heavier than
+            <input type="number" min={10} max={70} value={temp.boxWeightCap ?? 45} onChange={e => setTemp(t => ({ ...t, boxWeightCap: Math.max(10, Math.min(70, Number(e.target.value) || 45)) }))} style={{ ...selSt, width: 76 }} />
+            lb
+          </label>
+          <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>The station warns when a bin gets there. Which box a bin goes in is learnt: every Bin full asks which box it went in, and all stations learn from the answers.</div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -1767,7 +1764,9 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
 // prints (what is in it, ten jerseys a label), the team or size moves to a
 // new bin number and that bin's label prints. Closed bins stay listed, with
 // their list to print again.
-function BinsModal({ open, closed, by = "team", status, onFull, onReprint, onClose }) {
+const BOX_CHOICES = [...BOXES, { id: MORE, label: "More than one box" }];
+function BinsModal({ open, closed, by = "team", cap = 45, status, onFull, onReprint, onClose }) {
+  const [asking, setAsking] = useState(null);   // the bin whose box is being asked
   useEffect(() => {
     const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
     window.addEventListener("keydown", h, true);
@@ -1787,17 +1786,32 @@ function BinsModal({ open, closed, by = "team", status, onFull, onReprint, onClo
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {open.map(b => (
-            <div key={b.bin} style={rowSt}>
+            <div key={b.bin} style={{ ...rowSt, flexWrap: "wrap", borderColor: b.heavy >= 0.95 ? "#ef4444" : "#3f4b5c" }}>
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 40, fontWeight: 900, color: "#60a5fa", minWidth: 110, lineHeight: 1 }}>Bin {b.bin}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 22, fontWeight: 700, color: "#e2e8f0", overflowWrap: "anywhere" }}>{b.label}</div>
-                <div style={{ fontSize: 15, color: "#94a3b8" }}>{pcs(b.count)} in it</div>
+                <div style={{ fontSize: 15, color: "#94a3b8" }}>{pcs(b.count)} in it{b.count > 0 ? ` · about ${Math.round(b.weight)} lb of ${cap}` : ""}</div>
+                {b.heavy >= 0.95 && <div style={{ fontSize: 15, fontWeight: 800, color: "#f87171" }}>At the weight limit — close it</div>}
               </div>
-              {b.box && <div title="The box this bin goes in if it is closed now" style={{ fontSize: 17, fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>→ {b.box}</div>}
-              <button onClick={() => onFull(b.bin)} disabled={b.count === 0} title={b.count === 0 ? "Nothing is in this bin yet" : "Close this bin, print its list and open a new bin"}
+              {b.box && asking !== b.bin && <div title="The box this bin goes in if it is closed now" style={{ fontSize: 17, fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>→ {b.box}</div>}
+              {asking === b.bin && (
+                <div style={{ flexBasis: "100%" }}>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "#fcd34d", marginBottom: 8 }}>Which box is Bin {b.bin} going in?</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {BOX_CHOICES.map(c => (
+                      <button key={c.id} onClick={() => { setAsking(null); onFull(b.bin, c.id); }}
+                        style={{ ...(c.id === b.boxId ? btnPri : btnGhost), fontSize: 17, padding: "12px 18px", ...(c.id === b.boxId ? { background: "#f59e0b", color: "#0d1117" } : {}) }}>
+                        {c.label}{c.id === b.boxId ? " · suggested" : ""}
+                      </button>
+                    ))}
+                    <button onClick={() => setAsking(null)} style={{ ...btnGhost, fontSize: 15, padding: "12px 16px", color: "#94a3b8" }}>Not full yet</button>
+                  </div>
+                </div>
+              )}
+              {asking !== b.bin && <button onClick={() => b.count <= 1 ? onFull(b.bin, null) : setAsking(b.bin)} disabled={b.count === 0} title={b.count === 0 ? "Nothing is in this bin yet" : "Close this bin, print its list and open a new bin"}
                 style={{ ...btnPri, fontSize: 18, padding: "12px 22px", background: "#f59e0b", color: "#0d1117", opacity: b.count === 0 ? 0.4 : 1, cursor: b.count === 0 ? "not-allowed" : "pointer" }}>
                 Bin full
-              </button>
+              </button>}
             </div>
           ))}
         </div>
@@ -2072,9 +2086,20 @@ export default function App() {
   const [binPrint,           setBinPrint]           = useState(null);    // { status: "printing" | "done" | "error" | "off", text } — the last bin closed or list printed
   const binOf          = useCallback(row => binOfRow(binMap, closedBins, row), [binMap, closedBins]);
   // Every bin with what is in it and the box that many jerseys go in (boxes.js).
-  const boxOf      = useCallback(n => boxFor(n, settings)?.label || "", [settings]);
-  const openBins   = useMemo(() => binEntries(roster, binMap).map(e => { const count = binContents(roster, binMap, closedBins, e.bin).length; return { ...e, count, box: boxOf(count), open: true }; }), [roster, binMap, closedBins, boxOf]);
-  const closedList = useMemo(() => closedBins.map(c => { const count = binContents(roster, binMap, closedBins, c.bin).length; return { bin: c.bin, label: c.label, count, box: boxOf(count), open: false, closedAt: c.closedAt }; }), [roster, binMap, closedBins, boxOf]);
+  // The box by room and weight (boxmodel.js). The model is the hub's, fitted
+  // to every "which box did it go in" answer from every station; the last one
+  // seen is kept on this PC for when the hub is away.
+  const [boxModel, setBoxModel] = useState(() => { try { const m = JSON.parse(localStorage.getItem("jerseyqc.boxmodel") || "null"); return m?.units && m?.caps ? m : BOX_PRIOR; } catch { return BOX_PRIOR; } });
+  useEffect(() => {
+    if (!signedIn) return;
+    hub.boxModel().then(r => { if (r?.model?.units) { setBoxModel(r.model); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(r.model)); } catch { /* private window */ } } }).catch(() => {});
+  }, [signedIn, sessionStarted]);
+  const boxCap     = Number(settings.boxWeightCap) || BOX_PRIOR.weightCap;
+  const stitched   = jerseyTypeOf(jerseyType)?.construction !== "sublimated";   // no type set: the heavier guess
+  const boxOf      = useCallback(rows => predictBox(binCounts(rows, stitched), { ...boxModel, weightCap: boxCap }), [boxModel, boxCap, stitched]);
+  const openBins   = useMemo(() => binEntries(roster, binMap).map(e => { const rows = binContents(roster, binMap, closedBins, e.bin), b = boxOf(rows); return { ...e, count: rows.length, box: b?.label || "", boxId: b?.id || "", weight: b?.weight || 0, heavy: b?.heavy || 0, open: true }; }), [roster, binMap, closedBins, boxOf]);
+  const closedList = useMemo(() => closedBins.map(c => { const rows = binContents(roster, binMap, closedBins, c.bin), b = boxOf(rows); return { bin: c.bin, label: c.label, count: rows.length, box: c.box || b?.label || "", weight: b?.weight || 0, open: false, closedAt: c.closedAt }; }), [roster, binMap, closedBins, boxOf]);
+  const heavyBin   = openBins.find(b => b.heavy >= 0.95) || null;   // an open bin at the weight limit
   const binSummary = useMemo(() => [...closedList, ...openBins].sort((a, b) => a.bin - b.bin), [closedList, openBins]);
 
   // ── The sticker on every pass ─────────────────────────────────────────────
@@ -2259,23 +2284,30 @@ export default function App() {
   const finishLists = useMemo(() => !settings.binLists || !binMap ? []
     : openBins.filter(b => b.count > 0).flatMap(b => binListLabels(binContents(roster, binMap, closedBins, b.bin), { bin: b.bin, label: b.label, orderNumber, box: b.box })),
   [settings.binLists, binMap, openBins, roster, closedBins, orderNumber]);
-  const binFull = useCallback(bin => {
+  // `boxId`: the box the operator said the bin is going in (null for a
+  // one-piece bin: a bag). It goes on the list, is kept with the closed bin,
+  // and is the answer the box model learns from.
+  const binFull = useCallback((bin, boxId = null) => {
     const r = closeBin(roster, binMap, closedBins, bin); if (!r) return;
-    setBinMap(r.binMap); setClosedBins(r.closed);
-    const box   = boxOf(r.entry.ids.length);
-    const lists = binListLabels(binContents(roster, r.binMap, r.closed, bin), { bin, label: r.entry.label, orderNumber, box });
-    const what  = `Bin ${bin} closed with ${r.entry.ids.length} ${r.entry.ids.length === 1 ? "jersey" : "jerseys"}: pack it in a ${box.toUpperCase()}. ${r.entry.label} now goes in Bin ${r.newBin}`;
+    const rows = binContents(roster, r.binMap, r.closed, bin), guess = boxOf(rows);
+    const box  = BOX_CHOICES.find(c => c.id === boxId)?.label || guess?.label || "";
+    setBinMap(r.binMap); setClosedBins(r.closed.map(c => c === r.entry ? { ...c, box } : c));
+    if (boxId && rows.length > 1) hub.boxAnswer({ counts: binCounts(rows, stitched), box: boxId, suggested: guess?.id || "", station: stationId(), order: String(orderNumber || ""), bin })
+      .then(res => { if (res?.model) { setBoxModel(res.model); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(res.model)); } catch { /* private window */ } } })
+      .catch(() => {});   // the hub is away: the bin is closed all the same, this one answer is not learnt
+    const lists = binListLabels(rows, { bin, label: r.entry.label, orderNumber, box });
+    const what  = `Bin ${bin} closed with ${r.entry.ids.length} ${r.entry.ids.length === 1 ? "jersey" : "jerseys"}${box ? ` — ${box.toUpperCase()}` : ""}. ${r.entry.label} now goes in Bin ${r.newBin}`;
     if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Bin lists are switched off in Settings.` }); return; }
     setBinPrint({ status: "printing", text: what });
     printOnTicketRoll(lists, "binlist")
       .then(() => hub.printLabels([{ bin: r.newBin, label: r.entry.label, by: binFieldOf(r.binMap), count: 0, orderNumber: String(orderNumber || "") }], { kind: "binticket", station: stationId() }))
       .then(res => setBinPrint({ status: "done", text: `${what}. Printed ${lists.length} list ${lists.length === 1 ? "label" : "labels"} and the Bin ${r.newBin} label on ${res.printer}` }))
       .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
-  }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf]);
+  }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, stitched]);
   const reprintBinList = useCallback(bin => {
     const c = closedBins.find(x => x.bin === bin); if (!c) return;
     const rows  = binContents(roster, binMap, closedBins, bin);
-    const lists = binListLabels(rows, { bin, label: c.label, orderNumber, box: boxOf(rows.length) });
+    const lists = binListLabels(rows, { bin, label: c.label, orderNumber, box: c.box || boxOf(rows)?.label || "" });
     if (!lists.length) return;
     setBinPrint({ status: "printing", text: `Bin ${bin} list` });
     printOnTicketRoll(lists, "binlist")
@@ -2955,7 +2987,7 @@ export default function App() {
           onDismiss={() => closeDialog(() => setShowRosterComplete(false))} onFinish={askFinish} />
       )}
       {showBins && binMap && (
-        <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} status={binPrint}
+        <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} cap={boxCap} status={binPrint}
           onFull={binFull} onReprint={reprintBinList} onClose={() => closeDialog(() => setShowBins(false))} />
       )}
       {showFinish && (
@@ -3161,7 +3193,7 @@ export default function App() {
               {sessionStarted && (
                 <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
                   <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
-                  {binMap && <button onClick={() => setShowBins(true)} title="A bin is full: close it, print the list of what is in it, and carry on in a new bin" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>📦 Bin full</button>}
+                  {binMap && <button onClick={() => setShowBins(true)} title="A bin is full: close it, print the list of what is in it, and carry on in a new bin" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#f59e0b", color: "#fcd34d" }) }}>{heavyBin ? `📦 Bin ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Bin full"}</button>}
                   <span style={{ fontSize: 13, color: "#7c8ba1" }}>Every jersey scanned this order — flag one after the fact</span>
                 </div>
               )}

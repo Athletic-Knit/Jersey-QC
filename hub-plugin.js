@@ -15,6 +15,8 @@
 //   POST   /api/hub/rosters/:id/take    { station, operator } — a station starts it; 409 if another station already has it
 //   POST   /api/hub/rosters/:id/release the supervisor frees it for another station
 //   DELETE /api/hub/rosters/:id         the station finished it, or the supervisor removes it
+//   GET    /api/hub/boxes               { model, answers } — the box model (src/lib/boxmodel.js) fitted to every answer so far
+//   POST   /api/hub/boxes               { counts, box, station, order, bin, suggested } — a bin was closed and went in this box; → { model, answers }
 //   GET    /api/hub/print?station=…     { printer, printers, labelSize, flagPrinter, flagLabelSize } — the label printer for that station (JERSEY_PRINTER_<STATION>), else the hub's (JERSEY_PRINTER, else the first Zebra queue); the flag-ticket printer likewise (JERSEY_FLAG_PRINTER_<STATION>, JERSEY_FLAG_PRINTER), else the label printer
 //   POST   /api/hub/print               { labels, kind, station } — prints one label per entry (labels.js: kind "jersey" = the sticker on a pass, "flag" = the ticket on a flag, on the flag printer and its 2 x 1 in roll, "bin" = a bin label); 503 when there is no label printer
 import fs from "node:fs";
@@ -23,6 +25,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { labelsZPL, labelSize as labelDots, DEFAULT_LABEL_SIZE, DEFAULT_FLAG_LABEL_SIZE } from "./src/lib/labels.js";
+import { PRIOR as BOX_PRIOR, FEATURES as BOX_FEATURES, BOXES, MORE, fitBoxModel } from "./src/lib/boxmodel.js";
 
 // ── Bin labels: the Zebra on the hub PC ──────────────────────────────────────
 // The ZPL goes to a Windows print queue as raw bytes through tools/print-raw.ps1
@@ -102,6 +105,12 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   };
   const labelPrinter = async station => perStation[String(station || "").trim().toLowerCase()] || printerName || (await printerList()).find(isLabelPrinter)?.name || null;
   const ticketPrinter = async station => perStationFlag[String(station || "").trim().toLowerCase()] || flagName || labelPrinter(station);
+  // The box model: every "this bin went in that box" answer from every
+  // station is kept (the newest 3000) and the model is fitted to the newest
+  // 600, so all stations learn from the same floor.
+  const BOX_IDS = [...BOXES.map(b => b.id), MORE];
+  let boxModel = null;
+  const boxFit = () => (boxModel ||= fitBoxModel((state.boxAnswers || []).slice(-600), BOX_PRIOR));
   const summary = r => ({ id: r.id, orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
 
   async function handle(req, res) {
@@ -215,6 +224,19 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           return json(res, 200, { ok: true });
         }
         if (req.method === "DELETE" && id) { delete state.rosters[id]; save(); return json(res, 200, { ok: true }); }
+      }
+      if (kind === "boxes" && !id) {
+        if (req.method === "GET") return json(res, 200, { model: boxFit(), answers: (state.boxAnswers || []).length });
+        if (req.method === "POST") {
+          const body = await readBody(req);
+          const counts = Object.fromEntries(BOX_FEATURES.map(f => [f, Math.floor(Number(body.counts?.[f])) || 0]).filter(([, n]) => n > 0 && n < 1000));
+          if (!BOX_IDS.includes(body.box) || !Object.keys(counts).length) return json(res, 400, { error: "counts and box required" });
+          (state.boxAnswers ||= []).push({ counts, box: body.box, suggested: String(body.suggested ?? ""), station: String(body.station ?? ""), order: String(body.order ?? ""), bin: body.bin ?? "", at: now_() });
+          if (state.boxAnswers.length > 3000) state.boxAnswers = state.boxAnswers.slice(-3000);
+          boxModel = null; save();
+          console.log(`[hub] ${new Date().toLocaleTimeString()} ${body.station ? body.station + ": " : ""}bin ${body.bin ?? "?"} of order ${body.order || "—"} went in: ${body.box}${body.suggested && body.suggested !== body.box ? ` (suggested ${body.suggested})` : ""}`);
+          return json(res, 200, { model: boxFit(), answers: state.boxAnswers.length });
+        }
       }
       if (kind === "print" && !id) {
         if (req.method === "GET") { const station = new URL(req.url, "http://hub").searchParams.get("station"); return json(res, 200, { printer: await labelPrinter(station), printers: await printerList(), labelSize: labelSpec, flagPrinter: await ticketPrinter(station), flagLabelSize: flagSpec }); }
