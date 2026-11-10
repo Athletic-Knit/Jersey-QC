@@ -168,7 +168,7 @@ describe("bin labels on the hub's printer", () => {
     expect(body).toEqual({ ok: true, printer: "ZDesigner ZD411-203dpi ZPL", count: 1 });
     const { zpl } = f.printed[0];
     expect(zpl).toContain("^PW406");
-    expect(zpl).toContain("^LL209");
+    expect(zpl).toContain("^LL207");
     expect(zpl).toContain("^FR^FDFLAG^FS");
     expect(zpl).toContain("^FR^FD7^FS");
     expect(zpl).toContain("^FDSTITCHER^FS");
@@ -184,7 +184,7 @@ describe("bin labels on the hub's printer", () => {
     await call("POST", "/print", { kind: "jersey", station: "st-station1", labels: [{ bin: 3, by: "team", value: "Navy", orderNumber: "264247" }] });
     expect(f.printed.map(p => p.printer)).toEqual(["Zebra 2x1 on the server", "Zebra 2x1 at station 2", "Zebra at station 1"]);
     expect(f.printed[0].zpl).toContain("^PW457");                     // JERSEY_FLAG_LABEL_SIZE
-    expect(f.printed[0].zpl).toContain("^LL260");
+    expect(f.printed[0].zpl).toContain("^LL258");
     expect(f.printed[2].zpl).toContain("^PW203");                     // the sticker roll is untouched
   });
   it("no label printer: GET says null, POST says 503", async () => {

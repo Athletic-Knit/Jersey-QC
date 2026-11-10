@@ -197,11 +197,11 @@ describe("flagLabelZPL (2 x 1 in)", () => {
     expect(labelSize("2x1")).toMatchObject({ w: 406, h: 203, top: 16 });
     const z = flagLabelZPL(l);
     expect(z).toContain("^PW406");
-    expect(z).toContain("^LL209");
+    expect(z).toContain("^LL207");
   });
   it("a solid black column on the left with FLAG, the number and the name in white", () => {
     const z = flagLabelZPL(l);
-    expect(z).toContain("^FO0,0^GB141,213,141^FS");                 // a box filled by its own border, off the top and left edges
+    expect(z).toContain("^FO0,0^GB141,211,141^FS");                 // a box filled by its own border, off the top and left edges
     expect(z).toContain("^FR^FDFLAG^FS");
     expect(z).toContain("^FR^FD7^FS");
     expect(z).toContain("^FR^FDSMITH^FS");
@@ -227,7 +227,7 @@ describe("flagLabelZPL (2 x 1 in)", () => {
   it("on the 1 x 0.5 in sticker roll the same layout still fits, smaller", () => {
     const z = flagLabelZPL(l, labelSize("1x0.5"));
     expect(z).toContain("^PW203");
-    expect(z).toContain("^FO0,0^GB65,112,65^FS");
+    expect(z).toContain("^FO0,0^GB65,110,65^FS");
     expect(z).toContain("^FR^FD7^FS");
     expect(z).toContain("^FDSTITCHER^FS");
     expect(topOf(z).every(y => y >= 16 && y < 102)).toBe(true);

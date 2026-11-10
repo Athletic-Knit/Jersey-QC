@@ -131,7 +131,10 @@ export function flagLabel(entry, binMap, { orderNumber = "", station = "", tag =
 // top edge to just past its bottom edge, while every text is laid out
 // FLAG_LIFT lower and so sits exactly where it did. The printer keeps ^LT
 // until told otherwise, so every other label sets ^LT0.
-export const FLAG_LIFT = 6;
+// 4 dots, no more: the printer prints a window exactly one label long, so
+// every dot the ticket is lifted is a dot lost at the bottom (6 left a white
+// line there). 4 puts the window on the label.
+export const FLAG_LIFT = 4;
 export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const { w, h } = size;
   const top   = (size.top || 0) + FLAG_LIFT;                      // the texts: where they were before the lift
