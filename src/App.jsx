@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -11,7 +11,7 @@ import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { pace } from "./lib/pace.js";
-import { binLabels, jerseyLabel, flagLabel } from "./lib/labels.js";
+import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.js";
 const SECOND_LOOK = false;
 import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf } from "./config.js";
@@ -1603,6 +1603,10 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
             <input type="checkbox" checked={temp.flagTickets !== false} onChange={e => setTemp(t => ({ ...t, flagTickets: e.target.checked }))} />
             Print a flag ticket for every flagged jersey (where it goes and why) — the 2 × 1 in roll
           </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginTop: 8 }}>
+            <input type="checkbox" checked={temp.binLists !== false} onChange={e => setTemp(t => ({ ...t, binLists: e.target.checked }))} />
+            Print what is in a bin when it is closed (full, or the order finished), ten jerseys a label — the 2 × 1 in roll
+          </label>
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -1744,6 +1748,71 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
   );
 }
 
+// ── Bins: which one is full ──────────────────────────────────────────────────
+// Every open bin with what is in it so far. "Bin full" closes it: its list
+// prints (what is in it, ten jerseys a label), the team or size moves to a
+// new bin number and that bin's label prints. Closed bins stay listed, with
+// their list to print again.
+function BinsModal({ open, closed, by = "team", status, onFull, onReprint, onClose }) {
+  useEffect(() => {
+    const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [onClose]);
+  const pcs = n => `${n} ${n === 1 ? "jersey" : "jerseys"}`;
+  const rowSt = { display: "flex", alignItems: "center", gap: 16, padding: "12px 18px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 32, maxWidth: 760, width: "92vw", maxHeight: "92%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 6 }}>
+          <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>📦 Bins</div>
+          <div style={{ fontSize: 17, color: "#94a3b8" }}>sorted by {by} — which bin is full?</div>
+        </div>
+        <div style={{ fontSize: 16, color: "#cbd5e1", marginBottom: 18 }}>
+          A full bin is closed: the list of what is in it prints, and its {by} carries on in a new bin, whose label prints too.
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {open.map(b => (
+            <div key={b.bin} style={rowSt}>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 40, fontWeight: 900, color: "#60a5fa", minWidth: 110, lineHeight: 1 }}>Bin {b.bin}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "#e2e8f0", overflowWrap: "anywhere" }}>{b.label}</div>
+                <div style={{ fontSize: 15, color: "#94a3b8" }}>{pcs(b.count)} in it</div>
+              </div>
+              <button onClick={() => onFull(b.bin)} disabled={b.count === 0} title={b.count === 0 ? "Nothing is in this bin yet" : "Close this bin, print its list and open a new bin"}
+                style={{ ...btnPri, fontSize: 18, padding: "12px 22px", background: "#f59e0b", color: "#0d1117", opacity: b.count === 0 ? 0.4 : 1, cursor: b.count === 0 ? "not-allowed" : "pointer" }}>
+                Bin full
+              </button>
+            </div>
+          ))}
+        </div>
+        {closed.length > 0 && (
+          <>
+            <div style={{ fontSize: 14, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "20px 0 8px" }}>Closed</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {closed.map(c => (
+                <div key={c.bin} style={{ ...rowSt, padding: "8px 18px", background: "transparent" }}>
+                  <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 900, color: "#7c8ba1", minWidth: 110, lineHeight: 1 }}>Bin {c.bin}</div>
+                  <div style={{ flex: 1, fontSize: 17, color: "#cbd5e1" }}>{c.label} · {pcs(c.count)}</div>
+                  <button onClick={() => onReprint(c.bin)} disabled={c.count === 0} title="Print this bin's list again" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", opacity: c.count === 0 ? 0.4 : 1 }}>🖨 Print list again</button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        {status && (
+          <div style={{ marginTop: 18, fontSize: 17, fontWeight: 600, color: status.status === "done" ? "#4ade80" : status.status === "printing" ? "#94a3b8" : "#fbbf24" }}>
+            {status.status === "printing" ? "🖨 Printing… " : "🖨 "}{status.text}
+          </div>
+        )}
+        <div style={{ marginTop: 22, textAlign: "right" }}>
+          <button onClick={onClose} style={{ ...btnGhost, fontSize: 17, padding: "12px 24px" }}>Close <Kbd light>Esc</Kbd></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Roster complete modal ─────────────────────────────────────────────────────
 // ── History: every jersey scanned this order, latest first ──────────────────
 // One line per jersey (its latest log entry). A passed jersey can be flagged
@@ -1787,7 +1856,7 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
 // ── Finish order: one look at where it stands, then confirm ─────────────────
 // Confirm clears the order and the station goes back to "waiting for an
 // order"; the hub keeps the order's record and sheets. Keep going closes it.
-function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, onConfirm, onCancel }) {
+function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, binLists = 0, onConfirm, onCancel }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const remaining = roster.filter(r => !r.scanned).length;
   const open = count("flag") + offRosterFlags + count("manual") + count("missing") + count("short");
@@ -1811,6 +1880,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
             ? `${remaining} ${remaining === 1 ? "jersey is" : "jerseys are"} not scanned yet. Finish anyway and the station goes back to waiting for an order; the supervisor keeps this order's record and sheets.`
             : "Every jersey is scanned. The station goes back to waiting for an order; the supervisor keeps this order's record and sheets."}
           {scans === 0 ? " Nothing was scanned on it." : ""}
+          {binLists > 0 ? ` Every open bin is closed and its list prints: ${binLists} ${binLists === 1 ? "label" : "labels"}.` : ""}
         </div>
         <div style={{ display: "flex", justifyContent: "center", gap: 28, marginBottom: 30 }}>
           {stats.map(s => (
@@ -1968,7 +2038,13 @@ export default function App() {
   const [firstScanTime,      setFirstScanTime]      = useState(null);
   const [now,                setNow]                = useState(() => Date.now());
 
-  const binOf          = useCallback(row => binFor(binMap, row), [binMap]);
+  // Bins closed as full: [{ bin, key, label, ids, closedAt }] (roster.js). The
+  // bin map only says which bin is open for a team or size; a done row in a
+  // closed bin stays in it.
+  const [closedBins,         setClosedBins]         = useState([]);
+  const [showBins,           setShowBins]           = useState(false);
+  const [binPrint,           setBinPrint]           = useState(null);    // { status: "printing" | "done" | "error" | "off", text } — the last bin closed or list printed
+  const binOf          = useCallback(row => binOfRow(binMap, closedBins, row), [binMap, closedBins]);
 
   // ── The sticker on every pass ─────────────────────────────────────────────
   // A pass (a green confirmed, a pick from the list, a by-hand pass) sets
@@ -2062,8 +2138,8 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, firstScanTime, idleSpells, awaySpells, checksLeft, inspect]);
+    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, firstScanTime, idleSpells, awaySpells, checksLeft, inspect]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -2105,6 +2181,7 @@ export default function App() {
     if (!keepLog) { setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); inspectRef.current.reset(); syncInspect(); }
     setThumb(null); setOverlay(null); setShowRosterComplete(false);
     const bins = binBy === "none" ? {} : buildBinMap(parsed, {}, binBy);
+    setClosedBins([]); setBinPrint(null);   // every roster row starts unscanned: no bin is closed
     if (binCount(bins) > 1) { setBinMap(bins); setShowBinSetup(true); }
     else { setBinMap(null); setShowBinSetup(false); }
   }, [syncInspect]);
@@ -2115,7 +2192,7 @@ export default function App() {
     const s = savedSession;
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
     setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
-    setLog(s.log || []); setBinMap(s.binMap || null); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
+    setLog(s.log || []); setBinMap(s.binMap || null); setClosedBins(s.closedBins || []); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
     ticketPrinted.current = (s.log || [])[0]?.id ?? 0;             // its last flag's ticket was printed when it happened
     vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
     inspectRef.current.load(s.inspect); syncInspect();
@@ -2132,18 +2209,56 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setClosedBins([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
   }, []);
 
   // Finish order: the confirm screen, then back to waiting for an order.
+  // ── Bins: full, closed, listed ─────────────────────────────────────────────
+  // The 2 x 1 in roll takes at most 100 labels a request: send them in turn.
+  const printOnTicketRoll = useCallback((labels, kind) => {
+    const chunks = [];
+    for (let i = 0; i < labels.length; i += 100) chunks.push(labels.slice(i, i + 100));
+    return chunks.reduce((p, c) => p.then(() => hub.printLabels(c, { kind, station: stationId() })), Promise.resolve(null));
+  }, []);
+  const printProblem = e => e.status === 503 ? "No label printer for this station" : `Not printed: ${e.status ? e.message : "could not reach the server"}`;
+  const openBins   = useMemo(() => binEntries(roster, binMap).map(e => ({ ...e, count: binContents(roster, binMap, closedBins, e.bin).length })), [roster, binMap, closedBins]);
+  const closedList = useMemo(() => closedBins.map(c => ({ bin: c.bin, label: c.label, count: binContents(roster, binMap, closedBins, c.bin).length })), [roster, binMap, closedBins]);
+  // What Finish order prints: the list of every bin still open with something in it.
+  const finishLists = useMemo(() => !settings.binLists || !binMap ? []
+    : openBins.filter(b => b.count > 0).flatMap(b => binListLabels(binContents(roster, binMap, closedBins, b.bin), { bin: b.bin, label: b.label, orderNumber })),
+  [settings.binLists, binMap, openBins, roster, closedBins, orderNumber]);
+  const binFull = useCallback(bin => {
+    const r = closeBin(roster, binMap, closedBins, bin); if (!r) return;
+    setBinMap(r.binMap); setClosedBins(r.closed);
+    const lists = binListLabels(binContents(roster, r.binMap, r.closed, bin), { bin, label: r.entry.label, orderNumber });
+    const what  = `Bin ${bin} closed with ${r.entry.ids.length} ${r.entry.ids.length === 1 ? "jersey" : "jerseys"} — ${r.entry.label} now goes in Bin ${r.newBin}`;
+    if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Bin lists are switched off in Settings.` }); return; }
+    setBinPrint({ status: "printing", text: what });
+    printOnTicketRoll(lists, "binlist")
+      .then(() => hub.printLabels([{ bin: r.newBin, label: r.entry.label, by: binFieldOf(r.binMap), count: 0, orderNumber: String(orderNumber || "") }], { kind: "binticket", station: stationId() }))
+      .then(res => setBinPrint({ status: "done", text: `${what}. Printed ${lists.length} list ${lists.length === 1 ? "label" : "labels"} and the Bin ${r.newBin} label on ${res.printer}` }))
+      .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
+  }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll]);
+  const reprintBinList = useCallback(bin => {
+    const c = closedBins.find(x => x.bin === bin); if (!c) return;
+    const lists = binListLabels(binContents(roster, binMap, closedBins, bin), { bin, label: c.label, orderNumber });
+    if (!lists.length) return;
+    setBinPrint({ status: "printing", text: `Bin ${bin} list` });
+    printOnTicketRoll(lists, "binlist")
+      .then(res => setBinPrint({ status: "done", text: `Bin ${bin} list printed again: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .catch(e => setBinPrint({ status: "error", text: `Bin ${bin} list. ${printProblem(e)}` }));
+  }, [roster, binMap, closedBins, orderNumber, printOnTicketRoll]);
+
   const [showFinish, setShowFinish] = useState(false);
   const askFinish    = useCallback(() => { setShowRosterComplete(false); setShowFinish(true); }, []);
   const finishOrder  = useCallback(() => {
     setShowFinish(false);
+    if (finishLists.length) printOnTicketRoll(finishLists, "binlist")   // the order is finished: every bin still open is closed, and its list prints
+      .catch(e => window.alert(`The bin lists were not printed: ${e.status === 503 ? "no label printer for this station" : e.status ? e.message : "could not reach the server"}.`));
     if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});   // the hub keeps the order's record and sheets in its ledger
     resetOrder();
-  }, [resetOrder, hubRosterId]);
+  }, [resetOrder, hubRosterId, finishLists, printOnTicketRoll]);
 
   // Sign out leaves the station, not the order: an unfinished order stays saved
   // on this PC and is offered to the next person who signs in here (a mistaken
@@ -2352,7 +2467,7 @@ export default function App() {
   useEffect(() => { triggerRef.current = doTriggerScan; }, [doTriggerScan]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
-  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHistory || showFinish;
+  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHistory || showFinish || showBins;
   useEffect(() => {
     if (!cameraOn || inputMode !== "camera" || !handsFree) { gateRef.current.disarm(); return; }   // paused, or nothing left in the order: never scan the empty table
     const id = setInterval(() => {
@@ -2452,12 +2567,12 @@ export default function App() {
       setRosterFile(f => f ? `${f} + ${file.name}` : file.name);
       setShowRosterComplete(false);
       if (binMap) {   // the order has bins: the added rows join them, by the same field
-        const bins = buildBinMap(next, binMap);
+        const bins = buildBinMap(next, binMap, undefined, closedBins.map(c => c.bin));   // a closed bin's number is never handed out again
         const newBins = binCount(bins) > binCount(binMap);
         setBinMap(bins); if (newBins) setShowBinSetup(true);
       }
     } catch (err) { setError("Failed to parse roster: " + err.message); }
-  }, [roster, binMap]);
+  }, [roster, binMap, closedBins]);
 
   // ── Overlay actions ───────────────────────────────────────────────────────
   const stamp = useCallback(() => ({ timestamp: localTimeStamp(), operator: operatorName }), [operatorName]);
@@ -2704,6 +2819,7 @@ export default function App() {
     if (!window.confirm(`Un-check #${row.number}${row.name ? " · " + row.name : ""} (${was})?`)) return;
     if (row.scanned === "pass") noteMistake("unchecked");   // a pass taken back: the app, or the operator, got it wrong — check the next ones
     setRoster(prev => prev.map(r => r._id === id ? { ...r, scanned: false } : r));
+    setClosedBins(prev => dropFromClosed(prev, id));   // taken back: it is no longer in the closed bin it was in
     const resolution = `Un-checked by ${operatorName || "operator"} — to be scanned again`;
     setLog(prev => [
       { id: Date.now(), match: { ...row, scanned: false }, status: "undo", reason: `Un-checked — was ${was}; scan it again`, ...stamp() },
@@ -2726,7 +2842,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.repeat) return;
-      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || showFinish || !sessionStarted) return;
+      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || showFinish || showBins || !sessionStarted) return;
       if (e.code !== scanKey) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       e.preventDefault();
@@ -2736,7 +2852,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, sessionStarted, scanKey, doTriggerScan, onTrial]);
+  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, showBins, sessionStarted, scanKey, doTriggerScan, onTrial]);
 
   const overlayKey = overlay ? `${overlay.mode}:${overlay.scan?.id}:${(overlay.candidates || []).map(c => c._id).join(",")}` : "";
   const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType), idleSpells, awaySpells };
@@ -2805,8 +2921,12 @@ export default function App() {
           onExport={() => { exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf); closeDialog(() => setShowRosterComplete(false)); }}
           onDismiss={() => closeDialog(() => setShowRosterComplete(false))} onFinish={askFinish} />
       )}
+      {showBins && binMap && (
+        <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} status={binPrint}
+          onFull={binFull} onReprint={reprintBinList} onClose={() => closeDialog(() => setShowBins(false))} />
+      )}
       {showFinish && (
-        <FinishOrderModal orderNumber={orderNumber} roster={roster} offRosterFlags={offRosterFlags} scans={log.length}
+        <FinishOrderModal orderNumber={orderNumber} roster={roster} offRosterFlags={offRosterFlags} scans={log.length} binLists={finishLists.length}
           onConfirm={finishOrder} onCancel={() => closeDialog(() => setShowFinish(false))} />
       )}
 
@@ -3008,6 +3128,7 @@ export default function App() {
               {sessionStarted && (
                 <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
                   <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
+                  {binMap && <button onClick={() => setShowBins(true)} title="A bin is full: close it, print the list of what is in it, and carry on in a new bin" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>📦 Bin full</button>}
                   <span style={{ fontSize: 13, color: "#7c8ba1" }}>Every jersey scanned this order — flag one after the fact</span>
                 </div>
               )}

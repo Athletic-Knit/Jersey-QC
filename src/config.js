@@ -113,6 +113,7 @@ export const DEFAULT_SETTINGS = {
   autoScanDelay: 3,       // seconds after a confirm before hands-free may scan again
   stickers: true,         // print a sticker (bin + team or size) on the server's label printer for every passed jersey
   flagTickets: true,      // print a flag ticket (2 x 1 in: where it goes and why) for every flagged jersey
+  binLists: true,         // print what is in a bin (2 x 1 in, ten jerseys a label) when it is closed: full, or the order finished
   trialMethod: "",        // input trial: "" | "mouse" | "keys" — which setup this station is timing (src/lib/trial.js)
 };
 

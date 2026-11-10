@@ -182,8 +182,62 @@ export function binLabelZPL(l, size = labelSize()) {
   ].join("\n");
 }
 
-// Every label of one kind, back to back. `kind`: "bin" (default), "jersey" or "flag".
+// ── The list of what is in a bin ─────────────────────────────────────────────
+// Printed when a bin is closed (it is full, or the order is finished), on the
+// 2 x 1 in roll: every jersey in the bin as "23-JAMES-AXL" (number, name,
+// size), ten to a label in two columns of five, read down the left column and
+// then down the right, in jersey-number order. A bin of 15 is two labels, a
+// bin of 30 three.
+export const BIN_LIST_PER_LABEL = 10;
+const squash = s => String(s ?? "").trim().replace(/[\s-]+/g, "");
+export function binListItem(row) {
+  return [String(row?.number ?? "").trim(), String(row?.name ?? "").trim(), squash(row?.size)].filter(Boolean).join("-");
+}
+// Jersey-number order: 2 before 10; a number that is not a number goes last;
+// the same number by name.
+const byNumber = (a, b) => {
+  const x = parseInt(a.number, 10), y = parseInt(b.number, 10);
+  if (Number.isNaN(x) !== Number.isNaN(y)) return Number.isNaN(x) ? 1 : -1;
+  return (Number.isNaN(x) ? 0 : x - y) || String(a.number ?? "").localeCompare(String(b.number ?? "")) || String(a.name ?? "").localeCompare(String(b.name ?? ""));
+};
+// rows in the bin → one entry per label: { bin, label, orderNumber, page, pages, count, items }.
+export function binListLabels(rows, { bin, label = "", orderNumber = "" } = {}) {
+  const items = [...(rows || [])].sort(byNumber).map(binListItem);
+  const pages = Math.ceil(items.length / BIN_LIST_PER_LABEL);
+  return Array.from({ length: pages }, (_, i) => ({
+    bin, label: String(label || ""), orderNumber: String(orderNumber || ""), page: i + 1, pages, count: items.length,
+    items: items.slice(i * BIN_LIST_PER_LABEL, (i + 1) * BIN_LIST_PER_LABEL),
+  }));
+}
+
+export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
+  const { w, h, top = 0 } = size;
+  const a    = h - top;                                           // the printable height
+  const pad  = Math.max(3, Math.round(a * 0.03));
+  const head = Math.max(12, Math.round(a * 0.12));
+  const rows = BIN_LIST_PER_LABEL / 2;
+  const y0   = top + pad + head + 4;                              // under the header and its rule
+  const rowH = Math.floor((h - pad - y0) / rows);
+  const colW = Math.floor((w - 3 * pad) / 2);
+  const left  = `BIN ${l.bin}${l.label ? "  " + l.label : ""}`;
+  const right = [l.orderNumber ? `Order ${l.orderNumber}` : "", `${l.count} pcs`, l.pages > 1 ? `${l.page}/${l.pages}` : ""].filter(Boolean).join("  ");
+  const lw = Math.round((w - 2 * pad) * 0.5), rw = w - 2 * pad - lw;
+  const out = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0",
+    line(pad, top + pad, fit(left, lw, head), lw, "L", left),
+    line(pad + lw, top + pad, fit(right, rw, head), rw, "R", right),
+    `^FO${pad},${top + pad + head + 1}^GB${w - 2 * pad},1,1^FS`];
+  (l.items || []).slice(0, BIN_LIST_PER_LABEL).forEach((text, i) => {
+    const col = Math.floor(i / rows), row = i % rows;            // down the left column, then down the right
+    out.push(line(pad + col * (colW + pad), y0 + row * rowH, fit(text, colW, Math.max(10, rowH - 3)), colW, "L", text));
+  });
+  out.push("^PQ1", "^XZ");
+  return out.join("\n");
+}
+
+// Every label of one kind, back to back. `kind`: "bin" (default), "jersey",
+// "flag", "binlist" (what is in a bin) or "binticket" (a bin label on the
+// 2 x 1 in roll, for a bin opened when another was full).
 export function labelsZPL(labels, size = labelSize(), kind = "bin") {
-  const one = kind === "jersey" ? jerseyLabelZPL : kind === "flag" ? flagLabelZPL : binLabelZPL;
+  const one = kind === "jersey" ? jerseyLabelZPL : kind === "flag" ? flagLabelZPL : kind === "binlist" ? binListZPL : binLabelZPL;
   return labels.map(l => one(l, size)).join("\n") + "\n";
 }

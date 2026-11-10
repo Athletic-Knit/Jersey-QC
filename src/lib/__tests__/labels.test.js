@@ -1,6 +1,6 @@
 // Bin labels for the Zebra: what each label says, and the ZPL that says it.
 import { describe, it, expect } from "vitest";
-import { binLabels, labelSize, binLabelZPL, labelsZPL, jerseyLabel, jerseyLabelZPL, flagLabel, flagLabelZPL } from "../labels.js";
+import { binLabels, labelSize, binLabelZPL, labelsZPL, jerseyLabel, jerseyLabelZPL, flagLabel, flagLabelZPL, binListItem, binListLabels, binListZPL } from "../labels.js";
 import { buildBinMap } from "../roster.js";
 
 const roster = [
@@ -244,5 +244,51 @@ describe("flagLabelZPL (2 x 1 in)", () => {
     expect((z.match(/\^XA/g) || []).length).toBe(2);
     expect(z).toContain("^PW406");
     expect(z).toContain("^FR^FD9^FS");
+  });
+});
+
+// What is in a bin, on the 2 x 1 in roll: ten jerseys a label, two columns of five.
+describe("bin list", () => {
+  const rows = Array.from({ length: 23 }, (_, i) => ({ _id: i, number: String(30 - i), name: i % 2 ? `P${i}` : "", size: i % 3 ? "A-XL" : "Y-M" }));
+  it("an item is number-name-size, the size without its hyphen", () => {
+    expect(binListItem({ number: "23", name: "James", size: "A-XL" })).toBe("23-James-AXL");
+    expect(binListItem({ number: "7", name: "", size: "Y-M" })).toBe("7-YM");
+    expect(binListItem({ number: "7", name: "LEE", size: "" })).toBe("7-LEE");
+  });
+  it("ten to a label, in jersey-number order: 23 jerseys are 3 labels", () => {
+    const labels = binListLabels(rows, { bin: 3, label: "Navy", orderNumber: 264247 });
+    expect(labels.map(l => l.items.length)).toEqual([10, 10, 3]);
+    expect(labels.map(l => [l.page, l.pages, l.count])).toEqual([[1, 3, 23], [2, 3, 23], [3, 3, 23]]);
+    expect(labels[0].items[0].startsWith("8-")).toBe(true);       // 8 is the lowest number
+    expect(labels[0].items[1].startsWith("9-")).toBe(true);       // 9 before 10: by number, not by text
+    expect(labels[0].items[2].startsWith("10-")).toBe(true);
+    expect(labels[2].items[2].startsWith("30-")).toBe(true);
+    expect(binListLabels([], { bin: 1 })).toEqual([]);
+    expect(binListLabels(rows.slice(0, 15), { bin: 1 }).length).toBe(2);
+    expect(binListLabels(rows.slice(0, 10), { bin: 1 }).length).toBe(1);
+  });
+  it("the label: a header, then the left column top to bottom and the right column top to bottom", () => {
+    const [l] = binListLabels(rows.slice(0, 10).map((r, i) => ({ ...r, number: String(i + 1), name: `N${i + 1}`, size: "A-L" })), { bin: 3, label: "Navy", orderNumber: "264247" });
+    const z = binListZPL(l);
+    expect(z).toContain("^PW406");
+    expect(z).toContain("^LL203");
+    expect(z).toContain("^FDBIN 3  Navy^FS");
+    expect(z).toContain("Order 264247  10 pcs");
+    const pos = t => { const m = z.split("\n").find(x => x.endsWith(`^FD${t}^FS`)).match(/\^FO(\d+),(\d+)/); return [Number(m[1]), Number(m[2])]; };
+    const [x1, y1] = pos("1-N1-AL"), [x5, y5] = pos("5-N5-AL"), [x6, y6] = pos("6-N6-AL"), [x10, y10] = pos("10-N10-AL");
+    expect(x5).toBe(x1); expect(y5).toBeGreaterThan(y1);          // 1 to 5 down the left
+    expect(x6).toBeGreaterThan(x1); expect(y6).toBe(y1);          // 6 starts the right column, level with 1
+    expect(x10).toBe(x6); expect(y10).toBe(y5);
+    expect(y10 + 20).toBeLessThanOrEqual(203);                    // the last row is on the label
+    expect(y1).toBeGreaterThanOrEqual(16);                        // nothing in the top 2 mm
+  });
+  it("a long name shrinks to its column; labelsZPL knows the kinds", () => {
+    const fontOf = (z, t) => parseInt(z.split("\n").find(x => x.endsWith(`^FD${t}^FS`)).match(/\^A0N,(\d+)/)[1], 10);
+    const [l] = binListLabels([{ number: "23", name: "James", size: "A-XL" }, { number: "88", name: "Vanderhoogenband", size: "A-2XL" }], { bin: 1 });
+    const z = binListZPL(l);
+    expect(fontOf(z, "88-Vanderhoogenband-A2XL")).toBeLessThan(fontOf(z, "23-James-AXL"));
+    const all = labelsZPL(binListLabels(rows, { bin: 2 }), labelSize("2x1"), "binlist");
+    expect((all.match(/\^XA/g) || []).length).toBe(3);
+    expect(labelsZPL([{ bin: 5, label: "Navy", by: "team", count: 0, orderNumber: "1" }], labelSize("2x1"), "binticket")).toContain("^FDBIN 5^FS");
   });
 });

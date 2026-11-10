@@ -214,11 +214,12 @@ export function rosterChoices(roster) {
   return { sizes: uniq("size").sort(bySize), teams: uniq("team").sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })) };
 }
 
-export function buildBinMap(roster, existing = {}, by) {
+// `taken`: bin numbers that may not be handed out again (bins closed as full).
+export function buildBinMap(roster, existing = {}, by, taken = []) {
   const field = by === "size" || by === "team" ? by : binFieldOf(existing);
   const keep  = binFieldOf(existing) === field ? existing : {};          // switching the field starts the bins over
   const map   = Object.fromEntries(Object.entries(keep).filter(([k]) => k !== "__by"));
-  const used  = new Set(Object.values(map));
+  const used  = new Set([...Object.values(map), ...taken]);
   const keys  = [...new Set(roster.map(r => teamKey(r[field])).filter(Boolean))].sort(field === "size" ? bySize : undefined);
   let next = 1;
   for (const key of keys) {
@@ -237,6 +238,46 @@ export function binFor(binMap, row) {
   const b = binMap[teamKey(v)];
   return b === undefined ? null : b;
 }
+
+// ── A bin that is full ──────────────────────────────────────────────────────
+// The bin map only ever says which bin is OPEN for a team or size. When the
+// operator says a bin is full it is closed: `closed` keeps
+// { bin, key, label, ids, closedAt } — the roster rows that were in it — and
+// the team or size gets the next number nobody has used. A jersey in a bin is
+// a row passed by the camera or by hand; a flagged one is with the supervisor.
+export const inBin = r => !!r && (r.scanned === "pass" || r.scanned === "manual");
+
+// The bin a row is in (a done row in a closed bin stays there), else the bin
+// it will go in.
+export function binOfRow(binMap, closed, row) {
+  if (inBin(row)) { const c = (closed || []).find(c => c.ids.includes(row._id)); if (c) return c.bin; }
+  return binFor(binMap, row);
+}
+
+export function nextBinNumber(binMap, closed = []) {
+  const nums = [...Object.entries(binMap || {}).filter(([k]) => k !== "__by").map(([, b]) => b), ...closed.map(c => c.bin)];
+  return nums.reduce((m, b) => Math.max(m, Number(b) || 0), 0) + 1;
+}
+
+// The rows in `bin` right now, open or closed.
+export function binContents(roster, binMap, closed, bin) {
+  return roster.filter(r => inBin(r) && binOfRow(binMap, closed, r) === bin);
+}
+
+// Close the open bin `bin`: → { binMap, closed, entry, newBin }, or null when
+// `bin` is not an open bin. `now` stamps the closing.
+export function closeBin(roster, binMap, closed = [], bin, now = Date.now()) {
+  const hit = Object.entries(binMap || {}).find(([k, b]) => k !== "__by" && b === bin);
+  if (!hit) return null;
+  const key    = hit[0];
+  const label  = binEntries(roster, binMap).find(e => e.bin === bin)?.label || key;
+  const entry  = { bin, key, label, ids: binContents(roster, binMap, closed, bin).map(r => r._id), closedAt: now };
+  const newBin = nextBinNumber(binMap, closed);
+  return { binMap: { ...binMap, [key]: newBin }, closed: [...closed, entry], entry, newBin };
+}
+
+// A row taken back (un-checked) is no longer in the closed bin it was in.
+export const dropFromClosed = (closed, id) => (closed || []).map(c => c.ids.includes(id) ? { ...c, ids: c.ids.filter(x => x !== id) } : c);
 
 // [{ label, bin }] in bin order, using the roster's own spelling of each team or size.
 export function binEntries(roster, binMap) {

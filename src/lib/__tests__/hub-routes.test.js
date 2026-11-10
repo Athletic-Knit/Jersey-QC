@@ -259,3 +259,20 @@ describe("bin labels on the hub's printer", () => {
     expect((await call("GET", "/rosters")).status).toBe(200);
   });
 });
+
+describe("bin lists and the label of a bin opened mid-order go to the 2 x 1 in roll", () => {
+  it("binlist and binticket print on the flag printer at the flag label size", async () => {
+    const sent = [];
+    const { call } = makeHub({ printer: "Stickers", flagPrinter: "Tickets", print: async (name, zpl) => { sent.push({ name, zpl }); }, listPrinters: async () => [] });
+    const list = { bin: 1, label: "Navy", orderNumber: "55", page: 1, pages: 1, count: 2, items: ["7-SMITH-AL", "9-JONES-AM"] };
+    let r = await call("POST", "/print", { labels: [list], kind: "binlist", station: "st-station1" });
+    expect(r.status).toBe(200);
+    expect(r.body.printer).toBe("Tickets");
+    expect(sent[0].zpl).toContain("^PW406");
+    expect(sent[0].zpl).toContain("^FD7-SMITH-AL^FS");
+    r = await call("POST", "/print", { labels: [{ bin: 3, label: "Navy", by: "team", count: 0, orderNumber: "55" }], kind: "binticket", station: "st-station1" });
+    expect(r.body.printer).toBe("Tickets");
+    expect(sent[1].zpl).toContain("^PW406");
+    expect(sent[1].zpl).toContain("^FDBIN 3^FS");
+  });
+});

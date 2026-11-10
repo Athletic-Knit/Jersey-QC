@@ -222,12 +222,14 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           const body = await readBody(req);
           const labels = Array.isArray(body.labels) ? body.labels.slice(0, 100) : [];
           if (!labels.length) return json(res, 400, { error: "labels required" });
-          const kind = body.kind === "jersey" || body.kind === "flag" ? body.kind : "bin";
-          const name = await (kind === "flag" ? ticketPrinter : labelPrinter)(body.station); if (!name) return json(res, 503, { error: "no label printer" });
-          try { await print(name, labelsZPL(labels, labelDots(kind === "flag" ? flagSpec : labelSpec), kind)); }
+          const kind = ["jersey", "flag", "binlist", "binticket"].includes(body.kind) ? body.kind : "bin";
+          const onTicketRoll = kind === "flag" || kind === "binlist" || kind === "binticket";   // the 2 x 1 in roll: flag tickets, bin lists, the label of a bin opened mid-order
+          const name = await (onTicketRoll ? ticketPrinter : labelPrinter)(body.station); if (!name) return json(res, 503, { error: "no label printer" });
+          try { await print(name, labelsZPL(labels, labelDots(onTicketRoll ? flagSpec : labelSpec), kind)); }
           catch (e) { console.error(`[hub] print on ${name} failed: ${e.message}`); return json(res, 502, { error: `print failed: ${e.message}` }); }
           const what = kind === "jersey" ? (labels.length === 1 ? `sticker bin ${labels[0].bin || "—"} ${labels[0].value || ""}` : `${labels.length} stickers`)
             : kind === "flag" ? (labels.length === 1 ? `flag ticket #${labels[0].number || "?"} ${labels[0].tag || ""}` : `${labels.length} flag tickets`)
+            : kind === "binlist" ? `${labels.length} bin list label${labels.length === 1 ? "" : "s"} (bin ${[...new Set(labels.map(l => l.bin))].join(", ")})`
             : `${labels.length} bin label${labels.length === 1 ? "" : "s"}`;
           console.log(`[hub] ${new Date().toLocaleTimeString()} ${body.station ? body.station + ": " : ""}printed ${what} on ${name}${labels[0]?.orderNumber ? ` for order ${labels[0].orderNumber}` : ""}`);
           return json(res, 200, { ok: true, printer: name, count: labels.length });
