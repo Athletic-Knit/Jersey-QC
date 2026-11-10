@@ -78,7 +78,7 @@ export function jerseyLabelZPL(l, size = labelSize()) {
   const hasBin = l.bin !== "" && l.bin !== null && l.bin !== undefined;
   const lw   = hasBin ? Math.round(w * 0.36) : 0;              // the BIN column
   const rx   = hasBin ? lw + pad : pad, rw = w - rx - pad;      // the sort column
-  const out  = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0"];
+  const out  = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", "^LT0"];
   if (hasBin) {
     const big = Math.round(a * 0.58);
     out.push(line(0, top + pad, tag, lw, "C", "BIN"));
@@ -124,6 +124,11 @@ export function flagLabel(entry, binMap, { orderNumber = "", station = "", tag =
 // as big as it fits, the reason on up to three lines, team · size · bin,
 // and order · station · time small at the bottom. In fractions of the
 // label, so it also comes out (small) on the 1 x 0.5 in sticker roll.
+// The 2 x 1 in roll starts printing about half a millimetre below the label's
+// top edge, which left a white line above the black column (10 Nov 2026). ^LT
+// lifts the whole ticket by FLAG_LIFT dots so the black reaches the edge. The
+// printer keeps ^LT until told otherwise, so every other label sets ^LT0.
+export const FLAG_LIFT = 6;
 export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const { w, h, top = 0 } = size;
   const a     = h - top;
@@ -135,7 +140,7 @@ export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const tiny  = Math.max(12, Math.round(a * 0.14));               // the name, the reason
   const mid   = Math.max(12, Math.round(a * 0.13));               // team · size · bin
   const small = Math.max(10, Math.round(a * 0.12));               // order · station · time
-  const out   = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0"];
+  const out   = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", `^LT${-FLAG_LIFT}`];
   // The black column: a box filled by a border as thick as the box is wide.
   // It runs off the top and the left of the label (the text in it keeps
   // clear of the 2 mm the printer cuts), so no white edge is left around it.
@@ -203,7 +208,7 @@ export function binLabelZPL(l, size = labelSize()) {
     ? [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : l.by === "team" ? "by team" : ""]
     : [l.orderNumber ? `Order ${l.orderNumber}` : ""]).filter(Boolean).join("   ");
   return [
-    "^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0",
+    "^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
     line(side, top + pad, fit(`BIN ${l.bin}`, w, big), w, "C", `BIN ${l.bin}`),
     line(side, top + pad + big + Math.round(a * 0.01), fit(l.label, w, mid), w, "C", l.label),
     ...(footer ? [line(side, h - small - pad, fit(footer, w, small), w, "C", footer)] : []),
@@ -261,7 +266,7 @@ export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const facts = [l.orderNumber ? `Order ${l.orderNumber}` : "", `${l.count} pcs`, l.pages > 1 ? `${l.page}/${l.pages}` : ""].filter(Boolean).join("  ");
   const right = box || facts;
   const lw = Math.round(fullW * 0.5), rw = fullW - lw;
-  const out = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0",
+  const out = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", "^LT0",
     tight(x0, top + pad, head, lw, left),
     line(x0 + lw, top + pad, fit(right, rw, head), rw, "R", right),
     ...(box ? [tight(x0, top + pad + head + 1, sub - 2, fullW, facts)] : []),
