@@ -69,7 +69,7 @@ export const hub = {
 // operator took); the hub keeps a photo once it has seen it, so older flags
 // keep theirs without being re-sent every 5 s.
 const PHOTOS_PER_REPORT = 6;   // the newest log entries that carry their photo in each 5-second report
-export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap, idleSpells = [], awaySpells = [] }) {
+export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap, closedBins = [], binSummary = [], idleSpells = [], awaySpells = [] }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
   return {
@@ -84,6 +84,9 @@ export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, note
     // order's QC Results sheet without the station. Bins travel with it.
     rows: roster.map(r => ({ ...r, scanned: r.scanned || false })),
     bins: binMap || null,
+    // The bins closed as full (which rows were in each), and one line per bin
+    // with its count and box, for the board's order view and its Bins sheet.
+    closedBins, binSummary,
     counts: { total: roster.length, pass: count("pass"), flag: count("flag"), manual: count("manual"), missing: count("missing"), short: count("short"), remaining: roster.filter(r => !r.scanned).length },
     lastScan: lastConfirmed ? { time: lastConfirmed.timestamp, text: `#${lastConfirmed.match?.number ?? "?"}${lastConfirmed.match?.name ? " " + lastConfirmed.match.name : ""}` } : null,
     // Every scan event of this order, compact (no images), for the hub's day

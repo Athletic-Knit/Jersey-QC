@@ -155,13 +155,18 @@ export function teamKey(t) { return String(t ?? "").trim().toLowerCase(); }
 // The order is sorted into bins by team (the default) or by size, the
 // supervisor's choice. A map keyed by team is flat, as it always was; a map
 // keyed by size carries `__by: "size"`. Every lookup takes the roster row, so
-// the caller never has to know which.
+// the caller never has to know which. Every order has at least one bin, as
+// packing boxes by the bin: an order that is not sorted (the "none" choice, or
+// a roster with no team or size to sort by) is one bin for the whole order,
+// `{ "*": 1, __by: "all" }`.
 export const BIN_BY = [
   { id: "team", label: "By team", hint: "one bin per team or colour" },
   { id: "size", label: "By size", hint: "one bin per size" },
-  { id: "none", label: "No bins", hint: "the order is not sorted at the station" },
+  { id: "none", label: "One bin", hint: "not sorted: the whole order in one bin" },
 ];
-export const binFieldOf = binMap => (binMap && binMap.__by === "size" ? "size" : "team");
+export const ALL_KEY = "*";
+export const ALL_LABEL = "Whole order";
+export const binFieldOf = binMap => (binMap && binMap.__by === "size" ? "size" : binMap && binMap.__by === "all" ? "all" : "team");
 export const binCount = binMap => Object.keys(binMap || {}).filter(k => k !== "__by").length;
 
 // Sizes in the order they sit on a rack: youth before adult, XS … 3XL.
@@ -216,7 +221,14 @@ export function rosterChoices(roster) {
 
 // `taken`: bin numbers that may not be handed out again (bins closed as full).
 export function buildBinMap(roster, existing = {}, by, taken = []) {
-  const field = by === "size" || by === "team" ? by : binFieldOf(existing);
+  const field = by === "size" || by === "team" ? by : by === "none" || by === "all" ? "all" : binFieldOf(existing);
+  // One bin for the whole order: the one it already has, else the first number free.
+  const whole = () => {
+    if (!roster.length) return {};
+    let n = 1; while (taken.includes(n)) n++;
+    return { [ALL_KEY]: binFieldOf(existing) === "all" && existing[ALL_KEY] !== undefined ? existing[ALL_KEY] : n, __by: "all" };
+  };
+  if (field === "all") return whole();
   const keep  = binFieldOf(existing) === field ? existing : {};          // switching the field starts the bins over
   const map   = Object.fromEntries(Object.entries(keep).filter(([k]) => k !== "__by"));
   const used  = new Set([...Object.values(map), ...taken]);
@@ -227,12 +239,14 @@ export function buildBinMap(roster, existing = {}, by, taken = []) {
     while (used.has(next)) next++;
     map[key] = next; used.add(next);
   }
+  if (!Object.keys(map).length) return whole();                          // nothing to sort by: one bin
   return field === "size" ? { ...map, __by: "size" } : map;
 }
 
 // `row` is a roster row (or a match); a bare string is taken as the keyed field's value.
 export function binFor(binMap, row) {
   if (!binMap || !row) return null;
+  if (binFieldOf(binMap) === "all") return binMap[ALL_KEY] ?? null;
   const v = typeof row === "object" ? row[binFieldOf(binMap)] : row;
   if (!v) return null;
   const b = binMap[teamKey(v)];
@@ -284,7 +298,7 @@ export function binEntries(roster, binMap) {
   if (!binMap) return [];
   const field = binFieldOf(binMap), label = {};
   roster.forEach(r => { const k = teamKey(r[field]); if (k && !label[k]) label[k] = String(r[field]).trim(); });
-  return Object.entries(binMap).filter(([k]) => k !== "__by").map(([k, bin]) => ({ label: label[k] || k, bin })).sort((a, b) => a.bin - b.bin);
+  return Object.entries(binMap).filter(([k]) => k !== "__by").map(([k, bin]) => ({ label: field === "all" ? ALL_LABEL : label[k] || k, bin })).sort((a, b) => a.bin - b.bin);
 }
 
 // Columns to show in the roster table (everything the file had, minus state).

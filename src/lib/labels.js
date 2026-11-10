@@ -45,7 +45,7 @@ const line = (x, y, fh, width, align, text, { lines = 1, reverse = false } = {})
 export function jerseyLabel(row, binMap, { orderNumber = "" } = {}) {
   const bin = binFor(binMap, row);
   let by = binFieldOf(binMap);
-  if (!binMap) by = String(row?.team ?? "").trim() ? "team" : "size";
+  if (!binMap || by === "all") by = String(row?.team ?? "").trim() ? "team" : "size";   // one bin for the whole order: still say the team or the size
   return { bin: bin === null ? "" : bin, by, value: String(row?.[by] ?? "").trim(), orderNumber: String(orderNumber || "") };
 }
 
@@ -171,7 +171,7 @@ export function binLabelZPL(l, size = labelSize()) {
   const mid   = Math.round(a * 0.26);                             // the team or size
   const wide  = w >= 300;
   const footer = (wide
-    ? [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : "by team", l.count ? `${l.count} ${l.count === 1 ? "jersey" : "jerseys"}` : ""]
+    ? [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : l.by === "team" ? "by team" : "", l.count ? `${l.count} ${l.count === 1 ? "jersey" : "jerseys"}` : ""]
     : [l.orderNumber ? `Order ${l.orderNumber}` : ""]).filter(Boolean).join("   ");
   return [
     "^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0",
@@ -187,7 +187,9 @@ export function binLabelZPL(l, size = labelSize()) {
 // 2 x 1 in roll: every jersey in the bin as "23-JAMES-AXL" (number, name,
 // size), ten to a label in two columns of five, read down the left column and
 // then down the right, in jersey-number order. A bin of 15 is two labels, a
-// bin of 30 three.
+// bin of 30 three. `box` (what packing puts the bin in: "Medium box", from
+// boxes.js — the station passes it, as it knows the box sizes) goes at the
+// top right, in capitals, with the order and the count on a small line under.
 export const BIN_LIST_PER_LABEL = 10;
 const squash = s => String(s ?? "").trim().replace(/[\s-]+/g, "");
 export function binListItem(row) {
@@ -200,12 +202,12 @@ const byNumber = (a, b) => {
   if (Number.isNaN(x) !== Number.isNaN(y)) return Number.isNaN(x) ? 1 : -1;
   return (Number.isNaN(x) ? 0 : x - y) || String(a.number ?? "").localeCompare(String(b.number ?? "")) || String(a.name ?? "").localeCompare(String(b.name ?? ""));
 };
-// rows in the bin → one entry per label: { bin, label, orderNumber, page, pages, count, items }.
-export function binListLabels(rows, { bin, label = "", orderNumber = "" } = {}) {
+// rows in the bin → one entry per label: { bin, label, orderNumber, box, page, pages, count, items }.
+export function binListLabels(rows, { bin, label = "", orderNumber = "", box = "" } = {}) {
   const items = [...(rows || [])].sort(byNumber).map(binListItem);
   const pages = Math.ceil(items.length / BIN_LIST_PER_LABEL);
   return Array.from({ length: pages }, (_, i) => ({
-    bin, label: String(label || ""), orderNumber: String(orderNumber || ""), page: i + 1, pages, count: items.length,
+    bin, label: String(label || ""), orderNumber: String(orderNumber || ""), box: String(box || ""), page: i + 1, pages, count: items.length,
     items: items.slice(i * BIN_LIST_PER_LABEL, (i + 1) * BIN_LIST_PER_LABEL),
   }));
 }
@@ -216,16 +218,20 @@ export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const pad  = Math.max(3, Math.round(a * 0.03));
   const head = Math.max(12, Math.round(a * 0.12));
   const rows = BIN_LIST_PER_LABEL / 2;
-  const y0   = top + pad + head + 4;                              // under the header and its rule
+  const box  = String(l.box || "").toUpperCase();
+  const sub  = box ? Math.max(10, Math.round(a * 0.09)) + 2 : 0;  // with a box: a small second line for the order and the count
+  const y0   = top + pad + head + sub + 4;                        // under the header and its rule
   const rowH = Math.floor((h - pad - y0) / rows);
   const colW = Math.floor((w - 3 * pad) / 2);
   const left  = `BIN ${l.bin}${l.label ? "  " + l.label : ""}`;
-  const right = [l.orderNumber ? `Order ${l.orderNumber}` : "", `${l.count} pcs`, l.pages > 1 ? `${l.page}/${l.pages}` : ""].filter(Boolean).join("  ");
+  const facts = [l.orderNumber ? `Order ${l.orderNumber}` : "", `${l.count} pcs`, l.pages > 1 ? `${l.page}/${l.pages}` : ""].filter(Boolean).join("  ");
+  const right = box || facts;
   const lw = Math.round((w - 2 * pad) * 0.5), rw = w - 2 * pad - lw;
   const out = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0",
     line(pad, top + pad, fit(left, lw, head), lw, "L", left),
     line(pad + lw, top + pad, fit(right, rw, head), rw, "R", right),
-    `^FO${pad},${top + pad + head + 1}^GB${w - 2 * pad},1,1^FS`];
+    ...(box ? [line(pad, top + pad + head + 1, fit(facts, w - 2 * pad, sub - 2), w - 2 * pad, "L", facts)] : []),
+    `^FO${pad},${top + pad + head + sub + 1}^GB${w - 2 * pad},1,1^FS`];
   (l.items || []).slice(0, BIN_LIST_PER_LABEL).forEach((text, i) => {
     const col = Math.floor(i / rows), row = i % rows;            // down the left column, then down the right
     out.push(line(pad + col * (colW + pad), y0 + row * rowH, fit(text, colW, Math.max(10, rowH - 3)), colW, "L", text));

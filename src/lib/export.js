@@ -48,11 +48,24 @@ export function buildRosterSheet(roster, log, meta, columns, binOf = () => null)
   ];
 }
 
+// One line per bin of the order, for packing: what it holds, how many
+// jerseys, the box it goes in, and when it was closed. `bins`:
+// [{ bin, label, count, box, open, closedAt }].
+export function buildBinsSheet(bins = [], stamp = t => localTimeStamp(new Date(t))) {
+  return [
+    ["Bin", "Holds", "Jerseys", "Box", "State", "Closed at"],
+    ...bins.map(b => [b.bin, b.label || "", b.count || 0, b.box || "", b.open ? "Open" : "Closed (full)", b.closedAt ? stamp(b.closedAt) : ""]),
+    [],
+    ["Total", "", bins.reduce((t, b) => t + (b.count || 0), 0)],
+  ];
+}
+
 export function exportRosterXLSX(roster, log, meta, columns, binOf, XLSX = globalThis.XLSX) {
   if (!XLSX) { alert("Excel library not loaded yet, please try again."); return; }
   const ws = XLSX.utils.aoa_to_sheet(buildRosterSheet(roster, log, meta, columns, binOf));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "QC Results");
+  if (meta.bins?.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildBinsSheet(meta.bins)), "Bins");
   // Where the screen was while the order was open: idle and away spells.
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildAttentionSheet(meta.idleSpells || [], meta.awaySpells || [], t => localTimeStamp(new Date(t)))), "Attention");
   XLSX.writeFile(wb, `roster_${safeFilename(meta.orderNumber)}_${localDateStamp()}.xlsx`);
