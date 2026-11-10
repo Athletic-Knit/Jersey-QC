@@ -53,13 +53,13 @@ describe("ZPL", () => {
     expect(z).toContain("^FDNavy^FS");
     expect(z).toContain("Order 264247");
     expect(z).toContain("by team");
-    expect(z).toContain("14 jerseys");
+    expect(z).not.toContain("jerseys");   // no count: nobody knows how many go in before it is full
     expect(z).toContain("^CI28");   // UTF-8 data, so a team named "Équipe" prints
   });
   it("by size, one jersey, no order number", () => {
     const z = binLabelZPL({ bin: 1, label: "Y-M", by: "size", count: 1, orderNumber: "" }, labelSize("2.25x1.25"));
     expect(z).toContain("by size");
-    expect(z).toContain("1 jersey^FS");
+    expect(z).not.toContain("jersey");
     expect(z).not.toContain("Order");
   });
   it("on the small roll the footer is just the order number", () => {

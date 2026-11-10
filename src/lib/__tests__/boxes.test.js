@@ -72,7 +72,7 @@ describe("every order has a bin", () => {
     expect(l).toMatchObject({ bin: 1, label: ALL_LABEL, count: 1 });
     const zpl = binLabelZPL(l, labelSize("2x1"));
     expect(zpl).not.toMatch(/by team|by size/);
-    expect(zpl).toMatch(/Order 5 {3}1 jersey/);
+    expect(zpl).toContain("^FDOrder 5^FS");   // the order alone: no "by", no jersey count
   });
 });
 

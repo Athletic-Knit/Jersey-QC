@@ -160,8 +160,9 @@ export function binLabels(roster, binMap, { orderNumber = "" } = {}) {
 }
 
 // "BIN 3" as big as the label allows (half its height), the team or size
-// under it, a small footer with the order number, "by team" / "by size" and
-// the jersey count (just the order number on a small label). It is read from
+// under it, a small footer with the order number and "by team" / "by size"
+// (just the order number on a small label). No jersey count: nobody knows
+// how many will go in before the bin is full. It is read from
 // across the table, so the bin and what it holds take the room and the footer
 // gets what is left. Bin labels go on the 2 x 1 in roll (kind "binticket"):
 // the ones printed when the order starts and the one for a bin opened when
@@ -178,7 +179,7 @@ export function binLabelZPL(l, size = labelSize()) {
   const big   = Math.round(a * 0.5);                              // "BIN 3"
   const mid   = Math.round(a * 0.27);                             // the team or size
   const footer = (wide
-    ? [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : l.by === "team" ? "by team" : "", l.count ? `${l.count} ${l.count === 1 ? "jersey" : "jerseys"}` : ""]
+    ? [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : l.by === "team" ? "by team" : ""]
     : [l.orderNumber ? `Order ${l.orderNumber}` : ""]).filter(Boolean).join("   ");
   return [
     "^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0",
