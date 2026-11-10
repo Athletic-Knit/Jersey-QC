@@ -126,12 +126,16 @@ export function flagLabel(entry, binMap, { orderNumber = "", station = "", tag =
 // label, so it also comes out (small) on the 1 x 0.5 in sticker roll.
 // The 2 x 1 in roll starts printing about half a millimetre below the label's
 // top edge, which left a white line above the black column (10 Nov 2026). ^LT
-// lifts the whole ticket by FLAG_LIFT dots so the black reaches the edge. The
-// printer keeps ^LT until told otherwise, so every other label sets ^LT0.
+// starts the ticket FLAG_LIFT dots higher, and only the black column uses
+// that: it is drawn that much longer, so it covers the label from above its
+// top edge to just past its bottom edge, while every text is laid out
+// FLAG_LIFT lower and so sits exactly where it did. The printer keeps ^LT
+// until told otherwise, so every other label sets ^LT0.
 export const FLAG_LIFT = 6;
 export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
-  const { w, h, top = 0 } = size;
-  const a     = h - top;
+  const { w, h } = size;
+  const top   = (size.top || 0) + FLAG_LIFT;                      // the texts: where they were before the lift
+  const a     = h - (size.top || 0);
   const pad   = Math.round(a * 0.04);
   const side  = w >= 300 ? Math.round((size.dpi || 203) * 2 / 25.4) : 0;   // the 2 x 1 in roll: the ZD411 cuts 2 mm off the left
   const lw    = Math.round((w - side) * 0.32);                    // the black column
@@ -140,11 +144,11 @@ export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const tiny  = Math.max(12, Math.round(a * 0.14));               // the name, the reason
   const mid   = Math.max(12, Math.round(a * 0.13));               // team · size · bin
   const small = Math.max(10, Math.round(a * 0.12));               // order · station · time
-  const out   = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", `^LT${-FLAG_LIFT}`];
+  const out   = ["^XA", "^CI28", `^PW${w}`, `^LL${h + FLAG_LIFT}`, "^LH0,0", `^LT${-FLAG_LIFT}`];
   // The black column: a box filled by a border as thick as the box is wide.
   // It runs off the top and the left of the label (the text in it keeps
   // clear of the 2 mm the printer cuts), so no white edge is left around it.
-  out.push(`^FO0,0^GB${side + lw},${h},${side + lw}^FS`);
+  out.push(`^FO0,0^GB${side + lw},${h + FLAG_LIFT + 4},${side + lw}^FS`);   // 4 dots past the bottom edge too
   const nameH = l.name ? tiny : 0;
   const big   = fit(l.number, lw - 4, Math.round(a * 0.5));
   out.push(line(side, top + pad, tag, lw, "C", "FLAG", { reverse: true }));
