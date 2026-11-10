@@ -89,6 +89,12 @@ describe("the box on the bin list and the Bins sheet", () => {
     // ten items still fit above the bottom edge
     const ys = [...zpl.matchAll(/\^FO\d+,(\d+)\^A0N,(\d+)/g)].map(m => Number(m[1]) + Number(m[2]));
     expect(Math.max(...ys)).toBeLessThanOrEqual(labelSize("2x1").h);
+    // nothing starts in the 2 mm (16 dots) the printer cuts off the left edge
+    const xs = [...zpl.matchAll(/\^FO(\d+),/g)].map(m => Number(m[1]));
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(16);
+    // and nothing runs past the right edge
+    const ends = [...zpl.matchAll(/\^FO(\d+),\d+\^A0N,\d+,\d+\^FB(\d+)/g)].map(m => Number(m[1]) + Number(m[2]));
+    expect(Math.max(...ends)).toBeLessThanOrEqual(labelSize("2x1").w);
   });
   it("without a box the list is as it was", () => {
     const zpl = binListZPL(binListLabels(rows, { bin: 1, label: "Navy", orderNumber: "264247" })[0], labelSize("2x1"));

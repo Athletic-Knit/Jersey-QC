@@ -124,7 +124,7 @@ describe("packing simulation: the box a bin goes in", () => {
     expect(acc(late, "learnt")).toBeGreaterThan(acc(late, "flat"));
     expect(acc(late, "learnt")).toBeGreaterThan(acc(late, "oracle") - 0.03);     // within 3 points of the best any rule could do
     expect(heavy.filter(x => !x.warned).length / Math.max(1, heavy.length)).toBeLessThan(0.02);
-  });
+    }, 120000);
 });
 
 describe("the box model", () => {

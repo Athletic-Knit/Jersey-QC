@@ -190,7 +190,10 @@ export function binLabelZPL(l, size = labelSize()) {
 // bin of 30 three. `box` (what packing puts the bin in: "Medium box", from
 // boxes.js — the station passes it, as it knows the box sizes) goes at the
 // top right, in capitals, with the order and the count on a small line under.
+// The list starts 2 mm in from the left edge: the ZD411 cut that much off the
+// left of the 2 x 1 in roll (seen on the floor, 10 Nov 2026).
 export const BIN_LIST_PER_LABEL = 10;
+export const BIN_LIST_LEFT_MM = 2;
 const squash = s => String(s ?? "").trim().replace(/[\s-]+/g, "");
 export function binListItem(row) {
   return [String(row?.number ?? "").trim(), String(row?.name ?? "").trim(), squash(row?.size)].filter(Boolean).join("-");
@@ -222,19 +225,21 @@ export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const sub  = box ? Math.max(10, Math.round(a * 0.09)) + 2 : 0;  // with a box: a small second line for the order and the count
   const y0   = top + pad + head + sub + 4;                        // under the header and its rule
   const rowH = Math.floor((h - pad - y0) / rows);
-  const colW = Math.floor((w - 3 * pad) / 2);
+  const x0   = Math.round((size.dpi || 203) * BIN_LIST_LEFT_MM / 25.4) + pad;   // where the list starts
+  const fullW = w - x0 - pad;
+  const colW = Math.floor((fullW - pad) / 2);
   const left  = `BIN ${l.bin}${l.label ? "  " + l.label : ""}`;
   const facts = [l.orderNumber ? `Order ${l.orderNumber}` : "", `${l.count} pcs`, l.pages > 1 ? `${l.page}/${l.pages}` : ""].filter(Boolean).join("  ");
   const right = box || facts;
-  const lw = Math.round((w - 2 * pad) * 0.5), rw = w - 2 * pad - lw;
+  const lw = Math.round(fullW * 0.5), rw = fullW - lw;
   const out = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0",
-    line(pad, top + pad, fit(left, lw, head), lw, "L", left),
-    line(pad + lw, top + pad, fit(right, rw, head), rw, "R", right),
-    ...(box ? [line(pad, top + pad + head + 1, fit(facts, w - 2 * pad, sub - 2), w - 2 * pad, "L", facts)] : []),
-    `^FO${pad},${top + pad + head + sub + 1}^GB${w - 2 * pad},1,1^FS`];
+    line(x0, top + pad, fit(left, lw, head), lw, "L", left),
+    line(x0 + lw, top + pad, fit(right, rw, head), rw, "R", right),
+    ...(box ? [line(x0, top + pad + head + 1, fit(facts, fullW, sub - 2), fullW, "L", facts)] : []),
+    `^FO${x0},${top + pad + head + sub + 1}^GB${fullW},1,1^FS`];
   (l.items || []).slice(0, BIN_LIST_PER_LABEL).forEach((text, i) => {
     const col = Math.floor(i / rows), row = i % rows;            // down the left column, then down the right
-    out.push(line(pad + col * (colW + pad), y0 + row * rowH, fit(text, colW, Math.max(10, rowH - 3)), colW, "L", text));
+    out.push(line(x0 + col * (colW + pad), y0 + row * rowH, fit(text, colW, Math.max(10, rowH - 3)), colW, "L", text));
   });
   out.push("^PQ1", "^XZ");
   return out.join("\n");
