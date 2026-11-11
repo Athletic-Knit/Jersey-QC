@@ -1127,14 +1127,15 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   }, [onTrial, state.mode]);
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
-  // The camera doubted the number it read (a digit covered or cut off, the
-  // jersey not flat, the number off centre) and the name settled it: still a
+  // The camera says the number it read is covered or cut off (it is asked to
+  // say so only on evidence: a fold, a hand, a sleeve, the picture's edge
+  // beside the digit) and the name settled it: still a
   // green, with a line telling the operator to look at the number. A stray
   // #12 LEACH with the 1 under a fold reads as the roster's #2 LEACH, and
   // only the operator can see that (11 Nov 2026). The matching is untouched.
   const seen = state.scan?.detected;
   const numberDoubt = mode === "confirm" && !!seen && String(state.match?.number ?? "") !== ""
-    && (seen.number_complete === false || seen.laid_flat === false || (!!seen.number_position && !/^cent(re|er)$/i.test(String(seen.number_position))));
+    && seen.number_complete === false;   // only when the camera says the number itself is covered or cut off: not for a jersey that is merely not flat or a number off centre, or the line would show too often to be read
   const isList  = mode === "pick" || mode === "close";
   const isRed   = mode === "flag" || mode === "duplicate" || mode === "supervisor";
   const isMenu  = mode === "reasons" || mode === "reasonText";
