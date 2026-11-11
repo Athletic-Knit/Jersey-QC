@@ -75,10 +75,11 @@ describe("bins", () => {
   const roster = [{ team: "Ravens" }, { team: "ravens " }, { team: "Hawks" }, { team: "" }];
   it("case-folds and trims team names", () => {
     const m = buildBinMap(roster);
-    expect(m).toEqual({ hawks: 1, ravens: 2 });
+    expect(m).toEqual({ hawks: 1, ravens: 2, "?": 3 });               // a row with no team: the "No team" bin
     expect(binFor(m, "Ravens")).toBe(2);
     expect(binFor(m, "ravens ")).toBe(2);
-    expect(binFor(m, "")).toBeNull();
+    expect(binFor(m, { team: "" })).toBe(3);
+    expect(binFor(buildBinMap([{ team: "Ravens" }, { team: "Hawks" }]), { team: "" })).toBeNull();   // every row has a team: no such bin
   });
   it("pins existing bins when the roster is replaced", () => {
     const first = buildBinMap([{ team: "Ravens" }, { team: "Hawks" }]);
@@ -88,7 +89,7 @@ describe("bins", () => {
     expect(second.wolves).toBe(3);
   });
   it("lists entries with the roster's spelling", () => {
-    expect(binEntries(roster, buildBinMap(roster))).toEqual([{ label: "Hawks", bin: 1 }, { label: "Ravens", bin: 2 }]);
+    expect(binEntries(roster, buildBinMap(roster))).toEqual([{ label: "Hawks", bin: 1 }, { label: "Ravens", bin: 2 }, { label: "No team", bin: 3 }]);
   });
   it("by size: one bin per size, youth before adult, XS before 3XL; the row says which field", () => {
     const r = [{ team: "Ravens", size: "A-L" }, { team: "Hawks", size: "Y-M" }, { team: "Ravens", size: "A-XS" }, { team: "Hawks", size: "a-l " }, { team: "Hawks", size: "A-3XL" }];

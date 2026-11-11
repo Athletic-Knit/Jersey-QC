@@ -93,7 +93,9 @@ export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, note
     lastScan: lastConfirmed ? { time: lastConfirmed.timestamp, text: `#${lastConfirmed.match?.number ?? "?"}${lastConfirmed.match?.name ? " " + lastConfirmed.match.name : ""}` } : null,
     // Every scan event of this order, compact (no images), for the hub's day
     // ledger — the end-of-day sheet is built from these across all stations.
-    events: log.slice(0, 400).map((l, i) => {
+    // All of them: a flag from the start of a 500-jersey order that is
+    // resolved at its end must still reach the ledger (~300 bytes an event).
+    events: log.map((l, i) => {
       const ev = {
         id: l.id, t: l.timestamp, status: l.status, order: orderNumber, run: orderRun, jerseyType, operator: l.operator || operatorName, rowId: l.match?._id,
         number: l.match?.number ?? l.detected?.number ?? "", name: l.match?.name ?? l.detected?.name ?? "", size: l.match?.size ?? "", team: l.match?.team ?? "",
@@ -103,6 +105,8 @@ export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, note
       if (l.status === "flagged" && i < PHOTOS_PER_REPORT) { if (l.photo) ev.photo = l.photo; if (l.damagePhotos?.length) ev.damagePhotos = l.damagePhotos; }
       return ev;
     }),
-    attention: log.filter(l => l.status === "flagged" || l.status === "manual" || l.status === "missing" || l.status === "short").slice(0, 25).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(i < 3 && l.photo ? { photo: l.photo } : {}), ...(i < 3 && l.damagePhotos?.length ? { damagePhotos: l.damagePhotos } : {}) })),
+    // Open items first, then the resolved ones: on a big order the newest 25
+    // could be all Missing marks and push every open flag off the board.
+    attention: (a => [...a.filter(l => !l.resolution), ...a.filter(l => l.resolution)])(log.filter(l => l.status === "flagged" || l.status === "manual" || l.status === "missing" || l.status === "short")).slice(0, 100).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(i < 3 && l.photo ? { photo: l.photo } : {}), ...(i < 3 && l.damagePhotos?.length ? { damagePhotos: l.damagePhotos } : {}) })),
   };
 }

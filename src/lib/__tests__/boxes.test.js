@@ -131,3 +131,38 @@ describe("long names on the bin list", () => {
     items.forEach(i => expect(i.x + textUnits(i.text) * i.w).toBeLessThanOrEqual(labelSize("2x1").w));
   });
 });
+
+// The same wrap, on the other labels: a long team on the jersey sticker, a
+// long name on the flag ticket. A one-line field is squeezed until it fits.
+describe("no one-line field can wrap", () => {
+  const fits = zpl => [...zpl.matchAll(/\^A0N,(\d+),(\d+)\^FB(\d+),1,0,[LCR](?:\^FR)?\^FD([^^]*)\^FS/g)].every(m => textUnits(m[4]) * Number(m[2]) <= Number(m[3]) + 1);
+  it("a long team on the sticker, a long name on the flag ticket, a long team on the bin label", async () => {
+    const { jerseyLabelZPL, flagLabelZPL } = await import("../labels.js");
+    const sticker = jerseyLabelZPL({ bin: 12, by: "team", value: "MISSISSAUGA STEELHEADS WHITE", orderNumber: "264247" });
+    expect(sticker).toContain("^FDMISSISSAUGA STEELHEADS WHITE^FS");
+    expect(fits(sticker)).toBe(true);
+    expect(fits(flagLabelZPL({ number: "88", name: "VANDENBROUCKE-JUNIOR", tag: "DECORATION", reason: "Wrong name", team: "MISSISSAUGA STEELHEADS WHITE", size: "A-3XL", bin: 12, orderNumber: "264247", station: "St 1", time: "09:00" }))).toBe(true);
+    expect(fits(binLabelZPL({ bin: 12, label: "MISSISSAUGA STEELHEADS WHITE ALTERNATE", by: "team", orderNumber: "264247" }, labelSize("2x1")))).toBe(true);
+  });
+});
+describe("a row with nothing to sort by", () => {
+  it("has a bin of its own, is in its contents, and a by-size order does the same", () => {
+    const roster = [row(0), row(1, { team: "", scanned: "pass" }), row(2, { team: "Red" })];
+    const map = buildBinMap(roster, {}, "team");
+    expect(binFor(map, roster[1])).toBe(3);
+    expect(binContents(roster, map, [], 3).map(r => r._id)).toEqual([1]);
+    expect(binEntries(roster, map).map(e => e.label)).toEqual(["Navy", "Red", "No team"]);
+    const bySize = buildBinMap([row(0), row(1, { size: "" })], {}, "size");
+    expect(binFor(bySize, row(1, { size: "" }))).toBe(2);
+  });
+});
+describe("the box model learns from a heavy bin that went in one box", () => {
+  it("40 adult 2XL stitched in a large box counts, though the estimate says 56 lb", async () => {
+    const { fitBoxModel, predictBox, PRIOR } = await import("../boxmodel.js");
+    const m = fitBoxModel(Array(50).fill({ counts: { "a2x|st": 40 }, box: "large" }));
+    expect(m.seen).toBe(50);
+    expect(predictBox({ "a2x|st": 40 }, { ...m, weightCap: Infinity }).id).toBe("large");
+    expect(predictBox({ "a2x|st": 40 }, { ...PRIOR, weightCap: Infinity }).id).toBe("more");
+    expect(predictBox({ "a2x|st": 5 }, { ...PRIOR, caps: [NaN, NaN, NaN], weightCap: Infinity }).id).toBeTruthy();   // never a crash
+  });
+});

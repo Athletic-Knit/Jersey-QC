@@ -53,8 +53,14 @@ const tight = (x, y, maxH, width, text) => {
 };
 // One line of text in a box: ^FB wraps it to `width`, one line, aligned.
 // `lines` > 1 wraps onto that many lines; `reverse` prints white on black.
-const line = (x, y, fh, width, align, text, { lines = 1, reverse = false } = {}) =>
-  `^FO${x},${y}^A0N,${fh},${fh}^FB${width},${lines},0,${align}${reverse ? "^FR" : ""}^FD${safe(text)}^FS`;
+// A one-line text wider than its box would wrap, and the printer prints the
+// wrapped piece over the start of the line; so a one-line field whose text
+// does not fit at `fh` gets narrower letters (the font's width setting) until
+// it does. `textUnits` is declared below; it is only called when a label is built.
+const line = (x, y, fh, width, align, text, { lines = 1, reverse = false } = {}) => {
+  const fw = lines === 1 ? Math.max(5, Math.min(fh, Math.floor(width / textUnits(text)))) : fh;
+  return `^FO${x},${y}^A0N,${fh},${fw}^FB${width},${lines},0,${align}${reverse ? "^FR" : ""}^FD${safe(text)}^FS`;
+};
 
 // ── The jersey sticker ───────────────────────────────────────────────────────
 // What a passed jersey's sticker says, from its roster row and the order's

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
 import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
@@ -161,6 +161,40 @@ function IdleWatch({ pulse, onSpell }) {
     </div>
   );
 }
+
+// One row of the station's roster table. Memoised: on a 500-jersey order the
+// table is 500 rows with a menu each, and rebuilding all of them on every
+// render of the app (several a scan) held the screen for most of a second
+// (measured 11 Nov 2026). A row is rebuilt only when its own jersey changes.
+const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise, onMark }) {
+  return (
+    <tr style={{
+      background: r.scanned === "pass" ? "rgba(34,197,94,0.07)" : r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned ? "rgba(245,158,11,0.07)" : "transparent",
+      borderBottom: "1px solid #1e293b",
+    }}>
+      <td style={{ ...tdSt, textAlign: "center" }}>
+        {r.scanned === "pass" ? "✅" : r.scanned === "flag" ? "🛑" : r.scanned === "manual" ? "✍" : r.scanned === "missing" ? "❓" : r.scanned === "short" ? "📦" : <span style={{ color: "#475569" }}>—</span>}
+      </td>
+      {cols.map(c => (
+        <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "#fbbf24" : "#e2e8f0" }}>{r[c]}</td>
+      ))}
+      {hasBins && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{bin !== null ? `Bin ${bin}` : "—"}</td>}
+      <td style={{ ...tdSt, padding: "2px 6px" }}>
+        <select value={["missing", "short"].includes(r.scanned) ? "missing" : ""}
+          onChange={e => onMark(r, e.target.value)}
+          style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
+          <option value="">—</option>
+          {(!r.scanned || ["missing", "short"].includes(r.scanned))
+            ? <option value="missing">Missing</option>
+            : <>
+                {(r.scanned === "pass" || r.scanned === "manual") && <option value="flag">🚩 Flag / damage</option>}
+                {(r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check</option>}
+              </>}
+        </select>
+      </td>
+    </tr>
+  );
+});
 
 function ResumeModal({ session, onResume, onDiscard }) {
   const done = session.roster.filter(r => r.scanned && r.scanned !== false).length;
@@ -1879,7 +1913,7 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
               {l.thumb && <img src={l.thumb} alt="" style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
               <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 28, lineHeight: 1 }}>#{l.match.number}{l.match.name ? ` · ${l.match.name}` : ""}</span>
               {l.match.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#4ade80", fontWeight: 800 }}>{l.match.size}</span>}
-              {binOf(l.match.team) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#60a5fa", fontWeight: 800 }}>Bin {binOf(l.match.team)}</span>}
+              {binOf(l.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#60a5fa", fontWeight: 800 }}>Bin {binOf(l.match)}</span>}
               <span style={{ marginLeft: "auto", fontSize: 14, color: "#7c8ba1", whiteSpace: "nowrap" }}>{l.timestamp}</span>
               {st === "flag"
                 ? <Pill color="#ef4444">Flagged</Pill>
@@ -2044,6 +2078,7 @@ export default function App() {
   const [showRosterComplete, setShowRosterComplete] = useState(false);
   const [idleSpells,         setIdleSpells]         = useState([]);      // { start, end, minutes } — the station sat untouched
   const [awaySpells,         setAwaySpells]         = useState([]);      // { start, end, seconds, how } — the Jersey QC screen was hidden or another window was in front (src/lib/attention.js)
+  const [saveOk, setSaveOk] = useState(true);     // did the last save of the order reach this PC's storage?
   const [hubOk, setHubOk] = useState(null);       // did the last progress report reach the hub? null = never tried
   const [newRosters, setNewRosters] = useState([]);   // rosters the supervisor sent while this order was running
   const [orderSetBy, setOrderSetBy] = useState(null); // { orderNumber, by } — the supervisor named this order from the board
@@ -2096,15 +2131,19 @@ export default function App() {
   const [closedBins,         setClosedBins]         = useState([]);
   const [showBins,           setShowBins]           = useState(false);
   const [binPrint,           setBinPrint]           = useState(null);    // { status: "printing" | "done" | "error" | "off", text } — the last bin closed or list printed
-  const binOf          = useCallback(row => binOfRow(binMap, closedBins, row), [binMap, closedBins]);
+  // The bin of a roster row, or of a log entry's match (a copy of the row from
+  // when it was scanned): the live row decides, so a jersey in a closed bin
+  // shows that bin everywhere.
+  const rowById        = useMemo(() => new Map(roster.map(r => [r._id, r])), [roster]);
+  const binOf          = useCallback(row => binOfRow(binMap, closedBins, row && typeof row === "object" ? rowById.get(row._id) || row : row), [binMap, closedBins, rowById]);
   // Every bin with what is in it and the box that many jerseys go in (boxes.js).
   // The box by room and weight (boxmodel.js). The model is the hub's, fitted
   // to every "which box did it go in" answer from every station; the last one
   // seen is kept on this PC for when the hub is away.
-  const [boxModel, setBoxModel] = useState(() => { try { const m = JSON.parse(localStorage.getItem("jerseyqc.boxmodel") || "null"); return m?.units && m?.caps ? m : BOX_PRIOR; } catch { return BOX_PRIOR; } });
+  const [boxModel, setBoxModel] = useState(() => { try { const m = JSON.parse(localStorage.getItem("jerseyqc.boxmodel") || "null"); return m?.units && m?.caps ? { ...BOX_PRIOR, ...m } : BOX_PRIOR; } catch { return BOX_PRIOR; } });
   useEffect(() => {
     if (!signedIn) return;
-    hub.boxModel().then(r => { if (r?.model?.units) { setBoxModel(r.model); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(r.model)); } catch { /* private window */ } } }).catch(() => {});
+    hub.boxModel().then(r => { if (r?.model?.units && r.model.caps) { setBoxModel({ ...BOX_PRIOR, ...r.model }); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(r.model)); } catch { /* private window */ } } }).catch(() => {});
   }, [signedIn, sessionStarted]);
   // The weight is the operator's call until a scale is connected to the station
   // (owner, 11 Nov 2026): with `boxWeights` off there is no cap, no lb and no warning.
@@ -2187,6 +2226,10 @@ export default function App() {
   // come back with an ETA in the thousands.
   const { etaMin }     = useMemo(() => pace(log, passCount, remaining, now, { start: firstScanTime }), [log, passCount, remaining, now, firstScanTime]);
   const rosterCols     = useMemo(() => displayColumns(roster), [roster]);
+  // The same columns as one array for the whole order, so a pass (a new
+  // roster array) does not rebuild every row of the table.
+  const rosterColsKey  = rosterCols.join("\u0001");
+  const rosterColsStable = useMemo(() => (rosterColsKey ? rosterColsKey.split("\u0001") : []), [rosterColsKey]);
   const extraCols      = useMemo(() => extraColumns(roster), [roster]);
   const keyLabel       = formatKey(scanKey);
   const showResume     = !!savedSession && !resumeDecided && !sessionStarted && !canSupervise;
@@ -2208,7 +2251,9 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+    const t = setTimeout(() => setSaveOk(prev => (prev === saved ? prev : saved)), 0);   // said in the header when it fails
+    return () => clearTimeout(t);
   }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, firstScanTime, idleSpells, awaySpells, checksLeft, inspect]);
 
   useEffect(() => {
@@ -2330,13 +2375,27 @@ export default function App() {
   }, [roster, binMap, closedBins, orderNumber, printOnTicketRoll, boxOf]);
 
   const [showFinish, setShowFinish] = useState(false);
+  const [finishing,  setFinishing]  = useState(false);   // Finish order is printing the bin lists
   const askFinish    = useCallback(() => { setShowRosterComplete(false); setShowFinish(true); }, []);
   const finishOrder  = useCallback(() => {
     setShowFinish(false);
-    if (finishLists.length) printOnTicketRoll(finishLists, "binlist")   // the order is finished: every bin still open is closed, and its list prints
-      .catch(e => window.alert(`The bin lists were not printed: ${e.status === 503 ? "no label printer for this station" : e.status ? e.message : "could not reach the server"}.`));
-    if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});   // the hub keeps the order's record and sheets in its ledger
-    resetOrder();
+    const done = () => {
+      if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});   // the hub keeps the order's record and sheets in its ledger
+      resetOrder();
+    };
+    if (!finishLists.length) { done(); return; }
+    // The order is finished: every bin still open is closed, and its list
+    // prints. The order is cleared only once the lists are out, because after
+    // that nothing here can print them again; if they fail the operator
+    // chooses: finish without them, or keep the order open and try again.
+    setFinishing(true);
+    printOnTicketRoll(finishLists, "binlist")
+      .then(() => { setFinishing(false); done(); })
+      .catch(e => {
+        setFinishing(false);
+        const why = e.status === 503 ? "no label printer for this station" : e.status ? e.message : "could not reach the server";
+        if (window.confirm(`The bin lists were NOT all printed: ${why}.\n\nOK = finish the order anyway, without the lists.\nCancel = keep the order open, fix the printer and press Finish order again.`)) done();
+      });
   }, [resetOrder, hubRosterId, finishLists, printOnTicketRoll]);
 
   // Sign out leaves the station, not the order: an unfinished order stays saved
@@ -2741,7 +2800,7 @@ export default function App() {
       if (r.inPlace) { if (o.reopened) { setOverlay(null); armAutoScan(); return; } setOverlay({ ...(o.returnTo || { mode: "flag", scan: o.scan }), note: r.label }); return; }
       if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it
       const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened ? `${r.label} — found after it passed` : r.label, reasonId: r.id, ...stamp() };
-      if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
+      if (o.match) { setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x)); setClosedBins(prev => dropFromClosed(prev, o.match._id)); }   // flagged: it is out of the bin it was in, closed or not
       setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(c => (c?.match?._id === o.match?._id ? null : c));
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: r.label, route: r.route, entryId: entry.id, photoFirst: r.id !== "wrong_decoration", damagePhotos: [] });
       playTone("flag");
@@ -2751,7 +2810,7 @@ export default function App() {
       const label = String(text || "").trim(); if (!label) return;
       inspectRef.current.defect(); syncInspect();
       const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened ? `${label} — found after it passed` : label, reasonId: "other", ...stamp() };
-      if (o.match) setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x));
+      if (o.match) { setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x)); setClosedBins(prev => dropFromClosed(prev, o.match._id)); }
       setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(c => (c?.match?._id === o.match?._id ? null : c));
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: label, route: "Supervisor decides", entryId: entry.id, photoFirst: true, damagePhotos: [] });
       playTone("flag");
@@ -2888,6 +2947,8 @@ export default function App() {
   // opens for it, as "Flag it" does for the last one. The scan is looked up in
   // the log for its picture; a row with no scan on record (an old session) is
   // flagged from the row itself.
+  const markHandler = useRef(() => {});
+  const onMarkRow = useCallback((r, v) => markHandler.current(r, v), []);
   const flagRow = (r) => {
     const l = log.find(x => x.match?._id === r._id && (x.status === S_PASS || x.status === S_MANUAL));
     actions.reopen(l || { id: Date.now(), match: r, detected: null, thumb: null });
@@ -2906,6 +2967,8 @@ export default function App() {
     ]);
     setLastResult(r => (r?.match?._id === id ? null : r)); setLastConfirmed(c => (c?.match?._id === id ? null : c));
   }, [roster, operatorName, stamp, noteMistake]);
+  // What a row's Mark menu does, kept current for the one stable handler the rows share.
+  useEffect(() => { markHandler.current = (r, v) => { if (v === "unscan") unscan(r._id); else if (v === "flag") flagRow(r); else markRow(r._id, v || false); }; });
 
   // Input trial: while Settings → Input trial names a setup, every decision on
   // a result screen (and every scan trigger) is kept in this browser, across
@@ -3004,6 +3067,11 @@ export default function App() {
         <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} cap={boxCap} status={binPrint}
           onFull={binFull} onReprint={reprintBinList} onClose={() => closeDialog(() => setShowBins(false))} />
       )}
+      {finishing && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 2400, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, fontWeight: 800, color: "#e2e8f0", textAlign: "center", padding: 24 }}>
+          🖨 Printing the bin lists… the order closes when they are out
+        </div>
+      )}
       {showFinish && (
         <FinishOrderModal orderNumber={orderNumber} roster={roster} offRosterFlags={offRosterFlags} scans={log.length} binLists={finishLists.length} bins={binSummary.filter(b => b.count > 0)}
           onConfirm={finishOrder} onCancel={() => closeDialog(() => setShowFinish(false))} />
@@ -3031,6 +3099,7 @@ export default function App() {
           {sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect)}</Pill></span>}
           {manualCount > 0 && <Pill color="#f59e0b" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the jerseys entered by hand">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
+          {saveOk === false && <Pill color="#f87171" title="This PC's storage is full or blocked: the order is not being saved, so a reload or a crash would lose the work since. Tell the supervisor; do not close or reload this page.">⚠ NOT SAVING — tell the supervisor</Pill>}
           {trialMethod && <span title="Input trial: every decision on a result screen is being timed for this setup (Settings → Input trial)"><Pill color="#c084fc" onClick={() => setShowSettings(true)}>⏱ {trialMethodLabel(trialMethod)}</Pill></span>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
         </div>
@@ -3178,7 +3247,7 @@ export default function App() {
                   <span style={{ fontSize: 14, color: "#94a3b8", whiteSpace: "nowrap" }}>Last passed</span>
                   <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 30, lineHeight: 1 }}>#{lastConfirmed.match?.number}{lastConfirmed.match?.name ? ` · ${lastConfirmed.match.name}` : ""}</span>
                   {lastConfirmed.match?.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#4ade80", fontWeight: 800 }}>{lastConfirmed.match.size}</span>}
-                  {binOf(lastConfirmed.match?.team) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#60a5fa", fontWeight: 800 }}>Bin {binOf(lastConfirmed.match?.team)}</span>}
+                  {binOf(lastConfirmed.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#60a5fa", fontWeight: 800 }}>Bin {binOf(lastConfirmed.match)}</span>}
                   {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && r.scanned) && (
                     <button onClick={() => unscan(lastConfirmed.match._id)} title="Un-check it; it must be scanned again" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>↶ Undo</button>
                   )}
@@ -3319,33 +3388,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {shownRows.map(r => (
-                        <tr key={r._id} style={{
-                          background: r.scanned === "pass" ? "rgba(34,197,94,0.07)" : r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned ? "rgba(245,158,11,0.07)" : "transparent",
-                          borderBottom: "1px solid #1e293b",
-                        }}>
-                          <td style={{ ...tdSt, textAlign: "center" }}>
-                            {r.scanned === "pass" ? "✅" : r.scanned === "flag" ? "🛑" : r.scanned === "manual" ? "✍" : r.scanned === "missing" ? "❓" : r.scanned === "short" ? "📦" : <span style={{ color: "#475569" }}>—</span>}
-                          </td>
-                          {rosterCols.map(c => (
-                            <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "#fbbf24" : "#e2e8f0" }}>{r[c]}</td>
-                          ))}
-                          {binMap && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{binOf(r) !== null ? `Bin ${binOf(r)}` : "—"}</td>}
-                          <td style={{ ...tdSt, padding: "2px 6px" }}>
-                            <select value={["missing", "short"].includes(r.scanned) ? "missing" : ""}
-                              onChange={e => { const v = e.target.value; if (v === "unscan") unscan(r._id); else if (v === "flag") flagRow(r); else markRow(r._id, v || false); }}
-                              style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
-                              <option value="">—</option>
-                              {(!r.scanned || ["missing", "short"].includes(r.scanned))
-                                ? <option value="missing">Missing</option>
-                                : <>
-                                    {(r.scanned === "pass" || r.scanned === "manual") && <option value="flag">🚩 Flag / damage</option>}
-                                    {(r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check</option>}
-                                  </>}
-                            </select>
-                          </td>
-                        </tr>
-                      ))}
+                      {shownRows.map(r => <RosterRow key={r._id} r={r} cols={rosterColsStable} hasBins={!!binMap} bin={binMap ? binOf(r) : null} canSupervise={canSupervise} onMark={onMarkRow} />)}
                     </tbody>
                   </table>
                 )
@@ -3372,7 +3415,7 @@ export default function App() {
                         <div style={{ fontWeight: 700, fontSize: 18, marginTop: 2 }}>Read: #{l.detected?.number || "?"} · {l.detected?.name || "—"}</div>
                         {l.match && (
                           <div style={{ fontSize: 15, color: "#cbd5e1", marginTop: 2 }}>
-                            Matched: {l.match.name || "—"} #{l.match.number}{l.match.size ? ` · ${l.match.size}` : ""}{l.match.team ? ` · ${l.match.team}` : ""}{binOf(l.match.team) !== null ? ` · Bin ${binOf(l.match.team)}` : ""}
+                            Matched: {l.match.name || "—"} #{l.match.number}{l.match.size ? ` · ${l.match.size}` : ""}{l.match.team ? ` · ${l.match.team}` : ""}{binOf(l.match) !== null ? ` · Bin ${binOf(l.match)}` : ""}
                           </div>
                         )}
                         {l.reason     && <div style={{ fontSize: 15, color: "#fbbf24", marginTop: 3 }}>⚠ {l.reason}</div>}

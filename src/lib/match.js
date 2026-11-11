@@ -331,7 +331,12 @@ function findMatchesInner(roster, name, number, read = {}) {
       const nameSettles = r => typed || !!nNum || !normNum(r.number);
       const direct = byBoth[0]
         || (!partialName && byName.length === 1 && byNum.length === 0 && (nNum ? normNum(byName[0].number) === nNum : nameSettles(byName[0])) ? byName[0] : null)
-        || (byNum.length === 1 && byName.length === 0 && !norm(byNum[0].name) ? byNum[0] : null);
+        // …and a row with no name is only "direct" when no name was read either:
+        // "#5?" with ZHANG on the jersey is not the roster's nameless #5 (a stray
+        // #56 ZHANG with a digit under a fold went green on it in the simulation,
+        // 11 Nov 2026). The camera already doubts the number; the name it read
+        // matches nothing; that is a question.
+        || (byNum.length === 1 && byName.length === 0 && !norm(byNum[0].name) && (!nName || numberOnly) ? byNum[0] : null);
       const sure = soleOpen(direct, cands);
       if (sure) return sure;
       // Several rows carry the read (same number, different colour or size):

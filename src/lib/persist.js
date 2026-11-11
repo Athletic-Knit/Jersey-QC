@@ -20,13 +20,49 @@ export function trimPhotos(log, keep = 20) {
   let seen = 0;
   return log.map(l => { if (!l?.photo && !l?.damagePhotos?.length) return l; seen++; return seen <= keep ? l : { ...l, photo: null, damagePhotos: [] }; });
 }
-export function saveSession(s)  {
-  quiet(() => {
-    let body = JSON.stringify({ ...s, savedAt: Date.now() });
-    if (body.length > PHOTO_BUDGET && s.log) body = JSON.stringify({ ...s, log: trimPhotos(s.log, 20), savedAt: Date.now() });
-    if (body.length > PHOTO_BUDGET && s.log) body = JSON.stringify({ ...s, log: trimPhotos(s.log, 0), savedAt: Date.now() });
-    localStorage.setItem(SESSION_KEY, body);
+// Every log entry also carries the scan's thumbnail (~7 KB) and the model's
+// usage figures. On a 500-jersey order that alone is 4 MB and more: past the
+// budget with every photo already gone, and past localStorage's quota soon
+// after, where the save fails and a reload brings back an old copy of the
+// order. So the thumbnails go too, oldest first: `keep` newest entries keep
+// theirs. What is needed to resume (the roster, each entry's match, status,
+// reason and time) is always kept.
+export function trimThumbs(log, keep = 60) {
+  if (!Array.isArray(log)) return log;
+  return log.map((l, i) => {
+    if (!l || (i < keep) || (!l.thumb && !l.detected?.usage)) return l;
+    const { usage: _usage, ...detected } = l.detected || {};
+    return { ...l, thumb: null, ...(l.detected ? { detected } : {}) };
   });
+}
+// The body to save: the session as it is when it fits, else with less and
+// less of what a resume can do without.
+export function sessionBody(s, budget = PHOTO_BUDGET) {
+  const steps = [
+    log => log,
+    log => trimPhotos(log, 20),
+    log => trimPhotos(log, 0),
+    log => trimThumbs(trimPhotos(log, 0), 60),
+    log => trimThumbs(trimPhotos(log, 0), 0),
+  ];
+  // An order only grows: start at the step the last save of this order needed.
+  if (s.orderRun !== tier.run) tier = { run: s.orderRun, at: 0 };
+  let body = "";
+  for (let i = budget > 0 ? tier.at : steps.length - 1; i < steps.length; i++) {
+    body = JSON.stringify({ ...s, ...(s.log ? { log: steps[i](s.log) } : {}), savedAt: Date.now() });
+    if (body.length <= budget || !s.log) { if (budget > 0) tier.at = i; break; }
+  }
+  return body;
+}
+let tier = { run: undefined, at: 0 };
+// → true when the session is on disk. false: storage is full or blocked, and
+// a reload would lose what was done since the last good save.
+export function saveSession(s)  {
+  try { localStorage.setItem(SESSION_KEY, sessionBody(s)); return true; }
+  catch {
+    try { localStorage.setItem(SESSION_KEY, sessionBody(s, 0)); return true; }   // the smallest body there is
+    catch { return false; }
+  }
 }
 export function loadSession()   { return quiet(() => { const v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }) ?? null; }
 export function clearSession()  { quiet(() => localStorage.removeItem(SESSION_KEY)); }

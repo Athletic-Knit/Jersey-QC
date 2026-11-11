@@ -83,7 +83,7 @@ export function predictBox(counts, model = PRIOR) {
     const boxes = Math.max(byWeight, byRoom);
     return { id: MORE, label: `${boxes} large boxes`, boxes, by: byWeight >= byRoom && byWeight > 1 ? "weight" : "room", room: load / (boxes * large), ...facts };
   }
-  const k = model.caps.findIndex(c => load <= c);
+  const k = Math.max(0, model.caps.findIndex(c => load <= c));   // caps that are not numbers: the smallest box, never a crash
   return { id: BOXES[k].id, label: BOXES[k].label, boxes: 1, by: "room", room: load / model.caps[k], ...facts };
 }
 
@@ -110,7 +110,7 @@ export function fitBoxModel(obs, prior = PRIOR, { start = null, iters = 200, tau
   (obs || []).forEach(o => {
     const y = LABELS.indexOf(o?.box);
     if (y < 0 || pieces(o.counts) <= (prior.bagMax ?? 1)) return;
-    if (weightOf(o.counts, prior) > prior.weightCap) return;                  // split by weight: says nothing about room
+    if (o.box === MORE && weightOf(o.counts, prior) > prior.weightCap) return;   // split, and heavy enough that weight explains it: says nothing about room
     const idx = [], n = [];
     FEATURES.forEach((f, i) => { if (o.counts[f]) { idx.push(i); n.push(o.counts[f]); } });
     if (idx.length) data.push({ idx, n, y });

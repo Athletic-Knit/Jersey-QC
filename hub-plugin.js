@@ -24,6 +24,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { Buffer } from "node:buffer";
 import { labelsZPL, labelSize as labelDots, DEFAULT_LABEL_SIZE, DEFAULT_FLAG_LABEL_SIZE } from "./src/lib/labels.js";
 import { PRIOR as BOX_PRIOR, FEATURES as BOX_FEATURES, BOXES, MORE, fitBoxModel } from "./src/lib/boxmodel.js";
 
@@ -62,14 +63,23 @@ export function pruneLedger(led, { keepDays = 90, photoDays = 14 } = {}) {
 
 export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", printers: stationPrinters = {}, labelSize = "", flagPrinter = "", flagPrinters: stationFlagPrinters = {}, flagLabelSize = "", print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
   let state = { stations: {}, rosters: {} };
-  try { state = { ...state, ...JSON.parse(fs.readFileSync(file, "utf8")) }; } catch { /* first run */ }
+  try { state = { ...state, ...JSON.parse(fs.readFileSync(file, "utf8")) }; }
+  catch (e) {
+    // No file is a first run. A file that is there but does not parse (a write
+    // cut short, OneDrive holding it) is kept aside: starting empty and saving
+    // over it would wipe the 90-day ledger.
+    if (fs.existsSync(file)) {
+      const aside = `${file}.unreadable-${Date.now().toString(36)}`;
+      try { fs.renameSync(file, aside); console.error(`[hub] ${file} could not be read (${e.message}); kept as ${aside}, starting empty`); } catch { /* leave it */ }
+    }
+  }
 
   // Writes are coalesced: with flag photos in the ledger the file is a few MB,
   // and every station reports every 5 s.
   let saveTimer = null;
   const writeNow = () => {
     saveTimer = null;
-    try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(state)); }
+    try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file + ".tmp", JSON.stringify(state)); fs.renameSync(file + ".tmp", file); }   // whole or not at all
     catch (e) { console.error("[hub] could not save:", e.message); }
   };
   const save = () => { if (!saveTimer) saveTimer = setTimeout(writeNow, 1500); };
@@ -77,9 +87,9 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   const now_ = now;
   const json = (res, code, body) => { res.statusCode = code; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(body)); };
   const readBody = req => new Promise((resolve, reject) => {
-    let s = "";
-    req.on("data", c => { s += c; if (s.length > 20e6) reject(new Error("body too large")); });
-    req.on("end", () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } });
+    const chunks = []; let size = 0;   // joined before decoding: an accented letter split across two chunks stays whole
+    req.on("data", c => { const b = Buffer.isBuffer(c) ? c : Buffer.from(String(c)); chunks.push(b); size += b.length; if (size > 20e6) reject(new Error("body too large")); });
+    req.on("end", () => { try { const s = Buffer.concat(chunks).toString("utf8"); resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } });
     req.on("error", reject);
   });
   // The label printer: the station's own (JERSEY_PRINTER_STATION1 = a queue on
@@ -231,7 +241,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           const body = await readBody(req);
           const counts = Object.fromEntries(BOX_FEATURES.map(f => [f, Math.floor(Number(body.counts?.[f])) || 0]).filter(([, n]) => n > 0 && n < 1000));
           if (!BOX_IDS.includes(body.box) || !Object.keys(counts).length) return json(res, 400, { error: "counts and box required" });
-          (state.boxAnswers ||= []).push({ counts, box: body.box, suggested: String(body.suggested ?? ""), station: String(body.station ?? ""), order: String(body.order ?? ""), bin: body.bin ?? "", at: now_() });
+          (state.boxAnswers ||= []).push({ counts, box: body.box, suggested: String(body.suggested ?? ""), station: String(body.station ?? ""), order: String(body.order ?? "").slice(0, 40), bin: String(body.bin ?? "").slice(0, 20), at: now_() });
           if (state.boxAnswers.length > 3000) state.boxAnswers = state.boxAnswers.slice(-3000);
           boxModel = null; save();
           console.log(`[hub] ${new Date().toLocaleTimeString()} ${body.station ? body.station + ": " : ""}bin ${body.bin ?? "?"} of order ${body.order || "—"} went in: ${body.box}${body.suggested && body.suggested !== body.box ? ` (suggested ${body.suggested})` : ""}`);

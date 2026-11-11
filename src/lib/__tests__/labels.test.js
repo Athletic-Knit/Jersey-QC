@@ -7,7 +7,7 @@ const roster = [
   { _id: 0, name: "SMITH",  number: "7",  team: "Navy", size: "A-L" },
   { _id: 1, name: "JONES",  number: "9",  team: "navy", size: "Y-M" },   // same team, the file's own spelling varies
   { _id: 2, name: "LEE",    number: "3",  team: "Red",  size: "A-L" },
-  { _id: 3, name: "PATEL",  number: "12", team: "",     size: "A-XL" },  // no team: in no bin
+  { _id: 3, name: "PATEL",  number: "12", team: "",     size: "A-XL" },  // no team: the "No team" bin
 ];
 
 describe("binLabels", () => {
@@ -16,6 +16,7 @@ describe("binLabels", () => {
     expect(labels).toEqual([
       { bin: 1, label: "Navy", by: "team", count: 2, orderNumber: "264247" },
       { bin: 2, label: "Red",  by: "team", count: 1, orderNumber: "264247" },
+      { bin: 3, label: "No team", by: "team", count: 1, orderNumber: "264247" },   // every jersey is in a bin
     ]);
   });
   it("by size: bins in rack order", () => {
@@ -93,8 +94,8 @@ describe("ZPL", () => {
   it("labelsZPL joins one ^XA…^XZ block per label", () => {
     const labels = binLabels(roster, buildBinMap(roster, {}, "team"), { orderNumber: "1" });
     const z = labelsZPL(labels);
-    expect((z.match(/\^XA/g) || []).length).toBe(2);
-    expect((z.match(/\^XZ/g) || []).length).toBe(2);
+    expect((z.match(/\^XA/g) || []).length).toBe(3);
+    expect((z.match(/\^XZ/g) || []).length).toBe(3);
     expect(z).toContain("^FDBIN 1^FS");
     expect(z).toContain("^FDBIN 2^FS");
     expect(z.endsWith("\n")).toBe(true);
@@ -111,8 +112,8 @@ describe("jerseyLabel", () => {
   it("by size: the bin and the size", () => {
     expect(jerseyLabel(roster[0], bySize)).toEqual({ bin: 2, by: "size", value: "A-L", orderNumber: "" });
   });
-  it("a jersey in no bin still says its team; an order with no bins says the team, or the size when there is no team", () => {
-    expect(jerseyLabel(roster[3], byTeam)).toEqual({ bin: "", by: "team", value: "", orderNumber: "" });
+  it("a jersey with no team is in the No team bin; an order with no bins says the team, or the size when there is no team", () => {
+    expect(jerseyLabel(roster[3], byTeam)).toEqual({ bin: 3, by: "team", value: "", orderNumber: "" });
     expect(jerseyLabel(roster[0], null)).toMatchObject({ bin: "", by: "team", value: "Navy" });
     expect(jerseyLabel(roster[3], null)).toMatchObject({ bin: "", by: "size", value: "A-XL" });
   });

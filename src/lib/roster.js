@@ -166,6 +166,11 @@ export const BIN_BY = [
 ];
 export const ALL_KEY = "*";
 export const ALL_LABEL = "Whole order";
+// Rows with nothing in the field the order is sorted by (a blank team on a
+// by-team order) share one bin of their own, so every jersey is in a bin, on
+// a bin list and in the Bins sheet's total.
+export const BLANK_KEY = "?";
+export const blankLabel = field => (field === "size" ? "No size" : "No team");
 export const binFieldOf = binMap => (binMap && binMap.__by === "size" ? "size" : binMap && binMap.__by === "all" ? "all" : "team");
 export const binCount = binMap => Object.keys(binMap || {}).filter(k => k !== "__by").length;
 
@@ -240,6 +245,10 @@ export function buildBinMap(roster, existing = {}, by, taken = []) {
     map[key] = next; used.add(next);
   }
   if (!Object.keys(map).length) return whole();                          // nothing to sort by: one bin
+  if (map[BLANK_KEY] === undefined && roster.some(r => !teamKey(r[field]))) {
+    while (used.has(next)) next++;
+    map[BLANK_KEY] = next;
+  }
   return field === "size" ? { ...map, __by: "size" } : map;
 }
 
@@ -248,8 +257,7 @@ export function binFor(binMap, row) {
   if (!binMap || !row) return null;
   if (binFieldOf(binMap) === "all") return binMap[ALL_KEY] ?? null;
   const v = typeof row === "object" ? row[binFieldOf(binMap)] : row;
-  if (!v) return null;
-  const b = binMap[teamKey(v)];
+  const b = binMap[teamKey(v) || BLANK_KEY];
   return b === undefined ? null : b;
 }
 
@@ -298,7 +306,7 @@ export function binEntries(roster, binMap) {
   if (!binMap) return [];
   const field = binFieldOf(binMap), label = {};
   roster.forEach(r => { const k = teamKey(r[field]); if (k && !label[k]) label[k] = String(r[field]).trim(); });
-  return Object.entries(binMap).filter(([k]) => k !== "__by").map(([k, bin]) => ({ label: field === "all" ? ALL_LABEL : label[k] || k, bin })).sort((a, b) => a.bin - b.bin);
+  return Object.entries(binMap).filter(([k]) => k !== "__by").map(([k, bin]) => ({ label: field === "all" ? ALL_LABEL : k === BLANK_KEY ? blankLabel(field) : label[k] || k, bin })).sort((a, b) => a.bin - b.bin);
 }
 
 // Columns to show in the roster table (everything the file had, minus state).
