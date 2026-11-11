@@ -114,7 +114,8 @@ export const DEFAULT_SETTINGS = {
   stickers: true,         // print a sticker (bin + team or size) on the server's label printer for every passed jersey
   flagTickets: true,      // print a flag ticket (2 x 1 in: where it goes and why) for every flagged jersey
   binLists: true,         // print what is in a bin (2 x 1 in, ten jerseys a label) when it is closed: full, or the order finished
-  boxWeightCap: 45,       // lb: no box heavier than this; the station warns as a bin gets there (src/lib/boxmodel.js)
+  boxWeights: false,      // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station
+  boxWeightCap: 45,       // lb: no box heavier than this, when boxWeights is on (src/lib/boxmodel.js)
   trialMethod: "",        // input trial: "" | "mouse" | "keys" — which setup this station is timing (src/lib/trial.js)
 };
 

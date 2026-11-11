@@ -1612,12 +1612,16 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
 
         <div style={{ marginBottom: 18 }}>
           <div style={labelSt}>Packing</div>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginBottom: 8 }}>
+            <input type="checkbox" checked={!!temp.boxWeights} onChange={e => setTemp(t => ({ ...t, boxWeights: e.target.checked }))} />
+            Estimate each bin's weight and warn near the limit (a guess from the sizes, until a scale is connected)
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", opacity: temp.boxWeights ? 1 : 0.45 }}>
             No box heavier than
             <input type="number" min={10} max={70} value={temp.boxWeightCap ?? 45} onChange={e => setTemp(t => ({ ...t, boxWeightCap: Math.max(10, Math.min(70, Number(e.target.value) || 45)) }))} style={{ ...selSt, width: 76 }} />
             lb
           </label>
-          <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>The station warns when a bin gets there. Which box a bin goes in is learnt: every Bin full asks which box it went in, and all stations learn from the answers.</div>
+          <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>Which box a bin goes in is learnt: every Bin full asks which box it went in, and all stations learn from the answers.</div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -1790,7 +1794,7 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, onFull, onRepr
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 40, fontWeight: 900, color: "#60a5fa", minWidth: 110, lineHeight: 1 }}>Bin {b.bin}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 22, fontWeight: 700, color: "#e2e8f0", overflowWrap: "anywhere" }}>{b.label}</div>
-                <div style={{ fontSize: 15, color: "#94a3b8" }}>{pcs(b.count)} in it{b.count > 0 ? ` · about ${Math.round(b.weight)} lb of ${cap}` : ""}</div>
+                <div style={{ fontSize: 15, color: "#94a3b8" }}>{pcs(b.count)} in it{b.count > 0 && cap ? ` · about ${Math.round(b.weight)} lb of ${cap}` : ""}</div>
                 {b.heavy >= 0.95 && <div style={{ fontSize: 15, fontWeight: 800, color: "#f87171" }}>At the weight limit — close it</div>}
               </div>
               {b.box && asking !== b.bin && <div title="The box this bin goes in if it is closed now" style={{ fontSize: 17, fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>→ {b.box}</div>}
@@ -2094,9 +2098,11 @@ export default function App() {
     if (!signedIn) return;
     hub.boxModel().then(r => { if (r?.model?.units) { setBoxModel(r.model); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(r.model)); } catch { /* private window */ } } }).catch(() => {});
   }, [signedIn, sessionStarted]);
-  const boxCap     = Number(settings.boxWeightCap) || BOX_PRIOR.weightCap;
+  // The weight is the operator's call until a scale is connected to the station
+  // (owner, 11 Nov 2026): with `boxWeights` off there is no cap, no lb and no warning.
+  const boxCap     = settings.boxWeights ? Number(settings.boxWeightCap) || BOX_PRIOR.weightCap : 0;
   const stitched   = jerseyTypeOf(jerseyType)?.construction !== "sublimated";   // no type set: the heavier guess
-  const boxOf      = useCallback(rows => predictBox(binCounts(rows, stitched), { ...boxModel, weightCap: boxCap }), [boxModel, boxCap, stitched]);
+  const boxOf      = useCallback(rows => predictBox(binCounts(rows, stitched), { ...boxModel, weightCap: boxCap || Infinity }), [boxModel, boxCap, stitched]);
   const openBins   = useMemo(() => binEntries(roster, binMap).map(e => { const rows = binContents(roster, binMap, closedBins, e.bin), b = boxOf(rows); return { ...e, count: rows.length, box: b?.label || "", boxId: b?.id || "", weight: b?.weight || 0, heavy: b?.heavy || 0, open: true }; }), [roster, binMap, closedBins, boxOf]);
   const closedList = useMemo(() => closedBins.map(c => { const rows = binContents(roster, binMap, closedBins, c.bin), b = boxOf(rows); return { bin: c.bin, label: c.label, count: rows.length, box: c.box || b?.label || "", weight: b?.weight || 0, open: false, closedAt: c.closedAt }; }), [roster, binMap, closedBins, boxOf]);
   const heavyBin   = openBins.find(b => b.heavy >= 0.95) || null;   // an open bin at the weight limit
