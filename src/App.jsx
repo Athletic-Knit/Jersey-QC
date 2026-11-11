@@ -1127,6 +1127,14 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   }, [onTrial, state.mode]);
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
+  // The camera doubted the number it read (a digit covered or cut off, the
+  // jersey not flat, the number off centre) and the name settled it: still a
+  // green, with a line telling the operator to look at the number. A stray
+  // #12 LEACH with the 1 under a fold reads as the roster's #2 LEACH, and
+  // only the operator can see that (11 Nov 2026). The matching is untouched.
+  const seen = state.scan?.detected;
+  const numberDoubt = mode === "confirm" && !!seen && String(state.match?.number ?? "") !== ""
+    && (seen.number_complete === false || seen.laid_flat === false || (!!seen.number_position && !/^cent(re|er)$/i.test(String(seen.number_position))));
   const isList  = mode === "pick" || mode === "close";
   const isRed   = mode === "flag" || mode === "duplicate" || mode === "supervisor";
   const isMenu  = mode === "reasons" || mode === "reasonText";
@@ -1324,6 +1332,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           {state.note && <div style={{ marginTop: 12, fontSize: 20, color: "#fcd34d" }}>✎ {state.note}</div>}
           {mode === "confirm" && (
             <>
+              {numberDoubt && (
+                <div style={{ marginTop: 12, padding: "10px 26px", borderRadius: 14, background: "#0d1117", border: "4px solid #f59e0b", color: "#fcd34d", fontWeight: 900, fontSize: "clamp(22px, 3vw, 32px)", textAlign: "center", maxWidth: "94%" }}>
+                  ⚠ Camera could not see the whole number — check it is #{match.number}
+                </div>
+              )}
               {inspect && inspect.phase !== "quick" && (
                 <div style={{ marginTop: 12, padding: "8px 24px", borderRadius: 14, background: "#f59e0b", color: "#0d1117", fontWeight: 900, fontSize: "clamp(20px, 2.6vw, 26px)", letterSpacing: 0.5 }}>
                   🔍 {inspectLabel(inspect)}
