@@ -240,10 +240,16 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
 
   return (
     <div style={modalBg}>
-      <div style={modalCard}>
-        <div style={{ fontSize: 40, marginBottom: 6, textAlign: "center" }}>🏭</div>
-        <div style={{ fontWeight: 900, fontSize: 28, textAlign: "center", marginBottom: 4 }}>Jersey QC Scanner</div>
-        <div style={{ fontSize: 17, color: "#94a3b8", textAlign: "center", marginBottom: 24 }}>{title || "Sign in once per shift"}</div>
+      {/* Two columns, so the whole sign-in fits one screen with no scrolling:
+          who and where on the left with the Sign in button, the PIN and its
+          keypad on the right. On a narrow screen the columns stack. */}
+      <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED ? 940 : 560, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+          <div style={{ fontWeight: 900, fontSize: 26 }}>🏭 Jersey QC Scanner</div>
+          <div style={{ fontSize: 16, color: "#94a3b8" }}>{title || "Sign in once per shift"}</div>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 32px", alignItems: "flex-start" }}>
+        <div style={{ flex: "1 1 340px", minWidth: 0 }}>
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Role</label>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${ROLE_CHOICES.length},1fr)`, gap: 6 }}>
@@ -272,14 +278,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
             <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>{busyBy(station) ? <span style={{ color: "#f87171" }}>{stDef?.label} is in use by {busyBy(station)} on another PC right now.</span> : <>Each station has its own PIN. The supervisor's board shows this page as {stDef?.label}.</>}</div>
           </div>
         )}
-        {PIN_REQUIRED && (
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelSt}>PIN</label>
-            <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} placeholder="••••" autoFocus onKeyDown={onEnter} onFocus={() => setPinFocus(true)} onBlur={() => setPinFocus(false)} style={{ ...inputSt, borderColor: pinFocus ? "#60a5fa" : inputSt.borderColor }} />
-            <ScreenKeys layout="digits" onKey={k => setPin(v => (k === "⌫" ? v.slice(0, -1) : (v + k).slice(0, 8)))} onEnter={submit} enterLabel="Sign in" />
-          </div>
-        )}
-        <div style={{ marginBottom: 18 }}>
+        <div style={{ marginBottom: 14 }}>
           <label style={labelSt}>Your name</label>
           <select value={nameChoice} onChange={e => { const v = e.target.value; setNameChoice(v); setName(v === "other" ? "Other" : v); }} style={{ ...inputSt, cursor: "pointer" }}>
             {OPERATORS.map(n => <option key={n} value={n}>{n}</option>)}
@@ -289,6 +288,15 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         {error && <div style={errSt}>{error}</div>}
         <button onClick={submit} style={bigBtn}>{onCancel ? "Take over →" : "Sign in →"}</button>
         {onCancel && <button onClick={onCancel} style={{ ...btnGhost, width: "100%", marginTop: 8 }}>← Back, keep the current operator</button>}
+        </div>
+        {PIN_REQUIRED && (
+          <div style={{ flex: "1 1 300px", minWidth: 0 }}>
+            <label style={labelSt}>PIN</label>
+            <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} placeholder="••••" autoFocus onKeyDown={onEnter} onFocus={() => setPinFocus(true)} onBlur={() => setPinFocus(false)} style={{ ...inputSt, borderColor: pinFocus ? "#60a5fa" : inputSt.borderColor }} />
+            <ScreenKeys layout="digits" onKey={k => setPin(v => (k === "⌫" ? v.slice(0, -1) : (v + k).slice(0, 8)))} onEnter={submit} enterLabel="Sign in" />
+          </div>
+        )}
+        </div>
       </div>
     </div>
   );
