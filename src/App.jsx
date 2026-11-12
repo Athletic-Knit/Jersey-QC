@@ -13,6 +13,7 @@ import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { pace } from "./lib/pace.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.js";
+import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord } from "./lib/printjobs.js";
 const SECOND_LOOK = false;
 import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf } from "./config.js";
@@ -366,7 +367,7 @@ function JerseyTypePicker({ value, onChange }) {
   );
 }
 
-function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, stationLabel = id => String(id || "").replace(/^st-/, "") }) {
+function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, onPrint, stationLabel = id => String(id || "").replace(/^st-/, "") }) {
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [jerseyType, setJerseyType] = useState("");
@@ -453,6 +454,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, st
         <div style={{ fontSize: 17, color: "#94a3b8", textAlign: "center", marginBottom: 24, display: "flex", gap: 8, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
           <span>{operatorName} · {cap(role || "")}</span>
           <button onClick={onSignOut} style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>Sign out</button>
+          {onPrint && <button onClick={onPrint} title="Print the labels of an order done before: find it by its number" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>🖨 Print</button>}
         </div>
         {hubRosters.length === 0 && (
           <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 8, border: "1px dashed #3f4b5c", color: "#cbd5e1", fontSize: 16, textAlign: "center", lineHeight: 1.4 }}>
@@ -1765,10 +1767,10 @@ function TrialPanel({ onClose }) {
 }
 
 // ── Bin setup modal ───────────────────────────────────────────────────────────
-// Opens when an order with bins starts. The button prints one bin label per
-// bin on the hub's Zebra (on request only: the roll holds the per-jersey
-// stickers, and a bin may not need a label at all); `autoPrint` would print
-// them as the screen opens.
+// Opens when an order starts. With `autoPrint` (a new order) the box labels
+// print as the screen opens, nobody has to ask (owner, 12 Nov 2026); the
+// button prints them again. Opened later from the Boxes dialog it only prints
+// on the button.
 function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, onPrinted, onConfirm }) {
   const [print, setPrint] = useState({ status: autoPrint && labels.length ? "printing" : "idle" });
   const fired = useRef(false);
@@ -1793,7 +1795,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
           {by === "all"
             ? <>This order is <strong style={{ color: "#e2e8f0" }}>not sorted</strong>: one run of boxes. </>
             : <>This order is sorted <strong style={{ color: "#e2e8f0" }}>by {by}</strong>: {entries.length} {by === "size" ? (entries.length === 1 ? "size" : "sizes") : (entries.length === 1 ? "team" : "teams")}. </>}
-          Print the labels and stick one inside each box before scanning. How many boxes is an estimate; a box that fills sooner gets its next label at Box full.
+          {autoPrint ? "The labels are printing: stick" : "Print the labels and stick"} one inside each box before scanning. How many boxes is an estimate; a box that fills sooner gets its next label at Box full.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 30, maxHeight: 400, overflowY: "auto" }}>
           {entries.map(({ label, bin, total = 0, boxes = 1 }) => (
@@ -1813,7 +1815,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
           {labels.length > 0 && (
             <button onClick={doPrint} disabled={print.status === "printing"} title="Print one label per box on the server's label printer"
               style={{ padding: "16px 28px", borderRadius: 10, border: "1px solid #475569", background: "#1e293b", color: "#e2e8f0", fontWeight: 700, fontSize: 19, cursor: print.status === "printing" ? "wait" : "pointer", opacity: print.status === "printing" ? 0.6 : 1 }}>
-              🖨 Print box labels
+              🖨 {autoPrint || print.status === "done" ? "Print them again" : "Print box labels"}
             </button>
           )}
         </div>
@@ -1944,6 +1946,175 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
             </div>
           ); })}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Order done: the lists are out, the order is still here ───────────────────
+// Finish order no longer drops straight back to the order screen (owner,
+// 12 Nov 2026): the box lists print and this screen stays, with the lists to
+// print again, the Print menu, and "New order" — which is what clears the
+// order. Until then the order is still open on the station (a reload offers
+// it again), so nothing is lost if the printer was out of labels. No key does
+// anything here: the pedal must not start a new order.
+function FinishedModal({ orderNumber, status, onReprint, onPrint, onNew, onBack }) {
+  const colour = { printing: "#94a3b8", done: "#4ade80", error: "#f87171", none: "#fbbf24" }[status?.status] || "#94a3b8";
+  const busy = status?.status === "printing";
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #22c55e", padding: 44, maxWidth: 680, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
+        <div style={{ fontSize: 56, marginBottom: 10 }}>🏁</div>
+        <div style={{ fontSize: 36, fontWeight: 900, color: "#e2e8f0", marginBottom: 12 }}>Order {orderNumber || "—"} is done</div>
+        <div style={{ fontSize: 19, fontWeight: 700, color: colour, marginBottom: 26, minHeight: 26 }}>{status?.status === "printing" ? "🖨 " : ""}{status?.text || ""}</div>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 14 }}>
+          <button onClick={onReprint} disabled={busy} style={{ ...btnGhost, fontSize: 18, padding: "14px 22px", opacity: busy ? 0.5 : 1 }}>🖨 Print the box lists again</button>
+          <button onClick={onPrint} style={{ ...btnGhost, fontSize: 18, padding: "14px 22px" }}>🖨 Print something else…</button>
+        </div>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+          <button onClick={onNew} disabled={busy} style={{ ...btnPri, fontSize: 21, padding: "16px 40px", background: "#22c55e", color: "#0d1117", opacity: busy ? 0.5 : 1 }}>New order →</button>
+          <button onClick={onBack} disabled={busy} title="The order is not closed yet: go back to it" style={{ ...btnGhost, fontSize: 16, padding: "14px 20px", opacity: busy ? 0.5 : 1 }}>← Back to this order</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Print: anything an order prints, again ───────────────────────────────────
+// Everything that goes to the label printer, on request (printjobs.js): the
+// box labels, the list of what is in a box, both, a jersey's sticker, a
+// flag's ticket — for all of the order or for one box or jersey. It opens on
+// the order on the station (`current`); "Another order" finds one done in the
+// past by its number in the hub's records (90 days) and prints from that.
+// Whatever the order, it prints on THIS station's printer.
+function PrintModal({ current = null, tagOf, onClose }) {
+  const [past,   setPast]   = useState(null);
+  const [q,      setQ]      = useState("");
+  const [found,  setFound]  = useState(null);   // { status: "searching" | "done" | "error", orders, message }
+  const [status, setStatus] = useState(null);   // { kind: "printing" | "done" | "error", text }
+  const [pick,   setPick]   = useState("");     // the sticker search
+  const pack = past || current;
+  useEffect(() => {
+    const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [onClose]);
+  // jobs: [[labels, kind], …] sent one after the other, 50 labels a request.
+  const send = (jobs, what) => {
+    const parts = jobs.filter(([labels]) => labels.length), n = parts.reduce((t, [labels]) => t + labels.length, 0);
+    if (!n) { setStatus({ kind: "error", text: `${what}: nothing to print` }); return; }
+    setStatus({ kind: "printing", text: `Printing ${what}…` });
+    const chunks = parts.flatMap(([labels, kind]) => Array.from({ length: Math.ceil(labels.length / 50) }, (_, i) => [labels.slice(i * 50, i * 50 + 50), kind]));
+    chunks.reduce((pr, [labels, kind]) => pr.then(() => hub.printLabels(labels, { kind, station: stationId() })), Promise.resolve(null))
+      .then(r => setStatus({ kind: "done", text: `Printed ${what}: ${n} ${n === 1 ? "label" : "labels"} on ${r.printer}` }))
+      .catch(e => setStatus({ kind: "error", text: `${what} NOT printed: ${e.status === 503 ? "no label printer for this station" : e.status ? e.message : "could not reach the server"}` }));
+  };
+  const search = () => {
+    const n = q.trim(); if (!n) return;
+    setFound({ status: "searching" });
+    hub.orders(n).then(r => setFound({ status: "done", orders: r.orders || [] }))
+      .catch(e => setFound({ status: "error", message: e.status ? e.message : "could not reach the server" }));
+  };
+  const boxes    = useMemo(() => packBoxes(pack), [pack]);
+  const stickers = useMemo(() => stickerRows(pack), [pack]);
+  const flags    = pack?.flags || [];
+  const needle   = pick.trim().toLowerCase();
+  const picked   = needle ? stickers.filter(r => String(r.number ?? "").trim().toLowerCase() === needle || String(r.name ?? "").toLowerCase().includes(needle)).slice(0, 8) : [];
+  const allLabels = pack ? boxLabelJobs(pack) : [], allLists = pack ? boxListJobs(pack) : [];
+  const many = (n, what) => n <= 30 || window.confirm(`Print ${n} ${what}?`);
+  const secSt  = { fontSize: 14, fontWeight: 800, color: "#94a3b8", letterSpacing: 1, textTransform: "uppercase", margin: "20px 0 8px" };
+  const rowSt  = { display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", borderRadius: 10, background: "#1e293b", border: "1px solid #3f4b5c" };
+  const bigBtn = { ...btnGhost, fontSize: 17, padding: "12px 18px", borderColor: "#3b82f6", color: "#93c5fd" };
+  const smBtn  = { ...btnGhost, fontSize: 15, padding: "6px 12px", whiteSpace: "nowrap" };
+  const of = b => `Box ${b.bin}`;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 30, maxWidth: 860, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>🖨 Print</div>
+          <div style={{ fontSize: 19, color: "#e2e8f0", fontWeight: 700, flex: 1 }}>
+            {pack ? <>Order {pack.orderNumber || "—"}{past ? <span style={{ color: "#fcd34d", fontWeight: 400 }}> · a past order{pack.past?.date ? `, ${pack.past.date}` : ""}{pack.past?.station ? `, ${String(pack.past.station).replace(/^st-/, "")}` : ""}</span> : <span style={{ color: "#94a3b8", fontWeight: 400 }}> · the order on this station</span>}</> : <span style={{ color: "#94a3b8", fontWeight: 400 }}>No order is open: find one by its number</span>}
+          </div>
+          <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 15, color: "#94a3b8", fontWeight: 700 }}>Another order:</span>
+          <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") search(); }} placeholder="order number" style={{ ...inputSt, width: 220, padding: "8px 12px" }} />
+          <button onClick={search} disabled={!q.trim()} style={{ ...smBtn, opacity: q.trim() ? 1 : 0.5 }}>🔎 Find</button>
+          {past && current && <button onClick={() => { setPast(null); setStatus(null); }} style={smBtn}>← Back to order {current.orderNumber || "on this station"}</button>}
+        </div>
+        {found?.status === "searching" && <div style={{ marginTop: 8, color: "#94a3b8" }}>Looking…</div>}
+        {found?.status === "error" && <div style={{ marginTop: 8, color: "#f87171", fontWeight: 700 }}>Could not look it up: {found.message}</div>}
+        {found?.status === "done" && found.orders.length === 0 && <div style={{ marginTop: 8, color: "#fbbf24", fontWeight: 700 }}>No order with that number in the last 90 days.</div>}
+        {found?.status === "done" && found.orders.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+            {found.orders.map(o => (
+              <button key={`${o.station}|${o.order}|${o.run}`} onClick={() => { setPast(packFromRecord(o)); setStatus(null); setFound(null); setPick(""); }} style={{ ...rowSt, cursor: "pointer", color: "#e2e8f0", fontSize: 16, textAlign: "left" }}>
+                <strong>Order {o.order}</strong>
+                <span style={{ color: "#94a3b8" }}>{o.date} · {String(o.station || "").replace(/^st-/, "")}{o.operator ? ` · ${o.operator}` : ""} · {o.rows.length} jerseys{o.counts ? `, ${(o.counts.pass || 0) + (o.counts.manual || 0)} passed` : ""}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {status && <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 8, background: "#0d1117", fontSize: 17, fontWeight: 700, color: status.kind === "done" ? "#4ade80" : status.kind === "error" ? "#f87171" : "#94a3b8" }}>{status.kind === "printing" ? "🖨 " : ""}{status.text}</div>}
+
+        {pack && !pack.binMap && <div style={{ marginTop: 16, color: "#fbbf24" }}>This order has no boxes on record.</div>}
+        {pack && boxes.length > 0 && (
+          <>
+            <div style={secSt}>The whole order</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button style={bigBtn} onClick={() => many(allLabels.length, "box labels") && send([[allLabels, "binticket"]], "every box label")}>Box labels · {allLabels.length}</button>
+              <button style={bigBtn} onClick={() => many(allLists.length, "list labels") && send([[allLists, "binlist"]], "every box list")}>Box lists · {allLists.length}</button>
+              <button style={bigBtn} onClick={() => many(allLabels.length + allLists.length, "labels") && send([[allLists, "binlist"], [allLabels, "binticket"]], "every box label and list")}>Both · {allLabels.length + allLists.length}</button>
+            </div>
+            <div style={secSt}>One box</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {boxes.map(b => (
+                <div key={b.bin} style={rowSt}>
+                  <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 900, color: b.open ? "#60a5fa" : "#7c8ba1", minWidth: 110, lineHeight: 1, whiteSpace: "nowrap" }}>{of(b)}</div>
+                  <div style={{ flex: 1, fontSize: 16, color: "#e2e8f0" }}>{b.label} <span style={{ color: "#94a3b8" }}>· {b.count} {b.count === 1 ? "jersey" : "jerseys"} · {b.open ? "open" : "closed"}</span></div>
+                  <button style={smBtn} onClick={() => send([[boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label`)}>Label</button>
+                  <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin), "binlist"]], `the ${of(b)} list`)}>List</button>
+                  <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin), "binlist"], [boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label and list`)}>Both</button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {pack && (
+          <>
+            <div style={secSt}>Jersey stickers · {stickers.length} passed</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input value={pick} onChange={e => setPick(e.target.value)} onKeyDown={e => e.stopPropagation()} placeholder="jersey number or name" style={{ ...inputSt, width: 260, padding: "8px 12px" }} />
+              <button style={{ ...smBtn, opacity: stickers.length ? 1 : 0.4 }} disabled={!stickers.length} onClick={() => many(stickers.length, "stickers") && send([[stickerJobs(pack), "jersey"]], "every sticker")}>All {stickers.length} stickers</button>
+            </div>
+            {needle && picked.length === 0 && <div style={{ marginTop: 6, color: "#fbbf24" }}>No passed jersey matches “{pick.trim()}”.</div>}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+              {picked.map(r => (
+                <div key={r._id} style={rowSt}>
+                  <div style={{ flex: 1, fontSize: 16, color: "#e2e8f0" }}><strong>#{r.number}</strong> {r.name} <span style={{ color: "#94a3b8" }}>{[r.team, r.size].filter(Boolean).join(" · ")}</span></div>
+                  <button style={smBtn} onClick={() => send([[stickerJobs(pack, [r._id]), "jersey"]], `the sticker of #${r.number}`)}>Print sticker</button>
+                </div>
+              ))}
+            </div>
+
+            <div style={secSt}>Flag tickets · {flags.length}</div>
+            {flags.length === 0 ? <div style={{ color: "#64748b" }}>No flags on this order.</div> : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {flags.length > 1 && <div><button style={smBtn} onClick={() => many(flags.length, "flag tickets") && send([[flagJobs(pack, null, tagOf), "flag"]], "every flag ticket")}>All {flags.length} tickets</button></div>}
+                {flags.slice(0, 60).map(f => (
+                  <div key={f.id} style={rowSt}>
+                    <div style={{ flex: 1, fontSize: 16, color: "#e2e8f0" }}><strong>#{f.match?.number ?? f.detected?.number ?? "?"}</strong> {f.match?.name ?? f.detected?.name ?? ""} <span style={{ color: "#fca5a5" }}>{f.reason}</span></div>
+                    <button style={smBtn} onClick={() => send([[flagJobs(pack, [f.id], tagOf), "flag"]], `the ticket of #${f.match?.number ?? "?"}`)}>Print ticket</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -2184,6 +2355,8 @@ export default function App() {
     return { ...e, total: rows.filter(r => !r.scanned).length, boxes: Math.max(1, boxOf(rows)?.boxes || 1) };
   }), [roster, binMap, closedBins, boxOf]);
   const boxPlanLabels = useMemo(() => binLabels(roster, binMap, { orderNumber, boxes: Object.fromEntries(boxPlan.map(e => [e.bin, e.boxes])) }), [roster, binMap, orderNumber, boxPlan]);
+  const [boxAuto,     setBoxAuto]     = useState(false);   // the box screen is open for a new order: its labels print by themselves
+  const [showPrint,   setShowPrint]   = useState(false);   // the Print menu
   const [boxLabelled, setBoxLabelled] = useState([]);   // the boxes whose label has been printed (saved in the session)
   const boxesLabelled = useCallback(() => setBoxLabelled(prev => [...new Set([...prev, ...boxPlanLabels.map(l => l.bin)])]), [boxPlanLabels]);
 
@@ -2332,7 +2505,7 @@ export default function App() {
     // box labels are printed from it.
     const bins = buildBinMap(parsed, {}, binBy);
     setClosedBins([]); setBinPrint(null); setBoxLabelled([]);   // every roster row starts unscanned: no box is closed
-    setBinMap(binCount(bins) > 0 ? bins : null); setShowBinSetup(binCount(bins) > 0);
+    setBinMap(binCount(bins) > 0 ? bins : null); setShowBinSetup(binCount(bins) > 0); setBoxAuto(true);
   }, [syncInspect]);
 
   // The order belongs to the station, not to a person: whoever is signed in
@@ -2412,28 +2585,31 @@ export default function App() {
   }, [roster, binMap, closedBins, orderNumber, printOnTicketRoll]);
 
   const [showFinish, setShowFinish] = useState(false);
-  const [finishing,  setFinishing]  = useState(false);   // Finish order is printing the bin lists
+  // Finish order prints the list of every open box and then STAYS on the
+  // "order is done" screen (`finished`: how the printing went). The order is
+  // cleared by "New order" there, not before, so the lists can be printed
+  // again and a reload still has the order.
+  const [finished,   setFinished]   = useState(null);    // { status: "printing" | "done" | "error" | "none", text }
   const askFinish    = useCallback(() => { setShowRosterComplete(false); setShowFinish(true); }, []);
-  const finishOrder  = useCallback(() => {
-    setShowFinish(false);
-    const done = () => {
-      if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});   // the hub keeps the order's record and sheets in its ledger
-      resetOrder();
-    };
-    if (!finishLists.length) { done(); return; }
-    // The order is finished: every bin still open is closed, and its list
-    // prints. The order is cleared only once the lists are out, because after
-    // that nothing here can print them again; if they fail the operator
-    // chooses: finish without them, or keep the order open and try again.
-    setFinishing(true);
+  const printFinishLists = useCallback(() => {
+    const n = finishLists.length;
+    if (!n) { setFinished({ status: "none", text: settings.binLists ? "No open box has anything in it: no list to print." : "Box lists are switched off in Settings." }); return; }
+    setFinished({ status: "printing", text: `Printing the box lists: ${n} ${n === 1 ? "label" : "labels"}…` });
     printOnTicketRoll(finishLists, "binlist")
-      .then(() => { setFinishing(false); done(); })
-      .catch(e => {
-        setFinishing(false);
-        const why = e.status === 503 ? "no label printer for this station" : e.status ? e.message : "could not reach the server";
-        if (window.confirm(`The box lists were NOT all printed: ${why}.\n\nOK = finish the order anyway, without the lists.\nCancel = keep the order open, fix the printer and press Finish order again.`)) done();
-      });
-  }, [resetOrder, hubRosterId, finishLists, printOnTicketRoll]);
+      .then(r => setFinished({ status: "done", text: `Box lists printed: ${n} ${n === 1 ? "label" : "labels"} on ${r.printer}` }))
+      .catch(e => setFinished({ status: "error", text: `The box lists were NOT printed. ${printProblem(e)}. Fix the printer and print them again.` }));
+  }, [finishLists, settings.binLists, printOnTicketRoll]);
+  const finishOrder  = useCallback(() => { setShowFinish(false); printFinishLists(); }, [printFinishLists]);
+  const newOrder     = useCallback(() => {
+    setFinished(null); setShowPrint(false);
+    if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});   // the hub keeps the order's record and sheets in its ledger
+    resetOrder();
+  }, [resetOrder, hubRosterId]);
+  // The order on this station, as the Print menu takes it (printjobs.js).
+  const printPack = useMemo(() => !sessionStarted || !roster.length ? null
+    : { orderNumber, roster, binMap, closedBins, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels },
+  [sessionStarted, roster, orderNumber, binMap, closedBins, log, boxPlanLabels]);
+  const flagTag = useCallback(reason => severityOf(reason).tag, []);
 
   // Sign out leaves the station, not the order: an unfinished order stays saved
   // on this PC and is offered to the next person who signs in here (a mistaken
@@ -2642,7 +2818,7 @@ export default function App() {
   useEffect(() => { triggerRef.current = doTriggerScan; }, [doTriggerScan]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
-  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHistory || showFinish || showBins;
+  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHistory || showFinish || showBins || !!finished || showPrint;
   useEffect(() => {
     if (!cameraOn || inputMode !== "camera" || !handsFree) { gateRef.current.disarm(); return; }   // paused, or nothing left in the order: never scan the empty table
     const id = setInterval(() => {
@@ -3021,7 +3197,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.repeat) return;
-      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || showFinish || showBins || !sessionStarted) return;
+      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || showFinish || showBins || finished || showPrint || !sessionStarted) return;
       if (e.code !== scanKey) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       e.preventDefault();
@@ -3031,7 +3207,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, showBins, sessionStarted, scanKey, doTriggerScan, onTrial]);
+  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, showBins, finished, showPrint, sessionStarted, scanKey, doTriggerScan, onTrial]);
 
   const overlayKey = overlay ? `${overlay.mode}:${overlay.scan?.id}:${(overlay.candidates || []).map(c => c._id).join(",")}` : "";
   const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType), idleSpells, awaySpells, bins: binSummary };
@@ -3058,7 +3234,7 @@ export default function App() {
       {sessionStarted && !showSupervisor && <IdleWatch pulse={log.filter(l => l.status === S_PASS || l.status === S_MANUAL || l.status === S_FLAGGED).length} onSpell={recordIdle} />}
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
-        <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} stationLabel={stationLabel}
+        <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onPrint={() => setShowPrint(true)} stationLabel={stationLabel}
           onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile, hubRosterId = null }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team" });
@@ -3068,7 +3244,7 @@ export default function App() {
       )}
 
       {showBinSetup && binMap && (
-        <BinSetupModal entries={boxPlan} by={binFieldOf(binMap)} labels={boxPlanLabels} onPrinted={boxesLabelled} onConfirm={() => setShowBinSetup(false)} />
+        <BinSetupModal entries={boxPlan} by={binFieldOf(binMap)} labels={boxPlanLabels} autoPrint={boxAuto} onPrinted={boxesLabelled} onConfirm={() => { setShowBinSetup(false); setBoxAuto(false); }} />
       )}
 
       {overlay && !wide && (
@@ -3102,12 +3278,13 @@ export default function App() {
       )}
       {showBins && binMap && (
         <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} cap={boxCap} status={binPrint}
-          onFull={binFull} onReprint={reprintBinList} onLabels={() => { setShowBins(false); setShowBinSetup(true); }} onClose={() => closeDialog(() => setShowBins(false))} />
+          onFull={binFull} onReprint={reprintBinList} onLabels={() => { setShowBins(false); setBoxAuto(false); setShowBinSetup(true); }} onClose={() => closeDialog(() => setShowBins(false))} />
       )}
-      {finishing && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 2400, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, fontWeight: 800, color: "#e2e8f0", textAlign: "center", padding: 24 }}>
-          🖨 Printing the box lists… the order closes when they are out
-        </div>
+      {finished && (
+        <FinishedModal orderNumber={orderNumber} status={finished} onReprint={printFinishLists} onPrint={() => setShowPrint(true)} onNew={newOrder} onBack={() => closeDialog(() => setFinished(null))} />
+      )}
+      {showPrint && (
+        <PrintModal current={printPack} tagOf={flagTag} onClose={() => closeDialog(() => setShowPrint(false))} />
       )}
       {showFinish && (
         <FinishOrderModal orderNumber={orderNumber} roster={roster} offRosterFlags={offRosterFlags} scans={log.length} binLists={finishLists.length} bins={binSummary.filter(b => b.count > 0)}
@@ -3141,6 +3318,7 @@ export default function App() {
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
+          {sessionStarted && <button onClick={() => setShowPrint(true)} title="Print any label of this order again, or of an order done before" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>🖨 Print</button>}
           {sessionStarted && <button onClick={askFinish} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#22c55e", color: "#4ade80" }}>🏁 Finish order</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
           <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>

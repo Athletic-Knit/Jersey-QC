@@ -63,6 +63,7 @@ export const hub = {
   boxModel:      ()             => call("/api/hub/boxes"),                                                                // { model, answers } — the box model fitted to the floor's answers
   boxAnswer:     answer         => call("/api/hub/boxes", { method: "POST", body: JSON.stringify(answer) }),              // { counts, box, station, order, bin, suggested } → { model, answers }
   removeRoster:  id             => call(`/api/hub/rosters/${id}`, { method: "DELETE" }),
+  orders:        q              => call(`/api/hub/orders?q=${encodeURIComponent(q)}`),                                    // { orders } — an order by its number, any day the ledger has: rows, boxes, flags
   ledger:        date           => call(`/api/hub/ledger${date ? "?date=" + encodeURIComponent(date) : ""}`),   // every scan event of a day, all stations
 };
 

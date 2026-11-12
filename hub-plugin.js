@@ -6,6 +6,7 @@
 //   POST   /api/hub/stations/:id        a station reports (body = snapshot)
 //   DELETE /api/hub/stations/:id
 //   DELETE /api/hub/stations/:id/carried?key=…   supervisor marks an item from an earlier order done
+//   GET    /api/hub/orders?q=264247         an order by its number, any day in the ledger: rows, boxes, flags — the station's Print menu
 //   GET    /api/hub/ledger?date=YYYY-MM-DD   every scan event and order of that day (default today) — the day sheet;
 //                                            `days` lists every day still kept (90; photos only on the newest 14);
 //                                            `days` lists every day still kept (90; photos only on the newest 14)
@@ -198,6 +199,31 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           return json(res, 200, { ok: true });
         }
         if (req.method === "DELETE" && id) { delete state.stations[id]; save(); return json(res, 200, { ok: true }); }
+      }
+      // An order by its number, from any day the ledger still has: the roster
+      // with each jersey's status, its boxes, and its flags (no photos), for
+      // the station's Print menu. One entry per run of the order on a station
+      // (the newest day's record of it), an exact match first, newest first.
+      if (kind === "orders" && req.method === "GET") {
+        const q = String(new URL(req.url, "http://hub").searchParams.get("q") || "").trim().toLowerCase();
+        if (!q) return json(res, 400, { error: "order number required" });
+        const found = {};
+        for (const [date, d] of Object.entries(state.ledger || {}).sort(([a], [b]) => a.localeCompare(b))) {
+          for (const o of Object.values(d.orders || {})) {
+            const n = String(o.order ?? "").trim().toLowerCase();
+            if (n !== q && !(q.length >= 3 && n.includes(q))) continue;
+            const k = `${o.station}|${o.order}|${o.run || 0}`, before = found[k];
+            const flags = { ...(before?.flagsById || {}) };
+            Object.values(d.events || {}).forEach(ev => {
+              if (ev.station !== o.station || String(ev.order) !== String(o.order) || (ev.run || 0) !== (o.run || 0) || ev.status !== "flagged") return;
+              const slim = { ...ev }; delete slim.photo; delete slim.damagePhotos; flags[ev.id] = slim;
+            });
+            found[k] = { date, exact: n === q, station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", firstSeen: before?.firstSeen ?? o.firstSeen, lastSeen: o.lastSeen, counts: o.counts || null, jerseyType: o.jerseyType || "", rows: o.rows || [], bins: o.bins || null, closedBins: o.closedBins || [], flagsById: flags };
+          }
+        }
+        const orders = Object.values(found).sort((a, b) => (b.exact - a.exact) || ((b.lastSeen || 0) - (a.lastSeen || 0))).slice(0, 10)
+          .map(({ flagsById, exact, ...o }) => ({ ...o, exact, flags: Object.values(flagsById).sort((a, b) => String(a.t).localeCompare(String(b.t))) }));
+        return json(res, 200, { orders });
       }
       if (kind === "ledger" && req.method === "GET") {
         const date = new URL(req.url, "http://hub").searchParams.get("date") || new Date(now_()).toLocaleDateString("en-CA");
