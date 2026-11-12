@@ -34,9 +34,23 @@ import { PRIOR as BOX_PRIOR, FEATURES as BOX_FEATURES, BOXES, MORE, fitBoxModel 
 // (no driver rendering). Both steps are injectable so the routes can be tested
 // without a printer.
 const PRINT_PS1 = path.join(path.dirname(fileURLToPath(import.meta.url)), "tools", "print-raw.ps1");
-const runPs1 = args => new Promise((resolve, reject) =>
-  execFile("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", PRINT_PS1, ...args], { windowsHide: true, timeout: 30000 },
-    (err, stdout, stderr) => err ? reject(new Error(String(stderr || err.message).trim().split(/\r?\n/)[0] || "powershell failed")) : resolve(String(stdout))));
+// Why the script failed, in words for the station's screen. What PowerShell
+// said comes first. With nothing said, the script was stopped after 30 s
+// (`killed`): it was still waiting for the printer, which for a printer shared
+// from another PC means that PC did not answer. Node's own message for that is
+// only the command line ("Command failed: powershell -NoProfile …"), which is
+// what the Print menu showed on 12 Nov 2026 and told nobody anything.
+const PS1_TIMEOUT_MS = 30000;
+export function ps1Problem(err, stderr, printer = "") {
+  const said = String(stderr || "").split(/\r?\n/).map(l => l.trim()).find(Boolean);
+  if (said) return said;
+  const host = String(printer).startsWith("\\\\") ? String(printer).split("\\")[2] : "";
+  if (err?.killed || err?.signal) return `${printer || "the printer"} did not answer in ${PS1_TIMEOUT_MS / 1000} s${host ? `: is ${host} (the PC that shares it) on, awake and on the network?` : ""}`;
+  return `the print script stopped${err?.code !== undefined && err?.code !== null ? ` (code ${err.code})` : ""} without saying why`;
+}
+const runPs1 = (args, printer = "") => new Promise((resolve, reject) =>
+  execFile("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", PRINT_PS1, ...args], { windowsHide: true, timeout: PS1_TIMEOUT_MS },
+    (err, stdout, stderr) => err ? reject(new Error(ps1Problem(err, stderr, printer))) : resolve(String(stdout))));
 
 // The print queues on this PC: [{ name, driver, port, status }].
 export async function listPrintersWindows() {
@@ -46,7 +60,7 @@ export async function listPrintersWindows() {
 export async function printRawWindows(printer, zpl) {
   const tmp = path.join(os.tmpdir(), `jerseyqc-labels-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.zpl`);
   fs.writeFileSync(tmp, zpl, "utf8");   // ^CI28: the printer reads the data as UTF-8
-  try { await runPs1(["-Printer", printer, "-File", tmp]); }
+  try { await runPs1(["-Printer", printer, "-File", tmp], printer); }
   finally { try { fs.unlinkSync(tmp); } catch { /* already gone */ } }
 }
 export const isLabelPrinter = p => /zebra|zd4|zdesigner/i.test(`${p?.name || ""} ${p?.driver || ""}`);
