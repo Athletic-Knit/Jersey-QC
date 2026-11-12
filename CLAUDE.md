@@ -120,7 +120,14 @@ Expected columns (case-insensitive, auto-detected):
 
 ## The running server
 
-The floor server is started hidden at log-on by the "Jersey QC server" scheduled task (`tools/serve-hidden.vbs`, output in `data/server.log`). Vite restarts it in place whenever `hub-plugin.js` or a file it imports (labels.js, roster.js) changes, so label and hub changes are live without a manual restart; the process id and start time stay the same, the log says "server restarted". An order started before a change keeps what its saved session holds until it is resumed.
+**Which PC is which (owner, 12 Nov 2026) — read this before saying anything about "the server":**
+
+- **AK-NB-165 is the floor server.** The stations on the floor talk to it. Restarting the floor server, reading its log, or checking what code it runs can only be done ON AK-NB-165. A Claude session on another PC cannot see it or restart it.
+- **AK-NB-164 is the development laptop**, where Claude sessions and code changes usually happen. Check with `hostname` before assuming. It also runs its own copy of the server on port 5173 (the same scheduled task at log-on) and the test server on 5174; a station pointed at this laptop is a test, not the floor. The Zebra used for test prints is shared from this laptop (`\\AK-NB-164\Zebra`).
+- So: the process on port 5173 here, `data/server.log` here and `data/hub.json` here describe THIS laptop's copy, not the floor. Never tell the owner "the server is running old code" or "the server has reloaded" from what this laptop shows (that mistake was made twice on 12 Nov 2026). Say what this laptop shows and that the floor server has to be checked on AK-NB-165.
+- A change reaches the floor only when AK-NB-165 has the new files (a `git pull` of `phase-1-rostering` there, or the OneDrive copy of this folder syncing to it; `data/` holds `hub-AK-NB-165-*.json` conflict copies, so the folder appears to be synced between the two PCs, but confirm with the owner which way they update it) and its server has loaded them. After a change, tell the owner it is pushed and that AK-NB-165 needs it; do not claim it is live on the floor.
+
+On either PC the server is started hidden at log-on by the "Jersey QC server" scheduled task (`tools/serve-hidden.vbs`, output in `data/server.log`). Vite restarts it in place whenever `hub-plugin.js` or a file it imports (labels.js, roster.js) changes, so label and hub changes are live without a manual restart; the process id and start time stay the same, the log says "server restarted". An order started before a change keeps what its saved session holds until it is resumed.
 
 ## Simulations
 
