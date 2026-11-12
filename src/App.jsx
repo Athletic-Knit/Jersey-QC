@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -11,7 +11,7 @@ import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { pace } from "./lib/pace.js";
-import { PRIOR as BOX_PRIOR, BOXES, MORE, predictBox, binCounts } from "./lib/boxmodel.js";
+import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.js";
 const SECOND_LOOK = false;
 import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
@@ -178,7 +178,7 @@ const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise,
       {cols.map(c => (
         <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "#fbbf24" : "#e2e8f0" }}>{r[c]}</td>
       ))}
-      {hasBins && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700 }}>{bin !== null ? `Bin ${bin}` : "—"}</td>}
+      {hasBins && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700, whiteSpace: "nowrap" }}>{bin !== null ? `Box ${bin}` : "—"}</td>}
       <td style={{ ...tdSt, padding: "2px 6px" }}>
         <select value={["missing", "short"].includes(r.scanned) ? "missing" : ""}
           onChange={e => onMark(r, e.target.value)}
@@ -484,7 +484,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, st
           <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. sponsor logo left sleeve · captain C on #19" rows={2} style={{ ...inputSt, resize: "vertical", fontSize: 16 }} />
           <label style={{ ...labelSt, marginTop: 10 }}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the flag reasons and the reports; leave it unset to offer every reason</span></label>
           <JerseyTypePicker value={jerseyType} onChange={setJerseyType} />
-          <label style={{ ...labelSt, marginTop: 12 }}>Bins — how the order is sorted{picked?.binBy ? <span style={{ color: "#60a5fa", fontWeight: 400 }}> · set by the supervisor</span> : null}</label>
+          <label style={{ ...labelSt, marginTop: 12 }}>Boxes — how the order is sorted{picked?.binBy ? <span style={{ color: "#60a5fa", fontWeight: 400 }}> · set by the supervisor</span> : null}</label>
           <BinByPicker value={binBy} onChange={setBinBy} />
         </div>
         <div style={{ marginBottom: 18 }}>
@@ -693,7 +693,7 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
           {!rec && err && <div style={{ padding: 24, color: "#f87171" }}>{err}</div>}
           {rec && rows.length > 0 && (tab === "roster" || tab === "problems") && (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr><th style={th}>Status</th><th style={th}>Name</th><th style={th}>Number</th><th style={th}>Team</th><th style={th}>Size</th><th style={th}>Bin</th><th style={th}>What happened</th><th style={th}>Inspector · time</th>{tab === "problems" && <th style={th}>Photo</th>}</tr></thead>
+              <thead><tr><th style={th}>Status</th><th style={th}>Name</th><th style={th}>Number</th><th style={th}>Team</th><th style={th}>Size</th><th style={th}>Box</th><th style={th}>What happened</th><th style={th}>Inspector · time</th>{tab === "problems" && <th style={th}>Photo</th>}</tr></thead>
               <tbody>
                 {(tab === "roster" ? rows : rows.filter(r => r.scanned === "flag" || r.scanned === "manual")).map((r, i) => {
                   const e = latestByRow.get(r._id);
@@ -701,7 +701,7 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
                     <tr key={r._id ?? i} style={{ background: r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned === "manual" ? "rgba(245,158,11,0.07)" : "transparent" }}>
                       <td style={{ ...td, color: colour(r.scanned), fontWeight: 700, whiteSpace: "nowrap" }}>{label(r.scanned)}</td>
                       <td style={td}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{r.size || ""}</td>
-                      <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Bin ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
+                      <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Box ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
                       <td style={{ ...td, color: "#cbd5e1" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                       <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
                       {tab === "problems" && <td style={td}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} /></td>}
@@ -1051,7 +1051,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order number</label><input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the station's flag reasons; unset offers every reason</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
-          <div style={{ marginBottom: 10 }}><label style={labelSt}>Bins — how the station sorts it</label><BinByPicker value={binBy} onChange={setBinBy} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Boxes — how the station sorts it</label><BinByPicker value={binBy} onChange={setBinBy} /></div>
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Roster file</label>
             <div onClick={() => fileRef.current.click()} style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${file ? "#22c55e" : "#334155"}`, background: "#1e293b", color: file ? "#22c55e" : "#64748b", fontSize: 13, cursor: "pointer" }}>{file ? "✓ " + file.name : "📂 Choose CSV or Excel…"}</div>
@@ -1317,9 +1317,9 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
                 )}
                 {binNum !== null && (
                   <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid #3b82f6", background: "rgba(59,130,246,0.16)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
-                    <div style={{ fontSize: `min(${hasSize ? 7 : 12}cqh, ${hasSize ? 14 : 20}cqw)`, color: "#93c5fd", fontWeight: 900, letterSpacing: 3, lineHeight: 1 }}>BIN</div>
+                    <div style={{ fontSize: `min(${hasSize ? 7 : 12}cqh, ${hasSize ? 14 : 20}cqw)`, color: "#93c5fd", fontWeight: 900, letterSpacing: 3, lineHeight: 1 }}>BOX</div>
                     {/* The digit is limited by the box width: one digit may be wider than two, two than three (Barlow Condensed is about half an em a digit). */}
-                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${hasSize ? 36 : 72}cqh, ${String(binNum).length === 1 ? 120 : String(binNum).length === 2 ? 80 : 55}cqw)`, fontWeight: 900, color: "#fff", lineHeight: 0.95 }}>{binNum}</div>
+                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${hasSize ? 36 : 72}cqh, ${String(binNum).length === 1 ? 120 : String(binNum).length === 2 ? 80 : String(binNum).length === 3 ? 58 : 44}cqw)`, fontWeight: 900, color: "#fff", lineHeight: 0.95 }}>{binNum}</div>
                   </div>
                 )}
               </div>
@@ -1478,7 +1478,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             )}
             {binNum !== null && (
               <div style={{ padding: "6px 36px 10px", borderRadius: 22, border: "5px solid #3b82f6", background: "rgba(59,130,246,0.16)", textAlign: "center", minWidth: 180 }}>
-                <div style={{ fontSize: "clamp(18px, 3cqh, 26px)", color: "#93c5fd", fontWeight: 800, marginBottom: 2, letterSpacing: 1 }}>BIN</div>
+                <div style={{ fontSize: "clamp(18px, 3cqh, 26px)", color: "#93c5fd", fontWeight: 800, marginBottom: 2, letterSpacing: 1 }}>BOX</div>
                 <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, min(13cqh, 18cqw), 120px)", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
               </div>
             )}
@@ -1654,7 +1654,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           <div style={labelSt}>Label printer</div>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginBottom: 8 }}>
             <input type="checkbox" checked={temp.stickers !== false} onChange={e => setTemp(t => ({ ...t, stickers: e.target.checked }))} />
-            Print a sticker for every passed jersey (its bin, and the team or size) — the 1 × ½ in roll
+            Print a sticker for every passed jersey (its box, and the team or size) — the 1 × ½ in roll
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
             <input type="checkbox" checked={temp.flagTickets !== false} onChange={e => setTemp(t => ({ ...t, flagTickets: e.target.checked }))} />
@@ -1662,7 +1662,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginTop: 8 }}>
             <input type="checkbox" checked={temp.binLists !== false} onChange={e => setTemp(t => ({ ...t, binLists: e.target.checked }))} />
-            Print what is in a bin when it is closed (full, or the order finished), ten jerseys a label — the 2 × 1 in roll
+            Print what is in a box when it is closed (full, or the order finished): a count label and fourteen jerseys a label — the 2 × 1 in roll
           </label>
         </div>
 
@@ -1670,14 +1670,14 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           <div style={labelSt}>Packing</div>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginBottom: 8 }}>
             <input type="checkbox" checked={!!temp.boxWeights} onChange={e => setTemp(t => ({ ...t, boxWeights: e.target.checked }))} />
-            Estimate each bin's weight and warn near the limit (a guess from the sizes, until a scale is connected)
+            Estimate each box's weight and warn near the limit (a guess from the sizes, until a scale is connected)
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", opacity: temp.boxWeights ? 1 : 0.45 }}>
             No box heavier than
             <input type="number" min={10} max={70} value={temp.boxWeightCap ?? 45} onChange={e => setTemp(t => ({ ...t, boxWeightCap: Math.max(10, Math.min(70, Number(e.target.value) || 45)) }))} style={{ ...selSt, width: 76 }} />
             lb
           </label>
-          <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>Which box a bin goes in is learnt: every Bin full asks which box it went in, and all stations learn from the answers.</div>
+          <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>How many jerseys fill a box is learnt: every Box full asks what size the box was, and all stations learn from the answers.</div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -1779,35 +1779,41 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
   useEffect(() => { if (autoPrint && labels.length && !fired.current) { fired.current = true; send(); } }, [autoPrint, labels.length, send]);   // the state already says "printing"
   const printLine = {
     idle:     "",
-    printing: "🖨 Printing the bin labels…",
+    printing: "🖨 Printing the box labels…",
     done:     `🖨 Printed ${print.count} ${print.count === 1 ? "label" : "labels"} on ${print.printer}`,
-    none:     "No label printer on the server — write the bin numbers by hand",
+    none:     "No label printer on the server — write the box numbers by hand",
     error:    `Could not print the labels: ${print.message}`,
   }[print.status];
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 44, maxWidth: 680, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
         <div style={{ fontSize: 56, marginBottom: 12 }}>🗂️</div>
-        <div style={{ fontSize: 36, fontWeight: 900, color: "#60a5fa", marginBottom: 8 }}>Prepare {entries.length} bins</div>
+        <div style={{ fontSize: 36, fontWeight: 900, color: "#60a5fa", marginBottom: 8 }}>Set out {labels.length || entries.length} {(labels.length || entries.length) === 1 ? "box" : "boxes"}</div>
         <div style={{ fontSize: 19, color: "#cbd5e1", marginBottom: 26 }}>
-          This order is sorted <strong style={{ color: "#e2e8f0" }}>by {by}</strong>: {entries.length} {by === "size" ? "sizes" : "teams"}. Label your bins before scanning:
+          {by === "all"
+            ? <>This order is <strong style={{ color: "#e2e8f0" }}>not sorted</strong>: one run of boxes. </>
+            : <>This order is sorted <strong style={{ color: "#e2e8f0" }}>by {by}</strong>: {entries.length} {by === "size" ? (entries.length === 1 ? "size" : "sizes") : (entries.length === 1 ? "team" : "teams")}. </>}
+          Print the labels and stick one inside each box before scanning. How many boxes is an estimate; a box that fills sooner gets its next label at Box full.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 30, maxHeight: 400, overflowY: "auto" }}>
-          {entries.map(({ label, bin }) => (
-            <div key={label} style={{ display: "flex", alignItems: "center", gap: 18, padding: "14px 22px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" }}>
-              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 44, fontWeight: 900, color: "#60a5fa", minWidth: 120, textAlign: "center", lineHeight: 1 }}>Bin {bin}</div>
-              <div style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0", textAlign: "left" }}>{label}</div>
+          {entries.map(({ label, bin, total = 0, boxes = 1 }) => (
+            <div key={bin} style={{ display: "flex", alignItems: "center", gap: 18, padding: "14px 22px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" }}>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 44, fontWeight: 900, color: "#60a5fa", minWidth: 150, textAlign: "center", lineHeight: 1, whiteSpace: "nowrap" }}>Box {bin}</div>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0" }}>{label}</div>
+                <div style={{ fontSize: 16, color: "#94a3b8" }}>{total} {total === 1 ? "jersey" : "jerseys"} to go · {boxes === 1 ? "1 box" : `${boxes} boxes: ${bin} to ${boxParts(bin)[0]}.${boxParts(bin)[1] + boxes - 1}`}</div>
+              </div>
             </div>
           ))}
         </div>
         <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
           <button onClick={onConfirm} style={{ padding: "16px 40px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 21, cursor: "pointer" }}>
-            Bins ready — start scanning
+            Boxes ready — start scanning
           </button>
           {labels.length > 0 && (
-            <button onClick={doPrint} disabled={print.status === "printing"} title="Print one label per bin on the server's label printer"
+            <button onClick={doPrint} disabled={print.status === "printing"} title="Print one label per box on the server's label printer"
               style={{ padding: "16px 28px", borderRadius: 10, border: "1px solid #475569", background: "#1e293b", color: "#e2e8f0", fontWeight: 700, fontSize: 19, cursor: print.status === "printing" ? "wait" : "pointer", opacity: print.status === "printing" ? 0.6 : 1 }}>
-              🖨 Print bin labels
+              🖨 Print box labels
             </button>
           )}
         </div>
@@ -1824,8 +1830,8 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
 // prints (what is in it, ten jerseys a label), the team or size moves to a
 // new bin number and that bin's label prints. Closed bins stay listed, with
 // their list to print again.
-const BOX_CHOICES = [...BOXES, { id: MORE, label: "More than one box" }];
-function BinsModal({ open, closed, by = "team", cap = 45, status, onFull, onReprint, onClose }) {
+const BOX_CHOICES = BOXES;   // a box on the floor is one box: small, medium or large
+function BinsModal({ open, closed, by = "team", cap = 45, status, onFull, onReprint, onLabels, onClose }) {
   const [asking, setAsking] = useState(null);   // the bin whose box is being asked
   useEffect(() => {
     const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
@@ -1838,25 +1844,26 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, onFull, onRepr
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 32, maxWidth: 760, width: "92vw", maxHeight: "92%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 6 }}>
-          <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>📦 Bins</div>
-          <div style={{ fontSize: 17, color: "#94a3b8" }}>{by === "all" ? "one bin for the whole order" : `sorted by ${by}`} — which bin is full?</div>
+          <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>📦 Boxes</div>
+          <div style={{ fontSize: 17, color: "#94a3b8", flex: 1 }}>{by === "all" ? "the whole order, box after box" : `sorted by ${by}`} — which box is full?</div>
+          {onLabels && <button onClick={onLabels} title="The box labels of this order, to print again" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>🖨 Box labels</button>}
         </div>
         <div style={{ fontSize: 16, color: "#cbd5e1", marginBottom: 18 }}>
-          A full bin is closed: the list of what is in it prints with the box to pack it in, and {by === "all" ? "the order" : `its ${by}`} carries on in a new bin, whose label prints too.
+          A full box is closed: the list of what is in it prints, to stick on the box when it is taped, and {by === "all" ? "the order" : `its ${by}`} carries on in the next box (5.1, then 5.2).
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {open.map(b => (
             <div key={b.bin} style={{ ...rowSt, flexWrap: "wrap", borderColor: b.heavy >= 0.95 ? "#ef4444" : "#3f4b5c" }}>
-              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 40, fontWeight: 900, color: "#60a5fa", minWidth: 110, lineHeight: 1 }}>Bin {b.bin}</div>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 40, fontWeight: 900, color: "#60a5fa", minWidth: 110, lineHeight: 1 }}>Box {b.bin}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 22, fontWeight: 700, color: "#e2e8f0", overflowWrap: "anywhere" }}>{b.label}</div>
                 <div style={{ fontSize: 15, color: "#94a3b8" }}>{pcs(b.count)} in it{b.count > 0 && cap ? ` · about ${Math.round(b.weight)} lb of ${cap}` : ""}</div>
                 {b.heavy >= 0.95 && <div style={{ fontSize: 15, fontWeight: 800, color: "#f87171" }}>At the weight limit — close it</div>}
               </div>
-              {b.box && asking !== b.bin && <div title="The box this bin goes in if it is closed now" style={{ fontSize: 17, fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>→ {b.box}</div>}
+              {b.box && asking !== b.bin && <div title="The size of box this many jerseys fill" style={{ fontSize: 17, fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>→ {b.box}</div>}
               {asking === b.bin && (
                 <div style={{ flexBasis: "100%" }}>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: "#fcd34d", marginBottom: 8 }}>Which box is Bin {b.bin} going in?</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "#fcd34d", marginBottom: 8 }}>What size is Box {b.bin}?</div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {BOX_CHOICES.map(c => (
                       <button key={c.id} onClick={() => { setAsking(null); onFull(b.bin, c.id); }}
@@ -1868,9 +1875,9 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, onFull, onRepr
                   </div>
                 </div>
               )}
-              {asking !== b.bin && <button onClick={() => b.count <= 1 ? onFull(b.bin, null) : setAsking(b.bin)} disabled={b.count === 0} title={b.count === 0 ? "Nothing is in this bin yet" : "Close this bin, print its list and open a new bin"}
+              {asking !== b.bin && <button onClick={() => b.count <= 1 ? onFull(b.bin, null) : setAsking(b.bin)} disabled={b.count === 0} title={b.count === 0 ? "Nothing is in this box yet" : "Close this box, print its list and carry on in the next box"}
                 style={{ ...btnPri, fontSize: 18, padding: "12px 22px", background: "#f59e0b", color: "#0d1117", opacity: b.count === 0 ? 0.4 : 1, cursor: b.count === 0 ? "not-allowed" : "pointer" }}>
-                Bin full
+                Box full
               </button>}
             </div>
           ))}
@@ -1881,9 +1888,9 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, onFull, onRepr
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {closed.map(c => (
                 <div key={c.bin} style={{ ...rowSt, padding: "8px 18px", background: "transparent" }}>
-                  <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 900, color: "#7c8ba1", minWidth: 110, lineHeight: 1 }}>Bin {c.bin}</div>
+                  <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 900, color: "#7c8ba1", minWidth: 110, lineHeight: 1 }}>Box {c.bin}</div>
                   <div style={{ flex: 1, fontSize: 17, color: "#cbd5e1" }}>{c.label} · {pcs(c.count)}{c.box ? <span style={{ color: "#fcd34d", fontWeight: 700 }}> → {c.box}</span> : null}</div>
-                  <button onClick={() => onReprint(c.bin)} disabled={c.count === 0} title="Print this bin's list again" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", opacity: c.count === 0 ? 0.4 : 1 }}>🖨 Print list again</button>
+                  <button onClick={() => onReprint(c.bin)} disabled={c.count === 0} title="Print this box's list again" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", opacity: c.count === 0 ? 0.4 : 1 }}>🖨 Print list again</button>
                 </div>
               ))}
             </div>
@@ -1927,7 +1934,7 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
               {l.thumb && <img src={l.thumb} alt="" style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
               <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 28, lineHeight: 1 }}>#{l.match.number}{l.match.name ? ` · ${l.match.name}` : ""}</span>
               {l.match.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#4ade80", fontWeight: 800 }}>{l.match.size}</span>}
-              {binOf(l.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#60a5fa", fontWeight: 800 }}>Bin {binOf(l.match)}</span>}
+              {binOf(l.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#60a5fa", fontWeight: 800 }}>Box {binOf(l.match)}</span>}
               <span style={{ marginLeft: "auto", fontSize: 14, color: "#7c8ba1", whiteSpace: "nowrap" }}>{l.timestamp}</span>
               {st === "flag"
                 ? <Pill color="#ef4444">Flagged</Pill>
@@ -1969,13 +1976,13 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
             ? `${remaining} ${remaining === 1 ? "jersey is" : "jerseys are"} not scanned yet. Finish anyway and the station goes back to waiting for an order; the supervisor keeps this order's record and sheets.`
             : "Every jersey is scanned. The station goes back to waiting for an order; the supervisor keeps this order's record and sheets."}
           {scans === 0 ? " Nothing was scanned on it." : ""}
-          {binLists > 0 ? ` Every open bin is closed and its list prints: ${binLists} ${binLists === 1 ? "label" : "labels"}.` : ""}
+          {binLists > 0 ? ` Every open box is closed and its list prints: ${binLists} ${binLists === 1 ? "label" : "labels"}.` : ""}
         </div>
         {bins.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 22, maxHeight: "22cqh", overflowY: "auto", textAlign: "left", fontSize: 17, color: "#cbd5e1" }}>
             {bins.map(b => (
               <div key={b.bin} style={{ display: "flex", gap: 12, padding: "5px 14px", borderRadius: 8, background: "#1e293b" }}>
-                <span style={{ fontWeight: 800, color: "#60a5fa", minWidth: 62 }}>Bin {b.bin}</span>
+                <span style={{ fontWeight: 800, color: "#60a5fa", minWidth: 62 }}>Box {b.bin}</span>
                 <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.label} · {b.count} {b.count === 1 ? "jersey" : "jerseys"}</span>
                 <span style={{ fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>{b.open ? "" : "closed · "}{b.box}</span>
               </div>
@@ -2167,7 +2174,18 @@ export default function App() {
   const openBins   = useMemo(() => binEntries(roster, binMap).map(e => { const rows = binContents(roster, binMap, closedBins, e.bin), b = boxOf(rows); return { ...e, count: rows.length, box: b?.label || "", boxId: b?.id || "", weight: b?.weight || 0, heavy: b?.heavy || 0, open: true }; }), [roster, binMap, closedBins, boxOf]);
   const closedList = useMemo(() => closedBins.map(c => { const rows = binContents(roster, binMap, closedBins, c.bin), b = boxOf(rows); return { bin: c.bin, label: c.label, count: rows.length, box: c.box || b?.label || "", weight: b?.weight || 0, open: false, closedAt: c.closedAt }; }), [roster, binMap, closedBins, boxOf]);
   const heavyBin   = openBins.find(b => b.heavy >= 0.95) || null;   // an open bin at the weight limit
-  const binSummary = useMemo(() => [...closedList, ...openBins].sort((a, b) => a.bin - b.bin), [closedList, openBins]);
+  const binSummary = useMemo(() => [...closedList, ...openBins].sort((a, b) => binOrder(a.bin, b.bin)), [closedList, openBins]);
+  // How many boxes each team or size is expected to fill from its open box on
+  // (the box model on every jersey of it not yet in a closed box), for the
+  // labels printed when the order starts: BOX 5.1, 5.2, 5.3. An estimate; a
+  // box whose label was not printed gets it at Box full (`boxLabelled`).
+  const boxPlan    = useMemo(() => binEntries(roster, binMap).map(e => {
+    const rows = roster.filter(r => r.scanned !== "flag" && binOfRow(binMap, closedBins, r) === e.bin);
+    return { ...e, total: rows.filter(r => !r.scanned).length, boxes: Math.max(1, boxOf(rows)?.boxes || 1) };
+  }), [roster, binMap, closedBins, boxOf]);
+  const boxPlanLabels = useMemo(() => binLabels(roster, binMap, { orderNumber, boxes: Object.fromEntries(boxPlan.map(e => [e.bin, e.boxes])) }), [roster, binMap, orderNumber, boxPlan]);
+  const [boxLabelled, setBoxLabelled] = useState([]);   // the boxes whose label has been printed (saved in the session)
+  const boxesLabelled = useCallback(() => setBoxLabelled(prev => [...new Set([...prev, ...boxPlanLabels.map(l => l.bin)])]), [boxPlanLabels]);
 
   // ── The sticker on every pass ─────────────────────────────────────────────
   // A pass (a green confirmed, a pick from the list, a by-hand pass) sets
@@ -2265,10 +2283,10 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
     const t = setTimeout(() => setSaveOk(prev => (prev === saved ? prev : saved)), 0);   // said in the header when it fails
     return () => clearTimeout(t);
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, firstScanTime, idleSpells, awaySpells, checksLeft, inspect]);
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, checksLeft, inspect]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -2309,12 +2327,12 @@ export default function App() {
     setRosterFile(fileName);
     if (!keepLog) { setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); inspectRef.current.reset(); syncInspect(); }
     setThumb(null); setOverlay(null); setShowRosterComplete(false);
-    // Every order has a bin, as packing boxes by the bin: one team or size, or
-    // an order that is not sorted, is Bin 1. The bin screen only shows when
-    // there is more than one to set out.
+    // Every order has a box: one team or size, or an order that is not
+    // sorted, starts in Box 1.1. The box screen shows on every order, as the
+    // box labels are printed from it.
     const bins = buildBinMap(parsed, {}, binBy);
-    setClosedBins([]); setBinPrint(null);   // every roster row starts unscanned: no bin is closed
-    setBinMap(binCount(bins) > 0 ? bins : null); setShowBinSetup(binCount(bins) > 1);
+    setClosedBins([]); setBinPrint(null); setBoxLabelled([]);   // every roster row starts unscanned: no box is closed
+    setBinMap(binCount(bins) > 0 ? bins : null); setShowBinSetup(binCount(bins) > 0);
   }, [syncInspect]);
 
   // The order belongs to the station, not to a person: whoever is signed in
@@ -2323,7 +2341,7 @@ export default function App() {
     const s = savedSession;
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
     setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
-    setLog(s.log || []); setBinMap(s.binMap || null); setClosedBins(s.closedBins || []); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
+    setLog(s.log || []); setBinMap(s.binMap || null); setClosedBins(s.closedBins || []); setBoxLabelled(s.boxLabelled || []); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
     ticketPrinted.current = (s.log || [])[0]?.id ?? 0;             // its last flag's ticket was printed when it happened
     vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
     inspectRef.current.load(s.inspect); syncInspect();
@@ -2340,7 +2358,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true);
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setClosedBins([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setClosedBins([]); setBoxLabelled([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
   }, []);
 
@@ -2355,7 +2373,7 @@ export default function App() {
   const printProblem = e => e.status === 503 ? "No label printer for this station" : `Not printed: ${e.status ? e.message : "could not reach the server"}`;
   // What Finish order prints: the list of every bin still open with something in it.
   const finishLists = useMemo(() => !settings.binLists || !binMap ? []
-    : openBins.filter(b => b.count > 0).flatMap(b => binListLabels(binContents(roster, binMap, closedBins, b.bin), { bin: b.bin, label: b.label, orderNumber, box: b.box })),
+    : openBins.filter(b => b.count > 0).flatMap(b => binListLabels(binContents(roster, binMap, closedBins, b.bin), { bin: b.bin, label: b.label, orderNumber })),
   [settings.binLists, binMap, openBins, roster, closedBins, orderNumber]);
   // `boxId`: the box the operator said the bin is going in (null for a
   // one-piece bin: a bag). It goes on the list, is kept with the closed bin,
@@ -2368,25 +2386,30 @@ export default function App() {
     if (boxId && rows.length > 1) hub.boxAnswer({ counts: binCounts(rows, stitched), box: boxId, suggested: guess?.id || "", station: stationId(), order: String(orderNumber || ""), bin })
       .then(res => { if (res?.model) { setBoxModel(res.model); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(res.model)); } catch { /* private window */ } } })
       .catch(() => {});   // the hub is away: the bin is closed all the same, this one answer is not learnt
-    const lists = binListLabels(rows, { bin, label: r.entry.label, orderNumber, box });
-    const what  = `Bin ${bin} closed with ${r.entry.ids.length} ${r.entry.ids.length === 1 ? "jersey" : "jerseys"}${box ? ` — ${box.toUpperCase()}` : ""}. ${r.entry.label} now goes in Bin ${r.newBin}`;
-    if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Bin lists are switched off in Settings.` }); return; }
+    const lists = binListLabels(rows, { bin, label: r.entry.label, orderNumber });
+    const what  = `Box ${bin} closed with ${r.entry.ids.length} ${r.entry.ids.length === 1 ? "jersey" : "jerseys"}. ${r.entry.label} now goes in Box ${r.newBin}`;
+    if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Box lists are switched off in Settings.` }); return; }
     setBinPrint({ status: "printing", text: what });
+    // The next box's label prints here only when it was not among the ones
+    // printed at the start (the order needed more boxes than estimated, or
+    // the labels were never printed).
+    const fresh = !boxLabelled.includes(r.newBin);
     printOnTicketRoll(lists, "binlist")
-      .then(() => hub.printLabels([{ bin: r.newBin, label: r.entry.label, by: binFieldOf(r.binMap), count: 0, orderNumber: String(orderNumber || "") }], { kind: "binticket", station: stationId() }))
-      .then(res => setBinPrint({ status: "done", text: `${what}. Printed ${lists.length} list ${lists.length === 1 ? "label" : "labels"} and the Bin ${r.newBin} label on ${res.printer}` }))
+      .then(res => !fresh ? res : hub.printLabels([{ bin: r.newBin, label: r.entry.label, by: binFieldOf(r.binMap), count: 0, orderNumber: String(orderNumber || "") }], { kind: "binticket", station: stationId() })
+        .then(res2 => { setBoxLabelled(prev => [...new Set([...prev, r.newBin])]); return res2; }))
+      .then(res => setBinPrint({ status: "done", text: `${what}. Printed ${lists.length} list ${lists.length === 1 ? "label" : "labels"} for Box ${bin}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` }))
       .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
-  }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, stitched]);
+  }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, stitched, boxLabelled]);
   const reprintBinList = useCallback(bin => {
     const c = closedBins.find(x => x.bin === bin); if (!c) return;
     const rows  = binContents(roster, binMap, closedBins, bin);
-    const lists = binListLabels(rows, { bin, label: c.label, orderNumber, box: c.box || boxOf(rows)?.label || "" });
+    const lists = binListLabels(rows, { bin, label: c.label, orderNumber });
     if (!lists.length) return;
-    setBinPrint({ status: "printing", text: `Bin ${bin} list` });
+    setBinPrint({ status: "printing", text: `Box ${bin} list` });
     printOnTicketRoll(lists, "binlist")
-      .then(res => setBinPrint({ status: "done", text: `Bin ${bin} list printed again: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}` }))
-      .catch(e => setBinPrint({ status: "error", text: `Bin ${bin} list. ${printProblem(e)}` }));
-  }, [roster, binMap, closedBins, orderNumber, printOnTicketRoll, boxOf]);
+      .then(res => setBinPrint({ status: "done", text: `Box ${bin} list printed again: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .catch(e => setBinPrint({ status: "error", text: `Box ${bin} list. ${printProblem(e)}` }));
+  }, [roster, binMap, closedBins, orderNumber, printOnTicketRoll]);
 
   const [showFinish, setShowFinish] = useState(false);
   const [finishing,  setFinishing]  = useState(false);   // Finish order is printing the bin lists
@@ -2408,7 +2431,7 @@ export default function App() {
       .catch(e => {
         setFinishing(false);
         const why = e.status === 503 ? "no label printer for this station" : e.status ? e.message : "could not reach the server";
-        if (window.confirm(`The bin lists were NOT all printed: ${why}.\n\nOK = finish the order anyway, without the lists.\nCancel = keep the order open, fix the printer and press Finish order again.`)) done();
+        if (window.confirm(`The box lists were NOT all printed: ${why}.\n\nOK = finish the order anyway, without the lists.\nCancel = keep the order open, fix the printer and press Finish order again.`)) done();
       });
   }, [resetOrder, hubRosterId, finishLists, printOnTicketRoll]);
 
@@ -2719,7 +2742,7 @@ export default function App() {
       setRosterFile(f => f ? `${f} + ${file.name}` : file.name);
       setShowRosterComplete(false);
       if (binMap) {   // the order has bins: the added rows join them, by the same field
-        const bins = buildBinMap(next, binMap, undefined, closedBins.map(c => c.bin));   // a closed bin's number is never handed out again
+        const bins = buildBinMap(next, binMap, undefined, closedBins.map(c => c.bin));   // a closed box's number is never handed out to another team or size
         const newBins = binCount(bins) > binCount(binMap);
         setBinMap(bins); if (newBins) setShowBinSetup(true);
       }
@@ -3045,7 +3068,7 @@ export default function App() {
       )}
 
       {showBinSetup && binMap && (
-        <BinSetupModal entries={binEntries(roster, binMap)} by={binFieldOf(binMap)} labels={binLabels(roster, binMap, { orderNumber })} onConfirm={() => setShowBinSetup(false)} />
+        <BinSetupModal entries={boxPlan} by={binFieldOf(binMap)} labels={boxPlanLabels} onPrinted={boxesLabelled} onConfirm={() => setShowBinSetup(false)} />
       )}
 
       {overlay && !wide && (
@@ -3060,7 +3083,7 @@ export default function App() {
 
       {retried && !overlay && !noJersey && (
         <div style={{ position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 1950, background: "#1e293b", color: "#fcd34d", border: "2px solid #f59e0b", borderRadius: 999, padding: "10px 22px", fontSize: 20, fontWeight: 800, boxShadow: "0 8px 30px rgba(0,0,0,0.5)", whiteSpace: "nowrap" }}>
-          ↻ Scanned again · {retried.number || retried.name ? `#${retried.number || "?"}${retried.name ? " " + retried.name : ""} is` : "that jersey is"} NOT checked — no sticker, no bin
+          ↻ Scanned again · {retried.number || retried.name ? `#${retried.number || "?"}${retried.name ? " " + retried.name : ""} is` : "that jersey is"} NOT checked — no sticker, no box
         </div>
       )}
       {noJersey && (
@@ -3079,11 +3102,11 @@ export default function App() {
       )}
       {showBins && binMap && (
         <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} cap={boxCap} status={binPrint}
-          onFull={binFull} onReprint={reprintBinList} onClose={() => closeDialog(() => setShowBins(false))} />
+          onFull={binFull} onReprint={reprintBinList} onLabels={() => { setShowBins(false); setShowBinSetup(true); }} onClose={() => closeDialog(() => setShowBins(false))} />
       )}
       {finishing && (
         <div style={{ position: "fixed", inset: 0, zIndex: 2400, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, fontWeight: 800, color: "#e2e8f0", textAlign: "center", padding: 24 }}>
-          🖨 Printing the bin lists… the order closes when they are out
+          🖨 Printing the box lists… the order closes when they are out
         </div>
       )}
       {showFinish && (
@@ -3261,7 +3284,7 @@ export default function App() {
                   <span style={{ fontSize: 14, color: "#94a3b8", whiteSpace: "nowrap" }}>Last passed</span>
                   <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 30, lineHeight: 1 }}>#{lastConfirmed.match?.number}{lastConfirmed.match?.name ? ` · ${lastConfirmed.match.name}` : ""}</span>
                   {lastConfirmed.match?.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#4ade80", fontWeight: 800 }}>{lastConfirmed.match.size}</span>}
-                  {binOf(lastConfirmed.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#60a5fa", fontWeight: 800 }}>Bin {binOf(lastConfirmed.match)}</span>}
+                  {binOf(lastConfirmed.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#60a5fa", fontWeight: 800 }}>Box {binOf(lastConfirmed.match)}</span>}
                   {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && r.scanned) && (
                     <button onClick={() => unscan(lastConfirmed.match._id)} title="Un-check it; it must be scanned again" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>↶ Undo</button>
                   )}
@@ -3290,7 +3313,7 @@ export default function App() {
               {sessionStarted && (
                 <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
                   <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
-                  {binMap && <button onClick={() => setShowBins(true)} title="A bin is full: close it, print the list of what is in it, and carry on in a new bin" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#f59e0b", color: "#fcd34d" }) }}>{heavyBin ? `📦 Bin ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Bin full"}</button>}
+                  {binMap && <button onClick={() => setShowBins(true)} title="A box is full: close it, print the list of what is in it, and carry on in the next box" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#f59e0b", color: "#fcd34d" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Box full"}</button>}
                   <span style={{ fontSize: 13, color: "#7c8ba1" }}>Every jersey scanned this order — flag one after the fact</span>
                 </div>
               )}
@@ -3397,7 +3420,7 @@ export default function App() {
                       <tr>
                         <th style={thSt}>Status</th>
                         {rosterCols.map(c => <th key={c} style={thSt}>{cap(c)}</th>)}
-                        {binMap && <th style={thSt}>Bin</th>}
+                        {binMap && <th style={thSt}>Box</th>}
                         <th style={thSt}>Mark</th>
                       </tr>
                     </thead>
@@ -3429,7 +3452,7 @@ export default function App() {
                         <div style={{ fontWeight: 700, fontSize: 18, marginTop: 2 }}>Read: #{l.detected?.number || "?"} · {l.detected?.name || "—"}</div>
                         {l.match && (
                           <div style={{ fontSize: 15, color: "#cbd5e1", marginTop: 2 }}>
-                            Matched: {l.match.name || "—"} #{l.match.number}{l.match.size ? ` · ${l.match.size}` : ""}{l.match.team ? ` · ${l.match.team}` : ""}{binOf(l.match) !== null ? ` · Bin ${binOf(l.match)}` : ""}
+                            Matched: {l.match.name || "—"} #{l.match.number}{l.match.size ? ` · ${l.match.size}` : ""}{l.match.team ? ` · ${l.match.team}` : ""}{binOf(l.match) !== null ? ` · Box ${binOf(l.match)}` : ""}
                           </div>
                         )}
                         {l.reason     && <div style={{ fontSize: 15, color: "#fbbf24", marginTop: 3 }}>⚠ {l.reason}</div>}

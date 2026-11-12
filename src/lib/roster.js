@@ -18,7 +18,7 @@ export const CORE_COLUMNS = ["name", "number", "team", "size"];
 const STATE_COLUMNS = ["_id", "scanned", "mark"];
 // Columns this app writes into its own Excel export. A re-used export must not
 // bring yesterday's results back as roster data ("Status: PASS" on unscanned rows).
-const APP_COLUMNS = ["status", "bin", "reason", "resolution", "inspected by", "time", ...STATE_COLUMNS];
+const APP_COLUMNS = ["status", "bin", "box", "reason", "resolution", "inspected by", "time", ...STATE_COLUMNS];
 
 export function canonicalHeader(h) {
   const key = stripBOM(String(h ?? "")).trim().toLowerCase();
@@ -160,10 +160,18 @@ export function teamKey(t) { return String(t ?? "").trim().toLowerCase(); }
 // a roster with no team or size to sort by) is one bin for the whole order,
 // `{ "*": 1, __by: "all" }`.
 export const BIN_BY = [
-  { id: "team", label: "By team", hint: "one bin per team or colour" },
-  { id: "size", label: "By size", hint: "one bin per size" },
-  { id: "none", label: "One bin", hint: "not sorted: the whole order in one bin" },
+  { id: "team", label: "By team", hint: "boxes per team or colour" },
+  { id: "size", label: "By size", hint: "boxes per size" },
+  { id: "none", label: "Not sorted", hint: "the whole order in one run of boxes" },
 ];
+// On the floor a bin is a box, and it has a name of two numbers: "5.2" is the
+// second box of sort 5 (a team, a size, or the whole order). The first number
+// never changes for a team or size; the second counts its boxes as they fill
+// (owner, 12 Nov 2026). The code still says "bin" for the thing itself.
+// An older saved order has plain numbers (3): they read as box 3, no second number.
+export const boxParts = b => { const m = String(b ?? "").trim().match(/^(\d+)(?:\.(\d+))?$/); return m ? [Number(m[1]), Number(m[2] || 0)] : [1e9, 0]; };
+export const binOrder = (a, b) => { const x = boxParts(a), y = boxParts(b); return (x[0] - y[0]) || (x[1] - y[1]); };
+const groupOf = b => boxParts(b)[0];
 export const ALL_KEY = "*";
 export const ALL_LABEL = "Whole order";
 // Rows with nothing in the field the order is sorted by (a blank team on a
@@ -195,7 +203,7 @@ export const ROSTER_SORTS = [
   { id: "name",   label: "Name" },
   { id: "number", label: "Number" },
   { id: "team",   label: "Team" },
-  { id: "bin",    label: "Bin" },
+  { id: "bin",    label: "Box" },
 ];
 // Status, done first (the default): passed, by hand, flagged, missing, short,
 // then what is still to scan. To-do first turns it round: to scan, flagged,
@@ -213,7 +221,7 @@ export function sortRoster(roster, by = "size", binMap = null, { doneFirst = tru
     name:   (a, b) => byText("name")(a, b) || byNumber(a, b),
     number: (a, b) => byNumber(a, b) || byText("name")(a, b),
     team:   (a, b) => byText("team")(a, b) || bySize(a.size, b.size) || byNumber(a, b),
-    bin:    (a, b) => ((binFor(binMap, a) ?? 1e9) - (binFor(binMap, b) ?? 1e9)) || bySize(a.size, b.size) || byNumber(a, b),
+    bin:    (a, b) => binOrder(binFor(binMap, a), binFor(binMap, b)) || bySize(a.size, b.size) || byNumber(a, b),
   }[by];
   return cmp ? roster.slice().sort(cmp) : roster;
 }
@@ -224,30 +232,31 @@ export function rosterChoices(roster) {
   return { sizes: uniq("size").sort(bySize), teams: uniq("team").sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })) };
 }
 
-// `taken`: bin numbers that may not be handed out again (bins closed as full).
+// `taken`: boxes whose first number may not be handed out again (boxes closed as full).
 export function buildBinMap(roster, existing = {}, by, taken = []) {
+  const gone = taken.map(groupOf);
   const field = by === "size" || by === "team" ? by : by === "none" || by === "all" ? "all" : binFieldOf(existing);
   // One bin for the whole order: the one it already has, else the first number free.
   const whole = () => {
     if (!roster.length) return {};
-    let n = 1; while (taken.includes(n)) n++;
-    return { [ALL_KEY]: binFieldOf(existing) === "all" && existing[ALL_KEY] !== undefined ? existing[ALL_KEY] : n, __by: "all" };
+    let n = 1; while (gone.includes(n)) n++;
+    return { [ALL_KEY]: binFieldOf(existing) === "all" && existing[ALL_KEY] !== undefined ? existing[ALL_KEY] : `${n}.1`, __by: "all" };
   };
   if (field === "all") return whole();
   const keep  = binFieldOf(existing) === field ? existing : {};          // switching the field starts the bins over
   const map   = Object.fromEntries(Object.entries(keep).filter(([k]) => k !== "__by"));
-  const used  = new Set([...Object.values(map), ...taken]);
+  const used  = new Set([...Object.values(map).map(groupOf), ...gone]);
   const keys  = [...new Set(roster.map(r => teamKey(r[field])).filter(Boolean))].sort(field === "size" ? bySize : undefined);
   let next = 1;
   for (const key of keys) {
     if (map[key] !== undefined) continue;
     while (used.has(next)) next++;
-    map[key] = next; used.add(next);
+    map[key] = `${next}.1`; used.add(next);
   }
   if (!Object.keys(map).length) return whole();                          // nothing to sort by: one bin
   if (map[BLANK_KEY] === undefined && roster.some(r => !teamKey(r[field]))) {
     while (used.has(next)) next++;
-    map[BLANK_KEY] = next;
+    map[BLANK_KEY] = `${next}.1`;
   }
   return field === "size" ? { ...map, __by: "size" } : map;
 }
@@ -265,7 +274,7 @@ export function binFor(binMap, row) {
 // The bin map only ever says which bin is OPEN for a team or size. When the
 // operator says a bin is full it is closed: `closed` keeps
 // { bin, key, label, ids, closedAt } — the roster rows that were in it — and
-// the team or size gets the next number nobody has used. A jersey in a bin is
+// the team or size carries on in its next box (5.1 → 5.2). A jersey in a bin is
 // a row passed by the camera or by hand; a flagged one is with the supervisor.
 export const inBin = r => !!r && (r.scanned === "pass" || r.scanned === "manual");
 
@@ -276,9 +285,13 @@ export function binOfRow(binMap, closed, row) {
   return binFor(binMap, row);
 }
 
-export function nextBinNumber(binMap, closed = []) {
-  const nums = [...Object.entries(binMap || {}).filter(([k]) => k !== "__by").map(([, b]) => b), ...closed.map(c => c.bin)];
-  return nums.reduce((m, b) => Math.max(m, Number(b) || 0), 0) + 1;
+// The box that follows `bin` for the same team or size: 5.1 → 5.2. The second
+// number is one more than any box of that sort has had, open or closed.
+export function nextBinNumber(binMap, closed = [], bin) {
+  const g = groupOf(bin);
+  const all = [...Object.entries(binMap || {}).filter(([k]) => k !== "__by").map(([, b]) => b), ...closed.map(c => c.bin)];
+  const last = all.filter(b => groupOf(b) === g).reduce((m, b) => Math.max(m, boxParts(b)[1]), 0);
+  return `${g}.${Math.max(1, last) + 1}`;
 }
 
 // The rows in `bin` right now, open or closed.
@@ -294,7 +307,7 @@ export function closeBin(roster, binMap, closed = [], bin, now = Date.now()) {
   const key    = hit[0];
   const label  = binEntries(roster, binMap).find(e => e.bin === bin)?.label || key;
   const entry  = { bin, key, label, ids: binContents(roster, binMap, closed, bin).map(r => r._id), closedAt: now };
-  const newBin = nextBinNumber(binMap, closed);
+  const newBin = nextBinNumber(binMap, closed, bin);
   return { binMap: { ...binMap, [key]: newBin }, closed: [...closed, entry], entry, newBin };
 }
 
@@ -306,7 +319,7 @@ export function binEntries(roster, binMap) {
   if (!binMap) return [];
   const field = binFieldOf(binMap), label = {};
   roster.forEach(r => { const k = teamKey(r[field]); if (k && !label[k]) label[k] = String(r[field]).trim(); });
-  return Object.entries(binMap).filter(([k]) => k !== "__by").map(([k, bin]) => ({ label: field === "all" ? ALL_LABEL : k === BLANK_KEY ? blankLabel(field) : label[k] || k, bin })).sort((a, b) => a.bin - b.bin);
+  return Object.entries(binMap).filter(([k]) => k !== "__by").map(([k, bin]) => ({ label: field === "all" ? ALL_LABEL : k === BLANK_KEY ? blankLabel(field) : label[k] || k, bin })).sort((a, b) => binOrder(a.bin, b.bin));
 }
 
 // Columns to show in the roster table (everything the file had, minus state).

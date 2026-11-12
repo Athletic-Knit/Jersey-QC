@@ -40,7 +40,7 @@ export function buildRosterSheet(roster, log, meta, columns, binOf = () => null)
     ["Jersey Type",  meta.jerseyType || ""],
     ["Order Notes",  meta.notes || ""],
     [],
-    ["Status", ...columns.map(cap), "Bin", "Reason", "Resolution", "Inspected By", "Time"],
+    ["Status", ...columns.map(cap), "Box", "Reason", "Resolution", "Inspected By", "Time"],
     ...roster.map(r => {
       const l = latest.get(r._id);
       return [rosterStatusLabel(r), ...columns.map(c => r[c] ?? ""), binOf(r) ?? "", l?.reason ?? "", l?.resolution ?? "", l?.operator ?? "", l?.timestamp ?? ""];
@@ -53,7 +53,7 @@ export function buildRosterSheet(roster, log, meta, columns, binOf = () => null)
 // [{ bin, label, count, box, open, closedAt }].
 export function buildBinsSheet(bins = [], stamp = t => localTimeStamp(new Date(t))) {
   return [
-    ["Bin", "Holds", "Jerseys", "Box", "State", "Closed at"],
+    ["Box", "Holds", "Jerseys", "Box size", "State", "Closed at"],
     ...bins.map(b => [b.bin, b.label || "", b.count || 0, b.box || "", b.open ? "Open" : "Closed (full)", b.closedAt ? stamp(b.closedAt) : ""]),
     [],
     ["Total", "", bins.reduce((t, b) => t + (b.count || 0), 0)],
@@ -65,14 +65,14 @@ export function exportRosterXLSX(roster, log, meta, columns, binOf, XLSX = globa
   const ws = XLSX.utils.aoa_to_sheet(buildRosterSheet(roster, log, meta, columns, binOf));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "QC Results");
-  if (meta.bins?.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildBinsSheet(meta.bins)), "Bins");
+  if (meta.bins?.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildBinsSheet(meta.bins)), "Boxes");
   // Where the screen was while the order was open: idle and away spells.
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildAttentionSheet(meta.idleSpells || [], meta.awaySpells || [], t => localTimeStamp(new Date(t)))), "Attention");
   XLSX.writeFile(wb, `roster_${safeFilename(meta.orderNumber)}_${localDateStamp()}.xlsx`);
 }
 
 export function buildLogCSV(log, binOf = () => null) {
-  const header = ["Time", "Status", "Detected Name", "Detected Number", "Matched Name", "Matched Number", "Team", "Size", "Bin", "Reason", "Resolution", "Operator"];
+  const header = ["Time", "Status", "Detected Name", "Detected Number", "Matched Name", "Matched Number", "Team", "Size", "Box", "Reason", "Resolution", "Operator"];
   const rows = log.map(l => [
     l.timestamp ?? "", l.status ?? "",
     l.detected?.name ?? "", l.detected?.number ?? "",

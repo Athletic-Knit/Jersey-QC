@@ -113,7 +113,7 @@ export const DEFAULT_SETTINGS = {
   autoScanDelay: 3,       // seconds after a confirm before hands-free may scan again
   stickers: true,         // print a sticker (bin + team or size) on the server's label printer for every passed jersey
   flagTickets: true,      // print a flag ticket (2 x 1 in: where it goes and why) for every flagged jersey
-  binLists: true,         // print what is in a bin (2 x 1 in, ten jerseys a label) when it is closed: full, or the order finished
+  binLists: true,         // print what is in a box (2 x 1 in: a count label, then fourteen jerseys a label) when it is closed: full, or the order finished
   boxWeights: false,      // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station
   boxWeightCap: 45,       // lb: no box heavier than this, when boxWeights is on (src/lib/boxmodel.js)
   trialMethod: "",        // input trial: "" | "mouse" | "keys" — which setup this station is timing (src/lib/trial.js)

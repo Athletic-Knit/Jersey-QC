@@ -107,7 +107,7 @@ describe("bin labels on the hub's printer", () => {
     { name: "RICOH SP C360DNw", driver: "PCL6 V4 Driver for Universal Print", port: "WSD", status: 7 },
     { name: "ZDesigner ZD411-203dpi ZPL", driver: "ZDesigner ZD411-203dpi ZPL", port: "USB001", status: 0 },
   ];
-  const labels = [{ bin: 1, label: "Navy", by: "team", count: 2, orderNumber: "264247" }, { bin: 2, label: "Red", by: "team", count: 1, orderNumber: "264247" }];
+  const labels = [{ bin: "1.1", label: "Navy", by: "team", count: 2, orderNumber: "264247" }, { bin: "2.1", label: "Red", by: "team", count: 1, orderNumber: "264247" }];
   const fakes = (list = queues) => {
     const printed = [];
     let lists = 0;
@@ -152,12 +152,12 @@ describe("bin labels on the hub's printer", () => {
     const { zpl } = f.printed[0];
     expect(zpl).toContain("^PW203");
     expect(zpl).toContain("^LL102");
-    expect(zpl).toContain("^FDBIN^FS");
+    expect(zpl).toContain("^FDBOX^FS");
     expect(zpl).toContain("^FD3^FS");
     expect(zpl).toContain("^FDTEAM^FS");
     expect(zpl).toContain("^FDNavy^FS");
     expect(zpl).toContain("^FDOrder 264247^FS");
-    expect(zpl).not.toContain("^FDBIN 3^FS");   // not the bin-label layout
+    expect(zpl).not.toContain("^FDBOX 3^FS");   // not the box-label layout
   });
   const ticket = [{ number: "7", name: "SMITH", tag: "STITCHER", reason: "Loose stitching", team: "Navy", size: "A-L", bin: 2, orderNumber: "264247", station: "St 1", time: "14:05" }];
   it("a flag ticket on a flag: kind flag, 2 x 1 in, on the station's printer when no flag printer is set", async () => {
@@ -172,7 +172,7 @@ describe("bin labels on the hub's printer", () => {
     expect(zpl).toContain("^FR^FDFLAG^FS");
     expect(zpl).toContain("^FR^FD7^FS");
     expect(zpl).toContain("^FDSTITCHER^FS");
-    expect(zpl).not.toContain("^FDBIN^FS");    // not the sticker layout
+    expect(zpl).not.toContain("^FDBOX^FS");    // not the sticker layout
   });
   it("the flag printer (JERSEY_FLAG_PRINTER_STATION1, else JERSEY_FLAG_PRINTER) takes the tickets; the stickers stay on the label printer", async () => {
     const f = fakes();
@@ -208,9 +208,9 @@ describe("bin labels on the hub's printer", () => {
     expect((zpl.match(/\^XA/g) || []).length).toBe(2);
     expect(zpl).toContain("^PW203");
     expect(zpl).toContain("^LL102");
-    expect(zpl).toContain("^FDBIN 1^FS");
+    expect(zpl).toContain("^FDBOX 1.1^FS");
     expect(zpl).toContain("^FDNavy^FS");
-    expect(zpl).toContain("^FDBIN 2^FS");
+    expect(zpl).toContain("^FDBOX 2.1^FS");
     expect(zpl).toContain("Order 264247");
   });
   it("JERSEY_LABEL_SIZE sets the label's dots", async () => {
@@ -264,7 +264,7 @@ describe("bin lists and the label of a bin opened mid-order go to the 2 x 1 in r
   it("binlist and binticket print on the flag printer at the flag label size", async () => {
     const sent = [];
     const { call } = makeHub({ printer: "Stickers", flagPrinter: "Tickets", print: async (name, zpl) => { sent.push({ name, zpl }); }, listPrinters: async () => [] });
-    const list = { bin: 1, label: "Navy", orderNumber: "55", page: 1, pages: 1, count: 2, items: ["7-SMITH-AL", "9-JONES-AM"] };
+    const list = { bin: "1.1", label: "Navy", orderNumber: "55", page: 1, pages: 1, count: 2, items: ["7-SMITH-AL", "9-JONES-AM"] };
     let r = await call("POST", "/print", { labels: [list], kind: "binlist", station: "st-station1" });
     expect(r.status).toBe(200);
     expect(r.body.printer).toBe("Tickets");
@@ -273,7 +273,7 @@ describe("bin lists and the label of a bin opened mid-order go to the 2 x 1 in r
     r = await call("POST", "/print", { labels: [{ bin: 3, label: "Navy", by: "team", count: 0, orderNumber: "55" }], kind: "binticket", station: "st-station1" });
     expect(r.body.printer).toBe("Tickets");
     expect(sent[1].zpl).toContain("^PW406");
-    expect(sent[1].zpl).toContain("^FDBIN 3^FS");
+    expect(sent[1].zpl).toContain("^FDBOX 3^FS");
   });
 });
 
