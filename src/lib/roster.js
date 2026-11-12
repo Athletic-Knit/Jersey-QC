@@ -172,6 +172,10 @@ export const BIN_BY = [
 export const boxParts = b => { const m = String(b ?? "").trim().match(/^(\d+)(?:\.(\d+))?$/); return m ? [Number(m[1]), Number(m[2] || 0)] : [1e9, 0]; };
 export const binOrder = (a, b) => { const x = boxParts(a), y = boxParts(b); return (x[0] - y[0]) || (x[1] - y[1]); };
 const groupOf = b => boxParts(b)[0];
+// An order saved before the boxes had two numbers: its open bin 3 becomes box
+// 3.1, so a resumed order shows and prints box names like every new one.
+export const modernBins = binMap => !binMap ? binMap
+  : Object.fromEntries(Object.entries(binMap).map(([k, b]) => [k, k !== "__by" && boxParts(b)[1] === 0 && boxParts(b)[0] < 1e9 ? `${boxParts(b)[0]}.1` : b]));
 export const ALL_KEY = "*";
 export const ALL_LABEL = "Whole order";
 // Rows with nothing in the field the order is sorted by (a blank team on a

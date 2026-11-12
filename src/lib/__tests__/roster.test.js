@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { modernBins } from "../roster.js";
 import { parseCSV, splitCSVLine, detectDelimiter, canonicalHeader, rowsToRoster, buildBinMap, binFor, binEntries, extraColumns, displayColumns, BOM, orderNumberOf, closeBin, binOfRow, binContents, nextBinNumber, dropFromClosed, boxParts, binOrder } from "../roster.js";
 
 const SAMPLE = `Name,Number,Team,Size Range,Size
@@ -212,5 +213,13 @@ describe("closing a full box", () => {
     expect(closed[0].ids).toEqual([1]);
     const more = [...rows, { _id: 5, name: "", number: "20", team: "Green", size: "A-L", scanned: false }];
     expect(buildBinMap(more, r.binMap, undefined, r.closed.map(c => c.bin))).toEqual({ navy: "1.2", red: "2.1", green: "3.1" });
+  });
+});
+
+describe("an order saved before boxes had two numbers", () => {
+  it("its open bins become the first box of their number; new-style names and the sort field are left alone", () => {
+    expect(modernBins({ navy: 1, red: 3 })).toEqual({ navy: "1.1", red: "3.1" });
+    expect(modernBins({ "y-m": 2, "a-l": "4.2", __by: "size" })).toEqual({ "y-m": "2.1", "a-l": "4.2", __by: "size" });
+    expect(modernBins(null)).toBeNull();
   });
 });
