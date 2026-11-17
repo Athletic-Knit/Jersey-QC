@@ -6,7 +6,8 @@
 const stationSuffix = s => s ? "." + String(s).replace(/[^\w-]/g, "").slice(0, 24) : "";
 const suffix = (() => { try { return stationSuffix(new URLSearchParams(window.location.search).get("station")); } catch { return ""; } })();
 const SESSION_KEY  = "jerseyqc.session.v1" + suffix;
-const SETTINGS_KEY = "jerseyqc.settings.v2";   // v2: Enter selects, R retries
+const SETTINGS_KEY = "jerseyqc.settings.v3";   // v2: Enter selects, R retries; v3: Enter scans too, no stickers (the owner, 17 Nov 2026)
+const SETTINGS_V2  = "jerseyqc.settings.v2";
 const SIGNIN_KEY   = "jerseyqc.signin.v1" + suffix;
 
 // localStorage can be full, blocked, or absent (private window); never let that throw.
@@ -67,7 +68,21 @@ export function saveSession(s)  {
 export function loadSession()   { return quiet(() => { const v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }) ?? null; }
 export function clearSession()  { quiet(() => localStorage.removeItem(SESSION_KEY)); }
 export function saveSettings(s) { quiet(() => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))); }
-export function loadSettings()  { return quiet(() => { const v = localStorage.getItem(SETTINGS_KEY); return v ? JSON.parse(v) : null; }) ?? null; }
+export function loadSettings()  {
+  return quiet(() => {
+    const v = localStorage.getItem(SETTINGS_KEY);
+    if (v) return JSON.parse(v);
+    // A station still on v2 keeps its camera, its rotation and every key it
+    // changed itself, and takes the two new defaults: B became Enter and the
+    // stickers went off (the owner, 17 Nov 2026). Saved as v3 once.
+    const old = localStorage.getItem(SETTINGS_V2);
+    if (!old) return null;
+    const s = { ...JSON.parse(old), stickers: false };
+    if (s.scanKey === "KeyB") s.scanKey = "Enter";
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    return s;
+  }) ?? null;
+}
 // Who is signed in at this station outlives any one order.
 // `station`: save for ANOTHER station's page — the one the sign-in box is about
 // to reload to — so the page comes back already signed in instead of empty.

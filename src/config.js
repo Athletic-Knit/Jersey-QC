@@ -88,7 +88,7 @@ export const STATIONS = [
 export const stationOf = id => STATIONS.find(s => s.id === id) || null;
 
 export const DEFAULT_SETTINGS = {
-  scanKey: "KeyB",        // take a picture (only when no screen is open)
+  scanKey: "Enter",       // take a picture (only when no screen is open). Enter, the same as Select, so one pedal does both (the owner, 17 Nov 2026; it was B)
   confirmKey: "Enter",    // select the highlighted option on any screen
   cancelKey: "KeyA",      // move the highlight down (↓ also works)
   upKey: "ArrowUp",       // move the highlight up (↑ also works)
@@ -98,7 +98,7 @@ export const DEFAULT_SETTINGS = {
   cameraId: "",           // "" = browser default
   autoScan: true,         // hands-free: scan when the jersey changes and settles
   autoScanDelay: 3,       // seconds after a confirm before hands-free may scan again
-  stickers: true,         // print a sticker (bin + team or size) on the server's label printer for every passed jersey
+  stickers: false,        // print a sticker (bin + team or size) on the server's label printer for every passed jersey. Off unless a station turns it on (the owner, 17 Nov 2026)
   flagTickets: true,      // print a flag ticket (2 x 1 in: where it goes and why) for every flagged jersey
   binLists: true,         // print what is in a box (2 x 1 in: a count label, then fourteen jerseys a label) when it is closed: full, or the order finished
   boxWeights: false,      // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station

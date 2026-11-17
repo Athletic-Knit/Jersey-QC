@@ -423,6 +423,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   const [file,    setFile]    = useState(null);
   const [error,   setError]   = useState(null);
   const [loading, setLoading] = useState(false);
+  const [orderKeys, setOrderKeys] = useState(false);   // on-screen keys under the order number while the cursor is in it: the stations have no keyboard
+  const orderRef = useRef(null);
   const [hubRosters, setHubRosters] = useState([]);
   const [picked,  setPicked]  = useState(null);     // a roster the supervisor sent
   const fileRef = useRef(null);
@@ -527,7 +529,9 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         )}
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order number</label>
-          <input value={order} onChange={e => setOrder(e.target.value)} placeholder="From the roster file, or type it" autoFocus onKeyDown={onEnter} style={inputSt} />
+          <input ref={orderRef} value={order} onChange={e => setOrder(e.target.value)} placeholder="From the roster file, or tap to type it" onKeyDown={onEnter} style={inputSt}
+            onFocus={() => setOrderKeys(true)} onBlur={() => setOrderKeys(false)} />
+          {orderKeys && <ScreenKeys layout="full" onKey={k => setOrder(v => typeKey(v, k))} onEnter={() => orderRef.current?.blur()} enterLabel="Done" />}
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order notes <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
@@ -2465,7 +2469,15 @@ export default function App() {
   const [newRosters, setNewRosters] = useState([]);   // rosters the supervisor sent while this order was running
   const [orderSetBy, setOrderSetBy] = useState(null); // { orderNumber, by } — the supervisor named this order from the board
   const knownRosterIds = useRef(null);                 // what was already waiting when this order started
-  const [handsFreePaused, setHandsFreePaused] = useState(false);   // operator paused hands-free; camera stays on, B still scans
+  const [handsFreePaused, setHandsFreePaused] = useState(false);   // operator paused hands-free; camera stays on, the scan key still scans
+  // After a flag the jersey is usually still on the table, and hands-free read
+  // it again as soon as the flagged screen closed (the owner, 17 Nov 2026). So a
+  // flag turns hands-free off until the operator scans the next jersey with the
+  // pedal; that scan's confirm arms it again as usual.
+  const [waitPedal, setWaitPedal] = useState(false);
+  const waitPedalRef = useRef(false);
+  const pedalNext = useCallback(() => { waitPedalRef.current = true; setWaitPedal(true); gateRef.current.disarm(); setArmed(false); }, []);
+  const pedalDone = useCallback(() => { if (waitPedalRef.current) { waitPedalRef.current = false; setWaitPedal(false); } }, []);
   // Self-check: after the app is corrected, the next 5 jerseys are read twice
   // and must agree before a green (src/lib/vigilance.js). checksLeft mirrors
   // the counter for the badge and the saved session.
@@ -2714,7 +2726,7 @@ export default function App() {
     setRoster(parsed.map(r => ({ ...r, scanned: false })));
     setRosterFile(fileName);
     if (!keepLog) { setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); inspectRef.current.reset(); syncInspect(); }
-    setThumb(null); setOverlay(null); setShowRosterComplete(false);
+    setThumb(null); setOverlay(null); setShowRosterComplete(false); waitPedalRef.current = false; setWaitPedal(false);
     // Every order has a box: one team or size, or an order that is not
     // sorted, starts in Box 1.1. The box screen shows on every order, as the
     // box labels are printed from it.
@@ -2749,6 +2761,7 @@ export default function App() {
     setSessionStarted(false); setResumeDecided(true);
     setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setClosedBins([]); setBoxLabelled([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
+    waitPedalRef.current = false; setWaitPedal(false);
   }, []);
 
   // Finish order: the confirm screen, then back to waiting for an order.
@@ -3033,6 +3046,7 @@ export default function App() {
 
   const doTriggerScan = useCallback((opts = {}) => {
     if (!videoRef.current || !canvasRef.current || scanning || !cameraOn || roster.length === 0 || inputMode !== "camera") return;
+    if (opts?.auto !== true && waitPedalRef.current) { waitPedalRef.current = false; setWaitPedal(false); }   // the pedal (or the SCAN button) after a flag: hands-free may arm again after this one
     const video = videoRef.current;
     if (!video.videoWidth) { setError("Camera is still starting — try again in a second."); return; }
     // A dead track leaves the last frame frozen on screen; never scan that.
@@ -3080,7 +3094,7 @@ export default function App() {
   }, [sessionStarted]);
 
   const armAutoScan = useCallback(() => {
-    if (!handsFree || !cameraOn || inputMode !== "camera" || modalOpen) return;
+    if (!handsFree || !cameraOn || inputMode !== "camera" || modalOpen || waitPedalRef.current) return;   // after a flag: the pedal scans the next one
     gateRef.current.arm(lastScanFrameRef.current); setArmed(true);
   }, [handsFree, cameraOn, inputMode, modalOpen]);
   useEffect(() => { armRef.current = armAutoScan; }, [armAutoScan]);
@@ -3091,15 +3105,17 @@ export default function App() {
   // not scan again. `autoScan` overrides the setting when Settings just saved it.
   const closeDialog = useCallback((hide, autoScan = settings.autoScan) => {
     hide();
-    if (overlay || !autoScan || handsFreePaused || remaining === 0 || !cameraOn || inputMode !== "camera") return;
+    if (overlay || !autoScan || handsFreePaused || remaining === 0 || !cameraOn || inputMode !== "camera" || waitPedalRef.current) return;
     gateRef.current.arm(lastScanFrameRef.current); setArmed(true);
   }, [overlay, settings.autoScan, handsFreePaused, remaining, cameraOn, inputMode]);
-  // Pause/resume hands-free from the camera panel: the camera stays on and B still scans.
+  // Pause/resume hands-free from the camera panel: the camera stays on and the scan key still scans.
   // One button, three states: off in Settings → turn it on; running → pause; paused → resume.
+  // Resume is the operator's word that the table is ready, so it also ends the wait for the pedal after a flag.
   const toggleHandsFree = () => {
     if (!settings.autoScan) { setSettings(s => ({ ...s, autoScan: true })); setHandsFreePaused(false); }
     else if (!handsFreePaused) { gateRef.current.disarm(); setArmed(false); setHandsFreePaused(true); return; }
     else setHandsFreePaused(false);
+    pedalDone();
     if (cameraOn && inputMode === "camera" && !modalOpen && !overlay && remaining > 0) { gateRef.current.arm(lastScanFrameRef.current); setArmed(true); }
   };
 
@@ -3271,15 +3287,17 @@ export default function App() {
     flagContinue() {
       const o = overlay; if (!o?.scan) return;
       const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: null, status: S_FLAGGED, reason: o.reason || "Flagged by operator", ...stamp() };
-      setLog(prev => [entry, ...prev]); setLastResult(entry); setOverlay(null); playTone("flag"); armAutoScan();
+      setLog(prev => [entry, ...prev]); setLastResult(entry); setOverlay(null); playTone("flag"); pedalNext();
     },
     skipDuplicate() { setOverlay(null); armAutoScan(); },
     flagDuplicate() {
       const o = overlay; if (!o?.scan) return;
       const entry = { id: o.scan.id || Date.now(), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: "Duplicate — scanned again after passing", ...stamp() };
-      setLog(prev => [entry, ...prev]); setLastResult(entry); setOverlay(null); playTone("flag"); armAutoScan();
+      setLog(prev => [entry, ...prev]); setLastResult(entry); setOverlay(null); playTone("flag"); pedalNext();
     },
-    continueSupervisor() { setOverlay(null); armAutoScan(); },
+    // Off the flagged screen: the flagged jersey is most likely still under the
+    // camera, so hands-free stays off until the pedal scans the next one.
+    continueSupervisor() { setOverlay(null); pedalNext(); },
     // A photo of the damage itself for the supervisor: the live frame as the
     // operator framed it (no crop), kept on the flag's log entry. The scan
     // photo stays — it says which jersey; this one says what is wrong.
@@ -3351,7 +3369,7 @@ export default function App() {
       setOverlay({ mode: "manual", scan: o.scan, match: null, teams: teamNames, returnTo: null, initial: o.typed });
     },
     };
-  }, [overlay, stamp, armAutoScan, roster, teamNames, noteMistake, lastConfirmed, syncInspect, captureFrame]);
+  }, [overlay, stamp, armAutoScan, pedalNext, roster, teamNames, noteMistake, lastConfirmed, syncInspect, captureFrame]);
 
   // ── Flag resolution (from the result card) ────────────────────────────────
   const resolveFlag = useCallback((logId, decision, note) => {
@@ -3452,9 +3470,13 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.repeat) return;
-      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || showFinish || showBins || finished || showPrint || showBlanks || !sessionStarted) return;
+      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || showFinish || showBins || finished || showPrint || showBlanks || showHistory || showSupervisor || !sessionStarted) return;
       if (e.code !== scanKey) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+      // The scan key is Enter by default, and Enter on a focused button clicks it
+      // (the last button the mouse touched keeps the focus): the pedal must only
+      // scan, so the button loses the focus and the default action is stopped.
+      if (document.activeElement?.tagName === "BUTTON") document.activeElement.blur();
       e.preventDefault();
       gateRef.current.disarm(); setArmed(false);
       onTrial({ screen: "camera", n: 1, idx: 0, id: "scan", via: "key", key: e.code, ms: Date.now() - lastScreenClosed.current, moves: 0, hovers: 0 });
@@ -3462,7 +3484,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, showBins, finished, showPrint, showBlanks, sessionStarted, scanKey, doTriggerScan, onTrial]);
+  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, showBins, finished, showPrint, showBlanks, showHistory, showSupervisor, sessionStarted, scanKey, doTriggerScan, onTrial]);
 
   const overlayKey = overlay ? `${overlay.mode}:${overlay.scan?.id}:${(overlay.candidates || []).map(c => c._id).join(",")}` : "";
   const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType), idleSpells, awaySpells, bins: binSummary, categoryOf: reasonCategory };
@@ -3665,8 +3687,8 @@ export default function App() {
                     {cameraOn && !scanning && (
                       <>
                         <div style={{ position: "absolute", top: 10, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(0,0,0,0.65)", padding: "8px 16px", borderRadius: 999 }}>
-                          <div style={{ width: 12, height: 12, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused ? "#94a3b8" : "#22c55e"}` }} />
-                          <span style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? "Hands-free paused — B to scan" : !settings.autoScan ? "Hands-free off — B to scan" : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : "Ready"}</span>
+                          <div style={{ width: 12, height: 12, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused || (waitPedal && handsFree) ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused || (waitPedal && handsFree) ? "#94a3b8" : "#22c55e"}` }} />
+                          <span style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? `Hands-free paused — ${keyLabel} to scan` : !settings.autoScan ? `Hands-free off — ${keyLabel} to scan` : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : waitPedal ? `Flagged — press ${keyLabel} to scan the next jersey` : "Ready"}</span>
                         </div>
                         {checksLeft > 0 && (
                           <div title="After a mistake the next jerseys are read twice and must agree before a green" style={{ position: "absolute", top: 54, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(37,99,235,0.85)", padding: "8px 16px", borderRadius: 999 }}>
@@ -3684,7 +3706,7 @@ export default function App() {
                       ? <button onClick={startCamera} style={{ ...btnPri, flex: 1, fontSize: 22, padding: "16px" }}>Start camera</button>
                       : <>
                           <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 56, fontSize: 18 }}>■</button>
-                          <button onClick={toggleHandsFree} title={!settings.autoScan ? "Turn hands-free scanning on" : handsFreePaused ? "Resume hands-free scanning" : "Pause hands-free — the camera stays on and B still scans"}
+                          <button onClick={toggleHandsFree} title={!settings.autoScan ? "Turn hands-free scanning on" : handsFreePaused ? "Resume hands-free scanning" : `Pause hands-free — the camera stays on and ${keyLabel} still scans`}
                             style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, borderColor: "#f59e0b", color: "#fcd34d", background: handsFree ? "rgba(245,158,11,0.14)" : "transparent", whiteSpace: "nowrap" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
                           <button onClick={() => { gateRef.current.disarm(); setArmed(false); onTrial({ screen: "camera", n: 1, idx: 0, id: "scan", via: "pointer", key: "", ms: Date.now() - lastScreenClosed.current, moves: 0, hovers: 0 }); doTriggerScan(); }} disabled={scanning}
                             style={{ ...btnPri, flex: 1, fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, letterSpacing: 1, padding: "14px", opacity: scanning ? 0.4 : 1 }}>
