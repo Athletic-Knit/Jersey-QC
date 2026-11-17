@@ -4,11 +4,11 @@
 //   • a jersey sticker, printed on every pass: the bin the jersey goes in and
 //     what the order is sorted by (the team or the size), for the packer who
 //     stacks the folded jerseys by bin;
-//   • a flag ticket, printed on every flag: the mirror of the sticker, with
-//     the left column solid black so a flagged jersey is never packed — the
-//     number on the black, where the jersey goes (STITCHER, REMAKE …) and
-//     why on the right. It goes on its own, bigger roll: 2 in wide by 1 in
-//     tall (JERSEY_FLAG_LABEL_SIZE), on the flag printer when there is one;
+//   • a flag ticket, printed on every flag: the jersey (number, name, team,
+//     size) in white on a solid black column, so a flagged jersey is never
+//     packed, and what is wrong with it on the right. It goes on its own,
+//     bigger roll: 2 in wide by 1 in tall (JERSEY_FLAG_LABEL_SIZE), on the
+//     flag printer when there is one;
 //   • a bin label (on request from the Bin setup screen): "BIN 3" and what
 //     the bin holds.
 // The sticker roll is 1 in wide by 0.5 in tall (JERSEY_LABEL_SIZE); every
@@ -125,10 +125,13 @@ export function flagLabel(entry, binMap, { orderNumber = "", station = "", tag =
   };
 }
 
-// 2 x 1 in, the mirror of the sticker: a solid black column on the left
-// with FLAG, the number and the name in white; on the right the route tag
-// as big as it fits, the reason on up to three lines, team · size · bin,
-// and order · station · time small at the bottom. In fractions of the
+// 2 x 1 in: the JERSEY on the left, the DAMAGE on the right (the owner, 17 Nov
+// 2026). The left column is solid black with everything about the jersey in
+// white: the number as big as it fits, then the name, the team and the size
+// stacked under it — the black alone says it is flagged, so no FLAG word
+// (it took the top of the column and said nothing the black did not). The
+// right column says what is wrong, as big as it fits on up to three lines,
+// with order · station · time small at the bottom. In fractions of the
 // label, so it also comes out (small) on the 1 x 0.5 in sticker roll.
 // The 2 x 1 in roll starts printing about half a millimetre below the label's
 // top edge, which left a white line above the black column (10 Nov 2026). ^LT
@@ -150,34 +153,43 @@ export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const a     = h - (size.top || 0);
   const pad   = Math.round(a * 0.04);
   const side  = w >= 300 ? Math.round((size.dpi || 203) * 2 / 25.4) : 0;   // the 2 x 1 in roll: the ZD411 cuts 2 mm off the left
-  const lw    = Math.round((w - side) * 0.32);                    // the black column
-  const rx    = side + lw + 2 * pad, rw = w - rx - pad;           // the right column
-  const tag   = Math.max(12, Math.round(a * 0.16));               // FLAG
-  const tiny  = Math.max(12, Math.round(a * 0.14));               // the name, the reason
-  const mid   = Math.max(12, Math.round(a * 0.13));               // team · size · bin
+  const lw    = Math.round((w - side) * 0.4);                     // the black column: the jersey
+  const rx    = side + lw + 2 * pad, rw = w - rx - pad;           // the right column: the damage
+  const nameH = Math.max(12, Math.round(a * 0.16));               // the name
+  const mid   = Math.max(12, Math.round(a * 0.14));               // team · size on one line
+  const mid2  = Math.max(12, Math.round(a * 0.13));               // or each on its own, when the team is long
   const small = Math.max(10, Math.round(a * 0.12));               // order · station · time
   const out   = ["^XA", "^CI28", `^PW${w}`, `^LL${h + FLAG_LIFT}`, "^LH0,0", `^LT${-FLAG_LIFT}`];
   // The black column: a box filled by a border as thick as the box is wide.
   // It runs off the top and the left of the label (the text in it keeps
   // clear of the 2 mm the printer cuts), so no white edge is left around it.
   out.push(`^FO0,0^GB${side + lw},${h + FLAG_LIFT + 4},${side + lw}^FS`);   // 4 dots past the bottom edge too
-  const nameH = l.name ? tiny : 0;
-  const big   = fit(l.number, lw - 4, Math.round(a * 0.5));
-  out.push(line(side, top + pad, tag, lw, "C", "FLAG", { reverse: true }));
-  out.push(line(side, top + pad + tag + 1, big, lw, "C", l.number, { reverse: true }));
-  if (l.name) out.push(line(side, top + a - pad - nameH, fit(l.name, lw - 4, tiny), lw, "C", l.name, { reverse: true }));
+  // The jersey, in white on the black: team · size (one line when it fits
+  // at full width, else the team over the size) and the name stack up from
+  // the bottom, each as wide as the column allows; the number fills what is
+  // left above them, centred, as big as it fits.
+  const bottom = top + a - pad;
+  let ly = bottom;
+  // A long name or team is squeezed (narrower letters, `line` does that) at
+  // not less than 85% of its line's height before it is made smaller: a
+  // condensed VANDERMEULEN reads, a tiny one does not.
+  const white = (y, fh, text) => out.push(line(side, y, Math.max(fit(text, lw - 4, fh), Math.round(fh * 0.85)), lw, "C", text, { reverse: true }));
+  const both = [l.team, l.size].filter(Boolean).join(" · ");
+  if (both && (!l.team || !l.size || textUnits(both) * mid <= lw - 4)) { ly -= mid; white(ly, mid, both); }
+  else if (both) { ly -= mid2; white(ly, mid2, l.size); ly -= mid2 + 1; white(ly, mid2, l.team); }
+  if (l.name) { ly -= nameH + 1; white(ly, nameH, l.name); }
+  const numRoom = ly - 2 - (top + pad);
+  const big     = fit(l.number, lw - 4, Math.min(Math.round(a * 0.5), numRoom));
+  white(top + pad + Math.max(0, Math.floor((numRoom - big) / 2)), big, l.number);
   // The right column says WHAT IS WRONG, as big as it fits on up to three
-  // lines, and under it the team and size, then the order and the time. No
-  // route word (STITCHER, REMAKE) and no box: the ticket is for whoever picks
-  // the jersey out of the DAMAGED box, and the problem is what they need
-  // (the manager, 17 Nov 2026).
-  const parts  = [l.team, l.size].filter(Boolean).join(" · ");
+  // lines, and under it the order, the station and the time. No route word
+  // (STITCHER, REMAKE) and no box: the ticket is for whoever picks the
+  // jersey out of the DAMAGED box, and the problem is what they need (the
+  // manager, 17 Nov 2026).
   const footer = [l.orderNumber ? `Ord ${l.orderNumber}` : "", l.station, l.time].filter(Boolean).join(" · ");
   const y = top + pad;
-  const bottom = top + a - pad;                                   // the lines stack up from here
   let fy = bottom;
   if (footer) { fy -= small; out.push(line(rx, fy, fit(footer, rw, small), rw, "C", footer)); }
-  if (parts)  { fy -= mid + 1; out.push(line(rx, fy, fit(parts, rw, mid), rw, "C", parts)); }
   const room   = fy - 4 - y;
   const reason = l.reason || "Flagged";
   // The biggest letters at which the words fit in at most three lines. The

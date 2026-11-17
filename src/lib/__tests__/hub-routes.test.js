@@ -169,8 +169,9 @@ describe("bin labels on the hub's printer", () => {
     const { zpl } = f.printed[0];
     expect(zpl).toContain("^PW406");
     expect(zpl).toContain("^LL207");
-    expect(zpl).toContain("^FR^FDFLAG^FS");
+    expect(zpl).not.toContain("FLAG");           // the black column alone says it is flagged
     expect(zpl).toContain("^FR^FD7^FS");
+    expect(zpl).toContain("^FR^FDNavy · A-L^FS");   // the jersey's details on the black, with the number
     expect(zpl).toContain("^FDLoose stitching^FS");   // what is wrong, not where it goes
     expect(zpl).not.toContain("STITCHER");
     expect(zpl).toContain("^FDNavy · A-L^FS");

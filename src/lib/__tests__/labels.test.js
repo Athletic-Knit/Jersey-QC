@@ -225,34 +225,49 @@ describe("flagLabelZPL (2 x 1 in)", () => {
     expect(z).toContain("^PW406");
     expect(z).toContain("^LL207");
   });
-  it("a solid black column on the left with FLAG, the number and the name in white", () => {
+  it("a solid black column on the left with the jersey in white: the number, the name, team · size — and no FLAG word (the owner, 17 Nov 2026)", () => {
     const z = flagLabelZPL(l);
-    expect(z).toContain("^FO0,0^GB141,211,141^FS");                 // a box filled by its own border, off the top and left edges
-    expect(z).toContain("^FR^FDFLAG^FS");
+    expect(z).toContain("^FO0,0^GB172,211,172^FS");                 // a box filled by its own border, off the top and left edges; wider than before, it holds the team and size too
+    expect(z).not.toContain("FLAG");
     expect(z).toContain("^FR^FD7^FS");
     expect(z).toContain("^FR^FDSMITH^FS");
+    expect(z).toContain("^FR^FDNavy · A-L^FS");
     expect(fontOf(z, "7")).toBeGreaterThanOrEqual(90);               // ~11 mm, read from across the table
-    expect(fontOf(z, "SMITH")).toBeGreaterThanOrEqual(24);
+    expect(fontOf(z, "SMITH")).toBeGreaterThanOrEqual(28);
+    expect(fontOf(z, "Navy · A-L")).toBeGreaterThanOrEqual(24);
+  });
+  it("a long team name: the team over the size on their own lines, the number still big", () => {
+    const z = flagLabelZPL({ ...l, number: "100", name: "VANDERMEULEN", team: "Ottawa Senators", size: "A-2XL" });
+    expect(z).toContain("^FR^FDOttawa Senators^FS");
+    expect(z).toContain("^FR^FDA-2XL^FS");
+    expect(z).not.toContain("Ottawa Senators · A-2XL");
+    expect(fontOf(z, "100")).toBeGreaterThanOrEqual(80);
+    expect(fontOf(z, "A-2XL")).toBeGreaterThanOrEqual(22);
+    expect(fontOf(z, "Ottawa Senators")).toBeGreaterThanOrEqual(20);   // squeezed to the column's width (narrower letters) at 85% of the line's height or more, not made small
+    const team = fieldsOf(z).find(x => x.text === "Ottawa Senators"), name = fieldsOf(z).find(x => x.text === "VANDERMEULEN");
+    expect(team.fw).toBeLessThan(team.fh);
+    expect(name.fh).toBeGreaterThanOrEqual(25);
+    expect(name.fw).toBeLessThan(name.fh);
   });
   // Every text field of a ticket: where it starts, its font height, how many lines its box allows.
   const fieldsOf = z => lines(z).filter(x => x.includes("^FD")).map(x => {
     const m = x.match(/^\^FO(\d+),(\d+)\^A0N,(\d+),(\d+)\^FB(\d+),(\d+),0,([LCR])(\^FR)?\^FD(.*)\^FS$/);
     return { x: +m[1], y: +m[2], fh: +m[3], fw: +m[4], width: +m[5], lines: +m[6], align: m[7], reverse: !!m[8], text: m[9] };
   });
-  it("the reason big on the right, centred on up to three lines, then team · size, and order · station · time at the bottom; no route tag, no box", () => {
+  it("the reason big on the right, centred on up to three lines, with order · station · time at the bottom; the jersey's details all on the left; no route tag, no box", () => {
     const z = flagLabelZPL(l);
     const f = fieldsOf(z), reason = f.find(x => x.text === l.reason), parts = f.find(x => x.text === "Navy · A-L"), footer = f.find(x => x.text === "Ord 264247 · St 1 · 14:05");
     expect(reason).toMatchObject({ lines: 3, align: "C", reverse: false });   // the right column is black on white
-    expect(reason.width).toBeGreaterThanOrEqual(240);
-    expect(reason.fh).toBeGreaterThanOrEqual(28);                   // bigger than it was under the route tag (26 at most)
-    expect(reason.fh).toBeGreaterThan(parts.fh);                    // what is wrong is the biggest thing on the right
+    expect(reason.width).toBeGreaterThanOrEqual(200);
+    expect(reason.fh).toBeGreaterThanOrEqual(24);                   // an old five-word wording on three lines of the narrower column: ~3 mm; the menu's own reasons are two or three words and come out far bigger
+    expect(reason.fh).toBeGreaterThan(footer.fh);                   // what is wrong is the biggest thing on the right
     expect(z).not.toMatch(/STITCHER|REMAKE|DECORATION|CLEANING|DECIDE/);   // no route tag, although the label still carries one
-    expect(z).toContain("^FDNavy · A-L^FS");
+    expect(parts).toMatchObject({ x: 16, reverse: true });           // team · size is on the black, with the jersey
+    expect(parts.x + parts.width).toBeLessThanOrEqual(reason.x);     // left of everything on the right
     expect(z).not.toMatch(/Box|BOX|2\.1/);                          // the box is not on the ticket
-    expect(parts.fh).toBeGreaterThanOrEqual(22);
-    expect(z).toContain("^FDOrd 264247 · St 1 · 14:05^FS");
-    expect(reason.y + reason.lines * reason.fh).toBeLessThanOrEqual(parts.y);   // three lines of reason end above the team
-    expect(parts.y + parts.fh).toBeLessThanOrEqual(footer.y);       // and the team above the order
+    expect(parts.fh).toBeGreaterThanOrEqual(24);
+    expect(footer).toMatchObject({ x: reason.x, reverse: false });
+    expect(reason.y + reason.lines * reason.fh).toBeLessThanOrEqual(footer.y);   // three lines of reason end above the order
     expect(topOf(z).every(y => y >= 16)).toBe(true);
   });
   it("every flag prints two tickets: ^PQ2, not ^PQ1", () => {
@@ -274,22 +289,22 @@ describe("flagLabelZPL (2 x 1 in)", () => {
     expect(z).not.toMatch(/STITCHER|REMAKE|DECORATION/);
     expect(z.endsWith("^PQ2\n^XZ")).toBe(true);
     const f = fieldsOf(z);
-    expect(f.map(x => x.text)).toEqual(["FLAG", "7", "SMITH", "Ord 264247 · St 1 · 14:05", "Navy · A-L", "Twill peeling"]);   // and nothing else
+    expect(f.map(x => x.text)).toEqual(["Navy · A-L", "SMITH", "7", "Ord 264247 · St 1 · 14:05", "Twill peeling"]);   // and nothing else: no FLAG word
     f.forEach(x => {
       expect(x.x).toBeGreaterThanOrEqual(0);
       expect(x.x + x.width).toBeLessThanOrEqual(size.w);
       expect(x.y + x.fh).toBeLessThanOrEqual(203 + 8);              // the label, the 4 dots it is lifted and the 4 the black column runs past the bottom
     });
-    const reason = f.at(-1), parts = f.find(x => x.text === "Navy · A-L");
+    const reason = f.at(-1), footer = f.find(x => x.text.startsWith("Ord "));
     expect(reason.fh).toBeGreaterThanOrEqual(45);                   // two short words: as big as the route tag used to be
-    expect(reason.y + reason.lines * reason.fh).toBeLessThanOrEqual(parts.y);
+    expect(reason.y + reason.lines * reason.fh).toBeLessThanOrEqual(footer.y);
   });
   it("a long reason takes three lines, smaller, rather than losing its end", () => {
     const z = flagLabelZPL({ ...l, reason: "Print error — ghosting, fading, misaligned" });
     const long = fieldsOf(z).find(x => x.text === "Print error — ghosting, fading, misaligned");
     expect(long).toMatchObject({ lines: 3, align: "C" });
     expect(long.fh).toBeGreaterThanOrEqual(20);   // still about 2.5 mm tall: sized by how the words wrap, not by a letter count
-    expect(long.y + 3 * long.fh).toBeLessThanOrEqual(fieldsOf(z).find(x => x.text === "Navy · A-L").y);
+    expect(long.y + 3 * long.fh).toBeLessThanOrEqual(fieldsOf(z).find(x => x.text.startsWith("Ord ")).y);
     const short = reason => fontOf(flagLabelZPL({ ...l, reason }), reason);
     expect(long.fh).toBeLessThan(short("Cleaning not done"));
     expect(short("Cleaning not done")).toBeLessThan(short("Size label"));   // the fewer the words, the bigger
@@ -297,7 +312,7 @@ describe("flagLabelZPL (2 x 1 in)", () => {
   it("on the 1 x 0.5 in sticker roll the same layout still fits, smaller", () => {
     const z = flagLabelZPL(l, labelSize("1x0.5"));
     expect(z).toContain("^PW203");
-    expect(z).toContain("^FO0,0^GB65,110,65^FS");
+    expect(z).toContain("^FO0,0^GB81,110,81^FS");
     expect(z).toContain("^FR^FD7^FS");
     expect(z).toContain("^FDLoose, missing or broken stitching^FS");
     expect(z).not.toContain("STITCHER");
@@ -310,7 +325,7 @@ describe("flagLabelZPL (2 x 1 in)", () => {
     expect(z).toContain("^FDFlagged^FS");
     expect(z).not.toContain("DECIDE");
     expect(z).not.toContain("^FD^FS");
-    expect(fieldsOf(z).map(x => x.text)).toEqual(["FLAG", "?", "Flagged"]);
+    expect(fieldsOf(z).map(x => x.text)).toEqual(["?", "Flagged"]);
   });
   it("labelsZPL with kind flag uses this layout", () => {
     const z = labelsZPL([l, { ...l, number: "9" }], labelSize("2x1"), "flag");
