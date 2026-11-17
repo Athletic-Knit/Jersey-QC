@@ -171,8 +171,13 @@ describe("bin labels on the hub's printer", () => {
     expect(zpl).toContain("^LL207");
     expect(zpl).toContain("^FR^FDFLAG^FS");
     expect(zpl).toContain("^FR^FD7^FS");
-    expect(zpl).toContain("^FDSTITCHER^FS");
-    expect(zpl).not.toContain("^FDBOX^FS");    // not the sticker layout
+    expect(zpl).toContain("^FDLoose stitching^FS");   // what is wrong, not where it goes
+    expect(zpl).not.toContain("STITCHER");
+    expect(zpl).toContain("^FDNavy · A-L^FS");
+    expect(zpl).not.toMatch(/Box|BOX/);        // not the sticker layout, and no box on a ticket
+    expect((zpl.match(/\^PQ2/g) || []).length).toBe(1);   // two tickets a flag
+    expect(zpl).not.toContain("^PQ1");
+    expect(body.count).toBe(1);                // one label sent; the printer makes the second copy
   });
   it("the flag printer (JERSEY_FLAG_PRINTER_STATION1, else JERSEY_FLAG_PRINTER) takes the tickets; the stickers stay on the label printer", async () => {
     const f = fakes();

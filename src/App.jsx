@@ -13,10 +13,10 @@ import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { pace } from "./lib/pace.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.js";
-import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord } from "./lib/printjobs.js";
+import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel } from "./lib/printjobs.js";
 const SECOND_LOOK = false;
 import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS } from "./config.js";
 
 
 const S_PASS    = "pass";
@@ -183,7 +183,7 @@ const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise,
       {cols.map(c => (
         <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "#fbbf24" : "#e2e8f0" }}>{r[c]}</td>
       ))}
-      {hasBins && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700, whiteSpace: "nowrap" }}>{bin !== null ? `Box ${bin}` : "—"}</td>}
+      {hasBins && <td style={{ ...tdSt, color: r.scanned === "flag" ? "#f87171" : "#60a5fa", fontWeight: 700, whiteSpace: "nowrap" }}>{r.scanned === "flag" ? "Damaged" : bin !== null ? `Box ${bin}` : "—"}</td>}
       <td style={{ ...tdSt, padding: "2px 6px" }}>
         {/* A flagged jersey is with the supervisor: an operator can do nothing to it from here, so
             there is no menu at all on its row (an empty menu was shown before, 17 Nov 2026). A
@@ -1198,9 +1198,10 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const isRed   = mode === "flag" || mode === "duplicate" || mode === "supervisor";
   const isMenu  = mode === "reasons" || mode === "reasonText";
   const isManual = mode === "manual" || mode === "manualDone";
+  const isClean = mode === "clean";   // "Dirt or mark": clean it at the station
 
-  const bg     = isGreen ? "#052e16" : (isList || isManual) ? "#1c1a06" : isMenu ? "#1a1033" : "#450a0a";
-  const accent = isGreen ? "#22c55e" : (isList || isManual) ? "#f59e0b" : isMenu ? "#a78bfa" : "#ef4444";
+  const bg     = isGreen ? "#052e16" : (isList || isManual) ? "#1c1a06" : isMenu ? "#1a1033" : isClean ? "#082f49" : "#450a0a";
+  const accent = isGreen ? "#22c55e" : (isList || isManual) ? "#f59e0b" : isMenu ? "#a78bfa" : isClean ? "#38bdf8" : "#ef4444";
 
   const match      = state.match || state.scan?.match || null;
   const candidates = useMemo(() => state.candidates || [], [state.candidates]);
@@ -1254,6 +1255,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "🚩 Bad jersey" }];
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }, { ...notRight, run: actions.reopenLast }];
     if (mode === "manual")     return [];
+    if (mode === "clean")      return [{ id: "cleaned", label: "✓ It is clean now", primary: true, run: actions.cleaned }, { id: "stays", label: "🚩 It will not come out", run: actions.cleanFailed }, { id: "back", label: "← Back", run: actions.back }];
     if (mode === "duplicate")  return [{ id: "skip", label: "✓ Skip", primary: true, run: actions.skipDuplicate }, retry, { id: "dup", label: "🚩 Duplicate", run: actions.flagDuplicate }];
     if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") {
@@ -1472,12 +1474,31 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         </>
       )}
 
+      {/* ── CLEAN IT NOW: dirt or a mark is wiped off at the station, not flagged ── */}
+      {isClean && (
+        <>
+          <div style={{ fontSize: 80, lineHeight: 1, marginBottom: 4 }}>🧽</div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 9vw, 120px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 4 }}>CLEAN IT NOW</div>
+          {match && (
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 4.5vw, 52px)", fontWeight: 700, color: "#bae6fd", marginTop: 14, textAlign: "center" }}>
+              #{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}
+            </div>
+          )}
+          <div style={{ fontSize: 26, color: "#e0f2fe", marginTop: 14, textAlign: "center", padding: "0 40px", maxWidth: 820, lineHeight: 1.4 }}>
+            Wipe the dirt or mark off. The jersey is <strong>not flagged</strong>.
+          </div>
+          <div style={{ marginTop: 28, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
+            {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
+          </div>
+        </>
+      )}
+
       {/* ── RED: not found / API error / duplicate / supervisor ── */}
       {isRed && count === null && (
         <>
           <div style={{ fontSize: 80, lineHeight: 1, marginBottom: 4 }}>{mode === "supervisor" ? "🛑" : mode === "duplicate" ? "⚠️" : "🚩"}</div>
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 9vw, 120px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 4 }}>
-            {mode === "supervisor" ? "GO TO SUPERVISOR" : mode === "duplicate" ? (match?.scanned === "flag" ? "FLAGGED" : "ALREADY DONE") : state.title || "NOT FOUND"}
+            {mode === "supervisor" ? "FLAGGED" : mode === "duplicate" ? (match?.scanned === "flag" ? "FLAGGED" : "ALREADY DONE") : state.title || "NOT FOUND"}
           </div>
           {(match || detected) && (
             <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 4.5vw, 52px)", fontWeight: 700, color: "#fca5a5", marginTop: 14, textAlign: "center" }}>
@@ -1488,6 +1509,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             <div style={{ fontSize: 26, color: "#fca5a5", marginTop: 12, textAlign: "center", padding: "0 40px", maxWidth: 820, opacity: 0.95, lineHeight: 1.4 }}>
               {state.reason}
             </div>
+          )}
+          {mode === "supervisor" && (
+            <>
+              {state.reason && <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 4.5vw, 52px)", fontWeight: 800, color: "#fff", marginTop: 10, textAlign: "center", padding: "0 30px" }}>{state.reason}</div>}
+              <div style={{ fontSize: 24, fontWeight: 700, color: "#fecaca", marginTop: 10, textAlign: "center", padding: "0 40px", maxWidth: 820, lineHeight: 1.35 }}>Stick a ticket on it and put it in the DAMAGED box.</div>
+            </>
           )}
           {mode === "supervisor" && damagePhotos.length > 0 && (
             <div style={{ marginTop: 10, textAlign: "center" }}>
@@ -1502,7 +1529,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           )}
           {mode === "supervisor" && ticket && (
             <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, fontSize: 19, color: ticket.status === "done" ? "#fecaca" : ticket.status === "printing" ? "#fca5a5" : "#fbbf24" }}>
-              <span>{ticket.status === "printing" ? "🖨 Printing the flag ticket…" : ticket.status === "done" ? "🖨 Flag ticket printed — stick it on the jersey" : ticket.status === "none" ? "🖨 No label printer for this station — write the ticket by hand" : `🖨 Ticket not printed: ${ticket.message}`}</span>
+              <span>{ticket.status === "printing" ? "🖨 Printing the flag ticket…" : ticket.status === "done" ? "🖨 2 flag tickets printed" : ticket.status === "none" ? "🖨 No label printer for this station — write the ticket by hand" : `🖨 Ticket not printed: ${ticket.message}`}</span>
               {ticket.status !== "printing" && <button onClick={() => reprintTicket?.(state.entryId)} title="Print this jersey's flag ticket again" style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, borderColor: "#fca5a5", color: "#fecaca" }}>Reprint</button>}
             </div>
           )}
@@ -1857,6 +1884,10 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
           {autoPrint ? "The labels are printing: stick" : "Print the labels and stick"} one inside each box before scanning. How many boxes is an estimate; a box that fills sooner gets its next label at Box full.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 30, maxHeight: 400, overflowY: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "12px 22px", borderRadius: 12, background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", order: 99 }}>
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: 34, fontWeight: 900, color: "#f87171", minWidth: 150, flexShrink: 0, textAlign: "center", lineHeight: 1, whiteSpace: "nowrap" }}>DAMAGED</div>
+            <div style={{ textAlign: "left", fontSize: 17, color: "#fecaca" }}>One more box, off to the side, for flagged jerseys. Its label prints with the first flag.</div>
+          </div>
           {entries.map(({ label, bin, total = 0, boxes = 1 }) => (
             <div key={bin} style={{ display: "flex", alignItems: "center", gap: 18, padding: "14px 22px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" }}>
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 44, fontWeight: 900, color: "#60a5fa", minWidth: 150, textAlign: "center", lineHeight: 1, whiteSpace: "nowrap" }}>Box {bin}</div>
@@ -1892,7 +1923,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
 // new bin number and that bin's label prints. Closed bins stay listed, with
 // their list to print again.
 const BOX_CHOICES = BOXES;   // a box on the floor is one box: small, medium or large
-function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, onFull, onReprint, onLabels, onClose }) {
+function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, damaged = [], onDamagedList, onFull, onReprint, onLabels, onClose }) {
   const [asking, setAsking] = useState(null);   // the bin whose box is being asked
   useEffect(() => {
     const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
@@ -1949,6 +1980,13 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, on
             </div>
           ))}
         </div>
+        {damaged.length > 0 && (
+          <div style={{ ...rowSt, marginTop: 10, borderColor: "#ef4444", background: "rgba(239,68,68,0.08)" }}>
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, color: "#f87171", minWidth: 110, lineHeight: 1 }}>DAMAGED</div>
+            <div style={{ flex: 1, fontSize: 16, color: "#fecaca" }}>{pcs(damaged.length)} flagged: {jerseyList(damaged, 8)}</div>
+            {onDamagedList && <button onClick={onDamagedList} title="Print the list of what is in the DAMAGED box: number, name, team and why" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", borderColor: "#ef4444", color: "#fecaca", whiteSpace: "nowrap" }}>🖨 Print its list</button>}
+          </div>
+        )}
         {closed.length > 0 && (
           <>
             <div style={{ fontSize: 14, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "20px 0 8px" }}>Closed</div>
@@ -2143,6 +2181,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const boxes    = useMemo(() => packBoxes(pack), [pack]);
   const stickers = useMemo(() => stickerRows(pack), [pack]);
   const flags    = pack?.flags || [];
+  const inDamaged = useMemo(() => damagedItems(pack), [pack]);
   const needle   = pick.trim().toLowerCase();
   const picked   = needle ? stickers.filter(r => rosterMatches(r, pick)).slice(0, 8) : [];   // the same search as the roster table's
   const allLabels = pack ? boxLabelJobs(pack) : [], allLists = pack ? boxListJobs(pack) : [];
@@ -2228,6 +2267,11 @@ function PrintModal({ current = null, tagOf, onClose }) {
               ))}
             </div>
 
+            <div style={secSt}>Damaged box · {inDamaged.length} in it</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button style={{ ...smBtn, opacity: inDamaged.length ? 1 : 0.4 }} disabled={!inDamaged.length} onClick={() => send([[damagedListJobs(pack), "binlist"]], "the DAMAGED box list")}>Its list</button>
+              <button style={smBtn} onClick={() => send([[[damagedBoxLabel(pack)], "binticket"]], "the DAMAGED box label")}>Its label</button>
+            </div>
             <div style={secSt}>Flag tickets · {flags.length}</div>
             {flags.length === 0 ? <div style={{ color: "#64748b" }}>No flags on this order.</div> : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2494,6 +2538,7 @@ export default function App() {
   // What each open box lacks before it is sealed (roster.js): for the Boxes and Finish dialogs.
   const shortList  = useMemo(() => shortages(roster, binMap, closedBins), [roster, binMap, closedBins]);
   const shortByBox = useMemo(() => Object.fromEntries(shortList.map(x => [x.bin, x])), [shortList]);
+  const flaggedRows = useMemo(() => roster.filter(r => r.scanned === "flag"), [roster]);   // what is in the DAMAGED box
   const binSummary = useMemo(() => [...closedList, ...openBins].sort((a, b) => binOrder(a.bin, b.bin)), [closedList, openBins]);
   // How many boxes each team or size is expected to fill from its open box on
   // (the box model on every jersey of it not yet in a closed box), for the
@@ -2541,6 +2586,7 @@ export default function App() {
   // Settings (`flagTickets`), apart from the stickers'.
   const [ticket, setTicket] = useState(null);      // { id, status: "done" | "none" | "error", printer, message }
   const ticketPrinted = useRef(0);                 // the log id of the last flag sent to the printer
+  const damagedSent   = useRef(false);             // the DAMAGED box's label is on its way (so two quick flags do not print two)
   const printTicket = useCallback(entry => {
     if (!entry) return Promise.resolve();
     const label = flagLabel(entry, binMap, { orderNumber, station: stationId(), tag: severityOf(entry.reason).tag });
@@ -2553,7 +2599,17 @@ export default function App() {
     if (!settings.flagTickets || !newestEntry || newestEntry.status !== S_FLAGGED || ticketPrinted.current === newestEntry.id) return;
     ticketPrinted.current = newestEntry.id;
     printTicket(newestEntry);
-  }, [newestEntry, settings.flagTickets, printTicket]);
+    // The first flag of an order also prints the label of the DAMAGED box, where
+    // this jersey and every flagged one after it goes (owner, 17 Nov 2026: with the
+    // first flag, not at the start — most orders never need the box). Once an order:
+    // "DAMAGED" is kept with the labels already printed, in the saved session.
+    if (!boxLabelled.includes("DAMAGED") && !damagedSent.current) {
+      damagedSent.current = true;
+      hub.printLabels([damagedBoxLabel({ orderNumber })], { kind: "binticket", station: stationId() })
+        .then(() => setBoxLabelled(prev => [...new Set([...prev, "DAMAGED"])]))
+        .catch(() => { damagedSent.current = false; });   // no printer just now: the next flag tries again
+    }
+  }, [newestEntry, settings.flagTickets, printTicket, boxLabelled, orderNumber]);
   // What the supervisor screen shows for its entry: how the ticket went, or that it is printing.
   const ticketFor = entryId => !settings.flagTickets || !entryId ? null : ticket?.id === entryId ? ticket : { id: entryId, status: "printing" };
   const reprintTicket = entryId => { const e = log.find(l => l.id === entryId); if (e) { setTicket(null); printTicket(e); } };
@@ -2663,7 +2719,7 @@ export default function App() {
     // sorted, starts in Box 1.1. The box screen shows on every order, as the
     // box labels are printed from it.
     const bins = buildBinMap(parsed, {}, binBy);
-    setClosedBins([]); setBinPrint(null); setBoxLabelled([]);   // every roster row starts unscanned: no box is closed
+    setClosedBins([]); setBinPrint(null); setBoxLabelled([]); damagedSent.current = false;   // every roster row starts unscanned: no box is closed
     setBoxFilter(""); setDoneFilter(""); setRosterSearch("");    // the last order's box is not this order's
     setBinMap(binCount(bins) > 0 ? bins : null); setShowBinSetup(binCount(bins) > 0); setBoxAuto(true);
   }, [syncInspect]);
@@ -2706,8 +2762,9 @@ export default function App() {
   const printProblem = e => e.status === 503 ? "No label printer for this station" : `Not printed: ${e.status ? e.message : "could not reach the server"}`;
   // What Finish order prints: the list of every bin still open with something in it.
   const finishLists = useMemo(() => !settings.binLists || !binMap ? []
-    : openBins.filter(b => b.count > 0).flatMap(b => binListLabels(binContents(roster, binMap, closedBins, b.bin), { bin: b.bin, label: b.label, orderNumber })),
-  [settings.binLists, binMap, openBins, roster, closedBins, orderNumber]);
+    : [...openBins.filter(b => b.count > 0).flatMap(b => binListLabels(binContents(roster, binMap, closedBins, b.bin), { bin: b.bin, label: b.label, orderNumber, by: binFieldOf(binMap) })),
+       ...damagedListJobs({ orderNumber, roster, flags: log.filter(l => l.status === S_FLAGGED) })],   // and what is in the DAMAGED box
+  [settings.binLists, binMap, openBins, roster, closedBins, orderNumber, log]);
   // `boxId`: the box the operator said the bin is going in (null for a
   // one-piece bin: a bag). It goes on the list, is kept with the closed bin,
   // and is the answer the box model learns from.
@@ -2719,7 +2776,7 @@ export default function App() {
     if (boxId && rows.length > 1) hub.boxAnswer({ counts: binCounts(rows, stitched), box: boxId, suggested: guess?.id || "", station: stationId(), order: String(orderNumber || ""), bin })
       .then(res => { if (res?.model) { setBoxModel(res.model); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(res.model)); } catch { /* private window */ } } })
       .catch(() => {});   // the hub is away: the bin is closed all the same, this one answer is not learnt
-    const lists = binListLabels(rows, { bin, label: r.entry.label, orderNumber });
+    const lists = binListLabels(rows, { bin, label: r.entry.label, orderNumber, by: binFieldOf(binMap) });
     const what  = `Box ${bin} closed with ${r.entry.ids.length} ${r.entry.ids.length === 1 ? "jersey" : "jerseys"}. ${r.entry.label} now goes in Box ${r.newBin}`;
     if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Box lists are switched off in Settings.` }); return; }
     setBinPrint({ status: "printing", text: what });
@@ -2736,7 +2793,7 @@ export default function App() {
   const reprintBinList = useCallback(bin => {
     const c = closedBins.find(x => x.bin === bin); if (!c) return;
     const rows  = binContents(roster, binMap, closedBins, bin);
-    const lists = binListLabels(rows, { bin, label: c.label, orderNumber });
+    const lists = binListLabels(rows, { bin, label: c.label, orderNumber, by: binFieldOf(binMap) });
     if (!lists.length) return;
     setBinPrint({ status: "printing", text: `Box ${bin} list` });
     printOnTicketRoll(lists, "binlist")
@@ -2770,6 +2827,15 @@ export default function App() {
     : { orderNumber, roster, binMap, closedBins, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels },
   [sessionStarted, roster, orderNumber, binMap, closedBins, log, boxPlanLabels]);
   const flagTag = useCallback(reason => severityOf(reason).tag, []);
+  // The list of what is in the DAMAGED box, whenever the inspector asks for it.
+  const printDamagedList = useCallback(() => {
+    const lists = damagedListJobs(printPack);
+    if (!lists.length) { setBinPrint({ status: "off", text: "Nothing is in the DAMAGED box." }); return; }
+    setBinPrint({ status: "printing", text: "DAMAGED box list" });
+    printOnTicketRoll(lists, "binlist")
+      .then(res => setBinPrint({ status: "done", text: `DAMAGED box list printed: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .catch(e => setBinPrint({ status: "error", text: `DAMAGED box list. ${printProblem(e)}` }));
+  }, [printPack, printOnTicketRoll]);
 
   // Sign out leaves the station, not the order: an unfinished order stays saved
   // on this PC and is offered to the next person who signs in here (a mistaken
@@ -3173,7 +3239,9 @@ export default function App() {
     chooseReason(r) {
       const o = overlay; if (!o) return;
       if (!r.custom) { inspectRef.current.defect(); syncInspect(); }
-      if (r.inPlace) { if (o.reopened) { setOverlay(null); armAutoScan(); return; } setOverlay({ ...(o.returnTo || { mode: "flag", scan: o.scan }), note: r.label }); return; }
+      // Dirt or a mark is cleaned at the station, not flagged: say so, and ask.
+      // (Before 17 Nov 2026 the menu just closed, and nobody could tell what had happened.)
+      if (r.inPlace) { setOverlay({ mode: "clean", scan: o.scan, match: o.match || null, returnTo: o.returnTo || null, reopened: !!o.reopened, late: o.late }); return; }
       if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it
       const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened && o.late !== false ? `${r.label} — found after it passed` : r.label, reasonId: r.id, ...stamp() };
       if (o.match) { setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x)); setClosedBins(prev => dropFromClosed(prev, o.match._id)); }   // flagged: it is out of the bin it was in, closed or not
@@ -3181,6 +3249,15 @@ export default function App() {
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: r.label, route: r.route, entryId: entry.id, photoFirst: r.id !== "wrong_decoration", damagePhotos: [] });
       playTone("flag");
     },
+    // The "Clean it now" screen. Cleaned: the jersey carries on as it was — back
+    // to the screen it came from, with a note for the record; one that had
+    // already passed stays passed. Not cleaned: flagged like any other defect.
+    cleaned() {
+      const o = overlay; if (!o) return;
+      if (o.reopened || !o.returnTo) { setOverlay(null); armAutoScan(); return; }
+      setOverlay({ ...o.returnTo, note: "Dirt or mark, cleaned at the station" });
+    },
+    cleanFailed() { actions.chooseReason(MARK_STAYS); },
     reasonSubmit(text) {
       const o = overlay; if (!o) return;
       const label = String(text || "").trim(); if (!label) return;
@@ -3455,7 +3532,7 @@ export default function App() {
           onDismiss={() => closeDialog(() => setShowRosterComplete(false))} onFinish={askFinish} />
       )}
       {showBins && binMap && (
-        <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} cap={boxCap} status={binPrint} short={shortByBox}
+        <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} cap={boxCap} status={binPrint} short={shortByBox} damaged={flaggedRows} onDamagedList={printDamagedList}
           onFull={binFull} onReprint={reprintBinList} onLabels={() => { setShowBins(false); setBoxAuto(false); setShowBinSetup(true); }} onClose={() => closeDialog(() => setShowBins(false))} />
       )}
       {finished && (

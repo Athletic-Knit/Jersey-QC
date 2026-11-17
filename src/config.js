@@ -17,18 +17,25 @@ export const CHECKLIST = ["name & number", "size tag", "logos", "seams", "spots 
 
 // One tap on the "not right" menu. `route` is where the jersey goes; in Phase 1
 // everything except "mark" shows the same red "Go to supervisor".
-// `cat` is the defect category the reports count it under (the roadmap's
-// breakdown: decoration, artwork, sewing, label, plus fabric and cleaning).
+// One short menu for every order (17 Nov 2026, after the demo to the manager:
+// the old menu showed near-twins side by side, "Missing or wrong logo" beside
+// "Missing, wrong or crooked crest or logo", and its labels were sentences).
+// A reason is two or three plain words. `only` keeps the two that belong to
+// one way of making a jersey off the other's menu; `cat` is the defect
+// category the reports count it under.
 export const REASONS = [
-  { id: "wrong_decoration", label: "Wrong name, number or team",  route: "Supervisor → pink slip → decoration", cat: "Decoration" },
-  { id: "logo",             label: "Missing or wrong logo",        route: "Supervisor → pink slip → decoration", cat: "Decoration" },
-  { id: "sublimation",      label: "Sublimation error",            route: "Supervisor → full remake", cat: "Artwork" },
-  { id: "stitching",        label: "Stitching or seam",            route: "Supervisor → stitcher", cat: "Sewing" },
-  { id: "label",            label: "Wrong or missing size label",  route: "Supervisor → stitcher", cat: "Label" },
-  { id: "cleaning",         label: "Cleaning not done",            route: "Supervisor → back to cleaning", cat: "Cleaning" },
-  { id: "mark",             label: "Mark or dirt — clean it here", route: "Clean in place", inPlace: true, cat: "Cleaning" },
-  { id: "other",            label: "Something else — type it",     route: "Supervisor decides", custom: true, cat: "Other" },   // free text, for what the list does not cover
+  { id: "wrong_decoration", label: "Name or number",       route: "Supervisor → pink slip → decoration", cat: "Decoration" },
+  { id: "logo",      label: "Logo or crest",     route: "Supervisor → pink slip → decoration", cat: "Decoration" },
+  { id: "twill",     label: "Twill peeling",     route: "Supervisor → pink slip → decoration", cat: "Decoration", only: "stitched" },
+  { id: "print",     label: "Print or colour",   route: "Supervisor → full remake",            cat: "Artwork",    only: "sublimated" },
+  { id: "stitching", label: "Stitching or seam", route: "Supervisor → stitcher",               cat: "Sewing" },
+  { id: "fabric",    label: "Hole or snag",      route: "Supervisor → full remake",            cat: "Fabric" },
+  { id: "label",     label: "Size label",        route: "Supervisor → stitcher",               cat: "Label" },
+  { id: "mark",      label: "Dirt or mark",      route: "Clean in place", inPlace: true,       cat: "Cleaning" },   // cleaned at the station, not flagged: the "Clean it now" screen
+  { id: "other",     label: "Something else",    route: "Supervisor decides", custom: true,    cat: "Other" },      // free text, for what the list does not cover
 ];
+// "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
+export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning" };
 
 // What the order is made of. ECHL and ECHL replica jerseys have the names,
 // numbers and crests stitched on as twill; sublimated jerseys have them
@@ -42,37 +49,14 @@ export const JERSEY_TYPES = [
 export const jerseyTypeOf = id => JERSEY_TYPES.find(t => t.id === id) || null;
 export const jerseyTypeLabel = id => jerseyTypeOf(id)?.label || "";
 
-const R = Object.fromEntries(REASONS.map(r => [r.id, r]));
 export const REASONS_BY_CONSTRUCTION = {
-  stitched: [
-    R.wrong_decoration,
-    { id: "logo",       label: "Missing, wrong or crooked crest or logo", route: "Supervisor → pink slip → decoration", cat: "Decoration" },
-    { id: "twill",      label: "Twill lifting, peeling or torn",           route: "Supervisor → pink slip → decoration", cat: "Decoration" },
-    { id: "stitching",  label: "Loose, missing or broken stitching",      route: "Supervisor → stitcher", cat: "Sewing" },
-    { id: "seam",       label: "Seam, hem or construction",                route: "Supervisor → stitcher", cat: "Sewing" },
-    R.label, R.cleaning, R.mark, R.other,
-  ],
-  sublimated: [
-    R.wrong_decoration,
-    { id: "logo",       label: "Missing, wrong or misplaced logo",         route: "Supervisor → full remake", cat: "Artwork" },
-    { id: "print",      label: "Print error — ghosting, fading, misaligned", route: "Supervisor → full remake", cat: "Artwork" },
-    { id: "colour",     label: "Colour off, bleeding or streaked",         route: "Supervisor → full remake", cat: "Artwork" },
-    { id: "fabric",     label: "Fabric flaw, snag or hole",                route: "Supervisor → full remake", cat: "Fabric" },
-    { id: "seam",       label: "Seam, hem or construction",                route: "Supervisor → stitcher", cat: "Sewing" },
-    R.label, R.cleaning, R.mark, R.other,
-  ],
+  stitched:   REASONS.filter(r => !r.only || r.only === "stitched"),
+  sublimated: REASONS.filter(r => !r.only || r.only === "sublimated"),
 };
-// The "not right" menu for an order: by its type (an ECHL order is never
-// offered "Sublimation error"). With no type set, every reason from both
-// lists, one per id, with the in-place and free-text ones last — nothing is
+// The "not right" menu for an order: by its type (a stitched order is never
+// offered "Print or colour"). With no type set, the whole list: nothing is
 // ruled out when nobody said what the order is made of.
-const byId = list => { const seen = new Set(); return list.filter(r => !seen.has(r.id) && seen.add(r.id)); };
-export const ALL_REASONS_MENU = byId([
-  R.wrong_decoration, R.logo,   // the general wording, not one construction's
-  ...REASONS_BY_CONSTRUCTION.stitched.filter(r => !r.inPlace && !r.custom),
-  ...REASONS_BY_CONSTRUCTION.sublimated.filter(r => !r.inPlace && !r.custom),
-  ...REASONS,
-]).sort((a, b) => (a.inPlace || a.custom ? 1 : 0) - (b.inPlace || b.custom ? 1 : 0) || (a.custom ? 1 : 0) - (b.custom ? 1 : 0));
+export const ALL_REASONS_MENU = REASONS;
 export function reasonsFor(jerseyType) {
   const t = jerseyTypeOf(jerseyType);
   return t ? REASONS_BY_CONSTRUCTION[t.construction] : ALL_REASONS_MENU;
@@ -127,7 +111,26 @@ export const DEFAULT_SETTINGS = {
 // which outranks a clean. Works from the reason's label alone, so flags
 // recorded before any route was kept on the entry still get a tag, and a
 // "— found after it passed" suffix does not change where it goes.
-const ALL_REASONS = [...REASONS, ...REASONS_BY_CONSTRUCTION.stitched, ...REASONS_BY_CONSTRUCTION.sublimated];
+// The wordings used before 17 Nov 2026, so that a flag recorded then still
+// has its route and its category on the board and in the reports.
+const OLD_REASONS = [
+  ["Wrong name, number or team", "Supervisor → pink slip → decoration", "Decoration"],
+  ["Missing or wrong logo", "Supervisor → pink slip → decoration", "Decoration"],
+  ["Missing, wrong or crooked crest or logo", "Supervisor → pink slip → decoration", "Decoration"],
+  ["Twill lifting, peeling or torn", "Supervisor → pink slip → decoration", "Decoration"],
+  ["Sublimation error", "Supervisor → full remake", "Artwork"],
+  ["Missing, wrong or misplaced logo", "Supervisor → full remake", "Artwork"],
+  ["Print error — ghosting, fading, misaligned", "Supervisor → full remake", "Artwork"],
+  ["Colour off, bleeding or streaked", "Supervisor → full remake", "Artwork"],
+  ["Fabric flaw, snag or hole", "Supervisor → full remake", "Fabric"],
+  ["Loose, missing or broken stitching", "Supervisor → stitcher", "Sewing"],
+  ["Seam, hem or construction", "Supervisor → stitcher", "Sewing"],
+  ["Wrong or missing size label", "Supervisor → stitcher", "Label"],
+  ["Cleaning not done", "Supervisor → back to cleaning", "Cleaning"],
+  ["Mark or dirt — clean it here", "Clean in place", "Cleaning"],
+  ["Something else — type it", "Supervisor decides", "Other"],
+].map(([label, route, cat]) => ({ label, route, cat }));
+const ALL_REASONS = [...REASONS, MARK_STAYS, ...OLD_REASONS];
 // The defect category of a flag, from its reason's label, for the reports'
 // breakdown. A reason typed by the operator is "Other"; a jersey that is not
 // on the roster, or a duplicate, is an order problem, not a defect.

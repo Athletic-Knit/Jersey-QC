@@ -13,7 +13,7 @@
 //     the bin holds.
 // The sticker roll is 1 in wide by 0.5 in tall (JERSEY_LABEL_SIZE); every
 // layout is in fractions of the label so another roll only needs the setting.
-import { binEntries, binFieldOf, binFor, boxParts } from "./roster.js";
+import { binEntries, binFieldOf, binFor, boxParts, bySize } from "./roster.js";
 
 // "1x0.5" (inches, width x height) → dots at the printer's resolution.
 // `top` is where printing starts: the ZD411 begins its label about 2 mm
@@ -141,6 +141,9 @@ export function flagLabel(entry, binMap, { orderNumber = "", station = "", tag =
 // every dot the ticket is lifted is a dot lost at the bottom (6 left a white
 // line there). 4 puts the window on the label.
 export const FLAG_LIFT = 4;
+// Every flag prints this many tickets (the manager, 17 Nov 2026): one goes on
+// the jersey, the other stays with whoever deals with it.
+export const FLAG_COPIES = 2;
 export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const { w, h } = size;
   const top   = (size.top || 0) + FLAG_LIFT;                      // the texts: where they were before the lift
@@ -163,29 +166,42 @@ export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   out.push(line(side, top + pad, tag, lw, "C", "FLAG", { reverse: true }));
   out.push(line(side, top + pad + tag + 1, big, lw, "C", l.number, { reverse: true }));
   if (l.name) out.push(line(side, top + a - pad - nameH, fit(l.name, lw - 4, tiny), lw, "C", l.name, { reverse: true }));
-  // The right column.
-  const tagH = fit(l.tag || "DECIDE", rw, Math.round(a * 0.26));
-  let y = top + pad;
-  out.push(line(rx, y, tagH, rw, "C", l.tag || "DECIDE"));
-  y += tagH + pad;
-  const parts = [l.team, l.size, l.bin !== "" ? `Box ${l.bin}` : ""].filter(Boolean).join(" · ");
+  // The right column says WHAT IS WRONG, as big as it fits on up to three
+  // lines, and under it the team and size, then the order and the time. No
+  // route word (STITCHER, REMAKE) and no box: the ticket is for whoever picks
+  // the jersey out of the DAMAGED box, and the problem is what they need
+  // (the manager, 17 Nov 2026).
+  const parts  = [l.team, l.size].filter(Boolean).join(" · ");
   const footer = [l.orderNumber ? `Ord ${l.orderNumber}` : "", l.station, l.time].filter(Boolean).join(" · ");
+  const y = top + pad;
   const bottom = top + a - pad;                                   // the lines stack up from here
   let fy = bottom;
   if (footer) { fy -= small; out.push(line(rx, fy, fit(footer, rw, small), rw, "C", footer)); }
   if (parts)  { fy -= mid + 1; out.push(line(rx, fy, fit(parts, rw, mid), rw, "C", parts)); }
-  const room = fy - 2 - y;                                        // what is left for the reason
-  if (l.reason && room >= 10) {
-    // As many lines as the room allows (up to 3); when the reason still
-    // does not fit, a smaller font down to 10 dots rather than a cut line.
-    let fh = Math.min(tiny, room), lines = 1;
-    for (; fh >= 10; fh--) {
-      lines = Math.max(1, Math.min(3, Math.floor(room / fh)));
-      if (lines * Math.floor(rw / (0.58 * fh)) >= l.reason.length) break;
+  const room   = fy - 4 - y;
+  const reason = l.reason || "Flagged";
+  // The biggest letters at which the words fit in at most three lines. The
+  // printer wraps at spaces, so the lines are counted the way it wraps: word
+  // by word, a line holding about rw / (0.6 fh) letters. Counting letters
+  // alone let "Wrong name, number or team" through at a size where it needs a
+  // fourth line, which the printer prints over the third. A reason that still
+  // does not fit at the smallest size (a long typed one) is cut with "…".
+  const linesFor = (text, fh) => {
+    const per = Math.max(1, Math.floor(rw / (0.6 * fh)));
+    let n = 1, used = 0;
+    for (const word of text.split(/\s+/).filter(Boolean)) {
+      if (word.length > per) return 99;                           // a word longer than a line would be cut
+      if (used && used + 1 + word.length > per) { n++; used = word.length; } else used += (used ? 1 : 0) + word.length;
     }
-    out.push(line(rx, y, Math.max(10, fh), rw, "C", l.reason, { lines }));
-  }
-  out.push("^PQ1", "^XZ");
+    return n;
+  };
+  let text = reason, fh = Math.max(12, Math.min(Math.round(a * 0.34), room));
+  const fits = h => linesFor(text, h) <= Math.max(1, Math.min(3, Math.floor(room / h)));
+  while (fh > 12 && !fits(fh)) fh--;
+  while (!fits(fh) && text.length > 8) text = text.slice(0, -2).trimEnd().replace(/…$/, "") + "…";
+  const used = Math.min(linesFor(text, fh), 3);
+  out.push(line(rx, y + Math.max(0, Math.floor((room - used * fh) / 2)), fh, rw, "C", text, { lines: Math.max(1, Math.min(3, Math.floor(room / fh))) }));
+  out.push(`^PQ${FLAG_COPIES}`, "^XZ");
   return out.join("\n");
 }
 
@@ -229,7 +245,7 @@ export function binLabelZPL(l, size = labelSize()) {
     : [l.orderNumber ? `Order ${l.orderNumber}` : ""]).filter(Boolean).join("   ");
   return [
     "^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
-    line(side, top + pad, fit(`BOX ${l.bin}`, w, big), w, "C", `BOX ${l.bin}`),
+    line(side, top + pad, fit(l.title || `BOX ${l.bin}`, w, big), w, "C", l.title || `BOX ${l.bin}`),
     line(side, top + pad + big + Math.round(a * 0.01), fit(l.label, w, mid), w, "C", l.label),
     ...(footer ? [line(side, h - small - pad, fit(footer, w, small), w, "C", footer)] : []),
     "^PQ1", "^XZ",
@@ -267,36 +283,93 @@ const byNumber = (a, b) => {
 // rows in the box → the labels in print order: the pages of rows, last page
 // first ({ bin, label, orderNumber, page, pages, count, items }), then the
 // count label ({ title: true, bin, label, orderNumber, count, pages }).
-export function binListLabels(rows, { bin, label = "", orderNumber = "" } = {}) {
+export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "team" } = {}) {
   const items = [...(rows || [])].sort(byNumber).map(binListItem);
   if (!items.length) return [];
   const pages = Math.ceil(items.length / BIN_LIST_PER_LABEL);
-  const base  = { bin, label: String(label || ""), orderNumber: String(orderNumber || ""), pages, count: items.length };
+  // What the customer checks the box against: how many of each size (or, in
+  // an order sorted by size, of each team). "Y-M 4   A-L 12   A-XL 8".
+  const other = by === "size" ? "team" : "size", tally = new Map();
+  (rows || []).forEach(r => {   // "Navy" and "navy " are one team, as they are one box: counted together under the first spelling met
+    const shown = String(r?.[other] ?? "").trim(); if (!shown) return;
+    const k = shown.toLowerCase(), t = tally.get(k) || { shown, n: 0 };
+    t.n++; tally.set(k, t);
+  });
+  const mix = [...tally.values()].sort((a, b) => (other === "size" ? bySize(a.shown, b.shown) : a.shown.localeCompare(b.shown, undefined, { sensitivity: "base" }))).map(t => `${t.shown} ${t.n}`).join("   ");
+  const base  = { bin, label: String(label || ""), orderNumber: String(orderNumber || ""), pages, count: items.length, by, mix };
   const lists = Array.from({ length: pages }, (_, i) => ({ ...base, page: i + 1, items: items.slice(i * BIN_LIST_PER_LABEL, (i + 1) * BIN_LIST_PER_LABEL) }));
   return [...lists.reverse(), { ...base, title: true, page: 0, items: [] }];
 }
 
-// The count label: "BOX 5.1" at almost half the label's height, "24 pcs"
-// under it, the team or size and the order number in a small footer.
+// The count label is the CUSTOMER'S label: it goes on the outside of the taped
+// box. No box number on it (5.1 is the floor's own name for the box and means
+// nothing to them; the manager, 17 Nov 2026): the team (or the size, in an
+// order sorted by size) as big as it fits, how many pieces, how many of each
+// size, and the order number. An order that is not sorted leads with the
+// order number. The floor still knows which box it is for: the box has its
+// BOX 5.1 label inside, and the list prints as that box is closed.
 function binCountZPL(l, size) {
   const { w: full, h, top = 0, dpi = 203 } = size;
   const side  = full >= 300 ? Math.round(dpi * 2 / 25.4) : 0;
   const w     = full - 2 * side;
   const a     = h - top;
   const pad   = Math.round(a * 0.03);
-  const big   = Math.round(a * 0.46), mid = Math.round(a * 0.28), small = Math.max(12, Math.round(a * 0.13));
+  const big   = Math.round(a * 0.38), mid = Math.round(a * 0.24), mixH = Math.round(a * 0.15), small = Math.max(12, Math.round(a * 0.12));
+  const order = l.orderNumber ? `Order ${l.orderNumber}` : "";
+  const named = l.by !== "all" && !!l.label && !/^whole order$/i.test(l.label);
+  const head  = named ? l.label : order || "Order";
   const pcs   = `${l.count} ${l.count === 1 ? "pc" : "pcs"}`;
-  const footer = [l.label, l.orderNumber ? `Order ${l.orderNumber}` : ""].filter(Boolean).join("   ");
-  return [
-    "^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
-    line(side, top + pad, fit(`BOX ${l.bin}`, w, big), w, "C", `BOX ${l.bin}`),
-    line(side, top + pad + big + 2, fit(pcs, w, mid), w, "C", pcs),
-    ...(footer ? [line(side, h - small - pad, fit(footer, w, small), w, "C", footer)] : []),
-    "^PQ1", "^XZ",
-  ].join("\n");
+  const out = ["^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
+    line(side, top + pad, fit(head, w, big), w, "C", head),
+    line(side, top + pad + big + 2, fit(pcs, w, mid), w, "C", pcs)];
+  if (l.mix) out.push(line(side, top + pad + big + mid + 5, mixH, w, "C", l.mix));
+  if (named && order) out.push(line(side, h - small - pad, fit(order, w, small), w, "C", order));
+  out.push("^PQ1", "^XZ");
+  return out.join("\n");
+}
+
+// ── What is in the DAMAGED box ───────────────────────────────────────────────
+// Every flagged jersey goes in the DAMAGED box with its ticket. Its list is
+// printed when the inspector asks (the box is full, the shift ends) and at
+// Finish order: the order number and the count in a header, then a line a
+// jersey — number, name, team, and why it was flagged — seven to a 2 x 1 in
+// label, in one column, as the reason needs the width.
+// `entries`: [{ number, name, team, reason }]. → the labels in print order,
+// the last page first, like a box list.
+export const DAMAGED_PER_LABEL = 7;
+export function damagedListLabels(entries, { orderNumber = "" } = {}) {
+  const items = (entries || []).map(e => ({
+    who: [String(e.number ?? "").trim() ? `#${String(e.number).trim()}` : "", String(e.name ?? "").trim(), String(e.team ?? "").trim()].filter(Boolean).join(" ") || "Jersey",
+    reason: String(e.reason || "").replace(/ — found after it passed$/, "").trim() || "Flagged",
+  }));
+  if (!items.length) return [];
+  const pages = Math.ceil(items.length / DAMAGED_PER_LABEL);
+  return Array.from({ length: pages }, (_, i) => ({
+    damaged: true, bin: "DAMAGED", orderNumber: String(orderNumber || ""), page: i + 1, pages, count: items.length,
+    items: items.slice(i * DAMAGED_PER_LABEL, (i + 1) * DAMAGED_PER_LABEL),
+  })).reverse();
+}
+function damagedListZPL(l, size) {
+  const { w, h, top = 0 } = size;
+  const a    = h - top;
+  const pad  = Math.max(3, Math.round(a * 0.03));
+  const head = Math.max(12, Math.round(a * 0.12));
+  const x0   = Math.round((size.dpi || 203) * BIN_LIST_LEFT_MM / 25.4) + pad;
+  const fullW = w - x0 - pad;
+  const left  = `DAMAGED${l.orderNumber ? "  Order " + l.orderNumber : ""}`;
+  const right = `${l.count} ${l.count === 1 ? "pc" : "pcs"}${l.pages > 1 ? `  ${l.page}/${l.pages}` : ""}`;
+  const rw = Math.round(fullW * 0.3), lw = fullW - rw;
+  const y0 = top + pad + head + 5, rowH = Math.floor((h - pad - y0) / DAMAGED_PER_LABEL);
+  return ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", "^LT0",
+    tight(x0, top + pad, head, lw, left),
+    line(x0 + lw, top + pad, fit(right, rw, head), rw, "R", right),
+    `^FO${x0},${top + pad + head + 1}^GB${fullW},1,1^FS`,
+    ...(l.items || []).slice(0, DAMAGED_PER_LABEL).map((it, i) => tight(x0, y0 + i * rowH, Math.max(10, rowH - 3), fullW, `${it.who}: ${it.reason}`)),
+    "^PQ1", "^XZ"].join("\n");
 }
 
 export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
+  if (l.damaged) return damagedListZPL(l, size);
   if (l.title) return binCountZPL(l, size);
   const { w, h, top = 0 } = size;
   const a    = h - top;                                           // the printable height

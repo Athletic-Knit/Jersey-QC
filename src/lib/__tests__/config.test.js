@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { JERSEY_TYPES, reasonsFor, jerseyTypeLabel, REASONS, STATIONS, stationOf, ROLES } from "../../config.js";
+import { JERSEY_TYPES, reasonsFor, jerseyTypeLabel, REASONS, MARK_STAYS, reasonCategory, routeOfReason, severityOf, STATIONS, stationOf, ROLES } from "../../config.js";
 
 describe("stations", () => {
   it("three stations, each with its own PIN, none equal to the supervisor's", () => {
@@ -17,53 +17,125 @@ describe("jersey types and their reason menus", () => {
     expect(JERSEY_TYPES.map(t => t.id)).toEqual(["echl", "echl_replica", "sublimated"]);
     expect(JERSEY_TYPES.map(t => t.construction)).toEqual(["stitched", "stitched", "sublimated"]);
   });
-  it("stitched orders get twill and stitching reasons, sublimated get print and fabric", () => {
+  // One short list for every order (17 Nov 2026): a stitched order leaves out
+  // "Print or colour", a sublimated one leaves out "Twill peeling".
+  const ALL_IDS = ["wrong_decoration", "logo", "twill", "print", "stitching", "fabric", "label", "mark", "other"];
+  it("one short list: stitched orders get it without print, sublimated without twill", () => {
     const st = reasonsFor("echl").map(r => r.id), sub = reasonsFor("sublimated").map(r => r.id);
-    expect(st).toEqual(expect.arrayContaining(["twill", "stitching"]));
-    expect(st).not.toEqual(expect.arrayContaining(["print"]));
-    expect(sub).toEqual(expect.arrayContaining(["print", "colour", "fabric"]));
-    expect(sub).not.toEqual(expect.arrayContaining(["twill"]));
+    expect(st).toEqual(ALL_IDS.filter(id => id !== "print"));
+    expect(sub).toEqual(ALL_IDS.filter(id => id !== "twill"));
     expect(reasonsFor("echl_replica")).toBe(reasonsFor("echl"));
+    expect(REASONS.find(r => r.id === "twill").only).toBe("stitched");
+    expect(REASONS.find(r => r.id === "print").only).toBe("sublimated");
+    expect(REASONS.filter(r => r.only).map(r => r.id)).toEqual(["twill", "print"]);   // the only two that belong to one way of making a jersey
+    for (const gone of ["seam", "colour", "sublimation", "cleaning"]) expect(REASONS.map(r => r.id)).not.toContain(gone);   // the old ids
+  });
+  it("the wording of the menu", () => {
+    expect(Object.fromEntries(REASONS.map(r => [r.id, r.label]))).toEqual({
+      wrong_decoration: "Name or number", logo: "Logo or crest", twill: "Twill peeling", print: "Print or colour",
+      stitching: "Stitching or seam", fabric: "Hole or snag", label: "Size label", mark: "Dirt or mark", other: "Something else",
+    });
   });
   it("every menu keeps the free-text and in-place options and ends with 'other'", () => {
     for (const t of ["echl", "sublimated", ""]) {
       const rs = reasonsFor(t);
       expect(rs.at(-1).custom).toBe(true);
       expect(rs.some(r => r.inPlace)).toBe(true);
+      expect(rs.filter(r => r.inPlace).map(r => r.id)).toEqual(["mark"]);
+      expect(rs.filter(r => r.custom).map(r => r.id)).toEqual(["other"]);
     }
   });
-  it("no type → every reason from both lists, one per id, in-place and free-text last; labels resolve", () => {
+  it("no type → all nine reasons, one per id, in-place and free-text last; labels resolve", () => {
     const all = reasonsFor("");
     expect(reasonsFor("nonsense")).toBe(all);
     const ids = all.map(r => r.id);
+    expect(ids.length).toBe(9);
+    expect(ids).toEqual(ALL_IDS);
     expect(new Set(ids).size).toBe(ids.length);
     for (const list of [reasonsFor("echl"), reasonsFor("sublimated"), REASONS]) for (const r of list) expect(ids).toContain(r.id);
     expect(ids.slice(-2)).toEqual(["mark", "other"]);
-    for (const t of ["echl", "echl_replica"]) expect(reasonsFor(t).map(r => r.label)).not.toContain("Sublimation error");
+    for (const t of ["echl", "echl_replica"]) expect(reasonsFor(t).map(r => r.label)).not.toContain("Print or colour");
+    expect(reasonsFor("sublimated").map(r => r.label)).not.toContain("Twill peeling");
     expect(jerseyTypeLabel("echl_replica")).toBe("ECHL replica");
     expect(jerseyTypeLabel("")).toBe("");
+  });
+  it("no two reasons on any menu share a label or an id", () => {
+    for (const t of ["echl", "echl_replica", "sublimated", ""]) {
+      const rs = reasonsFor(t);
+      expect(new Set(rs.map(r => r.id)).size).toBe(rs.length);
+      expect(new Set(rs.map(r => r.label.trim().toLowerCase())).size).toBe(rs.length);
+    }
+  });
+  it("every label is at most 3 words", () => {
+    const words = label => label.trim().split(/\s+/).length;
+    expect(REASONS.filter(r => words(r.label) > 3).map(r => r.label)).toEqual([]);
+  });
+  it("dirt that will not come out (MARK_STAYS) is a flag of its own, not on the menu: Cleaning, back to cleaning", () => {
+    expect(MARK_STAYS).toMatchObject({ label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning" });
+    expect(REASONS.map(r => r.label)).not.toContain(MARK_STAYS.label);
+    expect(REASONS.map(r => r.id)).not.toContain(MARK_STAYS.id);
+    expect(MARK_STAYS.inPlace).toBeFalsy();                         // "Dirt or mark" is cleaned at the station; this one is flagged
+    expect(reasonCategory(MARK_STAYS.label)).toBe("Cleaning");
+    expect(routeOfReason(MARK_STAYS.label)).toBe("Supervisor → back to cleaning");
+    expect(severityOf(MARK_STAYS.label).tag).toBe("CLEANING");
+    expect(reasonCategory(`${MARK_STAYS.label} — found after it passed`)).toBe("Cleaning");
   });
 });
 
 describe("where a flag goes, and its weight on the board", () => {
   it("maps every reason label of every jersey type to its route", async () => {
-    const { routeOfReason, REASONS_BY_CONSTRUCTION } = await import("../../config.js");
-    expect(routeOfReason("Sublimation error")).toBe("Supervisor → full remake");
-    expect(routeOfReason("Loose, missing or broken stitching")).toBe("Supervisor → stitcher");
-    expect(routeOfReason("Print error — ghosting, fading, misaligned — found after it passed")).toBe("Supervisor → full remake");
+    const { REASONS_BY_CONSTRUCTION } = await import("../../config.js");
+    expect(routeOfReason("Twill peeling")).toBe("Supervisor → pink slip → decoration");
+    expect(routeOfReason("Print or colour")).toBe("Supervisor → full remake");
+    expect(routeOfReason("Hole or snag — found after it passed")).toBe("Supervisor → full remake");
     expect(routeOfReason("Not on the roster — operator typed #77 KIM")).toBe("Supervisor → check the order");
     expect(routeOfReason("Duplicate — scanned again after passing")).toBe("Supervisor → check the order");
     expect(routeOfReason("a loose thread on the collar")).toBe("Supervisor decides");
     for (const list of Object.values(REASONS_BY_CONSTRUCTION)) for (const r of list) expect(routeOfReason(r.label)).toBe(r.route);
   });
-  it("weighs a remake over decoration over cleaning over a decision", async () => {
-    const { severityOf } = await import("../../config.js");
+  // A flag recorded before 17 Nov 2026 carries the old wording: it keeps its
+  // route, its tag on the board and its category in the reports.
+  it("the wordings used before the short menu still resolve: route, tag and category", () => {
+    const old = [
+      ["Wrong name, number or team",                 "Supervisor → pink slip → decoration", "DECORATION", "Decoration"],
+      ["Missing or wrong logo",                      "Supervisor → pink slip → decoration", "DECORATION", "Decoration"],
+      ["Missing, wrong or crooked crest or logo",    "Supervisor → pink slip → decoration", "DECORATION", "Decoration"],
+      ["Twill lifting, peeling or torn",             "Supervisor → pink slip → decoration", "DECORATION", "Decoration"],
+      ["Sublimation error",                          "Supervisor → full remake",            "REMAKE",     "Artwork"],
+      ["Missing, wrong or misplaced logo",           "Supervisor → full remake",            "REMAKE",     "Artwork"],
+      ["Print error — ghosting, fading, misaligned", "Supervisor → full remake",            "REMAKE",     "Artwork"],
+      ["Colour off, bleeding or streaked",           "Supervisor → full remake",            "REMAKE",     "Artwork"],
+      ["Fabric flaw, snag or hole",                  "Supervisor → full remake",            "REMAKE",     "Fabric"],
+      ["Loose, missing or broken stitching",         "Supervisor → stitcher",               "STITCHER",   "Sewing"],
+      ["Seam, hem or construction",                  "Supervisor → stitcher",               "STITCHER",   "Sewing"],
+      ["Wrong or missing size label",                "Supervisor → stitcher",               "STITCHER",   "Label"],
+      ["Cleaning not done",                          "Supervisor → back to cleaning",       "CLEANING",   "Cleaning"],
+    ];
+    for (const [label, route, tag, cat] of old) {
+      expect(REASONS.map(r => r.label)).not.toContain(label);       // off the menu …
+      expect([label, routeOfReason(label)]).toEqual([label, route]);   // … and still understood
+      expect([label, severityOf(label).tag]).toEqual([label, tag]);
+      expect([label, reasonCategory(label)]).toEqual([label, cat]);
+    }
+    expect(routeOfReason("Print error — ghosting, fading, misaligned — found after it passed")).toBe("Supervisor → full remake");
+    expect(reasonCategory("Seam, hem or construction — found after it passed")).toBe("Sewing");
+    expect(routeOfReason("SUBLIMATION ERROR")).toBe("Supervisor → full remake");   // the label's case does not matter
+  });
+  it("weighs a remake over decoration over cleaning over a decision", () => {
     const w = r => severityOf(r).weight;
+    expect(w("Print or colour")).toBeGreaterThan(w("Logo or crest"));
+    expect(w("Logo or crest")).toBeGreaterThan(w("Dirt that will not come out"));
+    expect(w("Dirt that will not come out")).toBeGreaterThan(w("something odd"));
+    expect(severityOf("Print or colour").tag).toBe("REMAKE");
+    expect(severityOf("Hole or snag").tag).toBe("REMAKE");
+    expect(severityOf("Twill peeling").tag).toBe("DECORATION");
+    expect(severityOf("Stitching or seam").tag).toBe("STITCHER");
+    expect(severityOf("Size label").tag).toBe("STITCHER");
+    expect(severityOf("").tag).toBe("DECIDE");
+    // the same weights for the wordings used before 17 Nov 2026
     expect(w("Sublimation error")).toBeGreaterThan(w("Missing or wrong logo"));
     expect(w("Missing or wrong logo")).toBeGreaterThan(w("Cleaning not done"));
     expect(w("Cleaning not done")).toBeGreaterThan(w("something odd"));
     expect(severityOf("Sublimation error").tag).toBe("REMAKE");
-    expect(severityOf("Stitching or seam").tag).toBe("STITCHER");
-    expect(severityOf("").tag).toBe("DECIDE");
   });
 });

@@ -9,7 +9,7 @@
 // labels the station expects the order to need (the open order only).
 // Nothing here prints: each function returns the labels for hub.printLabels.
 import { binContents, binEntries, binFieldOf, binOfRow, binOrder, inBin } from "./roster.js";
-import { binListLabels, jerseyLabel, flagLabel } from "./labels.js";
+import { binListLabels, jerseyLabel, flagLabel, damagedListLabels } from "./labels.js";
 
 // Every box of the order, closed and open, in box order, with the rows in it.
 export function packBoxes(pack) {
@@ -37,7 +37,7 @@ export function boxLabelJobs(pack, bin) {
 // something in it. Each box's labels come in print order (labels.js).
 export function boxListJobs(pack, bin) {
   return packBoxes(pack).filter(b => b.count > 0 && (bin === undefined || b.bin === bin))
-    .flatMap(b => binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: pack?.orderNumber }));
+    .flatMap(b => binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: pack?.orderNumber, by: binFieldOf(pack?.binMap) }));
 }
 
 // The jerseys that have a sticker: passed by the camera or by hand.
@@ -57,6 +57,31 @@ export function flagJobs(pack, ids, tagOf = () => "DECIDE") {
   return (pack?.flags || []).filter(e => !ids || ids.includes(e.id))
     .map(e => flagLabel(e, pack.binMap, { orderNumber: pack.orderNumber, station: pack.station, tag: tagOf(e.reason) }));
 }
+
+// ── The DAMAGED box ─────────────────────────────────────────────────────────
+// What is in it: every jersey that is flagged right now, with the reason of
+// its newest flag, in jersey-number order. A jersey that was flagged and has
+// since passed or been un-checked is out of the box; one the supervisor has
+// resolved is too. A flag with no roster row (not on the roster) counts: the
+// jersey is in the box all the same.
+export function damagedItems(pack) {
+  const roster = pack?.roster || [], seen = new Set(), out = [];
+  const newestFirst = [...(pack?.flags || [])].sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")) || (Number(b.id) || 0) - (Number(a.id) || 0));
+  newestFirst.forEach(e => {
+    const id = e.match?._id, row = id !== undefined ? roster.find(r => r._id === id) : null;
+    if (row && row.scanned !== "flag") return;
+    if (!row && e.resolution) return;
+    const key = row ? "r" + id : "e" + e.id;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ number: row?.number ?? e.match?.number ?? e.detected?.number ?? "", name: row?.name ?? e.match?.name ?? e.detected?.name ?? "", team: row?.team ?? e.match?.team ?? "", reason: e.reason || "" });
+  });
+  const num = x => { const n = parseInt(String(x.number).replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : 1e9; };
+  return out.sort((a, b) => num(a) - num(b) || String(a.name).localeCompare(String(b.name)));
+}
+// Its list (kind "binlist") and its own label (kind "binticket").
+export function damagedListJobs(pack) { return damagedListLabels(damagedItems(pack), { orderNumber: pack?.orderNumber }); }
+export const damagedBoxLabel = pack => ({ bin: "DAMAGED", title: "DAMAGED", label: "Flagged jerseys", by: "", count: 0, orderNumber: String(pack?.orderNumber || "") });
 
 // One of the hub's order records (GET /api/hub/orders) → a pack. Its box
 // names are left as they were recorded: an order from before the boxes had

@@ -1,6 +1,6 @@
 // Bin labels for the Zebra: what each label says, and the ZPL that says it.
 import { describe, it, expect } from "vitest";
-import { binLabels, labelSize, binLabelZPL, labelsZPL, jerseyLabel, jerseyLabelZPL, flagLabel, flagLabelZPL, binListItem, binListLabels, binListZPL, BIN_LIST_PER_LABEL } from "../labels.js";
+import { binLabels, labelSize, binLabelZPL, labelsZPL, jerseyLabel, jerseyLabelZPL, flagLabel, flagLabelZPL, FLAG_COPIES, binListItem, binListLabels, binListZPL, BIN_LIST_PER_LABEL } from "../labels.js";
 import { buildBinMap } from "../roster.js";
 
 const roster = [
@@ -99,6 +99,20 @@ describe("ZPL", () => {
     const short = binLabelZPL({ ...label, label: "Navy" }), long = binLabelZPL({ ...label, label: "Blue Jays Home Alternate" });
     expect(fontOf(long)).toBeLessThan(fontOf(short));
     expect(fontOf(long)).toBeGreaterThanOrEqual(10);
+  });
+  it("a label with a title prints the title in place of BOX and its number: the DAMAGED box", () => {
+    const z = binLabelZPL({ title: "DAMAGED", label: "Flagged jerseys", by: "", orderNumber: "5" }, labelSize("2x1"));
+    expect(z).toContain("^FDDAMAGED^FS");
+    expect(z).not.toContain("BOX");
+    expect(z).not.toContain("undefined");                         // this box has no number
+    expect(z).toContain("^FDFlagged jerseys^FS");
+    expect(z).toContain("^FDOrder 5^FS");                         // the order alone: this box is not by team or by size
+    expect(z).not.toMatch(/by team|by size/);
+    const fontOf = t => parseInt(z.split("\n").find(x => x.endsWith(`^FD${t}^FS`)).match(/\^A0N,(\d+)/)[1], 10);
+    expect(fontOf("DAMAGED")).toBeGreaterThan(fontOf("Flagged jerseys"));   // the title is the big line, where BOX 3 is
+    // a box with a number and a title: the title wins; without a title nothing changes
+    expect(binLabelZPL({ ...label, title: "DAMAGED" }, labelSize("2x1"))).not.toContain("BOX");
+    expect(binLabelZPL({ ...label, title: "" }, labelSize("2x1"))).toContain("^FDBOX 3^FS");
   });
   it("labelsZPL joins one ^XA…^XZ block per label", () => {
     const labels = binLabels(roster, buildBinMap(roster, {}, "team"), { orderNumber: "1" });
@@ -220,42 +234,90 @@ describe("flagLabelZPL (2 x 1 in)", () => {
     expect(fontOf(z, "7")).toBeGreaterThanOrEqual(90);               // ~11 mm, read from across the table
     expect(fontOf(z, "SMITH")).toBeGreaterThanOrEqual(24);
   });
-  it("the route tag big on the right, the reason wrapped, team · size · box, and order · station · time at the bottom", () => {
-    const z = flagLabelZPL(l);
-    expect(z).toContain("^FDSTITCHER^FS");
-    expect(fontOf(z, "STITCHER")).toBeGreaterThanOrEqual(45);
-    expect(z).toMatch(/\^A0N,2[0-6],2[0-6]\^FB24\d,[23],0,C\^FDLoose, missing or broken stitching\^FS/);
-    expect(z).toContain("^FDNavy · A-L · Box 2.1^FS");
-    expect(fontOf(z, "Navy · A-L · Box 2.1")).toBeGreaterThanOrEqual(22);
-    expect(z).toContain("^FDOrd 264247 · St 1 · 14:05^FS");
-    expect(topOf(z).every(y => y >= 16)).toBe(true);
-    expect(z).not.toContain("^FR^FDSTITCHER");                      // the right column is black on white
+  // Every text field of a ticket: where it starts, its font height, how many lines its box allows.
+  const fieldsOf = z => lines(z).filter(x => x.includes("^FD")).map(x => {
+    const m = x.match(/^\^FO(\d+),(\d+)\^A0N,(\d+),(\d+)\^FB(\d+),(\d+),0,([LCR])(\^FR)?\^FD(.*)\^FS$/);
+    return { x: +m[1], y: +m[2], fh: +m[3], fw: +m[4], width: +m[5], lines: +m[6], align: m[7], reverse: !!m[8], text: m[9] };
   });
-  it("a long reason takes three lines, a little smaller, rather than losing its end", () => {
-    const long = flagLabelZPL({ ...l, reason: "Print error — ghosting, fading, misaligned" });
-    expect(long).toMatch(/\^A0N,2[0-4],2[0-4]\^FB24\d,3,0,C\^FDPrint error — ghosting, fading, misaligned\^FS/);
-    expect(fontOf(flagLabelZPL({ ...l, reason: "Cleaning not done" }), "Cleaning not done")).toBe(26);
+  it("the reason big on the right, centred on up to three lines, then team · size, and order · station · time at the bottom; no route tag, no box", () => {
+    const z = flagLabelZPL(l);
+    const f = fieldsOf(z), reason = f.find(x => x.text === l.reason), parts = f.find(x => x.text === "Navy · A-L"), footer = f.find(x => x.text === "Ord 264247 · St 1 · 14:05");
+    expect(reason).toMatchObject({ lines: 3, align: "C", reverse: false });   // the right column is black on white
+    expect(reason.width).toBeGreaterThanOrEqual(240);
+    expect(reason.fh).toBeGreaterThanOrEqual(28);                   // bigger than it was under the route tag (26 at most)
+    expect(reason.fh).toBeGreaterThan(parts.fh);                    // what is wrong is the biggest thing on the right
+    expect(z).not.toMatch(/STITCHER|REMAKE|DECORATION|CLEANING|DECIDE/);   // no route tag, although the label still carries one
+    expect(z).toContain("^FDNavy · A-L^FS");
+    expect(z).not.toMatch(/Box|BOX|2\.1/);                          // the box is not on the ticket
+    expect(parts.fh).toBeGreaterThanOrEqual(22);
+    expect(z).toContain("^FDOrd 264247 · St 1 · 14:05^FS");
+    expect(reason.y + reason.lines * reason.fh).toBeLessThanOrEqual(parts.y);   // three lines of reason end above the team
+    expect(parts.y + parts.fh).toBeLessThanOrEqual(footer.y);       // and the team above the order
+    expect(topOf(z).every(y => y >= 16)).toBe(true);
+  });
+  it("every flag prints two tickets: ^PQ2, not ^PQ1", () => {
+    expect(FLAG_COPIES).toBe(2);
+    for (const size of [labelSize("2x1"), labelSize("1x0.5"), labelSize("2.25x1.25")]) {
+      const z = flagLabelZPL(l, size);
+      expect(z.endsWith("^PQ2\n^XZ")).toBe(true);
+      expect(z).not.toContain("^PQ1");
+    }
+    expect(flagLabelZPL({ number: "?", name: "", reason: "" }).endsWith("^PQ2\n^XZ")).toBe(true);
+    // the stickers, the box labels and the box lists are still one each
+    expect(jerseyLabelZPL({ bin: 3, by: "team", value: "Navy", orderNumber: "264247" })).toContain("^PQ1");
+    expect(binLabelZPL({ bin: 3, label: "Navy", by: "team", count: 1, orderNumber: "1" })).toContain("^PQ1");
+  });
+  it("a reason off the short menu: 'Twill peeling' big, no route word, two tickets, every text on the label", () => {
+    const size = labelSize("2x1");
+    const z = flagLabelZPL({ ...l, tag: "DECORATION", reason: "Twill peeling" }, size);
+    expect(z).toContain("^FDTwill peeling^FS");
+    expect(z).not.toMatch(/STITCHER|REMAKE|DECORATION/);
+    expect(z.endsWith("^PQ2\n^XZ")).toBe(true);
+    const f = fieldsOf(z);
+    expect(f.map(x => x.text)).toEqual(["FLAG", "7", "SMITH", "Ord 264247 · St 1 · 14:05", "Navy · A-L", "Twill peeling"]);   // and nothing else
+    f.forEach(x => {
+      expect(x.x).toBeGreaterThanOrEqual(0);
+      expect(x.x + x.width).toBeLessThanOrEqual(size.w);
+      expect(x.y + x.fh).toBeLessThanOrEqual(203 + 8);              // the label, the 4 dots it is lifted and the 4 the black column runs past the bottom
+    });
+    const reason = f.at(-1), parts = f.find(x => x.text === "Navy · A-L");
+    expect(reason.fh).toBeGreaterThanOrEqual(45);                   // two short words: as big as the route tag used to be
+    expect(reason.y + reason.lines * reason.fh).toBeLessThanOrEqual(parts.y);
+  });
+  it("a long reason takes three lines, smaller, rather than losing its end", () => {
+    const z = flagLabelZPL({ ...l, reason: "Print error — ghosting, fading, misaligned" });
+    const long = fieldsOf(z).find(x => x.text === "Print error — ghosting, fading, misaligned");
+    expect(long).toMatchObject({ lines: 3, align: "C" });
+    expect(long.fh).toBeGreaterThanOrEqual(20);   // still about 2.5 mm tall: sized by how the words wrap, not by a letter count
+    expect(long.y + 3 * long.fh).toBeLessThanOrEqual(fieldsOf(z).find(x => x.text === "Navy · A-L").y);
+    const short = reason => fontOf(flagLabelZPL({ ...l, reason }), reason);
+    expect(long.fh).toBeLessThan(short("Cleaning not done"));
+    expect(short("Cleaning not done")).toBeLessThan(short("Size label"));   // the fewer the words, the bigger
   });
   it("on the 1 x 0.5 in sticker roll the same layout still fits, smaller", () => {
     const z = flagLabelZPL(l, labelSize("1x0.5"));
     expect(z).toContain("^PW203");
     expect(z).toContain("^FO0,0^GB65,110,65^FS");
     expect(z).toContain("^FR^FD7^FS");
-    expect(z).toContain("^FDSTITCHER^FS");
+    expect(z).toContain("^FDLoose, missing or broken stitching^FS");
+    expect(z).not.toContain("STITCHER");
     expect(topOf(z).every(y => y >= 16 && y < 102)).toBe(true);
     expect(lines(z).filter(x => x.includes("^A0N")).every(x => parseInt(x.match(/\^A0N,(\d+)/)[1], 10) >= 10)).toBe(true);
   });
-  it("nothing to say: no name, no reason, no team — the ticket still prints", () => {
+  it("nothing to say: no name, no reason, no team — the ticket still prints, and says Flagged", () => {
     const z = flagLabelZPL({ number: "?", name: "", tag: "DECIDE", reason: "", team: "", size: "", bin: "", orderNumber: "", station: "", time: "" });
     expect(z).toContain("^FR^FD?^FS");
-    expect(z).toContain("^FDDECIDE^FS");
+    expect(z).toContain("^FDFlagged^FS");
+    expect(z).not.toContain("DECIDE");
     expect(z).not.toContain("^FD^FS");
+    expect(fieldsOf(z).map(x => x.text)).toEqual(["FLAG", "?", "Flagged"]);
   });
   it("labelsZPL with kind flag uses this layout", () => {
     const z = labelsZPL([l, { ...l, number: "9" }], labelSize("2x1"), "flag");
     expect((z.match(/\^XA/g) || []).length).toBe(2);
     expect(z).toContain("^PW406");
     expect(z).toContain("^FR^FD9^FS");
+    expect((z.match(/\^PQ2/g) || []).length).toBe(2);
   });
 });
 
@@ -273,6 +335,7 @@ describe("box list", () => {
     expect(labels.map(l => l.title ? "count" : l.page)).toEqual([2, 1, "count"]);      // the order they print in
     expect(labels.map(l => l.items.length)).toEqual([9, 14, 0]);
     expect(labels.every(l => l.bin === "3.1" && l.label === "Navy" && l.orderNumber === "264247" && l.count === 23 && l.pages === 2)).toBe(true);
+    expect(labels.every(l => l.by === "team" && l.mix === "Y-M 8   A-XL 15")).toBe(true);   // by team unless told otherwise, and the sizes in the box on every entry
     const first = labels[1], last = labels[0];
     expect(first.items[0].startsWith("8-")).toBe(true);           // 8 is the lowest number
     expect(first.items[1].startsWith("9-")).toBe(true);           // 9 before 10: by number, not by text
@@ -283,18 +346,60 @@ describe("box list", () => {
     expect(binListLabels(rows.slice(0, 14), { bin: "1.1" }).length).toBe(2);
     expect(binListLabels(rows.slice(0, 1), { bin: "1.1" }).length).toBe(2);
   });
-  it("the count label: BOX 5.1, the pieces, the team and the order", () => {
-    const labels = binListLabels(rows, { bin: "5.1", label: "Navy", orderNumber: "264247" });
-    const z = binListZPL(labels[labels.length - 1], labelSize("2x1"));
-    expect(z).toContain("^FDBOX 5.1^FS");
+  it("`by` and `mix` on every entry: the sizes in a team's box, the teams in a size's box, in rack order", () => {
+    const box = [
+      { number: "1", name: "A", team: "Red",  size: "A-L" }, { number: "2", name: "B", team: "Navy", size: "Y-M" },
+      { number: "3", name: "C", team: "Navy", size: "A-L" }, { number: "4", name: "D", team: "Navy", size: "A-XL" },
+      { number: "5", name: "E", team: "",     size: "A-L" }, { number: "6", name: "F", team: "Red",  size: "" },
+    ];
+    const mixOf = by => { const labels = binListLabels(box, { bin: "1.1", label: "x", orderNumber: "5", by }); expect(labels.every(l => l.by === by)).toBe(true); expect(new Set(labels.map(l => l.mix)).size).toBe(1); return labels[0].mix; };
+    expect(mixOf("team")).toBe("Y-M 1   A-L 3   A-XL 1");         // sizes, youth before adult, small before large; a row with no size is not counted
+    expect(mixOf("all")).toBe("Y-M 1   A-L 3   A-XL 1");          // an order that is not sorted: sizes too
+    expect(mixOf("size")).toBe("Navy 3   Red 2");                 // sorted by size: how many of each team; a row with no team is not counted
+    expect(binListLabels(box, { bin: "1.1" })[0]).toMatchObject({ by: "team", mix: "Y-M 1   A-L 3   A-XL 1" });   // by team unless told otherwise
+    expect(binListLabels([{ number: "1", name: "A" }], { bin: "1.1", by: "team" }).every(l => l.mix === "")).toBe(true);   // no sizes on the roster: no mix
+  });
+  it("the count label is the customer's: the team big, the pieces, how many of each size, the order small — and no box number", () => {
+    const labels = binListLabels(rows, { bin: "5.1", label: "Navy", orderNumber: "264247", by: "team" });
+    const count = labels[labels.length - 1];
+    expect(count).toMatchObject({ title: true, bin: "5.1", label: "Navy", by: "team", count: 23, mix: "Y-M 8   A-XL 15" });   // the entry still says which box it is for
+    const z = binListZPL(count, labelSize("2x1"));
+    expect(z).toContain("^FDNavy^FS");
     expect(z).toContain("^FD23 pcs^FS");
-    expect(z).toContain("^FDNavy   Order 264247^FS");
+    expect(z).toContain("^FDY-M 8   A-XL 15^FS");
+    expect(z).toContain("^FDOrder 264247^FS");
+    expect(z).not.toContain("BOX");                               // 5.1 is the floor's name for the box and means nothing to the customer
+    expect(z).not.toContain("5.1");
     expect(binListZPL({ title: true, bin: "5.2", label: "Navy", orderNumber: "", count: 1 }, labelSize("2x1"))).toContain("^FD1 pc^FS");
-    const fields = [...z.matchAll(/\^FO(\d+),(\d+)\^A0N,(\d+),/g)].map(m => ({ x: +m[1], y: +m[2], fh: +m[3] }));
-    expect(fields.length).toBe(3);
+    const fields = [...z.matchAll(/\^FO(\d+),(\d+)\^A0N,(\d+),.*\^FD(.*)\^FS/g)].map(m => ({ x: +m[1], y: +m[2], fh: +m[3], text: m[4] }));
+    expect(fields.map(f => f.text)).toEqual(["Navy", "23 pcs", "Y-M 8   A-XL 15", "Order 264247"]);   // top to bottom, and nothing else
     fields.forEach(f => { expect(f.y + f.fh).toBeLessThanOrEqual(203); expect(f.y).toBeGreaterThanOrEqual(16); expect(f.x).toBeGreaterThanOrEqual(16); });
-    expect(fields[0].fh).toBeGreaterThan(fields[1].fh);           // the box name is the biggest thing on it
-    expect(fields[1].fh).toBeGreaterThan(fields[2].fh);
+    fields.slice(1).forEach((f, i) => { expect(f.y).toBeGreaterThanOrEqual(fields[i].y + fields[i].fh); expect(f.fh).toBeLessThan(fields[i].fh); });   // no line over another, each smaller than the one above: the team is the biggest thing on it
+    expect(z).toContain("^PQ1");                                  // one count label, not two
+  });
+  it("the count label by size leads with the size and tallies the teams; a box with no label or an old entry without a mix still prints", () => {
+    const teams = rows.map((r, i) => ({ ...r, team: i % 4 ? "Navy" : "Red", size: "A-L" }));
+    const labels = binListLabels(teams, { bin: "7.2", label: "A-L", orderNumber: "264247", by: "size" });
+    const z = binListZPL(labels.at(-1), labelSize("2x1"));
+    expect(z).toContain("^FDA-L^FS");
+    expect(z).toContain("^FD23 pcs^FS");
+    expect(z).toContain("^FDNavy 17   Red 6^FS");
+    expect(z).toContain("^FDOrder 264247^FS");
+    expect(z).not.toMatch(/BOX|7\.2/);
+    const old = binListZPL({ title: true, bin: "5.2", label: "Navy", orderNumber: "264247", count: 12, pages: 1 }, labelSize("2x1"));   // an entry made before `by` and `mix`
+    expect(old).toContain("^FDNavy^FS"); expect(old).toContain("^FD12 pcs^FS"); expect(old).toContain("^FDOrder 264247^FS");
+    expect(old).not.toMatch(/BOX|5\.2|undefined|\^FD\^FS/);
+  });
+  it("the count label of an order that is not sorted leads with the order, and has no footer", () => {
+    for (const entry of [{ by: "all", label: "Whole order" }, { by: "all", label: "" }, { by: "team", label: "Whole order" }]) {   // by "all", or the label alone says so
+      const labels = binListLabels(rows, { bin: "1.3", orderNumber: "264247", ...entry });
+      const z = binListZPL(labels.at(-1), labelSize("2x1"));
+      const fields = [...z.matchAll(/\^FO(\d+),(\d+)\^A0N,(\d+),.*\^FD(.*)\^FS/g)].map(m => ({ y: +m[2], fh: +m[3], text: m[4] }));
+      expect(fields.map(f => f.text)).toEqual(["Order 264247", "23 pcs", "Y-M 8   A-XL 15"]);   // the order once, as the big line
+      expect(fields[0].fh).toBeGreaterThan(fields[1].fh);
+      expect(z).not.toMatch(/BOX|1\.3|Whole order/);
+      fields.forEach(f => expect(f.y + f.fh).toBeLessThanOrEqual(203));
+    }
   });
   it("a label of rows has no header: the left column top to bottom, then the right, and nothing else", () => {
     const size = labelSize("2x1");
@@ -322,7 +427,8 @@ describe("box list", () => {
     const all = labelsZPL(binListLabels(rows, { bin: 2 }), labelSize("2x1"), "binlist");
     expect((all.match(/\^XA/g) || []).length).toBe(3);
     expect(all.indexOf("^FD30-")).toBeLessThan(all.indexOf("^FD8-"));           // the last page prints first
-    expect(all.indexOf("^FD8-")).toBeLessThan(all.indexOf("^FDBOX 2^FS"));      // the count label prints last
+    expect(all.indexOf("^FD23 pcs^FS")).toBeGreaterThan(all.indexOf("^FD8-"));  // the count label prints last
+    expect(all).not.toContain("BOX");                                            // and the box number is on none of them
     expect(labelsZPL([{ bin: 5, label: "Navy", by: "team", count: 0, orderNumber: "1" }], labelSize("2x1"), "binticket")).toContain("^FDBOX 5^FS");
   });
 });

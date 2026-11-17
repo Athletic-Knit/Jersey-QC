@@ -80,15 +80,18 @@ describe("every order has a box", () => {
 
 describe("the box size is not on the box list; the Bins sheet", () => {
   const rows = Array.from({ length: 13 }, (_, i) => row(i));
-  it("the list never prints the box size, on the rows or on the count label", () => {
+  it("the list never prints the box size or the box number, on the rows or on the count label", () => {
     const labels = binListLabels(rows, { bin: "1.1", label: "Navy", orderNumber: "264247", box: "Medium box" });
     expect(labels.length).toBe(2);                                // 13 jerseys: one label of rows and the count label
     expect(labels.every(l => !("box" in l))).toBe(true);          // a box size handed in is not kept
     const zpl = labels.map(l => binListZPL({ ...l, box: "Medium box" }, labelSize("2x1"))).join("\n");   // nor printed when an old caller still sends it
     expect(zpl).not.toMatch(/MEDIUM|LARGE|SMALL|BAG/i);
     expect(zpl).toMatch(/\^FD1-P0-AL\^FS/);
-    expect(zpl).toContain("^FDBOX 1.1^FS");
+    expect(zpl).not.toMatch(/BOX|1\.1/);                          // the count label is the customer's: the team, not the floor's box number
+    expect(zpl).toContain("^FDNavy^FS");
     expect(zpl).toContain("^FD13 pcs^FS");
+    expect(zpl).toContain("^FDA-L 13^FS");                        // how many of each size
+    expect(zpl).toContain("^FDOrder 264247^FS");
     // nothing starts in the 2 mm (16 dots) the printer cuts off the left edge, or runs off the bottom
     const xs = [...zpl.matchAll(/\^FO(\d+),/g)].map(m => Number(m[1]));
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(16);
