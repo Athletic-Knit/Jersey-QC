@@ -1,3 +1,5 @@
+import { blankGroups, isBlankRow, MAX_QUANTITY } from "../roster.js";
+import { shortages, jerseyList } from "../roster.js";
 import { describe, it, expect } from "vitest";
 import { modernBins } from "../roster.js";
 import { parseCSV, splitCSVLine, detectDelimiter, canonicalHeader, rowsToRoster, buildBinMap, binFor, binEntries, extraColumns, displayColumns, BOM, orderNumberOf, closeBin, binOfRow, binContents, nextBinNumber, dropFromClosed, boxParts, binOrder } from "../roster.js";
@@ -221,5 +223,69 @@ describe("an order saved before boxes had two numbers", () => {
     expect(modernBins({ navy: 1, red: 3 })).toEqual({ navy: "1.1", red: "3.1" });
     expect(modernBins({ "y-m": 2, "a-l": "4.2", __by: "size" })).toEqual({ "y-m": "2.1", "a-l": "4.2", __by: "size" });
     expect(modernBins(null)).toBeNull();
+  });
+});
+
+describe("what a box is short of before it is sealed", () => {
+  const r = (id, team, scanned, number = String(id)) => ({ _id: id, team, number, name: `P${id}`, size: "A-L", scanned });
+  const roster = [r(1, "Navy", "pass"), r(2, "Navy", "pass"), r(3, "Navy", "flag"), r(4, "Navy", "missing"), r(5, "Red", "pass"), r(6, "Red", false), r(7, "White", "manual")];
+  const map = buildBinMap(roster, {}, "team");
+  it("lists, per open box, what is not scanned and what will not arrive", () => {
+    const s = shortages(roster, map, []);
+    expect(s.map(x => [x.bin, x.label, x.toScan, x.flagged, x.missing])).toEqual([["1.1", "Navy", 0, 1, 1], ["2.1", "Red", 1, 0, 0]]);
+    expect(s[0].short.map(x => x._id)).toEqual([3, 4]);
+    expect(s[1].waiting.map(x => x._id)).toEqual([6]);
+  });
+  it("a complete box, and an order with no boxes, lack nothing", () => {
+    expect(shortages(roster, map, []).some(x => x.label === "White")).toBe(false);
+    expect(shortages(roster, null, [])).toEqual([]);
+    expect(shortages(roster.map(x => ({ ...x, scanned: "pass" })), map, [])).toEqual([]);
+  });
+  it("after a box is closed the shortage is the next box's", () => {
+    const c = closeBin(roster, map, [], "1.1");
+    expect(shortages(roster, c.binMap, c.closed).map(x => x.bin)).toEqual(["1.2", "2.1"]);
+  });
+  it("names the jerseys for a screen line", () => {
+    expect(jerseyList([r(3, "Navy"), r(4, "Navy")])).toBe("#3, #4");
+    expect(jerseyList([1, 2, 3, 4].map(i => r(i, "Navy")), 2)).toBe("#1, #2 and 2 more");
+    expect(jerseyList([{ number: "", name: "LEE" }, { number: "", name: "", size: "Y-M" }, {}])).toBe("LEE, Y-M blank, blank");
+  });
+});
+
+describe("blank jerseys: a roster of sizes and quantities", () => {
+  it("a blanks file has no name or number column; the quantity makes that many rows", () => {
+    const r = parseCSV("Team,Size,Qty,Style\nNavy,A-L,3,H550\nNavy,A-XL,2,H550\nRed,Y-M,1,H550\n");
+    expect(r.length).toBe(6);
+    expect(r.every(isBlankRow)).toBe(true);
+    expect(r.map(x => x._id)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(r[0]).toMatchObject({ team: "Navy", size: "A-L", style: "H550", name: "", number: "" });
+    expect("quantity" in r[0]).toBe(false);                       // the quantity is not kept as a column
+    expect(orderNumberOf(parseCSV("Order 77123\nSize,Quantity\nA-L,2\n"))).toBe("77123");
+  });
+  it("a blanks file without quantities is one row a line; an empty line is still dropped", () => {
+    const r = parseCSV("Team,Size\nNavy,A-L\nNavy,A-L\n,\nRed,Y-M\n");
+    expect(r.map(x => [x.team, x.size])).toEqual([["Navy", "A-L"], ["Navy", "A-L"], ["Red", "Y-M"]]);
+  });
+  it("a names roster is read as it always was: a line with no name and no number is dropped unless it says how many", () => {
+    const plain = parseCSV("Name,Number,Team,Size\nSMITH,7,Navy,A-L\n,,Navy,A-XL\nJONES,9,Navy,A-L\n");
+    expect(plain.map(x => x.name)).toEqual(["SMITH", "JONES"]);
+    const mixed = parseCSV("Name,Number,Team,Size,Qty\nSMITH,7,Navy,A-L,1\n,,Navy,A-XL,3\n");
+    expect(mixed.length).toBe(4);
+    expect(mixed.filter(isBlankRow).length).toBe(3);
+    expect(parseCSV("Name,Number,Qty\nSMITH,7,0\n").length).toBe(1);   // a named jersey is one jersey whatever the cell says
+  });
+  it("a silly quantity cannot freeze the station", () => {
+    expect(parseCSV("Size,Qty\nA-L,999999\n").length).toBe(MAX_QUANTITY);
+    expect(parseCSV("Size,Qty\nA-L,-4\nA-L,0\n").length).toBe(0);            // none asked for: none made
+    expect(parseCSV("Size,Qty\nA-M,abc\n").length).toBe(1);                    // a cell that is not a number: the line is one jersey, not lost
+  });
+  it("groups by team, size and style, with what is done and the next row to count", () => {
+    const r = parseCSV("Team,Size,Qty\nRed,Y-M,2\nNavy,A-XL,1\nNavy,A-L,3\n");
+    r[2].scanned = "pass"; r[3].scanned = "flag";                 // the one Navy A-XL passed, one Navy A-L flagged
+    const g = blankGroups([...r, { _id: 99, name: "SMITH", number: "7", team: "Navy", size: "A-L" }]);
+    expect(g.map(x => [x.team, x.size, x.total, x.done, x.flagged])).toEqual([["Navy", "A-L", 3, 0, 1], ["Navy", "A-XL", 1, 1, 0], ["Red", "Y-M", 2, 0, 0]]);
+    expect(g[0].next._id).toBe(4);                                 // the first Navy A-L not yet touched
+    expect(g[1].next).toBeNull();
+    expect(blankGroups([{ _id: 1, name: "SMITH", number: "7" }])).toEqual([]);
   });
 });

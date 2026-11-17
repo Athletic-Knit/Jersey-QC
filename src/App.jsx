@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -1878,7 +1878,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
 // new bin number and that bin's label prints. Closed bins stay listed, with
 // their list to print again.
 const BOX_CHOICES = BOXES;   // a box on the floor is one box: small, medium or large
-function BinsModal({ open, closed, by = "team", cap = 45, status, onFull, onReprint, onLabels, onClose }) {
+function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, onFull, onReprint, onLabels, onClose }) {
   const [asking, setAsking] = useState(null);   // the bin whose box is being asked
   useEffect(() => {
     const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
@@ -1906,6 +1906,12 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, onFull, onRepr
                 <div style={{ fontSize: 22, fontWeight: 700, color: "#e2e8f0", overflowWrap: "anywhere" }}>{b.label}</div>
                 <div style={{ fontSize: 15, color: "#94a3b8" }}>{pcs(b.count)} in it{b.count > 0 && cap ? ` · about ${Math.round(b.weight)} lb of ${cap}` : ""}</div>
                 {b.heavy >= 0.95 && <div style={{ fontSize: 15, fontWeight: 800, color: "#f87171" }}>At the weight limit — close it</div>}
+                {short[b.bin]?.short.length > 0 && (
+                  <div title="These jerseys are flagged or marked missing, so they will not arrive in this box by scanning on" style={{ fontSize: 15, fontWeight: 800, color: "#fbbf24" }}>
+                    ⚠ Short {short[b.bin].short.length}: {jerseyList(short[b.bin].short, 5)}{short[b.bin].toScan === 0 ? " — nothing else is coming for this box" : ""}
+                  </div>
+                )}
+                {short[b.bin]?.toScan > 0 && <div style={{ fontSize: 14, color: "#7c8ba1" }}>{short[b.bin].toScan} still to scan</div>}
               </div>
               {b.box && asking !== b.bin && <div title="The size of box this many jerseys fill" style={{ fontSize: 17, fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>→ {b.box}</div>}
               {asking === b.bin && (
@@ -1991,6 +1997,64 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
             </div>
           ); })}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Blank jerseys: counted, not scanned ──────────────────────────────────────
+// A jersey with no name and no number gives the camera nothing to read. The
+// operator looks it over and presses the button of its team and size: that
+// passes the next row of that kind, prints its sticker and puts it in its
+// box, like a green confirmed. The scan key (the pedal) or Enter counts one
+// more of the kind last pressed, so a stack of one size is one press each.
+function BlanksModal({ groups, boxOf, last, sticker, scanKey, onCount, onFlag, onUndo, onClose }) {
+  const [sel, setSel] = useState(null);
+  const open = groups.filter(g => g.next);
+  const current = groups.find(g => g.key === sel && g.next) || null;
+  useEffect(() => {
+    const h = e => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); return; }
+      if (e.code === scanKey || e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (current && !e.repeat) onCount(current); }
+    };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [current, scanKey, onCount, onClose]);
+  const name = g => [g.team, g.size, g.style].filter(Boolean).join(" · ") || "Blank jersey";
+  const left = groups.reduce((t, g) => t + (g.total - g.done - g.flagged), 0);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 30, maxWidth: 860, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>Blank jerseys</div>
+          <div style={{ fontSize: 17, color: "#94a3b8", flex: 1 }}>{left} still to count</div>
+          <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
+        </div>
+        <div style={{ fontSize: 16, color: "#cbd5e1", margin: "8px 0 16px", lineHeight: 1.4 }}>
+          Nothing is printed on these, so the camera has nothing to read. Look the jersey over, then press the button of its {groups.some(g => g.team) ? "team and " : ""}size. Each press counts one, prints its sticker and puts it in its box. The pedal counts one more of the kind you pressed last.
+        </div>
+        {last && (
+          <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 8, background: "rgba(34,197,94,0.1)", border: "1px solid #22c55e", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 17, color: "#e2e8f0" }}>
+            <span style={{ flex: 1 }}><strong style={{ color: "#4ade80" }}>Counted:</strong> {[last.match?.team, last.match?.size, last.match?.style].filter(Boolean).join(" · ")}{boxOf(last.match) !== null ? <> → <strong style={{ color: "#60a5fa" }}>Box {boxOf(last.match)}</strong></> : null}{sticker ? <span style={{ color: "#94a3b8" }}> · {sticker}</span> : null}</span>
+            <button onClick={() => onUndo(last.match._id)} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px" }}>Undo</button>
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {groups.map(g => {
+            const rest = g.total - g.done - g.flagged, on = current?.key === g.key;
+            return (
+              <div key={g.key} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 16px", borderRadius: 12, background: "#1e293b", border: `2px solid ${on ? "#22c55e" : "#3f4b5c"}`, opacity: g.next ? 1 : 0.55, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: "#e2e8f0" }}>{name(g)}</div>
+                  <div style={{ fontSize: 15, color: "#94a3b8" }}>{g.done} of {g.total} counted{g.flagged ? ` · ${g.flagged} flagged` : ""}{rest ? ` · ${rest} to go` : " · done"}{g.next && boxOf(g.next) !== null ? ` · Box ${boxOf(g.next)}` : ""}</div>
+                </div>
+                <button onClick={() => { setSel(g.key); onCount(g); }} disabled={!g.next} style={{ ...btnPri, fontSize: 20, padding: "14px 26px", background: "#22c55e", color: "#0d1117", opacity: g.next ? 1 : 0.4 }}>✓ Count one{on ? <> <Kbd>pedal</Kbd></> : null}</button>
+                <button onClick={() => { setSel(g.key); onFlag(g); }} disabled={!g.next} style={{ ...btnGhost, fontSize: 16, padding: "14px 16px", borderColor: "#ef4444", color: "#f87171", opacity: g.next ? 1 : 0.4 }}>🚩 Flag one</button>
+              </div>
+            );
+          })}
+        </div>
+        {open.length === 0 && <div style={{ marginTop: 14, fontSize: 18, fontWeight: 800, color: "#4ade80" }}>Every blank jersey is counted.</div>}
       </div>
     </div>
   );
@@ -2172,7 +2236,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
 // ── Finish order: one look at where it stands, then confirm ─────────────────
 // Confirm clears the order and the station goes back to "waiting for an
 // order"; the hub keeps the order's record and sheets. Keep going closes it.
-function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, binLists = 0, bins = [], onConfirm, onCancel }) {
+function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, binLists = 0, bins = [], short = [], onConfirm, onCancel }) {
+  const lacking = short.reduce((t, x) => t + x.toScan + x.short.length, 0);
   const count = s => roster.filter(r => r.scanned === s).length;
   const remaining = roster.filter(r => !r.scanned).length;
   const open = count("flag") + offRosterFlags + count("manual") + count("missing") + count("short");
@@ -2193,11 +2258,23 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
         <div style={{ fontSize: 36, fontWeight: 900, color: "#e2e8f0", marginBottom: 10 }}>Finish order {orderNumber || "—"}?</div>
         <div style={{ fontSize: 18, color: "#cbd5e1", marginBottom: 22, lineHeight: 1.4 }}>
           {remaining
-            ? `${remaining} ${remaining === 1 ? "jersey is" : "jerseys are"} not scanned yet. Finish anyway and the station goes back to waiting for an order; the supervisor keeps this order's record and sheets.`
-            : "Every jersey is scanned. The station goes back to waiting for an order; the supervisor keeps this order's record and sheets."}
+            ? `${remaining} ${remaining === 1 ? "jersey is" : "jerseys are"} not scanned yet. You can finish anyway; the supervisor keeps this order's record and sheets.`
+            : "Every jersey is scanned. The supervisor keeps this order's record and sheets."}
           {scans === 0 ? " Nothing was scanned on it." : ""}
           {binLists > 0 ? ` Every open box is closed and its list prints: ${binLists} ${binLists === 1 ? "label" : "labels"}.` : ""}
         </div>
+        {lacking > 0 && (
+          <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 10, border: "2px solid #f59e0b", background: "rgba(245,158,11,0.1)", textAlign: "left", maxHeight: "24cqh", overflowY: "auto" }}>
+            <div style={{ fontSize: 19, fontWeight: 900, color: "#fbbf24", marginBottom: 6 }}>⚠ Before the boxes are sealed: {lacking} {lacking === 1 ? "jersey is" : "jerseys are"} in no box</div>
+            {short.map(x => (
+              <div key={x.bin} style={{ fontSize: 16, color: "#e2e8f0", lineHeight: 1.45 }}>
+                <strong style={{ color: "#60a5fa" }}>Box {x.bin}</strong> · {x.label}:{" "}
+                {x.toScan > 0 && <><span style={{ color: "#fcd34d" }}>{x.toScan} not scanned</span> ({jerseyList(x.waiting, 5)}){x.short.length > 0 ? " · " : ""}</>}
+                {x.short.length > 0 && <><span style={{ color: "#fca5a5" }}>{[x.flagged ? `${x.flagged} flagged` : "", x.missing ? `${x.missing} missing` : ""].filter(Boolean).join(", ")}</span> ({jerseyList(x.short, 5)})</>}
+              </div>
+            ))}
+          </div>
+        )}
         {bins.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 22, maxHeight: "22cqh", overflowY: "auto", textAlign: "left", fontSize: 17, color: "#cbd5e1" }}>
             {bins.map(b => (
@@ -2400,6 +2477,9 @@ export default function App() {
   const openBins   = useMemo(() => binEntries(roster, binMap).map(e => { const rows = binContents(roster, binMap, closedBins, e.bin), b = boxOf(rows); return { ...e, count: rows.length, box: b?.label || "", boxId: b?.id || "", weight: b?.weight || 0, heavy: b?.heavy || 0, open: true }; }), [roster, binMap, closedBins, boxOf]);
   const closedList = useMemo(() => closedBins.map(c => { const rows = binContents(roster, binMap, closedBins, c.bin), b = boxOf(rows); return { bin: c.bin, label: c.label, count: rows.length, box: c.box || b?.label || "", weight: b?.weight || 0, open: false, closedAt: c.closedAt }; }), [roster, binMap, closedBins, boxOf]);
   const heavyBin   = openBins.find(b => b.heavy >= 0.95) || null;   // an open bin at the weight limit
+  // What each open box lacks before it is sealed (roster.js): for the Boxes and Finish dialogs.
+  const shortList  = useMemo(() => shortages(roster, binMap, closedBins), [roster, binMap, closedBins]);
+  const shortByBox = useMemo(() => Object.fromEntries(shortList.map(x => [x.bin, x])), [shortList]);
   const binSummary = useMemo(() => [...closedList, ...openBins].sort((a, b) => binOrder(a.bin, b.bin)), [closedList, openBins]);
   // How many boxes each team or size is expected to fill from its open box on
   // (the box model on every jersey of it not yet in a closed box), for the
@@ -2412,6 +2492,7 @@ export default function App() {
   const boxPlanLabels = useMemo(() => binLabels(roster, binMap, { orderNumber, boxes: Object.fromEntries(boxPlan.map(e => [e.bin, e.boxes])) }), [roster, binMap, orderNumber, boxPlan]);
   const [boxAuto,     setBoxAuto]     = useState(false);   // the box screen is open for a new order: its labels print by themselves
   const [showPrint,   setShowPrint]   = useState(false);   // the Print menu
+  const [showBlanks,  setShowBlanks]  = useState(false);   // the blank-jersey counting screen
   const [boxLabelled, setBoxLabelled] = useState([]);   // the boxes whose label has been printed (saved in the session)
   const boxesLabelled = useCallback(() => setBoxLabelled(prev => [...new Set([...prev, ...boxPlanLabels.map(l => l.bin)])]), [boxPlanLabels]);
 
@@ -2883,7 +2964,7 @@ export default function App() {
   useEffect(() => { triggerRef.current = doTriggerScan; }, [doTriggerScan]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
-  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHistory || showFinish || showBins || !!finished || showPrint;
+  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHistory || showFinish || showBins || !!finished || showPrint || showBlanks;
   useEffect(() => {
     if (!cameraOn || inputMode !== "camera" || !handsFree) { gateRef.current.disarm(); return; }   // paused, or nothing left in the order: never scan the empty table
     const id = setInterval(() => {
@@ -3068,7 +3149,10 @@ export default function App() {
       if (!c?.match) return;
       // also reached from the roster table (flagRow) and the history list
       const scan = { id: c.id, detected: c.detected, thumb: c.thumb, smallThumb: c.thumb, photo: null };
-      setOverlay({ mode: "reasons", scan, match: c.match, returnTo: null, reopened: true });
+      // `late`: the jersey had passed before this flag. A blank jersey flagged from the
+      // counting screen never passed, so its reason does not say "found after it passed".
+      const now = roster.find(r => r._id === c.match._id);
+      setOverlay({ mode: "reasons", scan, match: c.match, returnTo: null, reopened: true, late: !now || now.scanned === "pass" || now.scanned === "manual" });
     },
     reopenLast() { actions.reopen(lastConfirmed); },
     back()   { setOverlay(o => o.returnTo || null); },
@@ -3077,7 +3161,7 @@ export default function App() {
       if (!r.custom) { inspectRef.current.defect(); syncInspect(); }
       if (r.inPlace) { if (o.reopened) { setOverlay(null); armAutoScan(); return; } setOverlay({ ...(o.returnTo || { mode: "flag", scan: o.scan }), note: r.label }); return; }
       if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it
-      const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened ? `${r.label} — found after it passed` : r.label, reasonId: r.id, ...stamp() };
+      const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened && o.late !== false ? `${r.label} — found after it passed` : r.label, reasonId: r.id, ...stamp() };
       if (o.match) { setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x)); setClosedBins(prev => dropFromClosed(prev, o.match._id)); }   // flagged: it is out of the bin it was in, closed or not
       setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(c => (c?.match?._id === o.match?._id ? null : c));
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: r.label, route: r.route, entryId: entry.id, photoFirst: r.id !== "wrong_decoration", damagePhotos: [] });
@@ -3087,7 +3171,7 @@ export default function App() {
       const o = overlay; if (!o) return;
       const label = String(text || "").trim(); if (!label) return;
       inspectRef.current.defect(); syncInspect();
-      const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened ? `${label} — found after it passed` : label, reasonId: "other", ...stamp() };
+      const entry = { id: o.reopened ? Date.now() : (o.scan.id || Date.now()), detected: o.scan.detected, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened && o.late !== false ? `${label} — found after it passed` : label, reasonId: "other", ...stamp() };
       if (o.match) { setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x)); setClosedBins(prev => dropFromClosed(prev, o.match._id)); }
       setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(c => (c?.match?._id === o.match?._id ? null : c));
       setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: label, route: "Supervisor decides", entryId: entry.id, photoFirst: true, damagePhotos: [] });
@@ -3227,6 +3311,21 @@ export default function App() {
   // flagged from the row itself.
   const markHandler = useRef(() => {});
   const onMarkRow = useCallback((r, v) => markHandler.current(r, v), []);
+  // Blank jerseys (no name, no number): the groups to count, and one count —
+  // the next row of that team and size is passed exactly as a confirmed green
+  // is: a log entry, the last pass (so its sticker prints), the inspection count.
+  const isBlank = r => !!r && !String(r.name ?? "").trim() && !String(r.number ?? "").trim();
+  const blanks = useMemo(() => blankGroups(roster), [roster]);
+  const countBlank = g => {
+    const row = g?.next && roster.find(r => r._id === g.next._id && !r.scanned); if (!row) return;
+    const entry = { id: Date.now(), detected: null, thumb: null, match: row, status: S_PASS, reason: "Counted — blank jersey, nothing to read", ...stamp() };
+    if (!firstScanTime) setFirstScanTime(Date.now());
+    setRoster(prev => prev.map(r => r._id === row._id ? { ...r, scanned: "pass" } : r));
+    setLog(prev => [entry, ...prev]);
+    setLastResult(entry); setLastConfirmed(entry);
+    inspectRef.current.jerseyDone(); syncInspect();
+    playTone("pass");
+  };
   const flagRow = (r) => {
     const l = log.find(x => x.match?._id === r._id && (x.status === S_PASS || x.status === S_MANUAL));
     actions.reopen(l || { id: Date.now(), match: r, detected: null, thumb: null });
@@ -3262,7 +3361,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.repeat) return;
-      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || showFinish || showBins || finished || showPrint || !sessionStarted) return;
+      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || showFinish || showBins || finished || showPrint || showBlanks || !sessionStarted) return;
       if (e.code !== scanKey) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       e.preventDefault();
@@ -3272,7 +3371,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, showBins, finished, showPrint, sessionStarted, scanKey, doTriggerScan, onTrial]);
+  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, showBins, finished, showPrint, showBlanks, sessionStarted, scanKey, doTriggerScan, onTrial]);
 
   const overlayKey = overlay ? `${overlay.mode}:${overlay.scan?.id}:${(overlay.candidates || []).map(c => c._id).join(",")}` : "";
   const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType), idleSpells, awaySpells, bins: binSummary, categoryOf: reasonCategory };
@@ -3342,17 +3441,22 @@ export default function App() {
           onDismiss={() => closeDialog(() => setShowRosterComplete(false))} onFinish={askFinish} />
       )}
       {showBins && binMap && (
-        <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} cap={boxCap} status={binPrint}
+        <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} cap={boxCap} status={binPrint} short={shortByBox}
           onFull={binFull} onReprint={reprintBinList} onLabels={() => { setShowBins(false); setBoxAuto(false); setShowBinSetup(true); }} onClose={() => closeDialog(() => setShowBins(false))} />
       )}
       {finished && (
         <FinishedModal orderNumber={orderNumber} status={finished} onReprint={printFinishLists} onPrint={() => setShowPrint(true)} onNew={newOrder} onBack={() => closeDialog(() => setFinished(null))} />
       )}
+      {showBlanks && blanks.length > 0 && !overlay && (
+        <BlanksModal groups={blanks} boxOf={binOf} scanKey={scanKey} last={lastConfirmed && isBlank(lastConfirmed.match) ? lastConfirmed : null}
+          sticker={lastConfirmed && sticker?.id === lastConfirmed.id ? (sticker.status === "done" ? "sticker printed" : sticker.status === "none" ? "no label printer" : "sticker NOT printed") : ""}
+          onCount={countBlank} onFlag={g => { if (g.next) flagRow(g.next); }} onUndo={unscan} onClose={() => closeDialog(() => setShowBlanks(false))} />
+      )}
       {showPrint && (
         <PrintModal current={printPack} tagOf={flagTag} onClose={() => closeDialog(() => setShowPrint(false))} />
       )}
       {showFinish && (
-        <FinishOrderModal orderNumber={orderNumber} roster={roster} offRosterFlags={offRosterFlags} scans={log.length} binLists={finishLists.length} bins={binSummary.filter(b => b.count > 0)}
+        <FinishOrderModal orderNumber={orderNumber} roster={roster} offRosterFlags={offRosterFlags} scans={log.length} binLists={finishLists.length} bins={binSummary.filter(b => b.count > 0)} short={shortList}
           onConfirm={finishOrder} onCancel={() => closeDialog(() => setShowFinish(false))} />
       )}
 
@@ -3499,6 +3603,10 @@ export default function App() {
                     }
                     <button onClick={() => { gateRef.current.disarm(); setArmed(false); actions.manual(); }} disabled={scanning} title="Type the jersey in — when the camera cannot read it"
                       style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, whiteSpace: "nowrap" }}>⌨ By hand</button>
+                    {blanks.length > 0 && (
+                      <button onClick={() => { gateRef.current.disarm(); setArmed(false); setShowBlanks(true); }} title="Jerseys with no name and no number: count them in by team and size"
+                        style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", borderColor: "#22c55e", color: "#4ade80" }}>Blanks · {blanks.reduce((t, g) => t + (g.total - g.done - g.flagged), 0)}</button>
+                    )}
                   </div>
                   {error && <p style={{ padding: "0 14px 10px", fontSize: 15, color: "#f87171" }}>{error}</p>}
                 </div>

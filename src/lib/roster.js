@@ -13,6 +13,10 @@ const ALIASES = {
   order:        ["order", "order number", "order no", "order no.", "order #", "order#", "ordernumber", "order id", "po", "po number", "po #", "po#", "job", "job number", "work order", "wo"],
   size:         ["size"],
   "size range": ["size range", "sizerange", "range", "age group", "agegroup"],
+  // Blank jerseys (no decoration) come as lines of "40 of Navy A-L": the
+  // quantity makes that many rows; the style is kept as a column.
+  quantity:     ["quantity", "qty", "qty.", "count", "pieces", "pcs", "units", "how many"],
+  style:        ["style", "style number", "style no", "style no.", "style #", "style#", "sku"],
 };
 export const CORE_COLUMNS = ["name", "number", "team", "size"];
 const STATE_COLUMNS = ["_id", "scanned", "mark"];
@@ -26,9 +30,11 @@ export function canonicalHeader(h) {
   return key;
 }
 
+// A header row names the players (name or number), or, for an order of blank
+// jerseys, the sizes with how many or which team.
 function looksLikeHeader(cells) {
   const canon = (cells || []).map(canonicalHeader);
-  return canon.includes("name") || canon.includes("number");
+  return canon.includes("name") || canon.includes("number") || (canon.includes("size") && (canon.includes("quantity") || canon.includes("team")));
 }
 
 // Split one CSV line honouring double quotes ("Smith, John" stays one cell).
@@ -77,20 +83,58 @@ export function rowsToRoster(rows) {
     const m = (rows[i] || []).map(c => String(c ?? "")).join(" ").match(ORDER_IN_TEXT);
     if (m && !/^(no|number|id)$/i.test(m[1])) orderNumber = m[1];
   }
+  // A line with no name and no number is a blank jersey (no decoration). It is
+  // kept when the file is a blanks order (no name and no number column at
+  // all) or the line says how many; otherwise it is the stray or empty line it
+  // always was, and is dropped. A quantity makes that many rows, so each
+  // jersey is still one row to pass, flag, box and sticker.
+  const blanksFile = !headers.includes("name") && !headers.includes("number");
   const out = [];
   rows.slice(hIdx + 1).forEach(cells => {
-    const row = {};
+    const row = {}; let qty = null;
     headers.forEach((h, i) => {
       if (!h || APP_COLUMNS.includes(h)) return;
       const v = String(cells?.[i] ?? "").trim();
       if (h === "order") { if (v && !orderNumber) orderNumber = v; return; }
+      if (h === "quantity") { const n = parseInt(v.replace(/[^\d-]/g, ""), 10); qty = Number.isFinite(n) ? n : null; return; }
       row[h] = v;
     });
-    if (row.name || row.number) out.push(row);
+    const named = !!(row.name || row.number);
+    const blank = !named && (qty > 0 || (blanksFile && qty === null && !!(row.size || row["size range"] || row.team)));
+    if (!named && !blank) return;
+    const copies = Math.max(1, Math.min(qty > 0 ? qty : 1, MAX_QUANTITY, MAX_ROSTER - out.length));
+    for (let i = 0; i < copies && out.length < MAX_ROSTER; i++) out.push({ ...row });
   });
   const result = normaliseRosterRows(out);
   Object.defineProperty(result, "orderNumber", { value: orderNumber, enumerable: false });
   return result;
+}
+
+// One line may stand for at most this many jerseys, and a roster for this many
+// rows: a quantity typed as 40000 must not freeze the station.
+export const MAX_QUANTITY = 1000, MAX_ROSTER = 5000;
+
+// ── Blank jerseys ───────────────────────────────────────────────────────────
+// A row with no name and no number has nothing for the camera to read. The
+// station counts them instead: the operator looks the jersey over and presses
+// the button of its team and size, and the next row of that kind is passed.
+export const isBlankRow = r => !!r && !String(r.name ?? "").trim() && !String(r.number ?? "").trim();
+// The blank rows grouped by team, size and style: [{ key, team, size, style,
+// total, done, flagged, next }] — `next` is the row a count would pass, null
+// when the group is done. In team order, sizes in rack order.
+export function blankGroups(roster) {
+  const groups = new Map();
+  (roster || []).filter(isBlankRow).forEach(r => {
+    const team = String(r.team ?? "").trim(), size = String(r.size ?? "").trim(), style = String(r.style ?? "").trim();
+    const key = [team, size, style].map(x => x.toLowerCase()).join("|");
+    const g = groups.get(key) || { key, team, size, style, total: 0, done: 0, flagged: 0, next: null };
+    g.total++;
+    if (r.scanned === "pass" || r.scanned === "manual") g.done++;
+    else if (r.scanned === "flag") g.flagged++;
+    else if (!r.scanned && !g.next) g.next = r;
+    groups.set(key, g);
+  });
+  return [...groups.values()].sort((a, b) => a.team.localeCompare(b.team, undefined, { sensitivity: "base" }) || bySize(a.size, b.size) || a.style.localeCompare(b.style));
 }
 
 // The order number a parsed roster carried, or "".
@@ -327,6 +371,29 @@ export function closeBin(roster, binMap, closed = [], bin, now = Date.now()) {
   const newBin = nextBinNumber(binMap, closed, bin);
   return { binMap: { ...binMap, [key]: newBin }, closed: [...closed, entry], entry, newBin };
 }
+
+// ── What a box is short of, before it is sealed ─────────────────────────────
+// For every open box: the jerseys of its team or size that are in no box.
+// `toScan` are simply not scanned yet (they will go in this box); `short` are
+// the ones that will NOT arrive by scanning on: flagged (with the supervisor)
+// or marked missing. A box with nothing still to scan and something short is
+// about to be sealed incomplete, which is what the operator and the packer
+// must be told. → [{ bin, label, toScan, flagged, missing, short: rows, waiting: rows }]
+// for the boxes that lack anything, in box order.
+export function shortages(roster, binMap, closed = []) {
+  if (!binMap) return [];
+  return binEntries(roster, binMap).map(({ bin, label }) => {
+    const out = roster.filter(r => !inBin(r) && binOfRow(binMap, closed, r) === bin);
+    const waiting = out.filter(r => !r.scanned), short = out.filter(r => r.scanned);
+    return { bin, label, toScan: waiting.length, flagged: short.filter(r => r.scanned === "flag").length, missing: short.filter(r => r.scanned !== "flag").length, short, waiting };
+  }).filter(s => s.toScan + s.short.length > 0);
+}
+// "#5, #12, #40 and 2 more": the jerseys of a shortage, for a screen line. A
+// jersey with no number goes by its name; a blank one by its size.
+export const jerseyList = (rows, max = 6) => {
+  const one = r => { const n = String(r.number ?? "").trim(), name = String(r.name ?? "").trim(), size = String(r.size ?? "").trim(); return n ? `#${n}` : name || (size ? `${size} blank` : "blank"); };
+  return rows.slice(0, max).map(one).join(", ") + (rows.length > max ? ` and ${rows.length - max} more` : "");
+};
 
 // A row taken back (un-checked) is no longer in the closed bin it was in.
 export const dropFromClosed = (closed, id) => (closed || []).map(c => c.ids.includes(id) ? { ...c, ids: c.ids.filter(x => x !== id) } : c);
