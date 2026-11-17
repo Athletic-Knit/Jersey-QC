@@ -32,17 +32,18 @@ describe("jersey types and their reason menus", () => {
   });
   it("the wording of the menu", () => {
     expect(Object.fromEntries(REASONS.map(r => [r.id, r.label]))).toEqual({
-      wrong_decoration: "Name or number", logo: "Logo or crest", twill: "Twill peeling", print: "Print or colour",
-      stitching: "Stitching or seam", fabric: "Hole or snag", label: "Size label", mark: "Dirt or mark", other: "Something else",
+      wrong_decoration: "Name or number", logo: "Logo or crest", twill: "Twill peeling", print: "Sublimation error",
+      stitching: "Stitching or seam", fabric: "Hole or snag", label: "Size label", mark: "Dirt or mark", other: "Others",
     });
   });
-  it("every menu keeps the free-text and in-place options and ends with 'other'", () => {
+  it("every menu keeps the in-place option and ends with 'Others', which flags at once: nothing to type (the owner, 17 Nov 2026)", () => {
     for (const t of ["echl", "sublimated", ""]) {
       const rs = reasonsFor(t);
-      expect(rs.at(-1).custom).toBe(true);
+      expect(rs.at(-1).id).toBe("other");
+      expect(rs.at(-1).custom).toBeFalsy();
+      expect(rs.some(r => r.custom)).toBe(false);
       expect(rs.some(r => r.inPlace)).toBe(true);
       expect(rs.filter(r => r.inPlace).map(r => r.id)).toEqual(["mark"]);
-      expect(rs.filter(r => r.custom).map(r => r.id)).toEqual(["other"]);
     }
   });
   it("no type → all nine reasons, one per id, in-place and free-text last; labels resolve", () => {
@@ -54,7 +55,8 @@ describe("jersey types and their reason menus", () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const list of [reasonsFor("echl"), reasonsFor("sublimated"), REASONS]) for (const r of list) expect(ids).toContain(r.id);
     expect(ids.slice(-2)).toEqual(["mark", "other"]);
-    for (const t of ["echl", "echl_replica"]) expect(reasonsFor(t).map(r => r.label)).not.toContain("Print or colour");
+    for (const t of ["echl", "echl_replica"]) expect(reasonsFor(t).map(r => r.label)).not.toContain("Sublimation error");
+    expect(reasonsFor("sublimated").map(r => r.label)).toContain("Sublimation error");   // the floor's word: a sublimated order must offer it
     expect(reasonsFor("sublimated").map(r => r.label)).not.toContain("Twill peeling");
     expect(jerseyTypeLabel("echl_replica")).toBe("ECHL replica");
     expect(jerseyTypeLabel("")).toBe("");
@@ -86,7 +88,10 @@ describe("where a flag goes, and its weight on the board", () => {
   it("maps every reason label of every jersey type to its route", async () => {
     const { REASONS_BY_CONSTRUCTION } = await import("../../config.js");
     expect(routeOfReason("Twill peeling")).toBe("Supervisor → pink slip → decoration");
-    expect(routeOfReason("Print or colour")).toBe("Supervisor → full remake");
+    expect(routeOfReason("Sublimation error")).toBe("Supervisor → full remake");
+    expect(routeOfReason("Print or colour")).toBe("Supervisor → full remake");   // a flag recorded on 17 Nov 2026, when it read so
+    expect(routeOfReason("Something else")).toBe("Supervisor decides");
+    expect(routeOfReason("Others")).toBe("Supervisor decides");
     expect(routeOfReason("Hole or snag — found after it passed")).toBe("Supervisor → full remake");
     expect(routeOfReason("Not on the roster — operator typed #77 KIM")).toBe("Supervisor → check the order");
     expect(routeOfReason("Duplicate — scanned again after passing")).toBe("Supervisor → check the order");
@@ -101,7 +106,8 @@ describe("where a flag goes, and its weight on the board", () => {
       ["Missing or wrong logo",                      "Supervisor → pink slip → decoration", "DECORATION", "Decoration"],
       ["Missing, wrong or crooked crest or logo",    "Supervisor → pink slip → decoration", "DECORATION", "Decoration"],
       ["Twill lifting, peeling or torn",             "Supervisor → pink slip → decoration", "DECORATION", "Decoration"],
-      ["Sublimation error",                          "Supervisor → full remake",            "REMAKE",     "Artwork"],
+      ["Print or colour",                            "Supervisor → full remake",            "REMAKE",     "Artwork"],   // the sublimated menu's wording for one day; "Sublimation error" is on the menu again
+      ["Something else",                             "Supervisor decides",                  "DECIDE",     "Other"],
       ["Missing, wrong or misplaced logo",           "Supervisor → full remake",            "REMAKE",     "Artwork"],
       ["Print error — ghosting, fading, misaligned", "Supervisor → full remake",            "REMAKE",     "Artwork"],
       ["Colour off, bleeding or streaked",           "Supervisor → full remake",            "REMAKE",     "Artwork"],

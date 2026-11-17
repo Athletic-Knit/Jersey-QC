@@ -27,12 +27,12 @@ export const REASONS = [
   { id: "wrong_decoration", label: "Name or number",       route: "Supervisor → pink slip → decoration", cat: "Decoration" },
   { id: "logo",      label: "Logo or crest",     route: "Supervisor → pink slip → decoration", cat: "Decoration" },
   { id: "twill",     label: "Twill peeling",     route: "Supervisor → pink slip → decoration", cat: "Decoration", only: "stitched" },
-  { id: "print",     label: "Print or colour",   route: "Supervisor → full remake",            cat: "Artwork",    only: "sublimated" },
+  { id: "print",     label: "Sublimation error", route: "Supervisor → full remake",            cat: "Artwork",    only: "sublimated" },   // the floor's word for a print or colour fault (it read "Print or colour" for a day, 17 Nov 2026)
   { id: "stitching", label: "Stitching or seam", route: "Supervisor → stitcher",               cat: "Sewing" },
   { id: "fabric",    label: "Hole or snag",      route: "Supervisor → full remake",            cat: "Fabric" },
   { id: "label",     label: "Size label",        route: "Supervisor → stitcher",               cat: "Label" },
   { id: "mark",      label: "Dirt or mark",      route: "Clean in place", inPlace: true,       cat: "Cleaning" },   // cleaned at the station, not flagged: the "Clean it now" screen
-  { id: "other",     label: "Something else",    route: "Supervisor decides", custom: true,    cat: "Other" },      // free text, for what the list does not cover
+  { id: "other",     label: "Others",            route: "Supervisor decides",                  cat: "Other" },      // flags at once, nothing to type (the owner, 17 Nov 2026; it was "Something else" with a text box)
 ];
 // "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
 export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning" };
@@ -54,7 +54,7 @@ export const REASONS_BY_CONSTRUCTION = {
   sublimated: REASONS.filter(r => !r.only || r.only === "sublimated"),
 };
 // The "not right" menu for an order: by its type (a stitched order is never
-// offered "Print or colour"). With no type set, the whole list: nothing is
+// offered "Sublimation error"). With no type set, the whole list: nothing is
 // ruled out when nobody said what the order is made of.
 export const ALL_REASONS_MENU = REASONS;
 export function reasonsFor(jerseyType) {
@@ -129,6 +129,8 @@ const OLD_REASONS = [
   ["Cleaning not done", "Supervisor → back to cleaning", "Cleaning"],
   ["Mark or dirt — clean it here", "Clean in place", "Cleaning"],
   ["Something else — type it", "Supervisor decides", "Other"],
+  ["Print or colour", "Supervisor → full remake", "Artwork"],     // the sublimated menu's wording for one day, 17 Nov 2026
+  ["Something else", "Supervisor decides", "Other"],              // the last item of the menu that day, with a text box
 ].map(([label, route, cat]) => ({ label, route, cat }));
 const ALL_REASONS = [...REASONS, MARK_STAYS, ...OLD_REASONS];
 // The defect category of a flag, from its reason's label, for the reports'
