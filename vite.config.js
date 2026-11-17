@@ -20,6 +20,32 @@ export function printerEnv(env) {
   }
   return { printer: env.JERSEY_PRINTER, printers, labelSize: env.JERSEY_LABEL_SIZE, flagPrinter: env.JERSEY_FLAG_PRINTER, flagPrinters, flagLabelSize: env.JERSEY_FLAG_LABEL_SIZE }
 }
+// The read goes browser → this server → Anthropic. The API key stays HERE: the
+// proxy adds it to each request, so the station's page never holds it
+// (.env.local: CLAUDE_API_KEY=sk-ant-…). The old name VITE_CLAUDE_API_KEY is
+// still read, so nothing breaks on a PC that has not renamed it, but a
+// VITE_-named variable is also handed to every browser that opens the page:
+// rename it to take the key off the page. A request that brings its own key
+// (the test tools do) keeps it.
+export function anthropicKey(env) { return env.CLAUDE_API_KEY || env.VITE_CLAUDE_API_KEY || "" }
+export function anthropicProxy(env, { log = false } = {}) {
+  const key = anthropicKey(env)
+  const stamp = () => new Date().toLocaleTimeString('en-CA', { hour12: false })
+  if (!key) console.log(`${stamp()} [anthropic] no API key in .env.local (CLAUDE_API_KEY): the stations cannot read jerseys`)
+  return {
+    target: 'https://api.anthropic.com',
+    changeOrigin: true,
+    rewrite: (path) => path.replace(/^\/api\/anthropic/, ''),
+    configure: (proxy) => {
+      proxy.on('proxyReq', (proxyReq, req) => { req.__t0 = Date.now(); if (key && !req.headers['x-api-key']) proxyReq.setHeader('x-api-key', key) })
+      if (!log) return
+      // One line per model call in the server log: status and how long the
+      // answer took, so a slow or failed read can be traced after the fact.
+      proxy.on('proxyRes', (proxyRes, req) => console.log(`${stamp()} [anthropic] ${proxyRes.statusCode} in ${Date.now() - (req.__t0 || Date.now())} ms from ${req.socket?.remoteAddress || '?'}`))
+      proxy.on('error', (err, req) => console.log(`${stamp()} [anthropic] FAILED ${err.code || err.message} after ${Date.now() - (req?.__t0 || Date.now())} ms`))
+    },
+  }
+}
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
   return {
@@ -32,19 +58,7 @@ export default defineConfig(({ mode }) => {
     port: 5173,
     strictPort: true,    // fail loudly rather than drifting to 5174
     proxy: {
-      '/api/anthropic': {
-        target: 'https://api.anthropic.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/anthropic/, ''),
-        // One line per model call in the server log: status and how long the
-        // answer took, so a slow or failed read can be traced after the fact.
-        configure: (proxy) => {
-          const stamp = () => new Date().toLocaleTimeString('en-CA', { hour12: false });
-          proxy.on('proxyReq', (_proxyReq, req) => { req.__t0 = Date.now(); });
-          proxy.on('proxyRes', (proxyRes, req) => console.log(`${stamp()} [anthropic] ${proxyRes.statusCode} in ${Date.now() - (req.__t0 || Date.now())} ms from ${req.socket?.remoteAddress || '?'}`));
-          proxy.on('error', (err, req) => console.log(`${stamp()} [anthropic] FAILED ${err.code || err.message} after ${Date.now() - (req?.__t0 || Date.now())} ms`));
-        },
-      }
+      '/api/anthropic': anthropicProxy(env, { log: true }),
     }
   }
   }

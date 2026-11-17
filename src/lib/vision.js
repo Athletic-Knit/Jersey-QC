@@ -157,7 +157,7 @@ export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort
         signal: ac.signal,
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": apiKey || "",
+          ...(apiKey ? { "x-api-key": apiKey } : {}),   // the station sends none: the server's proxy adds the key (vite.config.js)
           "anthropic-version": "2023-06-01",
           "anthropic-dangerous-direct-browser-access": "true",
         },
