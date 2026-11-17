@@ -76,11 +76,16 @@ function Pill({ color, children, onClick, active = false, title }) {
 // The stations have a mouse and four programmed keys, no keyboard. Anything
 // that must be typed (the PIN, a jersey entered by hand) gets these keys under
 // the field. "digits" is a numeric pad; "full" adds the letters and a dash for
-// names and sizes. Presses do not steal focus from the field.
+// names and sizes; "search" is "full" with a space bar and Clear, for a search
+// box (the roster table's, the Print menu's). Presses do not steal focus from
+// the field. `typeKey` is what a press does to the text in the field.
+const typeKey = (v, k) => (k === "⌫" ? v.slice(0, -1) : k === "⌧" ? "" : k === "␣" ? (v && !v.endsWith(" ") ? v + " " : v) : v + k);
 const KEY_ROWS = {
   digits: [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["⌫", "0", "⏎"]],
   full:   [["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"], ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], ["A", "S", "D", "F", "G", "H", "J", "K", "L", "-"], ["Z", "X", "C", "V", "B", "N", "M", "⌫", "⏎"]],
+  search: [["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"], ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], ["A", "S", "D", "F", "G", "H", "J", "K", "L", "-"], ["Z", "X", "C", "V", "B", "N", "M", "⌫"], ["⌧", "␣", "⏎"]],
 };
+const KEY_NAMES = { "␣": "Space", "⌧": "Clear" };
 function ScreenKeys({ layout = "digits", onKey, onEnter, enterLabel = "OK" }) {
   const rows = KEY_ROWS[layout] || KEY_ROWS.digits;
   const wide = layout === "digits";
@@ -90,8 +95,8 @@ function ScreenKeys({ layout = "digits", onKey, onEnter, enterLabel = "OK" }) {
         <div key={i} style={{ display: "flex", gap: 6, justifyContent: "center" }}>
           {r.map(k => (
             <button key={k} type="button" onMouseDown={e => e.preventDefault()} onClick={() => (k === "⏎" ? onEnter?.() : onKey(k))}
-              style={{ flex: wide ? 1 : "0 0 auto", minWidth: wide ? 0 : 44, padding: wide ? "12px 0" : "10px 0", borderRadius: 8, border: "1px solid #3f4b5c", background: k === "⏎" ? "#3b82f6" : k === "⌫" ? "#334155" : "#1e293b", color: "#f1f5f9", fontSize: k === "⏎" ? 15 : 20, fontWeight: 700, cursor: "pointer" }}>
-              {k === "⏎" ? enterLabel : k}
+              style={{ flex: wide ? 1 : "0 0 auto", minWidth: wide ? 0 : k === "␣" ? 230 : k === "⌧" || (k === "⏎" && layout === "search") ? 96 : 44, padding: wide ? "12px 0" : "10px 0", borderRadius: 8, border: "1px solid #3f4b5c", background: k === "⏎" ? "#3b82f6" : k === "⌫" || k === "⌧" ? "#334155" : "#1e293b", color: "#f1f5f9", fontSize: k === "⏎" || KEY_NAMES[k] ? 15 : 20, fontWeight: 700, cursor: "pointer" }}>
+              {k === "⏎" ? enterLabel : KEY_NAMES[k] || k}
             </button>
           ))}
         </div>
@@ -1993,6 +1998,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const [found,  setFound]  = useState(null);   // { status: "searching" | "done" | "error", orders, message }
   const [status, setStatus] = useState(null);   // { kind: "printing" | "done" | "error", text }
   const [pick,   setPick]   = useState("");     // the sticker search
+  const [keys,   setKeys]   = useState(null);   // which box the on-screen keys are under: "order" | "pick" | null (no keyboard at a station)
+  const leave = () => document.activeElement?.blur?.();
   const pack = past || current;
   useEffect(() => {
     const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
@@ -2019,7 +2026,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const stickers = useMemo(() => stickerRows(pack), [pack]);
   const flags    = pack?.flags || [];
   const needle   = pick.trim().toLowerCase();
-  const picked   = needle ? stickers.filter(r => String(r.number ?? "").trim().toLowerCase() === needle || String(r.name ?? "").toLowerCase().includes(needle)).slice(0, 8) : [];
+  const picked   = needle ? stickers.filter(r => rosterMatches(r, pick)).slice(0, 8) : [];   // the same search as the roster table's
   const allLabels = pack ? boxLabelJobs(pack) : [], allLists = pack ? boxListJobs(pack) : [];
   const many = (n, what) => n <= 30 || window.confirm(`Print ${n} ${what}?`);
   const secSt  = { fontSize: 14, fontWeight: 800, color: "#94a3b8", letterSpacing: 1, textTransform: "uppercase", margin: "20px 0 8px" };
@@ -2040,10 +2047,11 @@ function PrintModal({ current = null, tagOf, onClose }) {
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14, flexWrap: "wrap" }}>
           <span style={{ fontSize: 15, color: "#94a3b8", fontWeight: 700 }}>Another order:</span>
-          <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") search(); }} placeholder="order number" style={{ ...inputSt, width: 220, padding: "8px 12px" }} />
+          <input value={q} onChange={e => setQ(e.target.value)} onFocus={() => setKeys("order")} onBlur={() => setKeys(k => (k === "order" ? null : k))} onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") search(); }} placeholder="order number" style={{ ...inputSt, width: 220, padding: "8px 12px" }} />
           <button onClick={search} disabled={!q.trim()} style={{ ...smBtn, opacity: q.trim() ? 1 : 0.5 }}>🔎 Find</button>
           {past && current && <button onClick={() => { setPast(null); setStatus(null); }} style={smBtn}>← Back to order {current.orderNumber || "on this station"}</button>}
         </div>
+        {keys === "order" && <div style={{ maxWidth: 560 }}><ScreenKeys layout="search" onKey={k => setQ(v => typeKey(v, k))} onEnter={() => { search(); leave(); }} enterLabel="Find" /></div>}
         {found?.status === "searching" && <div style={{ marginTop: 8, color: "#94a3b8" }}>Looking…</div>}
         {found?.status === "error" && <div style={{ marginTop: 8, color: "#f87171", fontWeight: 700 }}>Could not look it up: {found.message}</div>}
         {found?.status === "done" && found.orders.length === 0 && <div style={{ marginTop: 8, color: "#fbbf24", fontWeight: 700 }}>No order with that number in the last 90 days.</div>}
@@ -2088,9 +2096,10 @@ function PrintModal({ current = null, tagOf, onClose }) {
           <>
             <div style={secSt}>Jersey stickers · {stickers.length} passed</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <input value={pick} onChange={e => setPick(e.target.value)} onKeyDown={e => e.stopPropagation()} placeholder="jersey number or name" style={{ ...inputSt, width: 260, padding: "8px 12px" }} />
+              <input value={pick} onChange={e => setPick(e.target.value)} onFocus={() => setKeys("pick")} onBlur={() => setKeys(k => (k === "pick" ? null : k))} onKeyDown={e => e.stopPropagation()} placeholder="jersey number or name" style={{ ...inputSt, width: 260, padding: "8px 12px" }} />
               <button style={{ ...smBtn, opacity: stickers.length ? 1 : 0.4 }} disabled={!stickers.length} onClick={() => many(stickers.length, "stickers") && send([[stickerJobs(pack), "jersey"]], "every sticker")}>All {stickers.length} stickers</button>
             </div>
+            {keys === "pick" && <div style={{ maxWidth: 560 }}><ScreenKeys layout="search" onKey={k => setPick(v => typeKey(v, k))} onEnter={leave} enterLabel="Done" /></div>}
             {needle && picked.length === 0 && <div style={{ marginTop: 6, color: "#fbbf24" }}>No passed jersey matches “{pick.trim()}”.</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
               {picked.map(r => (
@@ -2265,6 +2274,8 @@ export default function App() {
   const [doneFilter,         setDoneFilter]         = useState("");       // "" all · "done" in a box (passed or by hand) · "todo" still to scan
   const [showFilters,        setShowFilters]        = useState(false);    // the funnel button's panel is open
   const [rosterSearch,       setRosterSearch]       = useState("");       // the table's search box: a jersey number, a name, or both
+  const [searchKeys,         setSearchKeys]         = useState(false);    // the on-screen keys under the bar, while the cursor is in the search box
+  const searchRef = useRef(null);
   const [showHistory,        setShowHistory]        = useState(false);   // every jersey scanned this order, latest first   // "pass" | "flag" | "manual" | null — set by clicking a header pill
   const filterRoster = useCallback(kind => { setRosterFilter(f => (f === kind ? null : kind)); setView("roster"); }, []);
   const [error,              setError]              = useState(null);
@@ -3573,10 +3584,10 @@ export default function App() {
                       while the cursor is in a box the scan key types, it does not scan. */}
                   <span style={{ position: "relative", display: "flex", alignItems: "center" }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true" style={{ position: "absolute", left: 9, pointerEvents: "none" }}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-                    <input value={rosterSearch} onChange={e => setRosterSearch(e.target.value)} placeholder="Number or name" aria-label="Find a jersey by number or name" title="Find a jersey: 57, smith, or 57 smith. Enter keeps it, Esc clears it."
+                    <input ref={searchRef} value={rosterSearch} onChange={e => setRosterSearch(e.target.value)} onFocus={() => setSearchKeys(true)} onBlur={() => setSearchKeys(false)} placeholder="Number or name" aria-label="Find a jersey by number or name" title="Find a jersey: 57, smith, or 57 smith. Enter keeps it, Esc clears it."
                       onKeyDown={e => { e.stopPropagation(); if (e.key === "Escape") { setRosterSearch(""); e.currentTarget.blur(); } else if (e.key === "Enter") e.currentTarget.blur(); }}
                       style={{ width: 190, boxSizing: "border-box", padding: "5px 26px 5px 30px", borderRadius: 6, border: `1px solid ${rosterSearch ? "#60a5fa" : "#3f4b5c"}`, background: "#1e293b", color: "#e2e8f0", fontSize: 15, fontWeight: rosterSearch ? 800 : 500 }} />
-                    {rosterSearch && <button onClick={() => setRosterSearch("")} aria-label="Clear the search" title="Clear the search" style={{ position: "absolute", right: 4, border: "none", background: "transparent", color: "#94a3b8", fontSize: 16, lineHeight: 1, cursor: "pointer", padding: "2px 5px" }}>×</button>}
+                    {rosterSearch && <button onMouseDown={e => e.preventDefault()} onClick={() => setRosterSearch("")} aria-label="Clear the search" title="Clear the search" style={{ position: "absolute", right: 4, border: "none", background: "transparent", color: "#94a3b8", fontSize: 16, lineHeight: 1, cursor: "pointer", padding: "2px 5px" }}>×</button>}
                   </span>
                   {/* The sort is one menu, not six buttons: fewer words on the bar. It lets go of the
                       keyboard as soon as something is chosen: a menu with the cursor in it would take the
@@ -3603,6 +3614,14 @@ export default function App() {
                       </button>
                     );
                   })()}
+                  {searchKeys && (
+                    <div style={{ flexBasis: "100%", borderTop: "1px solid #21262d", marginTop: 2, paddingBottom: 6 }}>
+                      {/* The stations have no keyboard: the keys come up when the search box is clicked and go when
+                          Done is pressed or anything else is clicked. The table under them filters as each key lands.
+                          They sit BEFORE the "N shown" line, so that line appearing never moves the keys under the finger. */}
+                      <ScreenKeys layout="search" onKey={k => setRosterSearch(v => typeKey(v, k))} onEnter={() => searchRef.current?.blur()} enterLabel="Done" />
+                    </div>
+                  )}
                   {(rosterFilter || rosterSearch.trim() || sizeFilter || teamFilter || boxFilter || doneFilter) && (
                     <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, fontWeight: 700, color: rosterFilter === "pass" ? "#22c55e" : rosterFilter === "flag" ? "#f87171" : rosterFilter ? "#fbbf24" : "#cbd5e1" }}>
                       <span>{shownRows.length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : rosterFilter ? "by hand" : "shown"}{sizeFilter ? ` · ${sizeFilter}` : ""}{teamFilter ? ` · ${teamFilter}` : ""}{boxFilter ? ` · Box ${boxFilter}` : ""}{doneFilter === "done" ? " · done" : doneFilter === "todo" ? " · to do" : ""}{rosterSearch.trim() ? ` · “${rosterSearch.trim()}”` : ""}</span>
