@@ -7,6 +7,7 @@
 //   DELETE /api/hub/stations/:id
 //   DELETE /api/hub/stations/:id/carried?key=…   supervisor marks an item from an earlier order done
 //   GET    /api/hub/orders?q=264247         an order by its number, any day in the ledger: rows, boxes, flags — the station's Print menu
+//   GET    /api/hub/ledger?from=&to=         several days, slim (no photos, no rosters) — the board's "Compare days" workbook
 //   GET    /api/hub/ledger?date=YYYY-MM-DD   every scan event and order of that day (default today) — the day sheet;
 //                                            `days` lists every day still kept (90; photos only on the newest 14);
 //                                            `days` lists every day still kept (90; photos only on the newest 14)
@@ -238,6 +239,22 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
         const orders = Object.values(found).sort((a, b) => (b.exact - a.exact) || ((b.lastSeen || 0) - (a.lastSeen || 0))).slice(0, 10)
           .map(({ flagsById, exact, ...o }) => ({ ...o, exact, flags: Object.values(flagsById).sort((a, b) => String(a.t).localeCompare(String(b.t))) }));
         return json(res, 200, { orders });
+      }
+      // Several days at once, for comparing them: ?from=YYYY-MM-DD&to=YYYY-MM-DD
+      // (both ends included, at most 92 days). Slim: no photos on the events and
+      // no rosters on the orders, so three months stay a small answer.
+      if (kind === "ledger" && req.method === "GET" && new URL(req.url, "http://hub").searchParams.get("from")) {
+        const q = new URL(req.url, "http://hub").searchParams;
+        const from = String(q.get("from")), to = String(q.get("to") || from);
+        const days = Object.keys(state.ledger || {}).filter(d => d >= from && d <= to).sort().slice(-92).map(date => {
+          const d = state.ledger[date];
+          return {
+            date,
+            events: Object.values(d.events || {}).map(ev => { const slim = { ...ev }; delete slim.photo; delete slim.damagePhotos; return slim; }).sort((a, b) => String(a.t).localeCompare(String(b.t))),
+            orders: Object.values(d.orders || {}).map(o => ({ station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", counts: o.counts || null, jerseyType: o.jerseyType || "", firstSeen: o.firstSeen, lastSeen: o.lastSeen })),
+          };
+        });
+        return json(res, 200, { from, to, days, known: Object.keys(state.ledger || {}).sort() });
       }
       if (kind === "ledger" && req.method === "GET") {
         const date = new URL(req.url, "http://hub").searchParams.get("date") || new Date(now_()).toLocaleDateString("en-CA");

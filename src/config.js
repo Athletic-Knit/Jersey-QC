@@ -17,14 +17,17 @@ export const CHECKLIST = ["name & number", "size tag", "logos", "seams", "spots 
 
 // One tap on the "not right" menu. `route` is where the jersey goes; in Phase 1
 // everything except "mark" shows the same red "Go to supervisor".
+// `cat` is the defect category the reports count it under (the roadmap's
+// breakdown: decoration, artwork, sewing, label, plus fabric and cleaning).
 export const REASONS = [
-  { id: "wrong_decoration", label: "Wrong name, number or team",  route: "Supervisor → pink slip → decoration" },
-  { id: "logo",             label: "Missing or wrong logo",        route: "Supervisor → pink slip → decoration" },
-  { id: "sublimation",      label: "Sublimation error",            route: "Supervisor → full remake" },
-  { id: "stitching",        label: "Stitching or seam",            route: "Supervisor → stitcher" },
-  { id: "cleaning",         label: "Cleaning not done",            route: "Supervisor → back to cleaning" },
-  { id: "mark",             label: "Mark or dirt — clean it here", route: "Clean in place", inPlace: true },
-  { id: "other",            label: "Something else — type it",     route: "Supervisor decides", custom: true },   // free text, for what the list does not cover
+  { id: "wrong_decoration", label: "Wrong name, number or team",  route: "Supervisor → pink slip → decoration", cat: "Decoration" },
+  { id: "logo",             label: "Missing or wrong logo",        route: "Supervisor → pink slip → decoration", cat: "Decoration" },
+  { id: "sublimation",      label: "Sublimation error",            route: "Supervisor → full remake", cat: "Artwork" },
+  { id: "stitching",        label: "Stitching or seam",            route: "Supervisor → stitcher", cat: "Sewing" },
+  { id: "label",            label: "Wrong or missing size label",  route: "Supervisor → stitcher", cat: "Label" },
+  { id: "cleaning",         label: "Cleaning not done",            route: "Supervisor → back to cleaning", cat: "Cleaning" },
+  { id: "mark",             label: "Mark or dirt — clean it here", route: "Clean in place", inPlace: true, cat: "Cleaning" },
+  { id: "other",            label: "Something else — type it",     route: "Supervisor decides", custom: true, cat: "Other" },   // free text, for what the list does not cover
 ];
 
 // What the order is made of. ECHL and ECHL replica jerseys have the names,
@@ -43,20 +46,20 @@ const R = Object.fromEntries(REASONS.map(r => [r.id, r]));
 export const REASONS_BY_CONSTRUCTION = {
   stitched: [
     R.wrong_decoration,
-    { id: "logo",       label: "Missing, wrong or crooked crest or logo", route: "Supervisor → pink slip → decoration" },
-    { id: "twill",      label: "Twill lifting, peeling or torn",           route: "Supervisor → pink slip → decoration" },
-    { id: "stitching",  label: "Loose, missing or broken stitching",      route: "Supervisor → stitcher" },
-    { id: "seam",       label: "Seam, hem or construction",                route: "Supervisor → stitcher" },
-    R.cleaning, R.mark, R.other,
+    { id: "logo",       label: "Missing, wrong or crooked crest or logo", route: "Supervisor → pink slip → decoration", cat: "Decoration" },
+    { id: "twill",      label: "Twill lifting, peeling or torn",           route: "Supervisor → pink slip → decoration", cat: "Decoration" },
+    { id: "stitching",  label: "Loose, missing or broken stitching",      route: "Supervisor → stitcher", cat: "Sewing" },
+    { id: "seam",       label: "Seam, hem or construction",                route: "Supervisor → stitcher", cat: "Sewing" },
+    R.label, R.cleaning, R.mark, R.other,
   ],
   sublimated: [
     R.wrong_decoration,
-    { id: "logo",       label: "Missing, wrong or misplaced logo",         route: "Supervisor → full remake" },
-    { id: "print",      label: "Print error — ghosting, fading, misaligned", route: "Supervisor → full remake" },
-    { id: "colour",     label: "Colour off, bleeding or streaked",         route: "Supervisor → full remake" },
-    { id: "fabric",     label: "Fabric flaw, snag or hole",                route: "Supervisor → full remake" },
-    { id: "seam",       label: "Seam, hem or construction",                route: "Supervisor → stitcher" },
-    R.cleaning, R.mark, R.other,
+    { id: "logo",       label: "Missing, wrong or misplaced logo",         route: "Supervisor → full remake", cat: "Artwork" },
+    { id: "print",      label: "Print error — ghosting, fading, misaligned", route: "Supervisor → full remake", cat: "Artwork" },
+    { id: "colour",     label: "Colour off, bleeding or streaked",         route: "Supervisor → full remake", cat: "Artwork" },
+    { id: "fabric",     label: "Fabric flaw, snag or hole",                route: "Supervisor → full remake", cat: "Fabric" },
+    { id: "seam",       label: "Seam, hem or construction",                route: "Supervisor → stitcher", cat: "Sewing" },
+    R.label, R.cleaning, R.mark, R.other,
   ],
 };
 // The "not right" menu for an order: by its type (an ECHL order is never
@@ -125,6 +128,17 @@ export const DEFAULT_SETTINGS = {
 // recorded before any route was kept on the entry still get a tag, and a
 // "— found after it passed" suffix does not change where it goes.
 const ALL_REASONS = [...REASONS, ...REASONS_BY_CONSTRUCTION.stitched, ...REASONS_BY_CONSTRUCTION.sublimated];
+// The defect category of a flag, from its reason's label, for the reports'
+// breakdown. A reason typed by the operator is "Other"; a jersey that is not
+// on the roster, or a duplicate, is an order problem, not a defect.
+export const DEFECT_CATEGORIES = ["Decoration", "Artwork", "Sewing", "Label", "Fabric", "Cleaning", "Order", "Other"];
+export function reasonCategory(reason) {
+  const label = String(reason || "").replace(/ — found after it passed$/, "").trim().toLowerCase();
+  const r = ALL_REASONS.find(x => x.label.toLowerCase() === label);
+  if (r) return r.cat || "Other";
+  if (/not on the roster|duplicate/.test(label)) return "Order";
+  return "Other";
+}
 export function routeOfReason(reason) {
   const label = String(reason || "").replace(/ — found after it passed$/, "").trim().toLowerCase();
   if (!label) return "Supervisor decides";

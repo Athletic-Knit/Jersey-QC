@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
 import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
-import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
+import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { createAwayWatch } from "./lib/attention.js";
@@ -16,7 +16,7 @@ import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.j
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord } from "./lib/printjobs.js";
 const SECOND_LOOK = false;
 import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory } from "./config.js";
 
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
 
@@ -201,6 +201,45 @@ const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise,
     </tr>
   );
 });
+
+// ── Compare days (the supervisor's board) ────────────────────────────────────
+// One workbook over a range of days from the hub's ledger: a row per day, per
+// operator, per station, per part of the day, and the defect categories day by
+// day. `days` is every day the hub has; the range starts on the last seven.
+function CompareDays({ days = [], stationLabel, onProblem }) {
+  const known = [...days].sort();
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState("");
+  const [to,   setTo]   = useState("");
+  const [busy, setBusy] = useState(false);
+  const first = from || known[Math.max(0, known.length - 7)] || "", last = to || known[known.length - 1] || "";
+  const run = () => {
+    if (!first || !last) return;
+    setBusy(true);
+    hub.ledgerRange(first <= last ? first : last, first <= last ? last : first)
+      .then(r => { if (!(r.days || []).length) { onProblem?.("No scans on record between those two days."); return; } exportCompareXLSX(r.days, stationLabel, undefined, { categoryOf: reasonCategory }); })
+      .catch(() => onProblem?.("Could not fetch those days from the hub."))
+      .finally(() => setBusy(false));
+  };
+  const dateSt = { ...inputSt, fontSize: 13, padding: "6px 8px" };
+  if (known.length < 2) return null;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <button onClick={() => setOpen(o => !o)} title="One Excel file over several days: each day, each operator, each station, morning against afternoon, and the defect categories day by day"
+        style={{ ...bigBtn, fontSize: 13, marginBottom: open ? 8 : 0, background: "transparent", border: "1px solid #3b82f6", color: "#93c5fd" }}>⬇ Compare days (Excel) {open ? "▲" : "▼"}</button>
+      {open && (
+        <div style={{ padding: 10, borderRadius: 8, border: "1px solid #21262d", background: "#0d1117" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <label style={{ ...labelSt, marginBottom: 0 }}>From<input type="date" value={first} min={known[0]} max={known[known.length - 1]} onChange={e => setFrom(e.target.value)} style={dateSt} /></label>
+            <label style={{ ...labelSt, marginBottom: 0 }}>To<input type="date" value={last} min={known[0]} max={known[known.length - 1]} onChange={e => setTo(e.target.value)} style={dateSt} /></label>
+          </div>
+          <button onClick={run} disabled={busy || !first || !last} style={{ ...bigBtn, fontSize: 13, background: "#3b82f6", color: "#fff", opacity: busy ? 0.6 : 1 }}>{busy ? "Fetching…" : "Download the comparison"}</button>
+          <div style={{ fontSize: 12, color: "#7c8ba1", marginTop: 6 }}>The hub keeps {known.length} {known.length === 1 ? "day" : "days"}: {known[0]} to {known[known.length - 1]}.</div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ResumeModal({ session, onResume, onDiscard }) {
   const done = session.roster.filter(r => r.scanned && r.scanned !== false).length;
@@ -793,7 +832,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
     const rows = rec.rows || [];
     if (!rows.length) { setMsg(`The hub has no jersey list for order ${o.order} on ${stationLabel(o.station)} — that station last reported before today's update, or the order was done before it. Press Export on the station for its sheet; reload the station page so future orders come through.`); return; }
     const log = (l.events || []).filter(e => e.station === rec.station && e.order === rec.order && sameRun(e.run, rec.run)).map(e => ({ match: { _id: e.rowId }, reason: e.reason, resolution: e.resolution, operator: e.operator, timestamp: e.t }));
-    exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "", jerseyType: jerseyTypeLabel(rec.jerseyType), idleSpells: rec.idle?.spells || [], awaySpells: rec.away?.spells || [], bins: rec.binSummary || [] }, displayColumns(rows), row => binOfRow(rec.bins, rec.closedBins, row));
+    exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "", jerseyType: jerseyTypeLabel(rec.jerseyType), idleSpells: rec.idle?.spells || [], awaySpells: rec.away?.spells || [], bins: rec.binSummary || [], categoryOf: reasonCategory }, displayColumns(rows), row => binOfRow(rec.bins, rec.closedBins, row));
   }).catch(() => setMsg("Could not fetch that order from the hub."));
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
@@ -1040,10 +1079,11 @@ function SupervisorPanel({ operatorName, onSignOut }) {
           })}
         </div>
         <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid #21262d", padding: 14, overflowY: "auto" }}>
-          <button onClick={() => hub.ledger(day).then(l => exportDaySheetXLSX(l, stationLabel)).catch(() => setMsg("Could not fetch the day's scans from the hub."))}
-            title="One Excel file for the whole day, every station: jerseys per hour, time per jersey, flags, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 8, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {day ? day : `${todayTotal} ${todayTotal === 1 ? "jersey" : "jerseys"} so far`}</button>
+          <button onClick={() => hub.ledger(day).then(l => exportDaySheetXLSX(l, stationLabel, undefined, { categoryOf: reasonCategory })).catch(() => setMsg("Could not fetch the day's scans from the hub."))}
+            title="One Excel file for the whole day, every station: jerseys per hour, time per jersey, flag rate, each operator, defects by category, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 8, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {day ? day : `${todayTotal} ${todayTotal === 1 ? "jersey" : "jerseys"} so far`}</button>
           <button onClick={() => hub.ledger(day).then(l => exportDamageReportXLSX(buildDamageRows(l.events || [], { stationLabel, typeLabel: jerseyTypeLabel }), { name: "day_" + (l.date || ""), title: `Damage report — ${l.date || "today"}, every station` })).catch(e => setMsg(e.message || "Could not fetch the day's flags from the hub."))}
             title="Every flagged jersey of the day, every station, with its photo (photos are kept 14 days)" style={{ ...bigBtn, fontSize: 13, marginBottom: 16, background: "transparent", border: "1px solid #ef4444", color: "#f87171" }}>⬇ Damage report (Excel, with photos){day ? ` — ${day}` : ""}</button>
+          <CompareDays days={days} stationLabel={stationLabel} onProblem={setMsg} />
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Send a roster</div>
           <div style={{ marginBottom: 10 }}>
             <label style={labelSt}>Send to</label>
@@ -3235,7 +3275,7 @@ export default function App() {
   }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, showBins, finished, showPrint, sessionStarted, scanKey, doTriggerScan, onTrial]);
 
   const overlayKey = overlay ? `${overlay.mode}:${overlay.scan?.id}:${(overlay.candidates || []).map(c => c._id).join(",")}` : "";
-  const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType), idleSpells, awaySpells, bins: binSummary };
+  const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType), idleSpells, awaySpells, bins: binSummary, categoryOf: reasonCategory };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
