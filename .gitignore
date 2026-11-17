@@ -31,3 +31,6 @@ public/sim
 public/sim/stress/distort/
 tools/recog-stress-results.json
 tools/sim-models.json
+
+# Development test server cache and data (this PC only)
+.vite-dev

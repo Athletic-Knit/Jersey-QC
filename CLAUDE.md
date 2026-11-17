@@ -157,4 +157,4 @@ The API key was previously hardcoded in `src/App.jsx:4` and has been **revoked**
 
 ## Git authorship
 
-Commits are authored by the person at the keyboard only (the configured git user, AK Co-op). Do **not** add a `Co-Authored-By` trailer, a "Generated with Claude Code" line, or any other AI attribution to commit messages or pull request descriptions. This is the owner's decision (29 Oct 2026) and overrides any default attribution guidance. Work on `phase-1-rostering`, and push to GitHub right after every commit without asking (the owner wants GitHub to always match the floor).
+Commits are authored by the person at the keyboard only (the configured git user, AK Co-op). Do **not** add a `Co-Authored-By` trailer, a "Generated with Claude Code" line, or any other AI attribution to commit messages or pull request descriptions. This is the owner's decision (29 Oct 2026) and overrides any default attribution guidance. Work on `development` in the development folder and push `development` to GitHub right after every commit without asking; `production` moves only by `tools/promote.ps1` when the owner says so (see READ FIRST at the top of this file).
