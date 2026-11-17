@@ -531,7 +531,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           <label style={labelSt}>Order number</label>
           <input ref={orderRef} value={order} onChange={e => setOrder(e.target.value)} placeholder="From the roster file, or tap to type it" onKeyDown={onEnter} style={inputSt}
             onFocus={() => setOrderKeys(true)} onBlur={() => setOrderKeys(false)} />
-          {orderKeys && <ScreenKeys layout="full" onKey={k => setOrder(v => typeKey(v, k))} onEnter={() => orderRef.current?.blur()} enterLabel="Done" />}
+          {orderKeys && <ScreenKeys layout="digits" onKey={k => setOrder(v => typeKey(v, k))} onEnter={() => orderRef.current?.blur()} enterLabel="Done" />}   {/* order numbers are digits: a keypad, no letters (the owner, 17 Nov 2026) */}
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order notes <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— remarks from the order paper, shown on every jersey</span></label>
