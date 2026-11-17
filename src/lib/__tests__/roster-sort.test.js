@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices } from "../roster.js";
+import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices, rosterMatches } from "../roster.js";
 
 const roster = [
   { _id: 1, name: "ZED",   number: "10", team: "Red",  size: "A-L",  scanned: "pass" },
@@ -49,5 +49,30 @@ describe("the roster table's sort", () => {
     sortRoster(roster, "size");
     expect(roster).toEqual(copy);
     expect(ids(sortRoster(roster, "nope"))).toEqual([1, 2, 3, 4, 5]);
+  });
+});
+
+describe("the roster table's search", () => {
+  const hit = q => roster.filter(r => rosterMatches(r, q)).map(r => r._id);
+  it("nothing typed shows everything", () => {
+    expect(hit("")).toEqual([1, 2, 3, 4, 5]);
+    expect(hit("   ")).toEqual([1, 2, 3, 4, 5]);
+  });
+  it("digits are the jersey number, exactly; # is allowed", () => {
+    expect(hit("7")).toEqual([2, 3]);                  // both #7s, not #70 or #17
+    expect(hit("#22")).toEqual([4]);
+    expect(hit("2")).toEqual([]);                      // 22 is not 2
+    expect(rosterMatches({ number: "00" }, "0")).toBe(false);   // 00 and 0 are different jerseys
+    expect(rosterMatches({ number: "00" }, "00")).toBe(true);
+  });
+  it("letters are part of the name or the team, any case", () => {
+    expect(hit("am")).toEqual([2]);
+    expect(hit("BLUE")).toEqual([2, 4]);
+    expect(hit("zz")).toEqual([]);
+  });
+  it("several words must all match", () => {
+    expect(hit("7 red")).toEqual([3]);
+    expect(hit("blue 22")).toEqual([4]);
+    expect(hit("7 cal")).toEqual([]);
   });
 });

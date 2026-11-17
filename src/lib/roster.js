@@ -232,6 +232,17 @@ export function sortRoster(roster, by = "size", binMap = null, { doneFirst = tru
   return cmp ? roster.slice().sort(cmp) : roster;
 }
 
+// The roster table's search box: "57", "#57", "smith", "57 smith", "navy 9".
+// Every word must match the row: a word of digits is the jersey number,
+// exactly (00 and 0 are two different jerseys); any other word is a part of
+// the name or of the team. Nothing typed matches every row.
+export function rosterMatches(row, query) {
+  const words = String(query ?? "").toLowerCase().split(/\s+/).map(w => w.replace(/^#/, "")).filter(Boolean);
+  if (!words.length) return true;
+  const number = String(row?.number ?? "").trim().toLowerCase(), name = String(row?.name ?? "").toLowerCase(), team = String(row?.team ?? "").toLowerCase();
+  return words.every(w => /^\d+$/.test(w) ? number === w : name.includes(w) || team.includes(w));
+}
+
 // The sizes and teams an order has, for the table's filter: sizes in rack order, teams as named.
 export function rosterChoices(roster) {
   const uniq = k => [...new Set(roster.map(r => String(r[k] ?? "").trim()).filter(Boolean))];

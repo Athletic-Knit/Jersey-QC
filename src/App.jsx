@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -2264,6 +2264,7 @@ export default function App() {
   const [boxFilter,          setBoxFilter]          = useState("");       // … or one box only: what is in it, and what is still to go in it
   const [doneFilter,         setDoneFilter]         = useState("");       // "" all · "done" in a box (passed or by hand) · "todo" still to scan
   const [showFilters,        setShowFilters]        = useState(false);    // the funnel button's panel is open
+  const [rosterSearch,       setRosterSearch]       = useState("");       // the table's search box: a jersey number, a name, or both
   const [showHistory,        setShowHistory]        = useState(false);   // every jersey scanned this order, latest first   // "pass" | "flag" | "manual" | null — set by clicking a header pill
   const filterRoster = useCallback(kind => { setRosterFilter(f => (f === kind ? null : kind)); setView("roster"); }, []);
   const [error,              setError]              = useState(null);
@@ -2432,11 +2433,12 @@ export default function App() {
   // IN (a closed box too), or the open one it will go in.
   const shownRows = useMemo(() => sortRoster(roster.filter(r =>
     (!rosterFilter || r.scanned === rosterFilter)
+    && rosterMatches(r, rosterSearch)
     && (!sizeFilter || String(r.size ?? "").trim() === sizeFilter)
     && (!teamFilter || String(r.team ?? "").trim() === teamFilter)
     && (!boxFilter || String(binOf(r) ?? "") === boxFilter)
     && (!doneFilter || (doneFilter === "done" ? (r.scanned === "pass" || r.scanned === "manual") : !r.scanned))),
-  rosterSort, binMap, { doneFirst, binOf }), [roster, rosterFilter, sizeFilter, teamFilter, boxFilter, doneFilter, rosterSort, binMap, doneFirst, binOf]);
+  rosterSort, binMap, { doneFirst, binOf }), [roster, rosterFilter, rosterSearch, sizeFilter, teamFilter, boxFilter, doneFilter, rosterSort, binMap, doneFirst, binOf]);
   // Rate and time left from working time (src/lib/pace.js): a night with the
   // order left open on screen is not working time, so a resumed order does not
   // come back with an ETA in the thousands.
@@ -2516,7 +2518,7 @@ export default function App() {
     // box labels are printed from it.
     const bins = buildBinMap(parsed, {}, binBy);
     setClosedBins([]); setBinPrint(null); setBoxLabelled([]);   // every roster row starts unscanned: no box is closed
-    setBoxFilter(""); setDoneFilter("");                         // the last order's box is not this order's
+    setBoxFilter(""); setDoneFilter(""); setRosterSearch("");    // the last order's box is not this order's
     setBinMap(binCount(bins) > 0 ? bins : null); setShowBinSetup(binCount(bins) > 0); setBoxAuto(true);
   }, [syncInspect]);
 
@@ -3566,15 +3568,28 @@ export default function App() {
               {/* Sort by / Show stay put above the list; only the table scrolls. */}
               {roster.length > 0 && (
                 <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "6px 14px", background: "#161b22", borderBottom: "1px solid #21262d", fontSize: 15, flexWrap: "wrap" }}>
-                  <span style={{ color: "#94a3b8", fontWeight: 700 }}>Sort by</span>
-                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {ROSTER_SORTS.filter(s => s.id !== "bin" || binMap).map(s => (
-                      <button key={s.id} onClick={() => setRosterSort(s.id)} title={s.id === "size" ? "Rack order: youth before adult, XS before 3XL" : s.id === "status" ? "Done on top: passed, by hand, flagged, missing, short, then still to scan — the toggle turns it round" : undefined}
-                        style={{ ...btnGhost, padding: "3px 12px", fontSize: 14, borderColor: rosterSort === s.id ? "#60a5fa" : "#334155", color: rosterSort === s.id ? "#fff" : "#94a3b8", background: rosterSort === s.id ? "rgba(96,165,250,0.15)" : "transparent", fontWeight: rosterSort === s.id ? 800 : 500 }}>{s.label}</button>
-                    ))}
-                  </div>
-                  {rosterSort === "status" && (
-                    <button onClick={() => setDoneFirst(d => !d)} title="Which end of the list the finished jerseys sit at" style={{ ...btnGhost, padding: "3px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>{doneFirst ? "✓ Done on top" : "— To do on top"} ⇅</button>
+                  {/* Search first: on a 500-jersey order, finding one jersey is the commonest thing asked of
+                      this table. Enter or Esc leaves the box (Esc also empties it), so the pedal scans again:
+                      while the cursor is in a box the scan key types, it does not scan. */}
+                  <span style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true" style={{ position: "absolute", left: 9, pointerEvents: "none" }}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                    <input value={rosterSearch} onChange={e => setRosterSearch(e.target.value)} placeholder="Number or name" aria-label="Find a jersey by number or name" title="Find a jersey: 57, smith, or 57 smith. Enter keeps it, Esc clears it."
+                      onKeyDown={e => { e.stopPropagation(); if (e.key === "Escape") { setRosterSearch(""); e.currentTarget.blur(); } else if (e.key === "Enter") e.currentTarget.blur(); }}
+                      style={{ width: 190, boxSizing: "border-box", padding: "5px 26px 5px 30px", borderRadius: 6, border: `1px solid ${rosterSearch ? "#60a5fa" : "#3f4b5c"}`, background: "#1e293b", color: "#e2e8f0", fontSize: 15, fontWeight: rosterSearch ? 800 : 500 }} />
+                    {rosterSearch && <button onClick={() => setRosterSearch("")} aria-label="Clear the search" title="Clear the search" style={{ position: "absolute", right: 4, border: "none", background: "transparent", color: "#94a3b8", fontSize: 16, lineHeight: 1, cursor: "pointer", padding: "2px 5px" }}>×</button>}
+                  </span>
+                  {/* The sort is one menu, not six buttons: fewer words on the bar. It lets go of the
+                      keyboard as soon as something is chosen: a menu with the cursor in it would take the
+                      scan key B as "jump to Box". */}
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#94a3b8", fontWeight: 700 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3" /></svg>
+                    <select value={rosterSort} onChange={e => { setRosterSort(e.target.value); e.currentTarget.blur(); }} aria-label="Sort the table by" title="Sort the table: Size is the rack order (youth before adult, XS before 3XL); Status puts the done ones first"
+                      style={{ background: "#1e293b", color: "#e2e8f0", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px", fontWeight: 700 }}>
+                      {ROSTER_SORTS.filter(x => x.id !== "bin" || binMap).map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
+                    </select>
+                  </label>
+                  {(rosterSort === "status" || rosterSort === "bin") && (
+                    <button onClick={() => setDoneFirst(d => !d)} title="Which end the finished jerseys sit at" style={{ ...btnGhost, padding: "3px 10px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>⇅ {doneFirst ? "Done first" : "To do first"}</button>
                   )}
                   {(() => {
                     // The filters sit behind one funnel button, like a shop's search page: the
@@ -3588,10 +3603,10 @@ export default function App() {
                       </button>
                     );
                   })()}
-                  {(rosterFilter || sizeFilter || teamFilter || boxFilter || doneFilter) && (
+                  {(rosterFilter || rosterSearch.trim() || sizeFilter || teamFilter || boxFilter || doneFilter) && (
                     <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, fontWeight: 700, color: rosterFilter === "pass" ? "#22c55e" : rosterFilter === "flag" ? "#f87171" : rosterFilter ? "#fbbf24" : "#cbd5e1" }}>
-                      <span>{shownRows.length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : rosterFilter ? "by hand" : "shown"}{sizeFilter ? ` · ${sizeFilter}` : ""}{teamFilter ? ` · ${teamFilter}` : ""}{boxFilter ? ` · Box ${boxFilter}` : ""}{doneFilter === "done" ? " · done" : doneFilter === "todo" ? " · to do" : ""}</span>
-                      <button onClick={() => { setRosterFilter(null); setSizeFilter(""); setTeamFilter(""); setBoxFilter(""); setDoneFilter(""); }} style={{ ...btnGhost, padding: "3px 10px", fontSize: 13 }}>Show all</button>
+                      <span>{shownRows.length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : rosterFilter ? "by hand" : "shown"}{sizeFilter ? ` · ${sizeFilter}` : ""}{teamFilter ? ` · ${teamFilter}` : ""}{boxFilter ? ` · Box ${boxFilter}` : ""}{doneFilter === "done" ? " · done" : doneFilter === "todo" ? " · to do" : ""}{rosterSearch.trim() ? ` · “${rosterSearch.trim()}”` : ""}</span>
+                      <button onClick={() => { setRosterFilter(null); setSizeFilter(""); setTeamFilter(""); setBoxFilter(""); setDoneFilter(""); setRosterSearch(""); }} style={{ ...btnGhost, padding: "3px 10px", fontSize: 13 }}>Show all</button>
                     </span>
                   )}
                   {showFilters && (() => {
@@ -3601,23 +3616,23 @@ export default function App() {
                     return (
                       <div style={{ flexBasis: "100%", display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap", padding: "8px 2px 4px", borderTop: "1px solid #21262d", marginTop: 2 }}>
                         {binSummary.length > 0 && field("BOX",
-                          <select value={boxFilter} onChange={e => setBoxFilter(e.target.value)} title="Only this box: what is in it, and what is still to go in it" style={selSt(boxFilter, "#93c5fd", "#3b82f6")}>
+                          <select value={boxFilter} onChange={e => { setBoxFilter(e.target.value); e.currentTarget.blur(); }} title="Only this box: what is in it, and what is still to go in it" style={selSt(boxFilter, "#93c5fd", "#3b82f6")}>
                             <option value="">All boxes</option>
                             {binSummary.map(b => <option key={b.bin} value={String(b.bin)}>Box {b.bin} · {b.label} · {b.count} in it{b.open ? "" : " · closed"}</option>)}
                           </select>)}
                         {field("DONE OR TO DO",
-                          <select value={doneFilter} onChange={e => setDoneFilter(e.target.value)} title="Done = passed or entered by hand, so in a box. To do = not scanned yet." style={selSt(doneFilter, "#86efac", "#22c55e")}>
+                          <select value={doneFilter} onChange={e => { setDoneFilter(e.target.value); e.currentTarget.blur(); }} title="Done = passed or entered by hand, so in a box. To do = not scanned yet." style={selSt(doneFilter, "#86efac", "#22c55e")}>
                             <option value="">Both</option>
                             <option value="done">Done only</option>
                             <option value="todo">To do only</option>
                           </select>)}
                         {ch.sizes.length > 1 && field("SIZE",
-                          <select value={sizeFilter} onChange={e => setSizeFilter(e.target.value)} title="Only this size" style={selSt(sizeFilter, "#fbbf24", "#f59e0b")}>
+                          <select value={sizeFilter} onChange={e => { setSizeFilter(e.target.value); e.currentTarget.blur(); }} title="Only this size" style={selSt(sizeFilter, "#fbbf24", "#f59e0b")}>
                             <option value="">All sizes</option>
                             {ch.sizes.map(x => <option key={x} value={x}>{x}</option>)}
                           </select>)}
                         {ch.teams.length > 1 && field("TEAM",
-                          <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} title="Only this team or colour" style={selSt(teamFilter, "#93c5fd", "#3b82f6")}>
+                          <select value={teamFilter} onChange={e => { setTeamFilter(e.target.value); e.currentTarget.blur(); }} title="Only this team or colour" style={selSt(teamFilter, "#93c5fd", "#3b82f6")}>
                             <option value="">All teams</option>
                             {ch.teams.map(t => <option key={t} value={t}>{t}</option>)}
                           </select>)}
@@ -3641,6 +3656,11 @@ export default function App() {
                     </thead>
                     <tbody>
                       {shownRows.map(r => <RosterRow key={r._id} r={r} cols={rosterColsStable} hasBins={!!binMap} bin={binMap ? binOf(r) : null} canSupervise={canSupervise} onMark={onMarkRow} />)}
+                      {shownRows.length === 0 && (
+                        <tr><td colSpan={rosterColsStable.length + (binMap ? 3 : 2)} style={{ ...tdSt, textAlign: "center", color: "#94a3b8", padding: "28px 12px", fontSize: 17 }}>
+                          No jersey on this order matches{rosterSearch.trim() ? ` “${rosterSearch.trim()}”` : " these filters"}. Press Show all to see the whole roster.
+                        </td></tr>
+                      )}
                     </tbody>
                   </table>
                 )
