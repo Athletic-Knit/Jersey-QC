@@ -1137,16 +1137,22 @@ const HEADLINE_FIELDS = ["number", "name"];
 // right, top to bottom, and Down follows that reading order (9 Nov 2026).
 function twoColumns(n) {
   return n > 3
-    ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "start" }   // row by row: 1st and 2nd across the top, 3rd and 4th under them
+    ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "stretch" }   // row by row: 1st and 2nd across the top, 3rd and 4th under them. The two tiles of a row are the same height: a one-line tile beside a two-line one used to leave a gap under it (17 Nov 2026)
     : { display: "flex", flexDirection: "column", gap: 8 };
 }
+// The "← Enter" hint of a tile. It is always there, only hidden when the tile
+// is not the highlighted one, so its room is kept: a hint that appeared on
+// hover took width from the label, which then wrapped onto another line and
+// made the tile jump taller. The highlighted tile grows a hair instead.
+const hintSt = (on, accent, gap = 12) => ({ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap", marginLeft: gap, visibility: on ? "visible" : "hidden" });
+const liftSt = on => ({ transform: on ? "scale(1.012)" : "none", transition: "transform 90ms ease-out", position: "relative", zIndex: on ? 1 : 0 });
 
 function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, accent, onClick, onHover, confirmKey }) {
   const head = primary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")).filter(Boolean).join(" · ");
   const sub  = [...secondary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")), ...extraCols.map(k => c[k] ? `${cap(k)}: ${c[k]}` : "")].filter(Boolean).join(" · ");
   return (
     <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover} data-sel={selected ? "1" : undefined}
-      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1 }}>
+      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...liftSt(selected && !disabled) }}>
       <div style={{ minWidth: 0 }}>
         <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px, 3vw, 42px)", fontWeight: 800, lineHeight: 1, color: disabled ? "#64748b" : "#fff" }}>{head || "—"}</span>
         {sub && <span style={{ fontSize: 20, color: "#cbd5e1", marginLeft: 14, display: "inline-block", whiteSpace: "nowrap" }}>{sub}</span>}
@@ -1154,7 +1160,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
           ? <span style={{ fontSize: 17, color: "#f87171", marginLeft: 12, fontWeight: 700 }}>🚩 Flagged</span>
           : <span style={{ fontSize: 17, color: "#22c55e", marginLeft: 12, fontWeight: 700 }}>✓ Already passed</span>)}
       </div>
-      {!disabled && selected && <span style={{ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap", marginLeft: 10 }}>← {formatKey(confirmKey)}</span>}
+      {!disabled && <span style={hintSt(selected, accent, 10)}>← {formatKey(confirmKey)}</span>}
     </div>
   );
 }
@@ -1545,11 +1551,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
               const sel = i === selectedIdx;
               return (
                 <div key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 12, minWidth: 0, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.12)"}`, background: sel ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.04)", cursor: "pointer" }}>
-                  <div>
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 12, minWidth: 0, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.12)"}`, background: sel ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.04)", cursor: "pointer", ...liftSt(sel) }}>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 24, fontWeight: 700, color: "#fff" }}>{o.label}</div>
                   </div>
-                  {sel && <span style={{ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap", marginLeft: 12 }}>← {formatKey(confirmKey)}</span>}
+                  <span style={hintSt(sel, accent)}>← {formatKey(confirmKey)}</span>
                 </div>
               );
             })}
