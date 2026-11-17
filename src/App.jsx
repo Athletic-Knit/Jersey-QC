@@ -1140,14 +1140,15 @@ function twoColumns(n) {
     ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "stretch" }   // row by row: 1st and 2nd across the top, 3rd and 4th under them. The two tiles of a row are the same height: a one-line tile beside a two-line one used to leave a gap under it (17 Nov 2026)
     : { display: "flex", flexDirection: "column", gap: 8 };
 }
-// The "← Enter" hint of a tile. It is always there, only hidden when the tile
-// is not the highlighted one, so its room is kept: a hint that appeared on
-// hover took width from the label, which then wrapped onto another line and
-// made the tile jump taller. The highlighted tile grows a hair instead.
+// The arrow that marks the highlighted tile. Only the arrow: the key's name
+// ("← Enter") took enough width to wrap long labels onto a second line (owner,
+// 17 Nov 2026). It is on every tile and only hidden when the tile is not the
+// highlighted one, so its room is kept and highlighting never changes how a
+// label wraps. The highlighted tile grows a hair instead.
 const hintSt = (on, accent, gap = 12) => ({ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap", marginLeft: gap, visibility: on ? "visible" : "hidden" });
 const liftSt = on => ({ transform: on ? "scale(1.012)" : "none", transition: "transform 90ms ease-out", position: "relative", zIndex: on ? 1 : 0 });
 
-function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, accent, onClick, onHover, confirmKey }) {
+function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, accent, onClick, onHover }) {
   const head = primary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")).filter(Boolean).join(" · ");
   const sub  = [...secondary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")), ...extraCols.map(k => c[k] ? `${cap(k)}: ${c[k]}` : "")].filter(Boolean).join(" · ");
   return (
@@ -1160,7 +1161,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
           ? <span style={{ fontSize: 17, color: "#f87171", marginLeft: 12, fontWeight: 700 }}>🚩 Flagged</span>
           : <span style={{ fontSize: 17, color: "#22c55e", marginLeft: 12, fontWeight: 700 }}>✓ Already passed</span>)}
       </div>
-      {!disabled && <span style={hintSt(selected, accent, 10)}>← {formatKey(confirmKey)}</span>}
+      {!disabled && <span style={hintSt(selected, accent, 10)} aria-hidden="true">←</span>}
     </div>
   );
 }
@@ -1555,7 +1556,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 24, fontWeight: 700, color: "#fff" }}>{o.label}</div>
                   </div>
-                  <span style={hintSt(sel, accent)}>← {formatKey(confirmKey)}</span>
+                  <span style={hintSt(sel, accent)} aria-hidden="true">←</span>
                 </div>
               );
             })}
