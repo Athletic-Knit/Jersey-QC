@@ -12,7 +12,7 @@ A React/Vite web app for quality-control scanning of sports jerseys in a manufac
 4. Claude Haiku extracts name + number from the photo via the Anthropic API
 5. Match result shows as a full-screen overlay:
    - **Green** = exact match → confirm with `B`, or edit with `A`
-   - **Yellow** = multiple candidates or close match → pick from list
+   - **Yellow** = multiple candidates or close match → pick from list. A list offers the candidates, Retry scan (or Back after typing) and "None of these"; it has no Flag button, as nobody has said yet which jersey it is (owner, 17 Nov 2026)
    - **Red** = not found or API error → flag and continue
 6. Flagged items appear in the log and can be resolved (Accept / Reject / Note)
 7. When all roster entries are scanned, a completion modal offers Excel export

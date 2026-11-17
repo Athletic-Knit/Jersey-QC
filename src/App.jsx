@@ -1241,7 +1241,10 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         ? { ...byHand, label: `🛑 #${t.number || "?"}${t.name ? " " + t.name : ""} — not on the roster` }
         : { ...byHand, label: "⌨ None of these" };
       const back = { id: "back", label: "← Back", run: actions.editTyped };   // mistyped: back to the form, as typed
-      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back] : [retry]), none, notRight];
+      // No Flag on a list: nobody has said yet which jersey this is, so there is nothing to
+      // flag (owner, 17 Nov 2026). Pick the jersey, or say it is none of these; a defect is
+      // flagged from the screen that follows, or with "Flag it" on the last pass.
+      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back] : [retry]), none];
     }
     if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "🚩 Bad jersey" }];
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }, { ...notRight, run: actions.reopenLast }];
