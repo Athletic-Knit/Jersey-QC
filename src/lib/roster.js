@@ -217,7 +217,9 @@ const TODO_FIRST = { false: 0, undefined: 0, "": 0, flag: 1, manual: 2, missing:
 const numOf = r => { const n = parseInt(String(r.number ?? "").replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : 1e9; };
 const byNumber = (a, b) => numOf(a) - numOf(b) || String(a.number ?? "").localeCompare(String(b.number ?? ""));
 const byText = k => (a, b) => String(a[k] ?? "").localeCompare(String(b[k] ?? ""), undefined, { sensitivity: "base" });
-export function sortRoster(roster, by = "size", binMap = null, { doneFirst = true } = {}) {
+// `binOf(row)`: the box a row is in or will go in (the station passes its own,
+// which knows the closed boxes); without it, the open box of the row's team or size.
+export function sortRoster(roster, by = "size", binMap = null, { doneFirst = true, binOf = row => binFor(binMap, row) } = {}) {
   const order = doneFirst ? DONE_FIRST : TODO_FIRST;
   const cmp = {
     size:   (a, b) => bySize(a.size, b.size) || byNumber(a, b),
@@ -225,7 +227,7 @@ export function sortRoster(roster, by = "size", binMap = null, { doneFirst = tru
     name:   (a, b) => byText("name")(a, b) || byNumber(a, b),
     number: (a, b) => byNumber(a, b) || byText("name")(a, b),
     team:   (a, b) => byText("team")(a, b) || bySize(a.size, b.size) || byNumber(a, b),
-    bin:    (a, b) => binOrder(binFor(binMap, a), binFor(binMap, b)) || bySize(a.size, b.size) || byNumber(a, b),
+    bin:    (a, b) => binOrder(binOf(a), binOf(b)) || (order[a.scanned] ?? 5) - (order[b.scanned] ?? 5) || bySize(a.size, b.size) || byNumber(a, b),
   }[by];
   return cmp ? roster.slice().sort(cmp) : roster;
 }

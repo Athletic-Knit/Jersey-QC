@@ -2261,6 +2261,9 @@ export default function App() {
   const [doneFirst,          setDoneFirst]          = useState(true);     // the status sort: done on top, or still-to-do on top
   const [sizeFilter,         setSizeFilter]         = useState("");       // the table shows one size only ("" = all)
   const [teamFilter,         setTeamFilter]         = useState("");       // … or one team only
+  const [boxFilter,          setBoxFilter]          = useState("");       // … or one box only: what is in it, and what is still to go in it
+  const [doneFilter,         setDoneFilter]         = useState("");       // "" all · "done" in a box (passed or by hand) · "todo" still to scan
+  const [showFilters,        setShowFilters]        = useState(false);    // the funnel button's panel is open
   const [showHistory,        setShowHistory]        = useState(false);   // every jersey scanned this order, latest first   // "pass" | "flag" | "manual" | null — set by clicking a header pill
   const filterRoster = useCallback(kind => { setRosterFilter(f => (f === kind ? null : kind)); setView("roster"); }, []);
   const [error,              setError]              = useState(null);
@@ -2424,8 +2427,16 @@ export default function App() {
   const canSupervise   = role === "supervisor" || role === "admin";
   const openCount      = roster.filter(r => r.scanned === "flag" || r.scanned === "missing" || r.scanned === "short").length;
   const rosterComplete = roster.length > 0 && remaining === 0;
-  // The roster table: the header pill's status, then the size and team filters, in the chosen order.
-  const shownRows = useMemo(() => sortRoster(roster.filter(r => (!rosterFilter || r.scanned === rosterFilter) && (!sizeFilter || String(r.size ?? "").trim() === sizeFilter) && (!teamFilter || String(r.team ?? "").trim() === teamFilter)), rosterSort, binMap, { doneFirst }), [roster, rosterFilter, sizeFilter, teamFilter, rosterSort, binMap, doneFirst]);
+  // The roster table: the header pill's status, then the size, team, box and
+  // done / to do filters, in the chosen order. A box is the one the jersey is
+  // IN (a closed box too), or the open one it will go in.
+  const shownRows = useMemo(() => sortRoster(roster.filter(r =>
+    (!rosterFilter || r.scanned === rosterFilter)
+    && (!sizeFilter || String(r.size ?? "").trim() === sizeFilter)
+    && (!teamFilter || String(r.team ?? "").trim() === teamFilter)
+    && (!boxFilter || String(binOf(r) ?? "") === boxFilter)
+    && (!doneFilter || (doneFilter === "done" ? (r.scanned === "pass" || r.scanned === "manual") : !r.scanned))),
+  rosterSort, binMap, { doneFirst, binOf }), [roster, rosterFilter, sizeFilter, teamFilter, boxFilter, doneFilter, rosterSort, binMap, doneFirst, binOf]);
   // Rate and time left from working time (src/lib/pace.js): a night with the
   // order left open on screen is not working time, so a resumed order does not
   // come back with an ETA in the thousands.
@@ -2505,6 +2516,7 @@ export default function App() {
     // box labels are printed from it.
     const bins = buildBinMap(parsed, {}, binBy);
     setClosedBins([]); setBinPrint(null); setBoxLabelled([]);   // every roster row starts unscanned: no box is closed
+    setBoxFilter(""); setDoneFilter("");                         // the last order's box is not this order's
     setBinMap(binCount(bins) > 0 ? bins : null); setShowBinSetup(binCount(bins) > 0); setBoxAuto(true);
   }, [syncInspect]);
 
@@ -3564,29 +3576,54 @@ export default function App() {
                   {rosterSort === "status" && (
                     <button onClick={() => setDoneFirst(d => !d)} title="Which end of the list the finished jerseys sit at" style={{ ...btnGhost, padding: "3px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>{doneFirst ? "✓ Done on top" : "— To do on top"} ⇅</button>
                   )}
-                  {(() => { const ch = rosterChoices(roster); return (ch.sizes.length > 1 || ch.teams.length > 1) && (
-                    <span style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 6 }}>
-                      <span style={{ color: "#94a3b8", fontWeight: 700 }}>Show</span>
-                      {ch.sizes.length > 1 && (
-                        <select value={sizeFilter} onChange={e => setSizeFilter(e.target.value)} title="Only this size" style={{ background: "#1e293b", color: sizeFilter ? "#fbbf24" : "#cbd5e1", border: `1px solid ${sizeFilter ? "#f59e0b" : "#3f4b5c"}`, borderRadius: 6, fontSize: 14, padding: "4px 8px", fontWeight: sizeFilter ? 800 : 500 }}>
-                          <option value="">All sizes</option>
-                          {ch.sizes.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      )}
-                      {ch.teams.length > 1 && (
-                        <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} title="Only this team or colour" style={{ background: "#1e293b", color: teamFilter ? "#93c5fd" : "#cbd5e1", border: `1px solid ${teamFilter ? "#3b82f6" : "#3f4b5c"}`, borderRadius: 6, fontSize: 14, padding: "4px 8px", fontWeight: teamFilter ? 800 : 500 }}>
-                          <option value="">All teams</option>
-                          {ch.teams.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      )}
-                    </span>
-                  ); })()}
-                  {(rosterFilter || sizeFilter || teamFilter) && (
+                  {(() => {
+                    // The filters sit behind one funnel button, like a shop's search page: the
+                    // row stays short, the button says how many are on, and the panel opens under it.
+                    const on = [sizeFilter, teamFilter, boxFilter, doneFilter].filter(Boolean).length;
+                    return (
+                      <button onClick={() => setShowFilters(v => !v)} title="Show only one size, team or box, or only what is done or still to do" aria-expanded={showFilters}
+                        style={{ ...btnGhost, marginLeft: 6, padding: "3px 12px", fontSize: 14, display: "flex", alignItems: "center", gap: 7, borderColor: on || showFilters ? "#60a5fa" : "#334155", color: on || showFilters ? "#fff" : "#94a3b8", background: on ? "rgba(96,165,250,0.15)" : "transparent", fontWeight: on ? 800 : 500 }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5L3 5z" /></svg>
+                        Filters{on ? ` · ${on}` : ""} <span style={{ fontSize: 11 }}>{showFilters ? "▲" : "▼"}</span>
+                      </button>
+                    );
+                  })()}
+                  {(rosterFilter || sizeFilter || teamFilter || boxFilter || doneFilter) && (
                     <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, fontWeight: 700, color: rosterFilter === "pass" ? "#22c55e" : rosterFilter === "flag" ? "#f87171" : rosterFilter ? "#fbbf24" : "#cbd5e1" }}>
-                      <span>{shownRows.length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : rosterFilter ? "by hand" : "shown"}{sizeFilter ? ` · ${sizeFilter}` : ""}{teamFilter ? ` · ${teamFilter}` : ""}</span>
-                      <button onClick={() => { setRosterFilter(null); setSizeFilter(""); setTeamFilter(""); }} style={{ ...btnGhost, padding: "3px 10px", fontSize: 13 }}>Show all</button>
+                      <span>{shownRows.length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : rosterFilter ? "by hand" : "shown"}{sizeFilter ? ` · ${sizeFilter}` : ""}{teamFilter ? ` · ${teamFilter}` : ""}{boxFilter ? ` · Box ${boxFilter}` : ""}{doneFilter === "done" ? " · done" : doneFilter === "todo" ? " · to do" : ""}</span>
+                      <button onClick={() => { setRosterFilter(null); setSizeFilter(""); setTeamFilter(""); setBoxFilter(""); setDoneFilter(""); }} style={{ ...btnGhost, padding: "3px 10px", fontSize: 13 }}>Show all</button>
                     </span>
                   )}
+                  {showFilters && (() => {
+                    const ch = rosterChoices(roster);
+                    const selSt = (on, c, b) => ({ background: "#1e293b", color: on ? c : "#cbd5e1", border: `1px solid ${on ? b : "#3f4b5c"}`, borderRadius: 6, fontSize: 15, padding: "6px 10px", fontWeight: on ? 800 : 500 });
+                    const field = (label, control) => <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12, fontWeight: 700, color: "#94a3b8", letterSpacing: 0.5 }}>{label}{control}</label>;
+                    return (
+                      <div style={{ flexBasis: "100%", display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap", padding: "8px 2px 4px", borderTop: "1px solid #21262d", marginTop: 2 }}>
+                        {binSummary.length > 0 && field("BOX",
+                          <select value={boxFilter} onChange={e => setBoxFilter(e.target.value)} title="Only this box: what is in it, and what is still to go in it" style={selSt(boxFilter, "#93c5fd", "#3b82f6")}>
+                            <option value="">All boxes</option>
+                            {binSummary.map(b => <option key={b.bin} value={String(b.bin)}>Box {b.bin} · {b.label} · {b.count} in it{b.open ? "" : " · closed"}</option>)}
+                          </select>)}
+                        {field("DONE OR TO DO",
+                          <select value={doneFilter} onChange={e => setDoneFilter(e.target.value)} title="Done = passed or entered by hand, so in a box. To do = not scanned yet." style={selSt(doneFilter, "#86efac", "#22c55e")}>
+                            <option value="">Both</option>
+                            <option value="done">Done only</option>
+                            <option value="todo">To do only</option>
+                          </select>)}
+                        {ch.sizes.length > 1 && field("SIZE",
+                          <select value={sizeFilter} onChange={e => setSizeFilter(e.target.value)} title="Only this size" style={selSt(sizeFilter, "#fbbf24", "#f59e0b")}>
+                            <option value="">All sizes</option>
+                            {ch.sizes.map(x => <option key={x} value={x}>{x}</option>)}
+                          </select>)}
+                        {ch.teams.length > 1 && field("TEAM",
+                          <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} title="Only this team or colour" style={selSt(teamFilter, "#93c5fd", "#3b82f6")}>
+                            <option value="">All teams</option>
+                            {ch.teams.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>)}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
               <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
