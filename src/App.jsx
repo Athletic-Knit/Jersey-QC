@@ -185,17 +185,22 @@ const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise,
       ))}
       {hasBins && <td style={{ ...tdSt, color: "#60a5fa", fontWeight: 700, whiteSpace: "nowrap" }}>{bin !== null ? `Box ${bin}` : "—"}</td>}
       <td style={{ ...tdSt, padding: "2px 6px" }}>
-        <select value={["missing", "short"].includes(r.scanned) ? "missing" : ""}
-          onChange={e => onMark(r, e.target.value)}
-          style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
-          <option value="">—</option>
-          {(!r.scanned || ["missing", "short"].includes(r.scanned))
-            ? <option value="missing">Missing</option>
-            : <>
-                {(r.scanned === "pass" || r.scanned === "manual") && <option value="flag">🚩 Flag / damage</option>}
-                {(r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check</option>}
-              </>}
-        </select>
+        {/* A flagged jersey is with the supervisor: an operator can do nothing to it from here, so
+            there is no menu at all on its row (an empty menu was shown before, 17 Nov 2026). A
+            supervisor still gets Un-check. */}
+        {r.scanned === "flag" && !canSupervise ? null : (
+          <select value={["missing", "short"].includes(r.scanned) ? "missing" : ""}
+            onChange={e => onMark(r, e.target.value)}
+            style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
+            <option value="">—</option>
+            {(!r.scanned || ["missing", "short"].includes(r.scanned))
+              ? <option value="missing">Missing</option>
+              : <>
+                  {(r.scanned === "pass" || r.scanned === "manual") && <option value="flag">🚩 Flag / damage</option>}
+                  {(r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check</option>}
+                </>}
+          </select>
+        )}
       </td>
     </tr>
   );
