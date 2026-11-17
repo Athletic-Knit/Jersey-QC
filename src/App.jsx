@@ -1216,6 +1216,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   // then 0 while the shot is taken; null when nothing is running.
   const [count, setCount] = useState(null);
   const damagePhotos = state.damagePhotos || [];
+  // FLAGGED with a damage photo: the photo takes all the room there is and
+  // the words share a line above it and a line below, so the operator can see
+  // whether the shot shows the damage and nothing scrolls (the owner, 17 Nov
+  // 2026: at a fixed height it was still small and the screen scrolled).
+  const compact = mode === "supervisor" && damagePhotos.length > 0 && count === null;
   const startCount = useCallback(() => { setCount(3); playTone("count"); }, []);
   // The retry pedal on a green: the read is right, there is nothing to retry,
   // and a retry here looks exactly like a confirm from the operator's side
@@ -1348,7 +1353,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   };
 
   return (
-    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "safe center", userSelect: "none", padding: state.scan?.thumb && !isGreen ? "16px 0 116px" : "16px 0", overflowY: "auto", containerType: "size" }}>
+    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "safe center", userSelect: "none", padding: compact ? "12px 0" : state.scan?.thumb && !isGreen ? "16px 0 116px" : "16px 0", overflowY: "auto", containerType: "size" }}>
 
       {/* ── GREEN ── */}
       {nudge && (
@@ -1496,8 +1501,39 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         </>
       )}
 
+      {/* ── RED, flagged, with a damage photo: the photo fills the screen ── */}
+      {compact && (
+        <>
+          <div style={{ flexShrink: 0, display: "flex", alignItems: "baseline", justifyContent: "center", flexWrap: "wrap", columnGap: "2cqw", rowGap: 4, padding: "0 20px", textAlign: "center" }}>
+            <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 7cqh, 72px)", fontWeight: 900, color: accent, lineHeight: 1 }}>🛑 FLAGGED</span>
+            {(match || detected) && (
+              <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(24px, 5.5cqh, 56px)", fontWeight: 700, color: "#fca5a5", lineHeight: 1 }}>
+                {match ? `#${match.number}${match.name ? ` · ${match.name}` : ""}${match.size ? ` · ${match.size}` : ""}` : `#${detected.number || "?"}${detected.name ? ` · ${detected.name}` : ""}`}
+              </span>
+            )}
+            {state.reason && <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(24px, 5.5cqh, 56px)", fontWeight: 800, color: "#fff", lineHeight: 1 }}>{state.reason}</span>}
+          </div>
+          <div style={{ flexShrink: 0, fontSize: "clamp(15px, 2.6cqh, 24px)", fontWeight: 700, color: "#fecaca", marginTop: "0.8cqh", textAlign: "center", padding: "0 20px" }}>Stick a ticket on it and put it in the DAMAGED box.</div>
+          <div style={{ flex: "1 1 0", minHeight: 0, width: "100%", display: "flex", justifyContent: "center", alignItems: "center", margin: "1cqh 0", padding: "0 20px", boxSizing: "border-box" }}>
+            <img src={damagePhotos[damagePhotos.length - 1]} alt="" style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", borderRadius: 12, border: "3px solid #fca5a5", boxSizing: "border-box", background: "#000" }} />
+          </div>
+          <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", columnGap: 28, rowGap: 4, padding: "0 20px", fontSize: "clamp(15px, 2.4cqh, 21px)", color: "#fecaca", fontWeight: 700 }}>
+            <span>✓ {damagePhotos.length > 1 ? `${damagePhotos.length} damage photos` : "Damage photo"} saved for the supervisor</span>
+            {ticket && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 10, fontWeight: 400, color: ticket.status === "done" ? "#fecaca" : ticket.status === "printing" ? "#fca5a5" : "#fbbf24" }}>
+                <span>{ticket.status === "printing" ? "🖨 Printing the flag ticket…" : ticket.status === "done" ? "🖨 2 flag tickets printed" : ticket.status === "none" ? "🖨 No label printer for this station — write the ticket by hand" : `🖨 Ticket not printed: ${ticket.message}`}</span>
+                {ticket.status !== "printing" && <button onClick={() => reprintTicket?.(state.entryId)} title="Print this jersey's flag ticket again" style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, borderColor: "#fca5a5", color: "#fecaca" }}>Reprint</button>}
+              </span>
+            )}
+          </div>
+          <div style={{ flexShrink: 0, marginTop: "1.2cqh", display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
+            {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
+          </div>
+        </>
+      )}
+
       {/* ── RED: not found / API error / duplicate / supervisor ── */}
-      {isRed && count === null && (
+      {isRed && count === null && !compact && (
         <>
           <div style={{ fontSize: 80, lineHeight: 1, marginBottom: 4 }}>{mode === "supervisor" ? "🛑" : mode === "duplicate" ? "⚠️" : "🚩"}</div>
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 9vw, 120px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 4 }}>
@@ -1611,12 +1647,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         </div>
       )}
 
-      {state.scan?.thumb && mode !== "done" && !isMenu && (
+      {state.scan?.thumb && mode !== "done" && !isMenu && !compact && (   // not on the compact flagged screen: it sat under the buttons on a narrow window
         <div title="What the camera read" style={{ position: "absolute", ...(isGreen ? { top: 12 } : { bottom: 12 }), left: 12, opacity: isGreen ? 0.5 : 0.6 }}>
           <img src={state.scan.thumb} alt="" style={{ width: isGreen ? 80 : 120, height: isGreen ? 60 : 90, objectFit: "cover", borderRadius: 8 }} />
         </div>
       )}
-      {!embedded && mode !== "manual" && mode !== "reasonText" && count === null && <LivePreview stream={stream} rotation={rotation} />}
+      {!embedded && mode !== "manual" && mode !== "reasonText" && count === null && !compact && <LivePreview stream={stream} rotation={rotation} />}
     </div>
   );
 }
