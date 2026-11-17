@@ -1,5 +1,24 @@
 # Jersey QC Scanner
 
+## READ FIRST: development and production are separate (owner's rule, 17 Nov 2026)
+
+**Never edit, save or restart anything in the production folder while making or testing a change.** On 17 Nov 2026, in the middle of a demo to the owner's manager, edits made in the production folder went live at once and one server rejected every jersey read. The owner's words: "Any change I say you to make shouldn't crash the server when production is actually going on. Make the change in development and then push it to production in a break or when told by us. This is not acceptable."
+
+| | Folder | Branch | What runs from it |
+|---|---|---|---|
+| **Production** | `C:\Users\coop\OneDrive - Athletic Knit\Desktop\Jersey-QC-master` | `production` | The floor's servers (port 5173, on both PCs). OneDrive copies this folder to the other PC, so a file saved here is live on the floor within minutes. |
+| **Development** | `C:\Users\coop\JerseyQC-dev` (on AK-NB-164; not in OneDrive) | `development` | Only the test server (port 5174, `jersey-qc-test` in `.claude/launch.json`), with its own data file (`data/hub-test.json`) and its own Vite cache (`.vite-dev`). `node_modules` is a link to production's, so nothing is installed twice. |
+
+How to work:
+
+1. Before the first edit of a session, check where you are: `git rev-parse --show-toplevel` and `git branch --show-current`. A Claude session usually opens in the PRODUCTION folder: do not edit there. Use the development folder by its full path (`cd "C:/Users/coop/JerseyQC-dev"` for commands, the full path for file tools).
+2. Make the change in development, run `npx eslint src hub-plugin.js` and `npx vitest run` there, try it on the test server (5174), commit, and `git push origin development`. Pushing `development` after each commit is fine and wanted.
+3. Tell the owner it is ready and what it changes. **Do not promote on your own.**
+4. When the owner says so, or names a break: in the PRODUCTION folder run `powershell -ExecutionPolicy Bypass -File tools\promote.ps1` (`-Check` only shows what is waiting). It lists the commits, says whether the server will reload (stations show Resume) or only the screens change, asks for YES, copies `data/hub.json` to `data/backups/`, fast-forwards `production` to `origin/development` and pushes it, and prints the line that undoes it.
+5. Nothing is changed in production without a promotion. A wrong note in this file is fixed in development and promoted like everything else.
+
+`phase-1-rostering` is the old working branch (it ends at `ce2ef65`, where both new branches start); nothing new goes on it. The development folder is a separate clone, not a `git worktree`: the production folder's `.git` is synced to the other PC, where a worktree's path would not exist. If the development folder is missing (another PC, a new laptop): `git clone --branch development https://github.com/Athletic-Knit/Jersey-QC.git C:\Users\coop\JerseyQC-dev`, copy `.env.local` and `public/sim` over from production, link or install `node_modules`, and write `vite.config.diag.js` again (plain HTTP on 5174, `root` and `cacheDir` inside the development folder, `hubPlugin({ file: data/hub-test.json })`; it is not in git).
+
 ## What this project does
 
 A React/Vite web app for quality-control scanning of sports jerseys in a manufacturing environment. An operator photographs each jersey with their device camera; Claude Haiku reads the player name and number from the image and matches it against an uploaded roster.
