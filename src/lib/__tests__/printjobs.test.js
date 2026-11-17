@@ -51,7 +51,8 @@ describe("stickers and flag tickets", () => {
   });
   it("a ticket for a flag, with the tag the caller works out", () => {
     const [t] = flagJobs(pack, [9], reason => reason === "Loose thread" ? "STITCHER" : "DECIDE");
-    expect(t).toMatchObject({ number: "6", name: "P5", tag: "STITCHER", reason: "Loose thread", team: "Red", bin: "2.1", orderNumber: "264247", station: "St 1", time: "10:15" });
+    expect(t).toMatchObject({ number: "6", name: "P5", tag: "STITCHER", reason: "Loose thread", team: "Red", bin: "2.1", orderNumber: "264247", station: "St 1" });
+    expect(t.time).toBeUndefined();                                                  // no time on a ticket (the owner, 17 Nov 2026)
     expect(flagJobs(pack, [1])).toEqual([]);
     expect(flagJobs(pack).length).toBe(1);
   });

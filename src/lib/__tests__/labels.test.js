@@ -202,11 +202,11 @@ describe("flagLabel", () => {
   it("from a log entry with a roster row: number, name, team, size, box, the tag the caller gives, the reason, order, station and time", () => {
     expect(flagLabel(entry, byTeam, { orderNumber: 264247, station: "st-station1", tag: "STITCHER" })).toEqual({
       number: "3", name: "LEE", tag: "STITCHER", reason: "Loose, missing or broken stitching", team: "Red", size: "A-L", bin: "2.1",
-      orderNumber: "264247", station: "St 1", time: "14:05",
+      orderNumber: "264247", station: "St 1",
     });
   });
   it("no roster row (not on the roster, could not read): what the camera read, or ?", () => {
-    expect(flagLabel({ detected: { number: "88", name: "NOBODY" }, reason: "Not on the roster." }, byTeam, { tag: "CHECK ORDER" })).toMatchObject({ number: "88", name: "NOBODY", tag: "CHECK ORDER", team: "", size: "", bin: "", station: "", time: "" });
+    expect(flagLabel({ detected: { number: "88", name: "NOBODY" }, reason: "Not on the roster." }, byTeam, { tag: "CHECK ORDER" })).toMatchObject({ number: "88", name: "NOBODY", tag: "CHECK ORDER", team: "", size: "", bin: "", station: "" });
     expect(flagLabel({ detected: {}, reason: "Could not read" }, null)).toMatchObject({ number: "?", name: "", tag: "DECIDE" });
   });
   it("a flag found after it passed loses the suffix on the ticket", () => {
@@ -215,7 +215,7 @@ describe("flagLabel", () => {
 });
 
 describe("flagLabelZPL (2 x 1 in)", () => {
-  const l = { number: "7", name: "SMITH", tag: "STITCHER", reason: "Loose, missing or broken stitching", team: "Navy", size: "A-L", bin: "2.1", orderNumber: "264247", station: "St 1", time: "14:05" };
+  const l = { number: "7", name: "SMITH", tag: "STITCHER", reason: "Loose, missing or broken stitching", team: "Navy", size: "A-L", bin: "2.1", orderNumber: "264247", station: "St 1" };
   const lines = z => z.split("\n");
   const fontOf = (z, text) => parseInt(lines(z).find(x => x.endsWith(`^FD${text}^FS`)).match(/\^A0N,(\d+)/)[1], 10);
   const topOf = z => lines(z).filter(x => x.startsWith("^FO") && !x.includes("^GB")).map(x => parseInt(x.match(/\^FO\d+,(\d+)/)[1], 10));
@@ -254,20 +254,24 @@ describe("flagLabelZPL (2 x 1 in)", () => {
     const m = x.match(/^\^FO(\d+),(\d+)\^A0N,(\d+),(\d+)\^FB(\d+),(\d+),0,([LCR])(\^FR)?\^FD(.*)\^FS$/);
     return { x: +m[1], y: +m[2], fh: +m[3], fw: +m[4], width: +m[5], lines: +m[6], align: m[7], reverse: !!m[8], text: m[9] };
   });
-  it("the reason big on the right, centred on up to three lines, with order · station · time at the bottom; the jersey's details all on the left; no route tag, no box", () => {
+  it("the reason big on the right, centred on up to three lines, with the order number big at the bottom and the station small above it, no time; the jersey's details all on the left; no route tag, no box", () => {
     const z = flagLabelZPL(l);
-    const f = fieldsOf(z), reason = f.find(x => x.text === l.reason), parts = f.find(x => x.text === "Navy · A-L"), footer = f.find(x => x.text === "Ord 264247 · St 1 · 14:05");
+    const f = fieldsOf(z), reason = f.find(x => x.text === l.reason), parts = f.find(x => x.text === "Navy · A-L"), footer = f.find(x => x.text === "Ord 264247"), st = f.find(x => x.text === "St 1");
     expect(reason).toMatchObject({ lines: 3, align: "C", reverse: false });   // the right column is black on white
     expect(reason.width).toBeGreaterThanOrEqual(200);
     expect(reason.fh).toBeGreaterThanOrEqual(24);                   // an old five-word wording on three lines of the narrower column: ~3 mm; the menu's own reasons are two or three words and come out far bigger
-    expect(reason.fh).toBeGreaterThan(footer.fh);                   // what is wrong is the biggest thing on the right
+    expect(reason.fh).toBeGreaterThan(st.fh);                       // an old five-word wording is smaller than the order number now; the menu's own reasons are bigger (below)
+    expect(footer.fh).toBeGreaterThanOrEqual(32);                   // the order number: six digits at ~4 mm, not the 2.5 mm it was (the owner, 17 Nov 2026)
+    expect(footer.fh).toBeGreaterThan(st.fh);
+    expect(st.y + st.fh).toBeLessThanOrEqual(footer.y);               // the station small, above the order
+    expect(z).not.toMatch(/14:05|\d\d:\d\d/);                     // no time on the ticket
     expect(z).not.toMatch(/STITCHER|REMAKE|DECORATION|CLEANING|DECIDE/);   // no route tag, although the label still carries one
     expect(parts).toMatchObject({ x: 16, reverse: true });           // team · size is on the black, with the jersey
     expect(parts.x + parts.width).toBeLessThanOrEqual(reason.x);     // left of everything on the right
     expect(z).not.toMatch(/Box|BOX|2\.1/);                          // the box is not on the ticket
     expect(parts.fh).toBeGreaterThanOrEqual(24);
     expect(footer).toMatchObject({ x: reason.x, reverse: false });
-    expect(reason.y + reason.lines * reason.fh).toBeLessThanOrEqual(footer.y);   // three lines of reason end above the order
+    expect(reason.y + reason.lines * reason.fh).toBeLessThanOrEqual(st.y);   // three lines of reason end above the station and the order
     expect(topOf(z).every(y => y >= 16)).toBe(true);
   });
   it("every flag prints two tickets: ^PQ2, not ^PQ1", () => {
@@ -289,22 +293,22 @@ describe("flagLabelZPL (2 x 1 in)", () => {
     expect(z).not.toMatch(/STITCHER|REMAKE|DECORATION/);
     expect(z.endsWith("^PQ2\n^XZ")).toBe(true);
     const f = fieldsOf(z);
-    expect(f.map(x => x.text)).toEqual(["Navy · A-L", "SMITH", "7", "Ord 264247 · St 1 · 14:05", "Twill peeling"]);   // and nothing else: no FLAG word
+    expect(f.map(x => x.text)).toEqual(["Navy · A-L", "SMITH", "7", "Ord 264247", "St 1", "Twill peeling"]);   // and nothing else: no FLAG word
     f.forEach(x => {
       expect(x.x).toBeGreaterThanOrEqual(0);
       expect(x.x + x.width).toBeLessThanOrEqual(size.w);
       expect(x.y + x.fh).toBeLessThanOrEqual(203 + 8);              // the label, the 4 dots it is lifted and the 4 the black column runs past the bottom
     });
-    const reason = f.at(-1), footer = f.find(x => x.text.startsWith("Ord "));
-    expect(reason.fh).toBeGreaterThanOrEqual(45);                   // two short words: as big as the route tag used to be
-    expect(reason.y + reason.lines * reason.fh).toBeLessThanOrEqual(footer.y);
+    const reason = f.at(-1), st = f.find(x => x.text === "St 1");
+    expect(reason.fh).toBeGreaterThanOrEqual(40);                   // two short words: as big as the route tag used to be
+    expect(reason.y + reason.lines * reason.fh).toBeLessThanOrEqual(st.y);
   });
   it("a long reason takes three lines, smaller, rather than losing its end", () => {
     const z = flagLabelZPL({ ...l, reason: "Print error — ghosting, fading, misaligned" });
     const long = fieldsOf(z).find(x => x.text === "Print error — ghosting, fading, misaligned");
     expect(long).toMatchObject({ lines: 3, align: "C" });
-    expect(long.fh).toBeGreaterThanOrEqual(20);   // still about 2.5 mm tall: sized by how the words wrap, not by a letter count
-    expect(long.y + 3 * long.fh).toBeLessThanOrEqual(fieldsOf(z).find(x => x.text.startsWith("Ord ")).y);
+    expect(long.fh).toBeGreaterThanOrEqual(18);   // still over 2 mm tall: sized by how the words wrap, not by a letter count
+    expect(long.y + 3 * long.fh).toBeLessThanOrEqual(fieldsOf(z).find(x => x.text === "St 1").y);
     const short = reason => fontOf(flagLabelZPL({ ...l, reason }), reason);
     expect(long.fh).toBeLessThan(short("Cleaning not done"));
     expect(short("Cleaning not done")).toBeLessThan(short("Size label"));   // the fewer the words, the bigger
@@ -320,7 +324,7 @@ describe("flagLabelZPL (2 x 1 in)", () => {
     expect(lines(z).filter(x => x.includes("^A0N")).every(x => parseInt(x.match(/\^A0N,(\d+)/)[1], 10) >= 10)).toBe(true);
   });
   it("nothing to say: no name, no reason, no team — the ticket still prints, and says Flagged", () => {
-    const z = flagLabelZPL({ number: "?", name: "", tag: "DECIDE", reason: "", team: "", size: "", bin: "", orderNumber: "", station: "", time: "" });
+    const z = flagLabelZPL({ number: "?", name: "", tag: "DECIDE", reason: "", team: "", size: "", bin: "", orderNumber: "", station: "" });
     expect(z).toContain("^FR^FD?^FS");
     expect(z).toContain("^FDFlagged^FS");
     expect(z).not.toContain("DECIDE");

@@ -1521,7 +1521,8 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           )}
           {mode === "supervisor" && damagePhotos.length > 0 && (
             <div style={{ marginTop: 10, textAlign: "center" }}>
-              <img src={damagePhotos[damagePhotos.length - 1]} alt="" style={{ height: "clamp(120px, 18vh, 196px)", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 12, border: "3px solid #fca5a5", display: "block", margin: "0 auto" }} />
+              {/* Big enough to see whether the shot shows the damage (the owner, 17 Nov 2026: at 18vh it was too small to tell); the screen scrolls when it does not fit. */}
+              <img src={damagePhotos[damagePhotos.length - 1]} alt="" style={{ height: "38cqh", maxWidth: "88cqw", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 12, border: "3px solid #fca5a5", display: "block", margin: "0 auto" }} />
               <div style={{ fontSize: 20, color: "#fecaca", marginTop: 4, fontWeight: 700 }}>✓ {damagePhotos.length > 1 ? `${damagePhotos.length} damage photos` : "Damage photo"} saved for the supervisor</div>
             </div>
           )}
