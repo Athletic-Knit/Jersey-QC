@@ -11,7 +11,6 @@ import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
-import { pace } from "./lib/pace.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel } from "./lib/printjobs.js";
@@ -1408,7 +1407,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
                 {hasSize && (
                   <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid #22c55e", background: "rgba(34,197,94,0.14)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
                     <div style={{ fontSize: `min(${binNum !== null ? 7 : 12}cqh, ${binNum !== null ? 14 : 20}cqw)`, color: "#86efac", fontWeight: 900, letterSpacing: 3, lineHeight: 1 }}>SIZE</div>
-                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${binNum !== null ? 34 : 70}cqh, ${String(match.size).length > 4 ? 38 : String(match.size).length > 2 ? 55 : 80}cqw)`, fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
+                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${binNum !== null ? 34 : 70}cqh, ${Math.min(80, Math.floor(130 / Math.max(1, String(match.size).length)))}cqw)`, fontWeight: 900, color: "#fff", letterSpacing: 1, lineHeight: 1, whiteSpace: "nowrap" }}>{match.size}</div>{/* by width too: four letters (A-XL, A-XS) used to wrap onto two lines (the owner, 19 Nov 2026) */}
                   </div>
                 )}
                 {binNum !== null && (
@@ -2022,6 +2021,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
 const BOX_CHOICES = BOXES;   // a box on the floor is one box: small, medium or large
 function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, damaged = [], onDamagedList, onFull, onReprint, onLabels, onClose }) {
   const [asking, setAsking] = useState(null);   // the bin whose box is being asked
+  const [unfolded, setUnfolded] = useState(null);   // the box whose jerseys still to scan are listed
   useEffect(() => {
     const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
     window.addEventListener("keydown", h, true);
@@ -2046,14 +2046,27 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, da
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 40, fontWeight: 900, color: "#60a5fa", minWidth: 110, lineHeight: 1 }}>Box {b.bin}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 22, fontWeight: 700, color: "#e2e8f0", overflowWrap: "anywhere" }}>{b.label}</div>
-                <div style={{ fontSize: 15, color: "#94a3b8" }}>{pcs(b.count)} in it{b.count > 0 && cap ? ` · about ${Math.round(b.weight)} lb of ${cap}` : ""}</div>
+                <div style={{ fontSize: 17, color: "#cbd5e1", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span><strong style={{ color: "#4ade80" }}>{b.count}</strong> scanned · <strong style={{ color: (short[b.bin]?.toScan || 0) > 0 ? "#fbbf24" : "#4ade80" }}>{short[b.bin]?.toScan || 0}</strong> left to scan{b.count > 0 && cap ? ` · about ${Math.round(b.weight)} lb of ${cap}` : ""}</span>
+                  {(short[b.bin]?.toScan || 0) > 0 && (
+                    <button onClick={() => setUnfolded(u => (u === b.bin ? null : b.bin))} title="The jerseys still to scan for this box" style={{ ...btnGhost, fontSize: 14, padding: "3px 10px" }}>{unfolded === b.bin ? "▲ Hide" : "▼ Show"} the {short[b.bin].toScan} left</button>
+                  )}
+                </div>
+                {unfolded === b.bin && (short[b.bin]?.waiting || []).length > 0 && (
+                  <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 4 }}>
+                    {short[b.bin].waiting.map(r => (
+                      <div key={r._id} style={{ fontSize: 16, color: "#e2e8f0", padding: "4px 8px", borderRadius: 6, background: "#0d1117" }}>
+                        <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{r.number || "—"}</strong>{r.name ? ` ${r.name}` : ""}{r.size ? <span style={{ color: "#4ade80", fontWeight: 700 }}> {r.size}</span> : null}{r.team ? <span style={{ color: "#94a3b8" }}> · {r.team}</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {b.heavy >= 0.95 && <div style={{ fontSize: 15, fontWeight: 800, color: "#f87171" }}>At the weight limit — close it</div>}
                 {short[b.bin]?.short.length > 0 && (
                   <div title="These jerseys are flagged or marked missing, so they will not arrive in this box by scanning on" style={{ fontSize: 15, fontWeight: 800, color: "#fbbf24" }}>
                     ⚠ Short {short[b.bin].short.length}: {jerseyList(short[b.bin].short, 5)}{short[b.bin].toScan === 0 ? " — nothing else is coming for this box" : ""}
                   </div>
                 )}
-                {short[b.bin]?.toScan > 0 && <div style={{ fontSize: 14, color: "#7c8ba1" }}>{short[b.bin].toScan} still to scan</div>}
               </div>
               {b.box && asking !== b.bin && <div title="The size of box this many jerseys fill" style={{ fontSize: 17, fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>→ {b.box}</div>}
               {asking === b.bin && (
@@ -2611,7 +2624,6 @@ export default function App() {
   const [showSupervisor,     setShowSupervisor]     = useState(() => savedSignIn?.role === "supervisor" || savedSignIn?.role === "admin");
   const [binMap,             setBinMap]             = useState(null);
   const [firstScanTime,      setFirstScanTime]      = useState(null);
-  const [now,                setNow]                = useState(() => Date.now());
 
   // Bins closed as full: [{ bin, key, label, ids, closedAt }] (roster.js). The
   // bin map only says which bin is open for a team or size; a done row in a
@@ -2692,7 +2704,6 @@ export default function App() {
   // Settings (`flagTickets`), apart from the stickers'.
   const [ticket, setTicket] = useState(null);      // { id, status: "done" | "none" | "error", printer, message }
   const ticketPrinted = useRef(0);                 // the log id of the last flag sent to the printer
-  const damagedSent   = useRef(false);             // the DAMAGED box's label is on its way (so two quick flags do not print two)
   const printTicket = useCallback(entry => {
     if (!entry) return Promise.resolve();
     const label = flagLabel(entry, binMap, { orderNumber, station: stationId(), tag: severityOf(entry.reason).tag });
@@ -2705,17 +2716,9 @@ export default function App() {
     if (!settings.flagTickets || !newestEntry || newestEntry.status !== S_FLAGGED || ticketPrinted.current === newestEntry.id) return;
     ticketPrinted.current = newestEntry.id;
     printTicket(newestEntry);
-    // The first flag of an order also prints the label of the DAMAGED box, where
-    // this jersey and every flagged one after it goes (owner, 17 Nov 2026: with the
-    // first flag, not at the start — most orders never need the box). Once an order:
-    // "DAMAGED" is kept with the labels already printed, in the saved session.
-    if (!boxLabelled.includes("DAMAGED") && !damagedSent.current) {
-      damagedSent.current = true;
-      hub.printLabels([damagedBoxLabel({ orderNumber })], { kind: "binticket", station: stationId() })
-        .then(() => setBoxLabelled(prev => [...new Set([...prev, "DAMAGED"])]))
-        .catch(() => { damagedSent.current = false; });   // no printer just now: the next flag tries again
-    }
-  }, [newestEntry, settings.flagTickets, printTicket, boxLabelled, orderNumber]);
+    // No DAMAGED box label on the first flag any more (the owner, 19 Nov 2026): the
+    // DAMAGED box is the same box all day. It still prints from the Boxes dialog.
+  }, [newestEntry, settings.flagTickets, printTicket]);
   // What the supervisor screen shows for its entry: how the ticket went, or that it is printing.
   const ticketFor = entryId => !settings.flagTickets || !entryId ? null : ticket?.id === entryId ? ticket : { id: entryId, status: "printing" };
   const reprintTicket = entryId => { const e = log.find(l => l.id === entryId); if (e) { setTicket(null); printTicket(e); } };
@@ -2750,7 +2753,6 @@ export default function App() {
   // Rate and time left from working time (src/lib/pace.js): a night with the
   // order left open on screen is not working time, so a resumed order does not
   // come back with an ETA in the thousands.
-  const { etaMin }     = useMemo(() => pace(log, passCount, remaining, now, { start: firstScanTime }), [log, passCount, remaining, now, firstScanTime]);
   const rosterCols     = useMemo(() => displayColumns(roster), [roster]);
   // The same columns as one array for the whole order, so a pass (a new
   // roster array) does not rebuild every row of the table.
@@ -2760,7 +2762,6 @@ export default function App() {
   const keyLabel       = formatKey(scanKey);
   const showResume     = !!savedSession && !resumeDecided && !sessionStarted && !canSupervise;
 
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
   useEffect(() => { saveSettings(settings); }, [settings]);
 
   useEffect(() => {
@@ -2825,7 +2826,7 @@ export default function App() {
     // sorted, starts in Box 1.1. The box screen shows on every order, as the
     // box labels are printed from it.
     const bins = buildBinMap(parsed, {}, binBy);
-    setClosedBins([]); setBinPrint(null); setBoxLabelled([]); damagedSent.current = false;   // every roster row starts unscanned: no box is closed
+    setClosedBins([]); setBinPrint(null); setBoxLabelled([]);   // every roster row starts unscanned: no box is closed
     setBoxFilter(""); setDoneFilter(""); setRosterSearch("");    // the last order's box is not this order's
     setBinMap(binCount(bins) > 0 ? bins : null); setShowBinSetup(binCount(bins) > 0); setBoxAuto(true);
   }, [syncInspect]);
@@ -2876,6 +2877,9 @@ export default function App() {
   // one-piece bin: a bag). It goes on the list, is kept with the closed bin,
   // and is the answer the box model learns from.
   const binFull = useCallback((bin, boxId = null) => {
+    // Jerseys of this team or size still to scan: none, and the box just closed
+    // is the last one it needs, so no next box's label (the owner, 19 Nov 2026).
+    const left = roster.filter(x => !x.scanned && binOfRow(binMap, closedBins, x) === bin).length;
     const r = closeBin(roster, binMap, closedBins, bin); if (!r) return;
     const rows = binContents(roster, r.binMap, r.closed, bin), guess = boxOf(rows);
     const box  = BOX_CHOICES.find(c => c.id === boxId)?.label || guess?.label || "";
@@ -2884,13 +2888,13 @@ export default function App() {
       .then(res => { if (res?.model) { setBoxModel(res.model); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(res.model)); } catch { /* private window */ } } })
       .catch(() => {});   // the hub is away: the bin is closed all the same, this one answer is not learnt
     const lists = binListLabels(rows, { bin, label: r.entry.label, orderNumber, by: binFieldOf(binMap) });
-    const what  = `Box ${bin} closed with ${r.entry.ids.length} ${r.entry.ids.length === 1 ? "jersey" : "jerseys"}. ${r.entry.label} now goes in Box ${r.newBin}`;
+    const what  = `Box ${bin} closed with ${r.entry.ids.length} ${r.entry.ids.length === 1 ? "jersey" : "jerseys"}. ${left ? `${r.entry.label} now goes in Box ${r.newBin}` : `Nothing of ${r.entry.label} is left to scan`}`;
     if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Box lists are switched off in Settings.` }); return; }
     setBinPrint({ status: "printing", text: what });
     // The next box's label prints here only when it was not among the ones
     // printed at the start (the order needed more boxes than estimated, or
     // the labels were never printed).
-    const fresh = !boxLabelled.includes(r.newBin);
+    const fresh = left > 0 && !boxLabelled.includes(r.newBin);
     printOnTicketRoll(lists, "binlist")
       .then(res => !fresh ? res : hub.printLabels([{ bin: r.newBin, label: r.entry.label, by: binFieldOf(r.binMap), count: 0, orderNumber: String(orderNumber || "") }], { kind: "binticket", station: stationId() })
         .then(res2 => { setBoxLabelled(prev => [...new Set([...prev, r.newBin])]); return res2; }))
@@ -4012,12 +4016,11 @@ export default function App() {
               stream={null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", borderBottom: "1px solid #21262d", flexShrink: 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", borderBottom: "1px solid #21262d", flexShrink: 0 }}>{/* no ETA here (the owner, 19 Nov 2026): it is on the board and the Wall */}
             {[
               { label: "Done",      value: `${scannedRows.length} / ${roster.length}`, color: "#e2e8f0" },
               { label: "Remaining", value: remaining,  color: remaining === 0 ? "#22c55e" : "#f59e0b" },
               { label: "Open",      value: openCount,  color: openCount > 0 ? "#ef4444" : "#64748b" },
-              { label: "ETA",       value: etaMin ? `${etaMin}m` : "—", color: "#64748b" },
             ].map(s => (
               <div key={s.label} style={{ padding: "14px 0 12px", textAlign: "center", borderRight: "1px solid #21262d" }}>
                 <div style={{ fontFamily: FONT_DISPLAY, fontSize: 54, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>

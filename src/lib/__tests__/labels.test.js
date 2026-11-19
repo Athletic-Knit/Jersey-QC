@@ -387,10 +387,13 @@ describe("box list", () => {
     expect(z).toContain("^FD23 pcs^FS");
     expect(z).toContain("^FDY-M 8   A-XL 15^FS");
     expect(z).toContain("^FDOrder 264247^FS");
-    expect(z).not.toContain("BOX");                               // 5.1 is the floor's name for the box and means nothing to the customer
-    expect(z).not.toContain("5.1");
+    expect(z).not.toContain("BOX");                               // no BOX word: the customer does not need it
+    expect(z).toContain("^FD5.1^FS");                             // the box number, small in the top-left corner, for the packer (the owner, 19 Nov 2026)
     expect(binListZPL({ title: true, bin: "5.2", label: "Navy", orderNumber: "", count: 1 }, labelSize("2x1"))).toContain("^FD1 pc^FS");
-    const fields = [...z.matchAll(/\^FO(\d+),(\d+)\^A0N,(\d+),.*\^FD(.*)\^FS/g)].map(m => ({ x: +m[1], y: +m[2], fh: +m[3], text: m[4] }));
+    const all = [...z.matchAll(/\^FO(\d+),(\d+)\^A0N,(\d+),.*\^FD(.*)\^FS/g)].map(m => ({ x: +m[1], y: +m[2], fh: +m[3], text: m[4] }));
+    const corner = all.find(f => f.text === "5.1");
+    expect(corner.fh).toBeLessThan(25); expect(corner.x).toBeLessThan(40);   // small, in the corner
+    const fields = all.filter(f => f !== corner);
     expect(fields.map(f => f.text)).toEqual(["Navy", "23 pcs", "Y-M 8   A-XL 15", "Order 264247"]);   // top to bottom, and nothing else
     fields.forEach(f => { expect(f.y + f.fh).toBeLessThanOrEqual(203); expect(f.y).toBeGreaterThanOrEqual(16); expect(f.x).toBeGreaterThanOrEqual(16); });
     fields.slice(1).forEach((f, i) => { expect(f.y).toBeGreaterThanOrEqual(fields[i].y + fields[i].fh); expect(f.fh).toBeLessThan(fields[i].fh); });   // no line over another, each smaller than the one above: the team is the biggest thing on it
@@ -404,19 +407,20 @@ describe("box list", () => {
     expect(z).toContain("^FD23 pcs^FS");
     expect(z).toContain("^FDNavy 17   Red 6^FS");
     expect(z).toContain("^FDOrder 264247^FS");
-    expect(z).not.toMatch(/BOX|7\.2/);
+    expect(z).not.toMatch(/BOX/);
+    expect(z).toContain("^FD7.2^FS");
     const old = binListZPL({ title: true, bin: "5.2", label: "Navy", orderNumber: "264247", count: 12, pages: 1 }, labelSize("2x1"));   // an entry made before `by` and `mix`
     expect(old).toContain("^FDNavy^FS"); expect(old).toContain("^FD12 pcs^FS"); expect(old).toContain("^FDOrder 264247^FS");
-    expect(old).not.toMatch(/BOX|5\.2|undefined|\^FD\^FS/);
+    expect(old).not.toMatch(/BOX|undefined|\^FD\^FS/);
   });
   it("the count label of an order that is not sorted leads with the order, and has no footer", () => {
     for (const entry of [{ by: "all", label: "Whole order" }, { by: "all", label: "" }, { by: "team", label: "Whole order" }]) {   // by "all", or the label alone says so
       const labels = binListLabels(rows, { bin: "1.3", orderNumber: "264247", ...entry });
       const z = binListZPL(labels.at(-1), labelSize("2x1"));
       const fields = [...z.matchAll(/\^FO(\d+),(\d+)\^A0N,(\d+),.*\^FD(.*)\^FS/g)].map(m => ({ y: +m[2], fh: +m[3], text: m[4] }));
-      expect(fields.map(f => f.text)).toEqual(["Order 264247", "23 pcs", "Y-M 8   A-XL 15"]);   // the order once, as the big line
+      expect(fields.filter(f => f.text !== "1.3").map(f => f.text)).toEqual(["Order 264247", "23 pcs", "Y-M 8   A-XL 15"]);   // the order once, as the big line (and the box number small in the corner)
       expect(fields[0].fh).toBeGreaterThan(fields[1].fh);
-      expect(z).not.toMatch(/BOX|1\.3|Whole order/);
+      expect(z).not.toMatch(/BOX|Whole order/);
       fields.forEach(f => expect(f.y + f.fh).toBeLessThanOrEqual(203));
     }
   });

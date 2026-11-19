@@ -55,7 +55,7 @@ export function stickerJobs(pack, ids) {
 // route tag (severityOf in config.js; the caller passes it, as labels do).
 export function flagJobs(pack, ids, tagOf = () => "DECIDE") {
   return (pack?.flags || []).filter(e => !ids || ids.includes(e.id))
-    .map(e => flagLabel(e, pack.binMap, { orderNumber: pack.orderNumber, station: pack.station, tag: tagOf(e.reason) }));
+    .map(e => ({ ...flagLabel(e, pack.binMap, { orderNumber: pack.orderNumber, station: pack.station, tag: tagOf(e.reason) }), copies: 1 }));   // a reprint from the Print menu is one ticket (the owner, 19 Nov 2026); a new flag prints FLAG_COPIES
 }
 
 // ── The DAMAGED box ─────────────────────────────────────────────────────────

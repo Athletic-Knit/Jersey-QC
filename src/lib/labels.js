@@ -216,7 +216,7 @@ export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   while (!fits(fh) && text.length > 8) text = text.slice(0, -2).trimEnd().replace(/…$/, "") + "…";
   const used = Math.min(linesFor(text, fh), 3);
   out.push(line(rx, y + Math.max(0, Math.floor((room - used * fh) / 2)), fh, rw, "C", text, { lines: Math.max(1, Math.min(3, Math.floor(room / fh))) }));
-  out.push(`^PQ${FLAG_COPIES}`, "^XZ");
+  out.push(`^PQ${Math.max(1, Number(l.copies) || FLAG_COPIES)}`, "^XZ");
   return out.join("\n");
 }
 
@@ -334,11 +334,17 @@ function binCountZPL(l, size) {
   const named = l.by !== "all" && !!l.label && !/^whole order$/i.test(l.label);
   const head  = named ? l.label : order || "Order";
   const pcs   = `${l.count} ${l.count === 1 ? "pc" : "pcs"}`;
+  // The box number, small in the bottom-left corner (the owner, 19 Nov 2026):
+  // the customer does not need it, the packer finds the box by it. The order
+  // line at the bottom keeps clear of it on both sides, so it stays centred.
+  const boxTxt = l.bin ? String(l.bin) : "", boxH = Math.max(12, Math.round(a * 0.1)), boxW = boxTxt ? Math.ceil(textUnits(boxTxt) * boxH) + 6 : 0;
+  const fw = w - 2 * boxW;
   const out = ["^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
     line(side, top + pad, fit(head, w, big), w, "C", head),
     line(side, top + pad + big + 2, fit(pcs, w, mid), w, "C", pcs)];
   if (l.mix) out.push(line(side, top + pad + big + mid + 5, mixH, w, "C", l.mix));
-  if (named && order) out.push(line(side, h - small - pad, fit(order, w, small), w, "C", order));
+  if (named && order) out.push(line(side + boxW, h - small - pad, fit(order, fw, small), fw, "C", order));
+  if (boxTxt) out.push(line(side, h - boxH - pad, boxH, boxW, "L", boxTxt));
   out.push("^PQ1", "^XZ");
   return out.join("\n");
 }

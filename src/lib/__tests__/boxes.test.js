@@ -87,7 +87,7 @@ describe("the box size is not on the box list; the Bins sheet", () => {
     const zpl = labels.map(l => binListZPL({ ...l, box: "Medium box" }, labelSize("2x1"))).join("\n");   // nor printed when an old caller still sends it
     expect(zpl).not.toMatch(/MEDIUM|LARGE|SMALL|BAG/i);
     expect(zpl).toMatch(/\^FD1-P0-AL\^FS/);
-    expect(zpl).not.toMatch(/BOX|1\.1/);                          // the count label is the customer's: the team, not the floor's box number
+    expect(zpl).not.toMatch(/BOX/);                               // the count label is the customer's: the team big; the box number only small in a corner
     expect(zpl).toContain("^FDNavy^FS");
     expect(zpl).toContain("^FD13 pcs^FS");
     expect(zpl).toContain("^FDA-L 13^FS");                        // how many of each size
