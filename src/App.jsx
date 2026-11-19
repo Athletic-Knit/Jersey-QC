@@ -1378,7 +1378,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   };
 
   return (
-    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "safe center", userSelect: "none", padding: compact ? "12px 0" : state.scan?.thumb && !isGreen ? "16px 0 116px" : "16px 0", overflowY: "auto", containerType: "size" }}>
+    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "safe center", userSelect: "none", padding: compact ? "12px 0" : state.scan?.thumb && !isGreen && !isList && !isSizePick ? "16px 0 116px" : "16px 0", overflowY: "auto", containerType: "size" }}>
 
       {/* ── GREEN ── */}
       {nudge && (
@@ -1693,7 +1693,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         </div>
       )}
 
-      {state.scan?.thumb && mode !== "done" && !isMenu && !compact && (   // not on the compact flagged screen: it sat under the buttons on a narrow window
+      {state.scan?.thumb && mode !== "done" && !isMenu && !compact && !isList && !isSizePick && (   /* not on the pick list: the room goes to the list (owner, 19 Nov 2026) */   // not on the compact flagged screen: it sat under the buttons on a narrow window
         <div title="What the camera read" style={{ position: "absolute", ...(isGreen ? { top: 12 } : { bottom: 12 }), left: 12, opacity: isGreen ? 0.5 : 0.6 }}>
           <img src={state.scan.thumb} alt="" style={{ width: isGreen ? 80 : 120, height: isGreen ? 60 : 90, objectFit: "cover", borderRadius: 8 }} />
         </div>
