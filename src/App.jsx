@@ -1036,14 +1036,29 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   // sheet and the damage report all follow it. The station cards are always now.
   const [day,  setDay]  = useState("");
   const [days, setDays] = useState([]);
+  // A range of days instead of one ({ from, to }, both included): the orders of every day in it,
+  // from the hub's slim ledger (no rosters). Each order keeps its own day, so Open order and the
+  // order sheet fetch that day.
+  const [range, setRange] = useState(null);
+  const [pickMode, setPickMode] = useState("");   // "" | "date" | "range": the date fields are showing
+  const [pickFrom, setPickFrom] = useState(""), [pickTo, setPickTo] = useState("");
   useEffect(() => {
-    const load = () => hub.ledger(day).then(l => { setOrders(l.orders || []); setDays(l.days || []); }).catch(() => {});
+    const load = range
+      ? () => hub.ledgerRange(range.from, range.to).then(r => {
+          const all = {};
+          (r.days || []).forEach(d => (d.orders || []).forEach(o => { const k = `${o.station}|${o.order}|${o.run || 0}`; if (!all[k] || (o.lastSeen || 0) >= (all[k].lastSeen || 0)) all[k] = { ...o, date: d.date }; }));
+          setOrders(Object.values(all)); if (r.known) setDays(r.known);
+        }).catch(() => {})
+      : () => hub.ledger(day).then(l => { setOrders((l.orders || []).map(o => ({ ...o, date: day }))); setDays(l.days || []); }).catch(() => {});
     load();
     const t = setInterval(load, 20000);
     return () => clearInterval(t);
-  }, [day]);
+  }, [day, range]);
+  const [fullScreen, setFullScreen] = useState(() => !!document.fullscreenElement);
+  useEffect(() => { const h = () => setFullScreen(!!document.fullscreenElement); document.addEventListener("fullscreenchange", h); return () => document.removeEventListener("fullscreenchange", h); }, []);
+  const toggleFull = () => { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); else document.documentElement.requestFullscreen?.()?.catch(() => {}); };
   // The same QC Results workbook the station exports, built from what the hub holds.
-  const downloadOrderSheet = (o) => hub.ledger(day).then(l => {
+  const downloadOrderSheet = (o) => hub.ledger(o.date ?? day).then(l => {
     const rec = (l.orders || []).find(x => x.station === o.station && x.order === o.order && sameRun(x.run, o.run)) || o;
     const rows = rec.rows || [];
     if (!rows.length) { setMsg(`The hub has no jersey list for order ${o.order} on ${stationLabel(o.station)} — that station last reported before today's update, or the order was done before it. Press Export on the station for its sheet; reload the station page so future orders come through.`); return; }
@@ -1157,6 +1172,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
         <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="#ef4444">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={() => setShowPile(true)} title="Orders parked with Finish later: search, assign to a station, check off" style={{ ...btnGhost, padding: "6px 12px", borderColor: pileCount ? "#f59e0b" : "#334155", color: pileCount ? "#fcd34d" : undefined }}>⏸ Unfinished · {pileCount}</button>
+          <button onClick={toggleFull} title={fullScreen ? "Leave full screen (Esc also works)" : "Full screen: hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px" }}>{fullScreen ? "⛶ Exit" : "⛶ Full screen"}</button>
           <button onClick={() => setWall(true)} title="One row per station in big letters, for a TV on the floor. Click or Esc comes back; ?view=wall in the address opens straight into it." style={{ ...btnGhost, padding: "6px 12px" }}>📺 Wall</button>
           <button onClick={onSignOut} title="End your shift on this PC" style={{ ...btnGhost, padding: "6px 14px" }}>Sign out</button>
         </div>
@@ -1168,20 +1184,38 @@ function SupervisorPanel({ operatorName, onSignOut }) {
           <button onClick={refresh} style={{ ...btnGhost, padding: "4px 10px", color: "#fff", borderColor: "#fff" }}>Retry</button>
         </div>
       )}
-      {openOrder && <OrderView station={openOrder.station} order={openOrder.order} run={openOrder.run || 0} date={day} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}
+      {openOrder && <OrderView station={openOrder.station} order={openOrder.order} run={openOrder.run || 0} date={openOrder.date ?? day} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}
       {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12, alignContent: "start" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gridAutoRows: "max-content", gap: 12, alignContent: "start" }}>{/* max-content rows: the station cards were squeezed to a strip to fit the orders list (27 in board, 19 Nov 2026) */}
           {data.stations.length === 0 && <div style={{ color: "#64748b", padding: 24 }}>No station has reported yet. A station appears here within a few seconds of starting an order.</div>}
-          {(orders.length > 0 || days.length > 1 || day) && (
+          {(orders.length > 0 || days.length > 1 || day || range) && (
             <div style={{ gridColumn: "1 / -1", order: 99, marginTop: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-                <div style={{ fontWeight: 800, fontSize: 14 }}>Orders {day ? `on ${day}` : "today"} ({orders.length})</div>
-                <select value={day} onChange={e => setDay(e.target.value)} title="Look back at a day the hub still keeps (90 days; photos on the newest 14)" style={{ ...inputSt, width: "auto", fontSize: 12, padding: "3px 8px" }}>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>Orders {range ? `${range.from} to ${range.to}` : day ? `on ${day}` : "today"} ({orders.length})</div>
+                <select value={range ? "__range" : pickMode === "date" ? "__date" : day} title="Look back at a day the hub still keeps (90 days; photos on the newest 14), a date you pick, or a range of dates"
+                  onChange={e => { const v = e.target.value; if (v === "__date") { setPickMode("date"); setPickFrom(day || todayStr); } else if (v === "__range") { setPickMode("range"); setPickFrom(range?.from || todayStr); setPickTo(range?.to || todayStr); } else { setPickMode(""); setRange(null); setDay(v); } }}
+                  style={{ ...inputSt, width: "auto", fontSize: 12, padding: "3px 8px" }}>
                   <option value="">Today</option>
                   {days.filter(d => d !== todayStr).slice().reverse().map(d => <option key={d} value={d}>{d}</option>)}
+                  <option value="__date">Pick a date…</option>
+                  <option value="__range">A range of dates…</option>
                 </select>
-                {day && <button onClick={() => setDay("")} style={{ ...btnGhost, padding: "3px 10px", fontSize: 12 }}>Back to today</button>}
+                {pickMode === "date" && (
+                  <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                    <input type="date" value={pickFrom} max={todayStr} onChange={e => setPickFrom(e.target.value)} style={{ ...inputSt, width: "auto", fontSize: 12, padding: "3px 8px" }} />
+                    <button onClick={() => { if (pickFrom) { setRange(null); setDay(pickFrom === todayStr ? "" : pickFrom); setPickMode(""); } }} style={{ ...btnPri, padding: "3px 12px", fontSize: 12 }}>Show</button>
+                  </span>
+                )}
+                {pickMode === "range" && (
+                  <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <input type="date" value={pickFrom} max={todayStr} onChange={e => setPickFrom(e.target.value)} style={{ ...inputSt, width: "auto", fontSize: 12, padding: "3px 8px" }} />
+                    <span style={{ fontSize: 12, color: "#94a3b8" }}>to</span>
+                    <input type="date" value={pickTo} max={todayStr} onChange={e => setPickTo(e.target.value)} style={{ ...inputSt, width: "auto", fontSize: 12, padding: "3px 8px" }} />
+                    <button onClick={() => { if (pickFrom && pickTo) { const [a, b] = pickFrom <= pickTo ? [pickFrom, pickTo] : [pickTo, pickFrom]; setRange({ from: a, to: b }); setPickMode(""); } }} style={{ ...btnPri, padding: "3px 12px", fontSize: 12 }}>Show</button>
+                  </span>
+                )}
+                {(day || range) && <button onClick={() => { setDay(""); setRange(null); setPickMode(""); }} style={{ ...btnGhost, padding: "3px 10px", fontSize: 12 }}>Back to today</button>}
               </div>
               {orders.length === 0 && <div style={{ color: "#64748b", fontSize: 13, padding: "6px 0 10px" }}>No orders on this day.</div>}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1199,7 +1233,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                           {" · "}{finished ? <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(o.lastSeen)}</span> : `in progress · started ${hm(o.firstSeen)}`}
                         </div>
                       </div>
-                      <button onClick={() => setOpenOrder({ station: o.station, order: o.order, run: o.run || 0 })} title="Open this order: roster with statuses, problems, and the log" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
+                      <button onClick={() => setOpenOrder({ station: o.station, order: o.order, run: o.run || 0, date: o.date })} title="Open this order: roster with statuses, problems, and the log" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
                       <button onClick={() => downloadOrderSheet(o)} title="The QC Results workbook for this order: every jersey with its status, reason, resolution, inspector and time" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet</button>
                     </div>
                   );
@@ -1283,13 +1317,15 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                 )}
                 {s.carried?.length > 0 && (
                   <div style={{ marginTop: 10, borderTop: "1px solid #21262d", paddingTop: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Still open from earlier orders</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Still open from earlier orders ({s.carried.length})</div>
+                    <div style={{ maxHeight: 220, overflowY: "auto" }}>{/* up to 50: they scroll in the card, so one station does not stretch the whole row */}
                     {s.carried.map(c => (
                       <div key={c.key} style={{ fontSize: 12, marginBottom: 4, display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
                         <span><span style={{ color: attnColour(c.status), fontWeight: 700 }}>{attnIcon(c.status)} {c.jersey}</span><span style={{ color: "#94a3b8" }}> — order {c.order} · {c.reason}</span></span>
                         <button onClick={() => markCarriedDone(s.id, c.key)} title="Dealt with — remove from this list" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, flexShrink: 0 }}>Done</button>
                       </div>
                     ))}
+                    </div>
                   </div>
                 )}
               </div>
