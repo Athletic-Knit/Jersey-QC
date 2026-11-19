@@ -1214,7 +1214,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const numberDoubt = mode === "confirm" && !!seen && String(state.match?.number ?? "") !== ""
     && seen.number_complete === false;   // only when the camera says the number itself is covered or cut off: not for a jersey that is merely not flat or a number off centre, or the line would show too often to be read
   const isList  = mode === "pick" || mode === "close";
-  const isSizePick = mode === "offSize";   // "Not on the roster" from the list: what size is it?
+  const isSizePick = mode === "offSize" || mode === "listFlag";   // Flag on the list: what is wrong, then (duplicate, not on the roster) what size is it?
   const isRed   = mode === "flag" || mode === "duplicate" || mode === "supervisor";
   const isMenu  = mode === "reasons" || mode === "reasonText";
   const isManual = mode === "manual" || mode === "manualDone";
@@ -1277,10 +1277,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       // NO SIZE TAG (nothing to pick a row by), and an EXTRA jersey that is not on the
       // roster, which asks the size first so the ticket carries it. Any other defect is
       // flagged from the screen that follows, or with "Flag it" on the last pass.
-      const noSize    = { id: "nosize",    label: "🏷 No size tag",       run: actions.noSizeTag };
-      const offRoster = { id: "offroster", label: "🚩 Not on the roster", run: actions.offRosterStart };
-      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back, none] : [retry, noSize, offRoster, { ...byHand, label: "⌨ Enter by hand" }])];
+      // One Flag button (the owner, 19 Nov 2026): it opens No size tag, Duplicate and Not on
+      // the roster. No Enter by hand here: it is beside the scan button.
+      const flag = { id: "listflag", label: "🚩 Flag", run: actions.listFlag };
+      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back, none] : [retry, flag])];
     }
+    if (mode === "listFlag")   return [{ id: "nosize", label: "🏷 No size tag", run: actions.noSizeTag }, { id: "dup", label: "🔁 Duplicate", run: () => actions.offRosterStart("dup") }, { id: "offroster", label: "🚩 Not on the roster", run: () => actions.offRosterStart("off") }, { id: "back", label: "← Back", run: actions.back }];
     if (mode === "offSize")    return [...(state.sizes || []).map(s => ({ id: "sz" + s, label: s, run: () => actions.offRosterSize(s) })), { id: "notag", label: "🏷 No size tag", run: () => actions.offRosterSize("") }, { id: "back", label: "← Back", run: actions.back }];
     if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "🚩 Bad jersey" }];
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }, { ...notRight, run: actions.reopenLast }];
@@ -1333,7 +1335,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (e.repeat) return;                       // a held key or pedal is one press, not many
       if (mode === "done") return;
       if (mode === "manual" || mode === "reasonText") { if (e.code === "Escape") { e.preventDefault(); actions.back(); } return; }   // typing, not navigating
-      if (mode === "offSize" && e.code === "Escape") { e.preventDefault(); actions.back(); return; }
+      if ((mode === "offSize" || mode === "listFlag") && e.code === "Escape") { e.preventDefault(); actions.back(); return; }
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target?.tagName)) return;   // the Enter that submitted the form is still bubbling: it must not also pick the first row of the list it opened
       if (e.code === retryKey) { if (mode === "confirm") { e.preventDefault(); showNudge(); return; } const i = options.findIndex(x => x.id === "retry"); if (i >= 0) { e.preventDefault(); lastKeyRef.current = Date.now(); fire(options[i], i, "key", e.code, options); } return; }
@@ -1469,19 +1471,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
               ? `#${state.typed.number || "?"}${state.typed.name ? " · " + state.typed.name : ""}`
               : `#${detected?.number || "?"}${detected?.number && detected?.number_complete === false ? "?" : ""}${detected?.name ? " · " + detected.name + (detected.name_complete === false ? "…" : "") : ""}`}
           </div>
-          <div style={{ fontSize: "clamp(24px, 3.6vw, 40px)", fontWeight: 900, color: accent, margin: "6px 0", textAlign: "center", padding: "0 24px", lineHeight: 1.1 }}>
-            {mode === "pick" ? "Which jersey is this? Check the size tag." : "No exact match — is it one of these?"}
-          </div>
-          {state.reason && (
-            <div style={{ fontSize: 24, color: "#fcd34d", marginBottom: 6, opacity: 0.95, textAlign: "center", padding: "0 24px" }}>
-              {state.reason}
-            </div>
-          )}
+
           <div style={{ fontSize: 20, color: "#d6d3d1", marginBottom: 16, textAlign: "center" }}>
             Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}{detected?.jersey_colour ? ` · ${detected.jersey_colour} jersey` : ""}
             {primary !== HEADLINE_FIELDS && <span style={{ marginLeft: 12, color: accent }}>· differs by {primary.map(cap).join(" and ")}</span>}
           </div>
-          <div style={{ width: "100%", maxWidth: candidates.length > 3 ? 1200 : 820, padding: "0 24px", boxSizing: "border-box", maxHeight: "52%", overflowY: "auto" }}>
+          <div style={{ width: "100%", maxWidth: candidates.length > 3 ? 1600 : 1000, padding: "0 24px", boxSizing: "border-box", flex: "0 1 auto", minHeight: 0, overflowY: "auto" }}>{/* the list takes all the room left on the screen (a 27 in panel shows far more than half), and scrolls only past that */}
             {candidates.length === 0 && (
               <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 22, padding: 16 }}>No rows to choose from.</div>
             )}
@@ -1507,8 +1502,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(44px, 10cqh, 96px)", fontWeight: 900, color: "#fff", lineHeight: 1, textAlign: "center", padding: "0 24px" }}>
             #{detected?.number || "?"}{detected?.name ? ` · ${detected.name}` : ""}
           </div>
-          <div style={{ fontSize: "clamp(26px, 4vw, 44px)", fontWeight: 900, color: accent, margin: "8px 0 4px", textAlign: "center", padding: "0 24px", lineHeight: 1.1 }}>Not on the roster — what size is it?</div>
-          <div style={{ fontSize: 22, color: "#fcd34d", marginBottom: 16, textAlign: "center", padding: "0 24px" }}>Read the size tag. It goes on the flag ticket.</div>
+          <div style={{ fontSize: "clamp(26px, 4vw, 44px)", fontWeight: 900, color: accent, margin: "8px 0 16px", textAlign: "center", padding: "0 24px", lineHeight: 1.1 }}>{mode === "listFlag" ? "What is wrong?" : state.kind === "dup" ? "Duplicate — what size is it?" : "Not on the roster — what size is it?"}</div>
           <div style={{ width: "100%", maxWidth: 1200, padding: "0 24px", boxSizing: "border-box", maxHeight: "68%", overflowY: "auto", ...twoColumns(options.length) }}>
             {options.map((o, i) => {
               const sel = i === selectedIdx;
@@ -3435,13 +3429,25 @@ export default function App() {
     },
     // "Not on the roster" on the pick list: an extra jersey. The size is asked
     // first (the roster has no row to take it from) so the ticket carries it.
-    offRosterStart() {
+    listFlag() {
       const o = overlay; if (!o?.scan) return;
-      setOverlay({ mode: "offSize", scan: o.scan, candidates: o.candidates, sizes: sizeChoices(roster), returnTo: o });
+      setOverlay({ mode: "listFlag", scan: o.scan, candidates: o.candidates, returnTo: o });
+    },
+    offRosterStart(kind = "off") {
+      const o = overlay; if (!o?.scan) return;
+      setOverlay({ mode: "offSize", kind, scan: o.scan, candidates: o.candidates, sizes: sizeChoices(roster), returnTo: o });
     },
     offRosterSize(size) {
       const o = overlay; if (!o?.scan) return;
       const d = o.scan.detected || {};
+      if (o.kind === "dup") {   // one more of a number and size that has passed: flagged with no row, the size on the ticket
+        const row = { number: String(d.number || "").trim(), name: String(d.name || "").trim(), team: "", size: String(size || ""), noRow: true };
+        const reason = `Duplicate — #${row.number || "?"}${row.size ? " " + row.size : ""}`;
+        const entry = { id: o.scan.id || Date.now(), detected: d, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: row, status: S_FLAGGED, reason, ...stamp() };
+        setLog(prev => [entry, ...prev]); setLastResult(entry);
+        setOverlay({ mode: "supervisor", scan: o.scan, match: row, reason: "Duplicate.", route: "Supervisor → check the order", entryId: entry.id, photoFirst: false, damagePhotos: [] });
+        playTone("flag"); return;
+      }
       commitTyped(o, { number: String(d.number || "").trim(), name: String(d.name || "").trim(), size: String(size || ""), team: "" }, null, true);
     },
     // "Enter by hand". On a list the operator already typed for (overlay.typed),
