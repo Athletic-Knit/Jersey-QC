@@ -2145,6 +2145,7 @@ function PackingModal({ groups, by = "team", info = {}, status, onFull, onBoxes,
   const [open, setOpen] = useState(null);   // the team whose jerseys are listed
   const [only, setOnly] = useState("all");  // all | complete | incomplete
   const [asking, setAsking] = useState(null);   // the open box whose size is being asked (Box full)
+  const [confirmPrint, setConfirmPrint] = useState(null);   // true: the done boxes list, false: not done; asked before it prints (a click by mistake prints nothing)
   const num = r => { const n = parseInt(String(r.number ?? "").replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : 1e9; };
   const jersey = (r, colour = "#e2e8f0") => (
     <span key={r._id} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, padding: "3px 8px", borderRadius: 6, background: "#0d1117", color: colour, fontSize: 15 }}>
@@ -2164,11 +2165,18 @@ function PackingModal({ groups, by = "team", info = {}, status, onFull, onBoxes,
               <button key={id} onClick={() => setOnly(id)} style={{ ...btnGhost, fontSize: 15, padding: "6px 12px", borderColor: only === id ? "#4ade80" : "#334155", color: only === id ? "#fff" : "#94a3b8" }}>{t}</button>
             ))}
           </div>
-          {onPrintBoxes && <button onClick={() => onPrintBoxes(true)} title="Print the list of every box that is done: full, or its team complete" style={{ ...btnGhost, fontSize: 15, whiteSpace: "nowrap", borderColor: "#22c55e", color: "#86efac" }}>🖨 Done boxes · {doneCount}</button>}
-          {onPrintBoxes && <button onClick={() => onPrintBoxes(false)} title="Print the list of every box that is not done yet, with what it still waits for" style={{ ...btnGhost, fontSize: 15, whiteSpace: "nowrap", borderColor: "#f59e0b", color: "#fcd34d" }}>🖨 Not done · {notDoneCount}</button>}
+          {onPrintBoxes && <button onClick={() => setConfirmPrint(true)} title="Print the list of every box that is done: full, or its team complete" style={{ ...btnGhost, fontSize: 15, whiteSpace: "nowrap", borderColor: "#22c55e", color: "#86efac" }}>🖨 Done boxes · {doneCount}</button>}
+          {onPrintBoxes && <button onClick={() => setConfirmPrint(false)} title="Print the list of every box that is not done yet, with what it still waits for" style={{ ...btnGhost, fontSize: 15, whiteSpace: "nowrap", borderColor: "#f59e0b", color: "#fcd34d" }}>🖨 Not done · {notDoneCount}</button>}
           {onBoxes && <button onClick={onBoxes} title="Every box in one list: closed boxes and their lists, the DAMAGED box, the box labels" style={{ ...btnGhost, fontSize: 15, whiteSpace: "nowrap" }}>📦 All boxes</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
+        {confirmPrint !== null && (
+          <div style={{ marginTop: 12, padding: "12px 16px", borderRadius: 12, border: `2px solid ${confirmPrint ? "#22c55e" : "#f59e0b"}`, background: "#0d1117", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", flex: 1 }}>Print the list of {confirmPrint ? `${doneCount} done` : `${notDoneCount} not done`} {(confirmPrint ? doneCount : notDoneCount) === 1 ? "box" : "boxes"}?</span>
+            <button onClick={() => { const d = confirmPrint; setConfirmPrint(null); onPrintBoxes(d); }} style={{ ...btnPri, fontSize: 17, padding: "10px 20px", background: confirmPrint ? "#22c55e" : "#f59e0b", color: "#0d1117" }}>✓ Print</button>
+            <button onClick={() => setConfirmPrint(null)} style={{ ...btnGhost, fontSize: 17, padding: "10px 18px" }}>Cancel</button>
+          </div>
+        )}
         {status && (
           <div style={{ marginTop: 12, fontSize: 17, fontWeight: 600, color: status.status === "done" ? "#4ade80" : status.status === "printing" ? "#94a3b8" : "#fbbf24" }}>
             {status.status === "printing" ? "🖨 Printing… " : "🖨 "}{status.text}
