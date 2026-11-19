@@ -3804,27 +3804,32 @@ export default function App() {
       .catch(e => setReplay({ ...blank, error: `No replay file for ${replayName} (${e.message})` }));
   }, [replayName]);
   const replayStep = replay?.steps[replay.i] || null;
-  // Skip ahead: every step up to step `target` is done at once, as the operator
-  // did it, with no screens — the passes land on their rows and in their boxes,
-  // the flags and the marks in the log — so the roster list shows the order as
-  // it stood at that scan. Forward only; the replay then carries on from there.
+  // Skip ahead to `target` jerseys done (the station's Done count, 214 of 521; the
+  // owner, 19 Nov 2026): the steps are done at once, as the operator did them,
+  // with no screens — the passes land on their rows and in their boxes, the flags
+  // and the marks in the log — until that many roster rows are done. Forward
+  // only; the replay then carries on from there.
   const [replaySkip, setReplaySkip] = useState("");
   const replaySkipTo = useCallback(target => {
     if (!replay || !sessionStarted) return;
-    const to = Math.max(replay.i, Math.min(replay.steps.length, Math.floor(Number(target) || 0) - 1));
-    if (to <= replay.i) return;
+    const want = Math.min(roster.length, Math.floor(Number(target) || 0));
     const rows = roster.map(r => ({ ...r })), entries = [], base = Date.now();
+    const doneNow = () => rows.filter(r => r.scanned).length;
+    if (doneNow() >= want) return;
     const st = stamp();
-    replay.steps.slice(replay.i, to).forEach((s, k) => {
+    let to = replay.i;
+    for (; to < replay.steps.length && doneNow() < want; to++) {
+      const s = replay.steps[to], k = to - replay.i;
       const id = base + k, at = { ...st, id, detected: s.detected || null, thumb: null };
-      if (s.kind === "undo")    { const r = findReplayRow(rows, s, true); if (r) { r.scanned = false; entries.push({ ...at, match: { ...r }, status: "undo", reason: "Un-checked — was passed; scan it again" }); } return; }
-      if (s.kind === "missing") { const r = findReplayRow(rows, s); if (r && !r.scanned) r.scanned = "missing"; return; }
-      if (s.kind !== "scan") return;
-      if (s.off) { entries.push({ ...at, match: { number: s.number, name: s.name || "", team: "", size: s.size || "", offRoster: true }, status: S_FLAGGED, reason: `Not on the roster — #${s.number || "?"}${s.size ? " " + s.size : ""}` }); return; }
-      if (s.dup) { entries.push({ ...at, match: { number: s.number, name: s.name || "", team: "", size: s.size || "", noRow: true }, status: S_FLAGGED, reason: `Duplicate — #${s.number || "?"}${s.size ? " " + s.size : ""}` }); return; }
-      const r = findReplayRow(rows, s); if (!r || r.scanned) return;
+      if (s.kind === "undo")    { const r = findReplayRow(rows, s, true); if (r) { r.scanned = false; entries.push({ ...at, match: { ...r }, status: "undo", reason: "Un-checked — was passed; scan it again" }); } continue; }
+      if (s.kind === "missing") { const r = findReplayRow(rows, s); if (r && !r.scanned) r.scanned = "missing"; continue; }
+      if (s.kind !== "scan") continue;
+      if (s.off) { entries.push({ ...at, match: { number: s.number, name: s.name || "", team: "", size: s.size || "", offRoster: true }, status: S_FLAGGED, reason: `Not on the roster — #${s.number || "?"}${s.size ? " " + s.size : ""}` }); continue; }
+      if (s.dup) { entries.push({ ...at, match: { number: s.number, name: s.name || "", team: "", size: s.size || "", noRow: true }, status: S_FLAGGED, reason: `Duplicate — #${s.number || "?"}${s.size ? " " + s.size : ""}` }); continue; }
+      const r = findReplayRow(rows, s); if (!r || r.scanned) continue;
       r.scanned = "pass"; entries.push({ ...at, match: { ...r }, status: S_PASS, reason: "" });
-    });
+    }
+    if (to === replay.i) return;
     replayReadRef.current = null;
     setOverlay(null);
     setRoster(rows);
@@ -3933,10 +3938,11 @@ export default function App() {
         <div style={{ position: "fixed", left: "50%", bottom: 10, transform: "translateX(-50%)", zIndex: 3000, background: "#0d1117", border: "3px solid #f59e0b", borderRadius: 14, padding: "10px 16px", color: "#e2e8f0", fontSize: 15, display: "flex", alignItems: "center", gap: 12, maxWidth: "96vw", boxShadow: "0 10px 30px rgba(0,0,0,0.6)" }}>
           <span style={{ fontWeight: 900, color: "#fcd34d", whiteSpace: "nowrap" }}>▶ Replay {replay.name}</span>
           {replay.error ? <span style={{ color: "#f87171" }}>{replay.error}</span> : (<>
-            <span style={{ whiteSpace: "nowrap" }} title="Steps of yesterday’s record: every scan, flag and mark the operator made. More than the roster has jerseys: flags, duplicates, the missing marks and an un-check are steps too">step {Math.min(replay.i + 1, replay.steps.length)} / {replay.steps.length}</span>
-            <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }} title="Do every scan up to this one at once, with no screens; the roster list catches up">
-              <input type="number" min={replay.i + 2} max={replay.steps.length + 1} value={replaySkip} placeholder="step #" onChange={e => setReplaySkip(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") { replaySkipTo(replaySkip); e.currentTarget.blur(); } }} style={{ ...inputSt, width: 78, padding: "4px 6px", fontSize: 14 }} />
-              <button onClick={() => replaySkipTo(replaySkip)} disabled={!sessionStarted || !(Number(replaySkip) > replay.i + 1)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, opacity: sessionStarted && Number(replaySkip) > replay.i + 1 ? 1 : 0.5 }}>⏭ Skip to</button>
+            <span style={{ whiteSpace: "nowrap", fontWeight: 800 }} title="Jerseys done, as on the station's Done tile">{roster.filter(r => r.scanned).length} / {roster.length}</span>
+            <span style={{ whiteSpace: "nowrap", color: "#7c8ba1", fontSize: 13 }} title="Steps of yesterday’s record: every scan, flag and mark the operator made (flags, duplicates and marks are steps too)">step {Math.min(replay.i + 1, replay.steps.length)}/{replay.steps.length}</span>
+            <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }} title="Skip until this many jerseys are done (as on the Done tile), with no screens; the roster list catches up">
+              <input type="number" min={1} max={roster.length} value={replaySkip} placeholder="jerseys" onChange={e => setReplaySkip(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") { replaySkipTo(replaySkip); e.currentTarget.blur(); } }} style={{ ...inputSt, width: 78, padding: "4px 6px", fontSize: 14 }} />
+              <button onClick={() => replaySkipTo(replaySkip)} disabled={!sessionStarted || !(Number(replaySkip) > roster.filter(r => r.scanned).length)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, opacity: sessionStarted && Number(replaySkip) > roster.filter(r => r.scanned).length ? 1 : 0.5 }}>⏭ Skip to</button>
             </span>
             <span style={{ color: "#94a3b8", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replayStep ? replayStep.label : "done"}</span>
             <span style={{ color: "#94a3b8", whiteSpace: "nowrap" }}>green {replay.tally.green || 0} · lists {replay.tally.list || 0}{replay.tally.list ? ` (${(replay.tally.listRows / replay.tally.list).toFixed(1)} rows)` : ""} · red {replay.tally.red || 0} · dup {replay.tally.duplicate || 0}</span>
