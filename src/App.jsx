@@ -268,6 +268,9 @@ function ResumeModal({ session, onResume, onDiscard }) {
 // ── Sign-in (once per shift) ──────────────────────────────────────────────────
 // Which station this page is, from ?station= in the address ("" when none).
 const urlStation = () => { try { return new URLSearchParams(window.location.search).get("station") || ""; } catch { return ""; } };
+// The replay is ours, never the floor's (the owner, 19 Nov 2026): it runs only where VITE_REPLAY=1 is in
+// .env.local, which only the development copy has. The floor runs Vite in dev mode too, so DEV is not enough.
+const REPLAY_ON = import.meta.env.VITE_REPLAY === "1";
 // Replay (development only, src/lib/replay.js): ?replay=<order> on the station
 // page, kept in sessionStorage so the sign-in's reload does not lose it.
 const replayRequested = () => { try { const q = new URLSearchParams(window.location.search).get("replay"); if (q) sessionStorage.setItem("jerseyqc.replay", q); return sessionStorage.getItem("jerseyqc.replay") || ""; } catch { return ""; } };
@@ -3010,7 +3013,7 @@ export default function App() {
     playTone("scan");
 
     const readOne = async (b64, url) => {
-      if (import.meta.env.DEV && replayReadRef.current) return replayReadRef.current;   // replay: yesterday's read stands in for the camera (src/lib/replay.js)
+      if (REPLAY_ON && replayReadRef.current) return replayReadRef.current;   // replay: yesterday's read stands in for the camera (src/lib/replay.js)
       // Send a smaller frame than the camera gives: same read, faster answer.
       const sendB64 = await frameForUpload(url, SEND_MAX_PX).catch(() => b64);
       const t0 = Date.now();
@@ -3629,7 +3632,7 @@ export default function App() {
   // and, once that order is open, hands each read to the scan in place of the
   // camera, then acts as the operator did after a pause: confirms the green,
   // picks the same row on a list, flags the extra jersey. See src/lib/replay.js.
-  const replayName = import.meta.env.DEV ? replayRequested() : "";
+  const replayName = REPLAY_ON ? replayRequested() : "";
   const [replay, setReplay] = useState(null);
   useEffect(() => {
     if (!replayName) return;
