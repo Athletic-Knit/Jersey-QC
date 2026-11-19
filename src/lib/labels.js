@@ -371,6 +371,20 @@ export function damagedListLabels(entries, { orderNumber = "" } = {}) {
     items: items.slice(i * DAMAGED_PER_LABEL, (i + 1) * DAMAGED_PER_LABEL),
   })).reverse();
 }
+// A list of boxes (the owner, 19 Nov 2026): the boxes that are done (full or
+// their team complete) or the ones that are not, a line a box — "Box 1.1  10U A
+// 17 pcs" — seven to a 2 x 1 in label, drawn like the DAMAGED list. `lines`:
+// the text of each line. → the labels in print order, the last page first.
+export function boxesListLabels(lines, { title = "BOXES", orderNumber = "" } = {}) {
+  const items = (lines || []).map(t => ({ text: String(t) }));
+  if (!items.length) return [];
+  const pages = Math.ceil(items.length / DAMAGED_PER_LABEL);
+  return Array.from({ length: pages }, (_, i) => ({
+    damaged: true, head: String(title), unit: "box", bin: String(title), orderNumber: String(orderNumber || ""), page: i + 1, pages, count: items.length,
+    items: items.slice(i * DAMAGED_PER_LABEL, (i + 1) * DAMAGED_PER_LABEL),
+  })).reverse();
+}
+
 function damagedListZPL(l, size) {
   const { w, h, top = 0 } = size;
   const a    = h - top;
@@ -378,15 +392,16 @@ function damagedListZPL(l, size) {
   const head = Math.max(12, Math.round(a * 0.12));
   const x0   = Math.round((size.dpi || 203) * BIN_LIST_LEFT_MM / 25.4) + pad;
   const fullW = w - x0 - pad;
-  const left  = `DAMAGED${l.orderNumber ? "  Order " + l.orderNumber : ""}`;
-  const right = `${l.count} ${l.count === 1 ? "pc" : "pcs"}${l.pages > 1 ? `  ${l.page}/${l.pages}` : ""}`;
+  const left  = `${l.head || "DAMAGED"}${l.orderNumber ? "  Order " + l.orderNumber : ""}`;
+  const unit  = l.unit === "box" ? (l.count === 1 ? "box" : "boxes") : (l.count === 1 ? "pc" : "pcs");
+  const right = `${l.count} ${unit}${l.pages > 1 ? `  ${l.page}/${l.pages}` : ""}`;
   const rw = Math.round(fullW * 0.3), lw = fullW - rw;
   const y0 = top + pad + head + 5, rowH = Math.floor((h - pad - y0) / DAMAGED_PER_LABEL);
   return ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", "^LT0",
     tight(x0, top + pad, head, lw, left),
     line(x0 + lw, top + pad, fit(right, rw, head), rw, "R", right),
     `^FO${x0},${top + pad + head + 1}^GB${fullW},1,1^FS`,
-    ...(l.items || []).slice(0, DAMAGED_PER_LABEL).map((it, i) => tight(x0, y0 + i * rowH, Math.max(10, rowH - 3), fullW, `${it.who}: ${it.reason}`)),
+    ...(l.items || []).slice(0, DAMAGED_PER_LABEL).map((it, i) => tight(x0, y0 + i * rowH, Math.max(10, rowH - 3), fullW, it.text ?? `${it.who}: ${it.reason}`)),
     "^PQ1", "^XZ"].join("\n");
 }
 

@@ -12,7 +12,7 @@ import { createVigilance, reconcile, turnMatters, settleTurned, createInspection
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
-import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.js";
+import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel } from "./lib/printjobs.js";
 const SECOND_LOOK = false;
 import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
@@ -2140,7 +2140,7 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, da
 // COMPLETE team (every jersey of it in a box). For each team: its boxes, full
 // or open, with what is in them; what is missing from it (flagged or marked
 // missing: it will not arrive by scanning on) and what is still to scan.
-function PackingModal({ groups, by = "team", info = {}, status, onFull, onBoxes, onClose }) {
+function PackingModal({ groups, by = "team", info = {}, status, onFull, onBoxes, onPrintBoxes, doneCount = 0, notDoneCount = 0, onClose }) {
   useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
   const [open, setOpen] = useState(null);   // the team whose jerseys are listed
   const [only, setOnly] = useState("all");  // all | complete | incomplete
@@ -2164,6 +2164,8 @@ function PackingModal({ groups, by = "team", info = {}, status, onFull, onBoxes,
               <button key={id} onClick={() => setOnly(id)} style={{ ...btnGhost, fontSize: 15, padding: "6px 12px", borderColor: only === id ? "#4ade80" : "#334155", color: only === id ? "#fff" : "#94a3b8" }}>{t}</button>
             ))}
           </div>
+          {onPrintBoxes && <button onClick={() => onPrintBoxes(true)} title="Print the list of every box that is done: full, or its team complete" style={{ ...btnGhost, fontSize: 15, whiteSpace: "nowrap", borderColor: "#22c55e", color: "#86efac" }}>🖨 Done boxes · {doneCount}</button>}
+          {onPrintBoxes && <button onClick={() => onPrintBoxes(false)} title="Print the list of every box that is not done yet, with what it still waits for" style={{ ...btnGhost, fontSize: 15, whiteSpace: "nowrap", borderColor: "#f59e0b", color: "#fcd34d" }}>🖨 Not done · {notDoneCount}</button>}
           {onBoxes && <button onClick={onBoxes} title="Every box in one list: closed boxes and their lists, the DAMAGED box, the box labels" style={{ ...btnGhost, fontSize: 15, whiteSpace: "nowrap" }}>📦 All boxes</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
@@ -3134,6 +3136,27 @@ export default function App() {
   [sessionStarted, roster, orderNumber, binMap, closedBins, log, boxPlanLabels]);
   const flagTag = useCallback(reason => severityOf(reason).tag, []);
   // The list of what is in the DAMAGED box, whenever the inspector asks for it.
+  // The list of boxes that are done (full, or their team complete) and the list
+  // of the ones that are not, to print and stick on the boxes (note 20, the owner,
+  // 19 Nov 2026). From the Packing view.
+  const boxesDone = useMemo(() => packingGroups.flatMap(g => {
+    const complete = g.toScan.length === 0 && g.short.length === 0;
+    return g.boxes.filter(b => b.full || (complete && b.rows.length)).map(b => ({ bin: b.bin, text: `Box ${b.bin}  ${g.label}  ${b.rows.length} pcs  ${b.full ? "full" : "complete"}` }));
+  }).sort((a, b) => binOrder(a.bin, b.bin)), [packingGroups]);
+  const boxesNotDone = useMemo(() => packingGroups.flatMap(g => {
+    const complete = g.toScan.length === 0 && g.short.length === 0;
+    if (complete) return [];
+    return g.boxes.filter(b => !b.full).map(b => ({ bin: b.bin, text: `Box ${b.bin}  ${g.label}  ${b.rows.length} pcs${g.toScan.length ? `  ${g.toScan.length} to scan` : ""}${g.short.length ? `  ${g.short.length} missing` : ""}` }));
+  }).sort((a, b) => binOrder(a.bin, b.bin)), [packingGroups]);
+  const printBoxesList = useCallback(done => {
+    const list = done ? boxesDone : boxesNotDone, what = done ? "Done boxes" : "Not done boxes";
+    const labels = boxesListLabels(list.map(x => x.text), { title: done ? "DONE BOXES" : "NOT DONE", orderNumber });
+    if (!labels.length) { setBinPrint({ status: "off", text: `${what}: none.` }); return; }
+    setBinPrint({ status: "printing", text: what });
+    printOnTicketRoll(labels, "binlist")
+      .then(res => setBinPrint({ status: "done", text: `${what} list printed: ${list.length} ${list.length === 1 ? "box" : "boxes"}, ${labels.length} ${labels.length === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .catch(e => setBinPrint({ status: "error", text: `${what} list. ${printProblem(e)}` }));
+  }, [boxesDone, boxesNotDone, orderNumber, printOnTicketRoll]);
   const printDamagedList = useCallback(() => {
     const lists = damagedListJobs(printPack);
     if (!lists.length) { setBinPrint({ status: "off", text: "Nothing is in the DAMAGED box." }); return; }
@@ -4001,7 +4024,7 @@ export default function App() {
           {noJersey}
         </div>
       )}
-      {showPacking && binMap && <PackingModal groups={packingGroups} by={binFieldOf(binMap)} info={Object.fromEntries(openBins.map(b => [b.bin, b]))} status={binPrint} onFull={binFull}
+      {showPacking && binMap && <PackingModal groups={packingGroups} by={binFieldOf(binMap)} info={Object.fromEntries(openBins.map(b => [b.bin, b]))} status={binPrint} onFull={binFull} onPrintBoxes={printBoxesList} doneCount={boxesDone.length} notDoneCount={boxesNotDone.length}
         onBoxes={() => { setShowPacking(false); setShowBins(true); }} onClose={() => closeDialog(() => setShowPacking(false))} />}
       {showIssues && <IssuesModal missing={issues.missing} dups={issues.dups} flagged={issues.flagged} binOf={binOf} onClose={() => closeDialog(() => setShowIssues(false))} />}
       {showHistory && (
