@@ -3655,13 +3655,13 @@ export default function App() {
     // "act": the screen is up (or came and went); after the pause, do what the operator did
     if (scanning) return;
     replayReadRef.current = null;
-    if (!overlay) { const t = setTimeout(next, 400); return () => clearTimeout(t); }   // the screen closed (or has not opened yet: the scan sets its state in two steps): on to the next scan after a moment
+    if (!overlay) { const t = setTimeout(next, Math.min(400, replay.delay)); return () => clearTimeout(t); }   // the screen closed (or has not opened yet: the scan sets its state in two steps): on to the next scan after a moment
     if (!replay.seen) {                                                  // the first screen of this scan: count it
       const m = overlay.mode, list = m === "pick" || m === "close";
       setReplay(r => ({ ...r, seen: true, tally: { ...r.tally, screens: (r.tally.screens || 0) + 1, green: (r.tally.green || 0) + (m === "confirm" ? 1 : 0), list: (r.tally.list || 0) + (list ? 1 : 0), listRows: (r.tally.listRows || 0) + (list ? (overlay.candidates || []).length : 0), red: (r.tally.red || 0) + (m === "flag" ? 1 : 0), duplicate: (r.tally.duplicate || 0) + (m === "duplicate" ? 1 : 0) } }));
       return;
     }
-    if (overlay.mode === "done") return;                                 // the green flash dismisses itself
+    if (overlay.mode === "done") { if (replay.delay < 300) { const t = setTimeout(() => actions.dismissDone(), replay.delay); return () => clearTimeout(t); } return; }   // the green flash dismisses itself; super fast does not wait for it
     const t = setTimeout(() => {
       const o = overlay, s = replayStep, a = actions;
       switch (o.mode) {
@@ -3728,7 +3728,10 @@ export default function App() {
           stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
       )}
 
-      {replay && (
+      {replay && replay.hidden && (
+        <button onClick={() => setReplay(r => ({ ...r, hidden: false }))} title="Show the replay bar" style={{ position: "fixed", right: 10, bottom: 10, zIndex: 3000, background: "#0d1117", border: "2px solid #f59e0b", borderRadius: 10, padding: "4px 10px", color: "#fcd34d", fontWeight: 800, fontSize: 13, cursor: "pointer", opacity: 0.85 }}>▲ Replay {Math.min(replay.i + 1, replay.steps.length)}/{replay.steps.length}{replay.playing ? " ▶" : " ⏸"}</button>
+      )}
+      {replay && !replay.hidden && (
         <div style={{ position: "fixed", left: "50%", bottom: 10, transform: "translateX(-50%)", zIndex: 3000, background: "#0d1117", border: "3px solid #f59e0b", borderRadius: 14, padding: "10px 16px", color: "#e2e8f0", fontSize: 15, display: "flex", alignItems: "center", gap: 12, maxWidth: "96vw", boxShadow: "0 10px 30px rgba(0,0,0,0.6)" }}>
           <span style={{ fontWeight: 900, color: "#fcd34d", whiteSpace: "nowrap" }}>▶ Replay {replay.name}</span>
           {replay.error ? <span style={{ color: "#f87171" }}>{replay.error}</span> : (<>
@@ -3738,9 +3741,10 @@ export default function App() {
             {!sessionStarted && <span style={{ color: "#fcd34d" }}>start order {replay.name} first</span>}
             <button onClick={() => setReplay(r => ({ ...r, playing: !r.playing }))} style={{ ...btnPri, padding: "6px 14px", fontSize: 15 }}>{replay.playing ? "⏸ Pause" : "▶ Play"}</button>
             <select value={replay.delay} onChange={e => setReplay(r => ({ ...r, delay: Number(e.target.value) }))} style={{ ...inputSt, padding: "4px 8px", fontSize: 14 }}>
-              {[[600, "fast"], [1500, "normal"], [3000, "slow"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {[[120, "super fast"], [600, "fast"], [1500, "normal"], [3000, "slow"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </>)}
+          <button onClick={() => setReplay(r => ({ ...r, hidden: true }))} title="Hide the replay bar (it keeps playing)" style={{ ...btnGhost, padding: "4px 10px" }}>▼ Hide</button>
           <button onClick={() => { try { sessionStorage.removeItem("jerseyqc.replay"); } catch { /* fine */ } setReplay(null); }} style={{ ...btnGhost, padding: "4px 10px" }}>✕</button>
         </div>
       )}
