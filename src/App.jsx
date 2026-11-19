@@ -3804,6 +3804,35 @@ export default function App() {
       .catch(e => setReplay({ ...blank, error: `No replay file for ${replayName} (${e.message})` }));
   }, [replayName]);
   const replayStep = replay?.steps[replay.i] || null;
+  // Skip ahead: every step up to step `target` is done at once, as the operator
+  // did it, with no screens — the passes land on their rows and in their boxes,
+  // the flags and the marks in the log — so the roster list shows the order as
+  // it stood at that scan. Forward only; the replay then carries on from there.
+  const [replaySkip, setReplaySkip] = useState("");
+  const replaySkipTo = useCallback(target => {
+    if (!replay || !sessionStarted) return;
+    const to = Math.max(replay.i, Math.min(replay.steps.length, Math.floor(Number(target) || 0) - 1));
+    if (to <= replay.i) return;
+    const rows = roster.map(r => ({ ...r })), entries = [], base = Date.now();
+    const st = stamp();
+    replay.steps.slice(replay.i, to).forEach((s, k) => {
+      const id = base + k, at = { ...st, id, detected: s.detected || null, thumb: null };
+      if (s.kind === "undo")    { const r = findReplayRow(rows, s, true); if (r) { r.scanned = false; entries.push({ ...at, match: { ...r }, status: "undo", reason: "Un-checked — was passed; scan it again" }); } return; }
+      if (s.kind === "missing") { const r = findReplayRow(rows, s); if (r && !r.scanned) r.scanned = "missing"; return; }
+      if (s.kind !== "scan") return;
+      if (s.off) { entries.push({ ...at, match: { number: s.number, name: s.name || "", team: "", size: s.size || "", offRoster: true }, status: S_FLAGGED, reason: `Not on the roster — #${s.number || "?"}${s.size ? " " + s.size : ""}` }); return; }
+      if (s.dup) { entries.push({ ...at, match: { number: s.number, name: s.name || "", team: "", size: s.size || "", noRow: true }, status: S_FLAGGED, reason: `Duplicate — #${s.number || "?"}${s.size ? " " + s.size : ""}` }); return; }
+      const r = findReplayRow(rows, s); if (!r || r.scanned) return;
+      r.scanned = "pass"; entries.push({ ...at, match: { ...r }, status: S_PASS, reason: "" });
+    });
+    replayReadRef.current = null;
+    setOverlay(null);
+    setRoster(rows);
+    setLog(prev => [...entries.reverse(), ...prev]);
+    if (!firstScanTime) setFirstScanTime(base);
+    setReplay(r => ({ ...r, i: to, phase: "scan", seen: false, playing: false, tally: { ...r.tally, skipped: (r.tally.skipped || 0) + (to - r.i) } }));
+    setReplaySkip("");
+  }, [replay, sessionStarted, roster, stamp, firstScanTime]);
   useEffect(() => {
     if (!replay || !replay.playing || !sessionStarted || !replayStep) return;
     const next = () => setReplay(r => ({ ...r, i: r.i + 1, phase: "scan", seen: false }));
@@ -3905,6 +3934,10 @@ export default function App() {
           <span style={{ fontWeight: 900, color: "#fcd34d", whiteSpace: "nowrap" }}>▶ Replay {replay.name}</span>
           {replay.error ? <span style={{ color: "#f87171" }}>{replay.error}</span> : (<>
             <span style={{ whiteSpace: "nowrap" }}>{Math.min(replay.i + 1, replay.steps.length)} / {replay.steps.length}</span>
+            <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }} title="Do every scan up to this one at once, with no screens; the roster list catches up">
+              <input type="number" min={replay.i + 2} max={replay.steps.length + 1} value={replaySkip} placeholder="scan #" onChange={e => setReplaySkip(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") { replaySkipTo(replaySkip); e.currentTarget.blur(); } }} style={{ ...inputSt, width: 78, padding: "4px 6px", fontSize: 14 }} />
+              <button onClick={() => replaySkipTo(replaySkip)} disabled={!sessionStarted || !(Number(replaySkip) > replay.i + 1)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, opacity: sessionStarted && Number(replaySkip) > replay.i + 1 ? 1 : 0.5 }}>⏭ Skip to</button>
+            </span>
             <span style={{ color: "#94a3b8", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replayStep ? replayStep.label : "done"}</span>
             <span style={{ color: "#94a3b8", whiteSpace: "nowrap" }}>green {replay.tally.green || 0} · lists {replay.tally.list || 0}{replay.tally.list ? ` (${(replay.tally.listRows / replay.tally.list).toFixed(1)} rows)` : ""} · red {replay.tally.red || 0} · dup {replay.tally.duplicate || 0}</span>
             {!sessionStarted && <span style={{ color: "#fcd34d" }}>start order {replay.name} first</span>}
