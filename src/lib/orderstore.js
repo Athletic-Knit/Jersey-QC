@@ -1,10 +1,11 @@
-// ── Unfinished orders, kept on this PC ──────────────────────────────────────
-// An order parked with "Finish later" (jerseys out for repair, missing, not
-// scanned) stays on the station PC, whole, until it is finished: it may take
-// two or three weeks to come back (the owner, 19 Nov 2026). localStorage holds
-// about 5 MB, which one 500-jersey order nearly fills, so these live in the
-// browser's IndexedDB, which holds hundreds of orders. The hub keeps only a
-// small entry per order (hub-plugin.js, /api/hub/unfinished).
+// ── Unfinished orders ───────────────────────────────────────────────────────
+// An order put aside with "Finish later" (jerseys out for repair, missing, not
+// scanned) is kept WHOLE ON THE SERVER, on its disk, until it is finished, and
+// any station picks it up (the owner, 19 Nov 2026: "store it local to the
+// server", not on the station PC; hub-plugin.js, /api/hub/unfinished).
+// For a day the orders were kept on the station PC, in the browser's IndexedDB.
+// What is left there moves to the server by itself (moveLocalToServer) and
+// leaves the PC once the server has it; nothing new is written there.
 //
 // A record: { key: "station|order|run", station, order, run, savedAt, closed,
 //             summary: { total, done, flagged, missing, toScan }, session }
@@ -70,6 +71,24 @@ export function applyCheckOff(rec, entry) {
   const lines = fresh.map((r, i) => ({ id: now + i, match: { ...r, scanned: "pass" }, status: "pass", reason: "Checked off by supervisor", resolution: `Checked off by supervisor${byId[r._id]?.by ? " (" + byId[r._id].by + ")" : ""}`, timestamp: stampOf(byId[r._id] || {}), operator: byId[r._id]?.by || "Supervisor" }));
   const session = { ...rec.session, roster: roster.map(r => (ids.has(r._id) && r.scanned !== "pass" && r.scanned !== "manual" ? { ...r, scanned: "pass", checkedBy: "supervisor" } : r)), log: [...lines.reverse(), ...(rec.session.log || [])] };
   return { ...rec, session, summary: outOf(session.roster), closed: entry.closed || rec.closed || null };
+}
+
+// The orders a station put aside on this PC before they were kept on the server:
+// each goes to the server, whole (`park` = hub.parkOrder), and is taken off this PC
+// once the server has it. The server away, they wait for the next time. → how many moved
+export async function moveLocalToServer(park) {
+  let recs; try { recs = await listOrders(); } catch { return 0; }
+  let moved = 0;
+  for (const rec of recs) {
+    const s = rec.session;
+    if (rec.closed || !s) { await dropOrder(rec.key).catch(() => {}); continue; }
+    try {
+      await park({ id: rec.hubId || undefined, station: rec.station, order: rec.order, run: rec.run, operator: s.operatorName || "", jerseyType: s.jerseyType || "",
+        kind: kindOfSession(s) === "sorter" ? "sorter" : "", ...outOf(s.roster), out: outList(s.roster, s.log), session: s });
+      await dropOrder(rec.key); moved++;
+    } catch { /* the server is away: next time */ }
+  }
+  return moved;
 }
 
 export const putOrder  = rec => run("readwrite", s => s.put({ ...rec, savedAt: Date.now() }));

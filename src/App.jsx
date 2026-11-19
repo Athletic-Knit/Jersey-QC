@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoices, LIST_SORTS, groupSize } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoiceGroups, LIST_SORTS, groupSize } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -10,7 +10,7 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
-import { orderKey, outOf, outList, putOrder, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry } from "./lib/orderstore.js";
+import { outOf, outList, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
@@ -246,7 +246,7 @@ function CompareDays({ days = [], stationLabel, onProblem }) {
   );
 }
 
-function ResumeModal({ session, onResume, onDiscard, role = "", onSetAside, onSignOut }) {
+function ResumeModal({ session, onResume, onDiscard, role = "", onSetAside, onSignOut, error = "" }) {
   const done = session.roster.filter(r => r.scanned && r.scanned !== false).length;
   // A sorter's order is not an inspector's, and the other way round (the owner, 19 Nov 2026).
   const kind = kindOfSession(session);
@@ -258,6 +258,7 @@ function ResumeModal({ session, onResume, onDiscard, role = "", onSetAside, onSi
           It was started by {session.operatorName || "someone"} as {kind === "sorter" ? "a sorter" : "an inspector"} ({done} of {session.roster.length} done). Only {kind === "sorter" ? "a sorter" : "an inspector"} can continue it.
           {" "}Set it aside to keep it under Unfinished orders for {kind === "sorter" ? "a sorter" : "an inspector"}, and start your own order here.
         </div>
+        {error && <div style={{ ...errSt, marginBottom: 14 }}>{error}</div>}
         <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
           <button onClick={onSetAside} style={{ ...btnPri, fontSize: 18, padding: "14px 26px", background: "#f59e0b", color: "#0d1117" }}>⏸ Set it aside</button>
           <button onClick={onSignOut} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>Sign out</button>
@@ -444,17 +445,14 @@ function JerseyTypePicker({ value, onChange }) {
   );
 }
 
-// ── Unfinished orders on this station (23, 24; the owner, 19 Nov 2026) ─────
-// Every order parked here with "Finish later", kept whole on this PC, plus the
-// ones the supervisor assigned to this station from the board's pile. Search
-// by order number; tap one to open it where it stopped. What the supervisor
-// checked off on the board is applied first; an order they closed is listed
-// apart, done.
+// ── Unfinished orders (23, 24; the owner, 19 Nov 2026) ────────────────────
+// Every order put aside with "Finish later", kept whole on the server: any
+// station picks one up, one station at a time. The ones the supervisor gave to
+// this station come first. Search by order number. What the supervisor checked
+// off on the board is applied when the order is opened.
 function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
-  const mine = kindOfRole(role);
-  const [local, setLocal] = useState(null);       // records on this PC (null: still reading)
-  const [assigned, setAssigned] = useState([]);   // hub entries assigned here that this PC does not have
-  const [other, setOther] = useState(0);          // unfinished orders here for the other role (a sorter's, an inspector's)
+  const mine = kindOfRole(role), me = stationId();
+  const [list, setList] = useState(null);         // the server's entries (null: still asking)
   const [q, setQ] = useState("");
   const [keys, setKeys] = useState(false);
   const [err, setErr] = useState("");
@@ -463,61 +461,56 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
   useEffect(() => {
     let on = true;
     const load = async () => {
-      let recs = await listOrders().catch(e => { if (on) setErr(`This PC cannot keep orders: ${e.message}`); return []; });
-      const hubList = await hub.unfinished({ station: stationId(), all: true }).then(r => r.orders || []).catch(() => null);
-      if (hubList) {
-        const byKey = Object.fromEntries(hubList.map(e => [e.key, e]));
-        recs = await Promise.all(recs.map(async rec => {
-          const e = byKey[rec.key]; if (!e) return rec;
-          const next = applyCheckOff({ ...rec, hubId: rec.hubId || e.id }, e);
-          if (next !== rec) await putOrder(next).catch(() => {});
-          return next;
-        }));
-        const have = new Set(recs.map(r => r.key));
-        if (on) setAssigned(hubList.filter(e => !e.closed && e.assignedTo === stationId() && !have.has(e.key) && kindOfEntry(e) === mine));
-      }
-      if (on) { setOther(recs.filter(r => !r.closed && kindOfSession(r.session) !== mine).length); setLocal(recs.filter(r => kindOfSession(r.session) === mine)); }
+      await moveLocalToServer(hub.parkOrder).catch(() => 0);   // any order still on this PC from before
+      try { const r = await hub.unfinished({ all: true }); if (on) { setList(r.orders || []); setErr(""); } }
+      catch (e) { if (on) { setList(l => l || []); setErr(`The server did not answer (${e.message}). The unfinished orders are kept there: try again in a moment.`); } }
     };
     load(); const t = setInterval(load, 15000);
     return () => { on = false; clearInterval(t); };
-  }, [mine]);
-  const match = o => !q.trim() || String(o).includes(q.trim());
-  const open = (local || []).filter(r => !r.closed && match(r.order));
-  const closed = (local || []).filter(r => r.closed && match(r.order));
-  const hubOnes = assigned.filter(e => match(e.order));
-  const findOnHub = async () => {
-    setBusy("Looking it up on the server…"); setErr("");
-    try {
-      const r = await hub.unfinished({ q: q.trim() });
-      const e = (r.orders || []).find(x => kindOfEntry(x) === mine);
-      if (!e) { setErr((r.orders || []).length ? `Order ${q.trim()} is ${mine === "sorter" ? "an inspection" : "a sorting"} order: only ${mine === "sorter" ? "an inspector" : "a sorter"} can pick it up.` : `No unfinished order ${q.trim()} on this PC or on the server.`); return; }
-      await onPickUp({ hubEntry: e });
-    } catch (x) { setErr(`Could not reach the server: ${x.message}`); } finally { setBusy(""); }
-  };
-  const line = (key, order, s, sub, onClick, colour = "#f59e0b") => (
-    <button key={key} onClick={onClick} style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: colour, color: "#e2e8f0" }}>
-      <div style={{ fontSize: 17, fontWeight: 800 }}>Order {order} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {s.done}/{s.total} done{s.flagged ? ` · ${s.flagged} flagged` : ""}{s.missing ? ` · ${s.missing} missing` : ""}{s.toScan ? ` · ${s.toScan} to scan` : ""}</span></div>
-      <div style={{ fontSize: 14, color: "#94a3b8" }}>{sub}</div>
-    </button>
-  );
+  }, []);
+  const term = q.trim();
+  const match = e => !term || String(e.order).includes(term);
+  const ofMine = (list || []).filter(e => kindOfEntry(e) === mine);
+  const open = ofMine.filter(e => !e.closed && match(e))
+    .sort((a, b) => ((b.assignedTo === me) - (a.assignedTo === me)) || ((b.updatedAt || 0) - (a.updatedAt || 0)));
+  const closed = ofMine.filter(e => e.closed && match(e));
+  const other = (list || []).filter(e => !e.closed && kindOfEntry(e) !== mine).length;
+  const pick = e => { setBusy(`Opening order ${e.order}…`); setErr(""); Promise.resolve(onPickUp({ hubEntry: e })).catch(x => setErr(x.message)).finally(() => setBusy("")); };
+  const day = ms => new Date(ms).toLocaleDateString([], { day: "numeric", month: "short" });
   return (
     <div style={{ marginBottom: 12 }}>
       {!tall && <label style={labelSt}>Unfinished orders — pick one up again</label>}
-      <div style={{ display: "flex", gap: 6 }}>
-        <input ref={qRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Order number" style={{ ...inputSt, flex: 1 }}
-          onFocus={() => setKeys(true)} onBlur={() => setKeys(false)} onKeyDown={e => { if (e.key === "Enter" && q.trim() && !open.length && !hubOnes.length) findOnHub(); }} />
-        {q.trim() && !open.length && !hubOnes.length && <button onClick={findOnHub} style={{ ...btnGhost, whiteSpace: "nowrap" }}>Find on the server</button>}
-      </div>
+      <input ref={qRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Type an order number to find it" style={{ ...inputSt, width: "100%" }}
+        onFocus={() => setKeys(true)} onBlur={() => setKeys(false)} />
       {keys && <ScreenKeys layout="digits" onKey={k => setQ(v => typeKey(v, k))} onEnter={() => qRef.current?.blur()} enterLabel="Done" />}
       {err && <div style={{ ...errSt, marginTop: 6 }}>{err}</div>}
-      {busy && <div style={{ fontSize: 14, color: "#94a3b8", marginTop: 6 }}>{busy}</div>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, ...(tall ? {} : { maxHeight: 190, overflowY: "auto" }), marginTop: 6 }}>
-        {local === null && <div style={{ fontSize: 14, color: "#7c8ba1" }}>Reading…</div>}
-        {hubOnes.map(e => line("h" + e.id, e.order, e, `Assigned to this station by ${e.assignedBy || "the supervisor"} · parked on ${stationLabel(e.station)} ${new Date(e.parkedAt).toLocaleDateString()}`, () => { setBusy("Opening…"); Promise.resolve(onPickUp({ hubEntry: e })).finally(() => setBusy("")); }, "#60a5fa"))}
-        {open.map(r => line(r.key, r.order, r.summary || {}, `Parked ${new Date(r.savedAt).toLocaleString()}`, () => onPickUp({ rec: r })))}
-        {local && !open.length && !hubOnes.length && <div style={{ fontSize: 14, color: "#7c8ba1" }}>{q.trim() ? "None with that number on this PC." : "No unfinished orders."}</div>}
-        {closed.length > 0 && <div style={{ fontSize: 14, color: "#4ade80" }}>✓ Closed by the supervisor: {closed.map(r => r.order).join(", ")}</div>}
-        {other > 0 && <div style={{ fontSize: 14, color: "#7c8ba1" }}>{other} more {other === 1 ? "is" : "are"} for {mine === "sorter" ? "an inspector" : "a sorter"}: only {mine === "sorter" ? "an inspector" : "a sorter"} sees {other === 1 ? "it" : "them"}.</div>}
+      {busy && <div style={{ fontSize: 16, color: "#94a3b8", marginTop: 6 }}>{busy}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, ...(tall ? {} : { maxHeight: 190, overflowY: "auto" }), marginTop: 8 }}>
+        {list === null && <div style={{ fontSize: 16, color: "#7c8ba1" }}>Asking the server…</div>}
+        {open.map(e => {
+          const busyElsewhere = e.openOn && e.openOn.station !== me;
+          const givenHere = e.assignedTo === me;
+          return (
+            <button key={e.id} onClick={() => !busyElsewhere && pick(e)} disabled={busyElsewhere}
+              style={{ ...btnGhost, textAlign: "left", padding: "10px 14px", borderColor: givenHere ? "#60a5fa" : "#f59e0b", color: "#e2e8f0", opacity: busyElsewhere ? 0.5 : 1, cursor: busyElsewhere ? "not-allowed" : "pointer" }}>
+              <div style={{ fontSize: 20, fontWeight: 900 }}>Order {e.order} <span style={{ fontWeight: 700, color: "#4ade80" }}>· {e.done} of {e.total} done</span></div>
+              <div style={{ fontSize: 16, color: "#cbd5e1", marginTop: 2 }}>
+                Not done:{" "}
+                {[e.flagged ? <span key="f" style={{ color: "#f87171" }}>{e.flagged} flagged</span> : null,
+                  e.missing ? <span key="m" style={{ color: "#fbbf24" }}>{e.missing} missing</span> : null,
+                  e.toScan ? <span key="t">{e.toScan} not scanned yet</span> : null].filter(Boolean).reduce((a, x) => a.length ? [...a, " · ", x] : [x], [])}
+              </div>
+              <div style={{ fontSize: 14, color: "#94a3b8", marginTop: 2 }}>
+                Put aside on {stationLabel(e.station)} by {e.operator || "—"}, {day(e.parkedAt)}
+                {givenHere && <span style={{ color: "#60a5fa", fontWeight: 800 }}> · Given to this station by {e.assignedBy || "the supervisor"}</span>}
+                {busyElsewhere && <span style={{ color: "#f59e0b", fontWeight: 800 }}> · Open on {stationLabel(e.openOn.station)} right now</span>}
+              </div>
+            </button>
+          );
+        })}
+        {list && !open.length && <div style={{ fontSize: 16, color: "#7c8ba1" }}>{term ? `No unfinished order ${term}.` : "No unfinished orders."}</div>}
+        {closed.length > 0 && <div style={{ fontSize: 15, color: "#4ade80" }}>✓ Finished by the supervisor on the board: {closed.map(e => e.order).join(", ")}</div>}
+        {other > 0 && <div style={{ fontSize: 15, color: "#7c8ba1" }}>{other} more {other === 1 ? "is" : "are"} for {mine === "sorter" ? "an inspector" : "a sorter"}: only {mine === "sorter" ? "an inspector" : "a sorter"} sees {other === 1 ? "it" : "them"}.</div>}
       </div>
     </div>
   );
@@ -532,14 +525,15 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   const [error,   setError]   = useState(null);
   const [loading, setLoading] = useState(false);
   const [showUnfinished, setShowUnfinished] = useState(false);   // the unfinished orders, behind one button (the owner, 19 Nov 2026)
+  const [showAssigned, setShowAssigned] = useState(false);       // the orders the supervisor sent, behind the button beside it
+  useEffect(() => { if (!showAssigned) return; const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setShowAssigned(false); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [showAssigned]);
   const [unfinishedCount, setUnfinishedCount] = useState(0);
   useEffect(() => {
     if (!onPickUp) return;
     let on = true;
     const load = async () => {
-      const local = await listOrders().then(a => a.filter(r => !r.closed && kindOfSession(r.session) === kindOfRole(role))).catch(() => []);
-      const assigned = await hub.unfinished({ station: stationId() }).then(r => (r.orders || []).filter(e => e.assignedTo === stationId() && kindOfEntry(e) === kindOfRole(role) && !local.some(l => l.key === e.key))).catch(() => []);
-      if (on) setUnfinishedCount(local.length + assigned.length);
+      const n = await hub.unfinished().then(r => (r.orders || []).filter(e => kindOfEntry(e) === kindOfRole(role)).length).catch(() => null);
+      if (on && n !== null) setUnfinishedCount(n);
     };
     load(); const t = setInterval(load, 15000);
     return () => { on = false; clearInterval(t); };
@@ -628,17 +622,33 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           <button onClick={onSignOut} style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>Sign out</button>
           {onPrint && <button onClick={onPrint} title="Print the labels of an order done before: find it by its number" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>🖨 Print</button>}
         </div>
-        {hubRosters.length === 0 && (
-          <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 8, border: "1px dashed #3f4b5c", color: "#cbd5e1", fontSize: 16, textAlign: "center", lineHeight: 1.4 }}>
-            <span style={{ color: "#60a5fa" }}>●</span> Waiting for the supervisor to send an order — it will appear here by itself. Or load a roster file below.
+        {/* The orders the supervisor sent are behind a button, beside Unfinished orders (the owner,
+            19 Nov 2026: they used to fill the top of this screen). Picked, the order shows here. */}
+        {picked && (
+          <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, border: "2px solid #22c55e", background: "rgba(34,197,94,0.1)", display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ flex: 1, fontSize: 18, fontWeight: 800, color: "#fff" }}>✓ Order {picked.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {picked.rows.length} jerseys · from {picked.by || "the supervisor"}</span></div>
+            <button onClick={() => setShowAssigned(true)} style={{ ...btnGhost, padding: "6px 14px", fontSize: 15 }}>Change</button>
           </div>
         )}
-        {hubRosters.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelSt}>From the supervisor</label>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 150, overflowY: "auto" }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          <button onClick={() => setShowAssigned(true)} title="The orders the supervisor sent to this station, or to any station" style={{ ...btnGhost, flex: 1, padding: "12px 14px", fontSize: 18, fontWeight: 800, borderColor: hubRosters.length ? "#60a5fa" : "#334155", color: hubRosters.length ? "#93c5fd" : "#94a3b8" }}>📥 Assigned orders · {hubRosters.length}</button>
+          {onPickUp && <button onClick={() => setShowUnfinished(true)} title="Orders put aside with Finish later, and the ones the supervisor gave to this station" style={{ ...btnGhost, flex: 1, padding: "12px 14px", fontSize: 18, fontWeight: 800, borderColor: unfinishedCount ? "#f59e0b" : "#334155", color: unfinishedCount ? "#fcd34d" : "#94a3b8" }}>⏸ Unfinished orders · {unfinishedCount}</button>}
+        </div>
+        {showAssigned && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #60a5fa", padding: 30, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
+              <div style={STICKY_HEAD}>
+                <div style={{ fontSize: 28, fontWeight: 900, color: "#93c5fd", flex: 1 }}>📥 Assigned orders</div>
+                <button onClick={() => setShowAssigned(false)} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
+              </div>
+              {hubRosters.length === 0 && (
+                <div style={{ marginTop: 16, padding: "18px 16px", borderRadius: 10, border: "1px dashed #3f4b5c", color: "#cbd5e1", fontSize: 19, textAlign: "center", lineHeight: 1.4 }}>
+                  No orders sent to you yet. When the supervisor sends one, it shows up here by itself.
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
               {hubRosters.map(r => (
-                <button key={r.id} onClick={() => !takenElsewhere(r) && pickRoster(r)} disabled={takenElsewhere(r)}
+                <button key={r.id} onClick={() => { if (takenElsewhere(r)) return; pickRoster(r); setShowAssigned(false); }} disabled={takenElsewhere(r)}
                   title={takenElsewhere(r) ? `${stationLabel(r.takenBy.station)} is working on this order — one station per order` : undefined}
                   style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "#22c55e" : "#334155", color: picked?.id === r.id ? "#fff" : "#94a3b8", background: picked?.id === r.id ? "rgba(34,197,94,0.12)" : "transparent", opacity: takenElsewhere(r) ? 0.5 : 1, cursor: takenElsewhere(r) ? "not-allowed" : "pointer" }}>
                   <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount} jerseys · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}{r.binBy && r.binBy !== "team" ? ` · ${BIN_BY.find(b => b.id === r.binBy)?.label.toLowerCase() || r.binBy}` : ""}</span>{r.forStation && !r.takenBy && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
@@ -646,12 +656,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
                   {r.takenBy && <div style={{ fontSize: 14, fontWeight: 700, color: takenElsewhere(r) ? "#f59e0b" : "#4ade80" }}>{takenElsewhere(r) ? `⛔ In progress on ${stationLabel(r.takenBy.station)} · ${r.takenBy.operator || "—"} · since ${new Date(r.takenBy.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "↻ Started on this station — pick it to continue"}</div>}
                 </button>
               ))}
+              </div>
             </div>
-          </div>
-        )}
-        {onPickUp && (
-          <div style={{ marginBottom: 12 }}>
-            <button onClick={() => setShowUnfinished(true)} title="Orders parked with Finish later, and the ones the supervisor assigned to this station" style={{ ...btnGhost, width: "100%", padding: "12px 14px", fontSize: 18, fontWeight: 800, borderColor: unfinishedCount ? "#f59e0b" : "#334155", color: unfinishedCount ? "#fcd34d" : "#94a3b8" }}>⏸ Unfinished orders · {unfinishedCount}</button>
           </div>
         )}
         {showUnfinished && (
@@ -960,8 +966,7 @@ const GONE_MS = 2 * 3600 * 1000;
 // assign one to a station (it appears on that station's order screen), or
 // check off the jerseys still out — ticked ones count as passed, "checked off
 // by supervisor", in the order and the reports; with none left the order is
-// closed. The hub keeps only these small entries (90 days); the whole order
-// stays on the station PC.
+// closed. The whole order is on the server's disk; this lists the small entries.
 function UnfinishedPile({ by, onClose }) {
   const [list, setList] = useState(null), [q, setQ] = useState(""), [err, setErr] = useState("");
   const [open, setOpen] = useState(null);           // the entry being checked off
@@ -995,7 +1000,7 @@ function UnfinishedPile({ by, onClose }) {
                 <div style={{ fontSize: 22, fontWeight: 900 }}>Order {e.order}</div>
                 <div style={{ fontSize: 15, color: "#cbd5e1", flex: 1, minWidth: 220 }}>
                   {e.done}/{e.total} done{e.flagged ? <> · <span style={{ color: "#f87171" }}>{e.flagged} flagged</span></> : null}{e.missing ? <> · <span style={{ color: "#fbbf24" }}>{e.missing} missing</span></> : null}{e.toScan ? <> · {e.toScan} not scanned</> : null}
-                  <div style={{ fontSize: 13, color: "#94a3b8" }}>parked on {stationLabel(e.station)} by {e.operator || "—"} · {new Date(e.parkedAt).toLocaleDateString()}{e.assignedTo ? <span style={{ color: "#60a5fa", fontWeight: 700 }}> · assigned to {stationLabel(e.assignedTo)}</span> : null}{e.checkedOff?.length ? ` · ${e.checkedOff.length} checked off` : ""}</div>
+                  <div style={{ fontSize: 13, color: "#94a3b8" }}>put aside on {stationLabel(e.station)} by {e.operator || "—"} · {new Date(e.parkedAt).toLocaleDateString()}{e.assignedTo ? <span style={{ color: "#60a5fa", fontWeight: 700 }}> · assigned to {stationLabel(e.assignedTo)}</span> : null}{e.openOn ? <span style={{ color: "#4ade80", fontWeight: 700 }}> · open on {stationLabel(e.openOn.station)} now <button onClick={() => act(hub.releaseUnfinished(e.id))} title="Free it, so another station can open it" style={{ ...btnGhost, fontSize: 12, padding: "1px 8px", marginLeft: 4 }}>Free it</button></span> : null}{e.checkedOff?.length ? ` · ${e.checkedOff.length} checked off` : ""}</div>
                 </div>
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {STATIONS.map(s => (
@@ -1546,7 +1551,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back, none] : [retry, flag])];
     }
     if (mode === "listFlag")   return [{ id: "nosize", label: "🏷 No size tag", run: actions.noSizeTag }, { id: "dup", label: "🔁 Duplicate", run: () => actions.offRosterStart("dup") }, { id: "offroster", label: "🚩 Not on the roster", run: () => actions.offRosterStart("off") }, { id: "back", label: "← Back", run: actions.back }];
-    if (mode === "offSize")    return [...(state.sizes || []).map(s => ({ id: "sz" + s, label: s, run: () => actions.offRosterSize(s) })), { id: "notag", label: "🏷 No size tag", run: () => actions.offRosterSize("") }, { id: "back", label: "← Back", run: actions.back }];
+    if (mode === "offSize")    return [
+      ...(state.sizes || []).flatMap((g, gi) => g.sizes.map(s => ({ id: "sz" + s.value, label: s.short, group: gi, run: () => actions.offRosterSize(s.value) }))),
+      { id: "goalie", label: state.goalie ? "☑ Goalie jersey" : "☐ Goalie jersey", on: !!state.goalie, run: actions.toggleGoalie },
+      { id: "notag", label: "🏷 No size tag", run: () => actions.offRosterSize("") },
+      { id: "back", label: "← Back", run: actions.back }];
     if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "🚩 Bad jersey" }];
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }, { ...notRight, run: actions.reopenLast }];
     if (mode === "manual")     return [];
@@ -1558,14 +1567,17 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       const cont   = { id: "cont",   label: "✓ Continue", run: actions.continueSupervisor };
       const photo  = { id: "photo",  label: damagePhotos.length ? "📷 Take another" : "📷 Photo of the damage", hint: damagePhotos.length ? "" : "hold the problem under the camera", run: startCount };
       const retake = { id: "retake", label: "↻ Retake", run: () => { actions.dropDamagePhoto(); startCount(); } };
-      if (!canPhoto) return [{ ...cont, primary: true }];
-      if (damagePhotos.length) return [{ ...cont, primary: true }, photo, retake];
+      // Flagged from the size screen: Back undoes the flag and asks the size again (the owner,
+      // 19 Nov 2026: a wrong size tapped by mistake).
+      const sizeBack = state.sizeBack ? [{ id: "sizeback", label: "← Back · wrong size", run: actions.backToSize }] : [];
+      if (!canPhoto) return [{ ...cont, primary: true }, ...sizeBack];
+      if (damagePhotos.length) return [{ ...cont, primary: true }, photo, retake, ...sizeBack];
       // A defect wants a photo first; a roster problem is already in the scan photo.
-      return state.photoFirst ? [{ ...photo, primary: true }, cont] : [{ ...cont, primary: true }, photo];
+      return state.photoFirst ? [{ ...photo, primary: true }, cont, ...sizeBack] : [{ ...cont, primary: true }, photo, ...sizeBack];
     }
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [mode, isList, candidates, actions, state.typed, state.sizes, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter]);
+  }, [mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter]);
 
   const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
   const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
@@ -1629,10 +1641,13 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const hasSize = !!(match?.size);
   const extras  = match ? extraCols.filter(k => match[k]).map(k => `${cap(k)}: ${match[k]}`) : [];
 
-  const OptionButton = ({ o, i }) => {
+  // A plain function, not a component: a component defined in here is a new type on every
+  // render, so the hover that highlights a button remounted it and a quick press (a touch
+  // screen, 19 Nov 2026) landed on the old one and did nothing.
+  const optionButton = (o, i) => {
     const sel = i === selectedIdx;
     return (
-      <button onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
+      <button key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
         style={{ padding: "13px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.22)"}`, background: o.primary ? accent : "transparent", color: o.primary ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 20, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
         <span>{o.label} {o.id === "retry" && mode !== "confirm" ? <Kbd light>{formatKey(retryKey)}</Kbd> : o.id === "manual" ? <Kbd light>{formatKey(byHandKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
         {o.hint && <span style={{ fontSize: 15, fontWeight: 400, opacity: 0.8 }}>{o.hint}</span>}
@@ -1716,7 +1731,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
                 </div>
               )}
               <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", padding: "0 6px" }}>
-                {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
+                {options.map((o, i) => optionButton(o, i))}
               </div>
             </>
           )}
@@ -1754,7 +1769,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             </div>
           </div>
           <div style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-            {options.map((o, i) => !o.candidate && <OptionButton key={o.id} o={o} i={i} />)}
+            {options.map((o, i) => !o.candidate && optionButton(o, i))}
           </div>
         </>
       )}
@@ -1766,6 +1781,36 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             #{detected?.number || "?"}{detected?.name ? ` · ${detected.name}` : ""}
           </div>
           <div style={{ fontSize: "clamp(26px, 4vw, 44px)", fontWeight: 900, color: accent, margin: "8px 0 16px", textAlign: "center", padding: "0 24px", lineHeight: 1.1 }}>{mode === "listFlag" ? "What is wrong?" : state.kind === "dup" ? "Duplicate — what size is it?" : "Not on the roster — what size is it?"}</div>
+          {state.threw && (
+            <div style={{ fontSize: "clamp(20px, 2.4vw, 28px)", fontWeight: 800, color: "#fecaca", background: "rgba(239,68,68,0.15)", border: "2px solid #ef4444", borderRadius: 12, padding: "8px 18px", marginBottom: 14, textAlign: "center" }}>
+              🗑 Throw away the tickets that printed for {state.threw}. Pick the right size.
+            </div>
+          )}
+          {mode === "offSize" ? (
+            <div style={{ width: "100%", maxWidth: 1400, padding: "0 24px", boxSizing: "border-box", maxHeight: "72%", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+              {(state.sizes || []).map((g, gi) => (
+                <div key={g.label} style={{ display: "flex", alignItems: "stretch", gap: 10 }}>
+                  <div style={{ width: 150, flexShrink: 0, display: "flex", alignItems: "center", fontSize: "clamp(22px, 2.4vw, 32px)", fontWeight: 900, color: "#fde68a" }}>{g.label}</div>
+                  <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 10 }}>
+                    {options.map((o, i) => o.group !== gi ? null : (
+                      <button key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={i === selectedIdx ? "1" : undefined}
+                        style={{ padding: "12px 6px", borderRadius: 14, border: `3px solid ${i === selectedIdx ? accent : "rgba(255,255,255,0.14)"}`, background: i === selectedIdx ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", color: "#fff", cursor: "pointer", fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 3.4vw, 50px)", fontWeight: 800, lineHeight: 1, ...liftSt(i === selectedIdx) }}>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
+                {options.map((o, i) => o.group !== undefined ? null : (
+                  <button key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={i === selectedIdx ? "1" : undefined}
+                    style={{ flex: 1, minWidth: 220, padding: "16px 20px", borderRadius: 14, border: `3px solid ${i === selectedIdx ? accent : o.on ? "#22c55e" : "rgba(255,255,255,0.14)"}`, background: o.on ? "rgba(34,197,94,0.2)" : i === selectedIdx ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", color: "#fff", cursor: "pointer", fontSize: "clamp(22px, 2.4vw, 30px)", fontWeight: 800, ...liftSt(i === selectedIdx) }}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
           <div style={{ width: "100%", maxWidth: 1200, padding: "0 24px", boxSizing: "border-box", maxHeight: "68%", overflowY: "auto", ...twoColumns(options.length) }}>
             {options.map((o, i) => {
               const sel = i === selectedIdx;
@@ -1778,6 +1823,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
               );
             })}
           </div>
+          )}
         </>
       )}
 
@@ -1805,7 +1851,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             Wipe the dirt or mark off. The jersey is <strong>not flagged</strong>.
           </div>
           <div style={{ marginTop: 28, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
-            {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
+            {options.map((o, i) => optionButton(o, i))}
           </div>
         </>
       )}
@@ -1836,7 +1882,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             )}
           </div>
           <div style={{ flexShrink: 0, marginTop: "1.2cqh", display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
-            {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
+            {options.map((o, i) => optionButton(o, i))}
           </div>
         </>
       )}
@@ -1886,7 +1932,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             <div style={{ fontSize: 21, color: "#fed7aa", marginTop: 16, textAlign: "center" }}>Check the network.</div>
           )}
           <div style={{ marginTop: 28, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
-            {options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}
+            {options.map((o, i) => optionButton(o, i))}
           </div>
         </>
       )}
@@ -1921,7 +1967,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             )}
           </div>
           {state.reason && <div style={{ fontSize: 21, color: "#fde68a", marginTop: 10, opacity: 0.9, textAlign: "center", padding: "0 24px" }}>{state.reason}</div>}
-          <div style={{ marginTop: 28, display: "flex", gap: 14 }}>{options.map((o, i) => <OptionButton key={o.id} o={o} i={i} />)}</div>
+          <div style={{ marginTop: 28, display: "flex", gap: 14 }}>{options.map((o, i) => optionButton(o, i))}</div>
         </>
       )}
 
@@ -2246,7 +2292,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 30, maxHeight: 400, overflowY: "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "12px 22px", borderRadius: 12, background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", order: 99 }}>
             <div style={{ fontFamily: FONT_DISPLAY, fontSize: 34, fontWeight: 900, color: "#f87171", minWidth: 150, flexShrink: 0, textAlign: "center", lineHeight: 1, whiteSpace: "nowrap" }}>DAMAGED</div>
-            <div style={{ textAlign: "left", fontSize: 17, color: "#fecaca" }}>One more box, off to the side, for flagged jerseys. Its label prints with the first flag.</div>
+            <div style={{ textAlign: "left", fontSize: 17, color: "#fecaca" }}>One more box, off to the side, for flagged jerseys. It is the same box all day: print its label from Boxes or the Print menu when you need one.</div>
           </div>
           {entries.map(({ label, bin, total = 0, boxes = 1 }) => (
             <div key={bin} style={{ display: "flex", alignItems: "center", gap: 18, padding: "14px 22px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" }}>
@@ -2968,6 +3014,8 @@ export default function App() {
   const [sessionStarted,     setSessionStarted]     = useState(false);
   const [orderRole,          setOrderRole]          = useState("");     // "sorter" | "inspector": who this order is for, set when it starts
   const [pickedUp,           setPickedUp]           = useState(null);   // { key, hubId } when this order was parked and picked up again: a flagged jersey that comes back passes
+  // Orders put aside on this PC before the server kept them go to the server, whole, as soon as it answers.
+  useEffect(() => { moveLocalToServer(hub.parkOrder).then(n => { if (n) console.log(`[unfinished] moved ${n} order(s) from this PC to the server`); }).catch(() => {}); }, []);
   const replayReadRef = useRef(null);   // a replayed read standing in for the camera (development only)
   const [role,               setRole]               = useState(() => savedSignIn?.role || "");
   const [roster,             setRoster]             = useState([]);
@@ -3323,13 +3371,14 @@ export default function App() {
   const discardSession = useCallback(() => { clearSession(); setResumeDecided(true); }, []);
   // The saved order is of the other kind (a sorter's, and an inspector signed in, or the other way
   // round): it goes, whole, to the unfinished orders for its own role, and the station is free.
+  const [asideErr, setAsideErr] = useState("");
   const setAsideSaved = useCallback(async () => {
     const s = savedSession; if (!s) return;
     const st = stationId(), summary = outOf(s.roster), kind = kindOfSession(s);
     const session = { ...s, orderRole: kind, hubRosterId: null };
-    try { await putOrder({ key: orderKey(st, s.orderNumber, s.orderRun || s.savedAt || 0), station: st, order: s.orderNumber, run: s.orderRun || s.savedAt || 0, closed: null, summary, session, hubId: s.pickedUp?.hubId || null }); }
-    catch { return; }   // the PC cannot keep it: leave it where it is
-    hub.parkOrder({ station: st, order: s.orderNumber, run: s.orderRun || s.savedAt || 0, operator: s.operatorName || "", jerseyType: s.jerseyType || "", kind: kind === "sorter" ? "sorter" : "", ...summary, out: outList(s.roster, s.log) }).catch(() => {});
+    setAsideErr("");
+    try { await hub.parkOrder({ id: s.pickedUp?.hubId || undefined, station: st, order: s.orderNumber, run: s.orderRun || s.savedAt || 0, operator: s.operatorName || "", jerseyType: s.jerseyType || "", kind: kind === "sorter" ? "sorter" : "", ...summary, out: outList(s.roster, s.log), session }); }
+    catch (e) { setAsideErr(`It could NOT be saved on the server (${e.message}). Nothing was lost: try again, or sign out.`); return; }   // kept here until the server has it
     if (s.hubRosterId) hub.removeRoster(s.hubRosterId).catch(() => {});
     clearSession(); setResumeDecided(true);
   }, [savedSession]);
@@ -3419,48 +3468,60 @@ export default function App() {
   const newOrder     = useCallback(() => {
     setFinished(null); setShowPrint(false);
     if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});   // the hub keeps the order's record and sheets in its ledger
-    if (pickedUp) { dropOrder(pickedUp.key).catch(() => {}); if (pickedUp.hubId) hub.dropUnfinished(pickedUp.hubId).catch(() => {}); }   // finished: out of the unfinished pile
+    if (pickedUp) { dropOrder(pickedUp.key).catch(() => {}); if (pickedUp.hubId) hub.dropUnfinished(pickedUp.hubId).catch(() => {}); }   // finished: out of the unfinished pile, and its file off the server's disk
     resetOrder();
   }, [resetOrder, hubRosterId, pickedUp]);
-  // ── Finish later (23, 24): park the order, whole, on this PC; a small entry on the hub ──
+  // ── Finish later (23, 24): the order, whole, goes to the server's disk; any station picks it up ──
   const [showPark, setShowPark] = useState(false);
   const [parkErr,  setParkErr]  = useState("");
+  const [parking,  setParking]  = useState(false);
   const parkOrder = useCallback(async () => {
-    const st = stationId(), key = orderKey(st, orderNumber, orderRun), summary = outOf(roster);
+    const st = stationId(), summary = outOf(roster);
     const kind = orderRole || kindOfRole(role);
     const session = { sessionStarted: true, role, orderRole: kind, roster, rosterFile, orderNumber, orderRun, hubRosterId: null, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() };
-    const rec = { key, station: st, order: orderNumber, run: orderRun, closed: null, summary, session, hubId: pickedUp?.hubId || null };
-    try { await putOrder(rec); }
-    catch (e) { setParkErr(`The order could NOT be saved on this PC (${e.message}). It is still open: finish it, or call the supervisor.`); return; }
-    hub.parkOrder({ station: st, order: orderNumber, run: orderRun, operator: operatorName, jerseyType, kind: kind === "sorter" ? "sorter" : "", ...summary, out: outList(roster, log) })
-      .then(r => (r?.id && r.id !== rec.hubId ? putOrder({ ...rec, hubId: r.id }) : null)).catch(() => {});   // the server is away: the order is kept here all the same
+    setParking(true); setParkErr("");
+    try { await hub.parkOrder({ id: pickedUp?.hubId || undefined, station: st, order: orderNumber, run: orderRun, operator: operatorName, jerseyType, kind: kind === "sorter" ? "sorter" : "", ...summary, out: outList(roster, log), session }); }
+    catch (e) { setParkErr(`The order could NOT be saved on the server (${e.message}). Nothing was lost: it is still open here. Try again, or call the supervisor.`); return; }
+    finally { setParking(false); }
+    if (pickedUp?.key) dropOrder(pickedUp.key).catch(() => {});   // an old copy on this PC, from before the server kept them
     if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});
     setShowPark(false); setParkErr("");
     resetOrder();
   }, [roster, role, orderRole, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, resetOrder]);
-  // Pick an unfinished order up again: from this PC (`rec`), or from the hub's pile when the
-  // supervisor assigned it here and this PC does not have it (rebuilt from the order's record).
-  const pickUpOrder = useCallback(async ({ rec, hubEntry }) => {
+  // Pick an unfinished order up again, at any station: the server says this station has it
+  // now (another station gets "open on Station N"), then sends the whole order. One put
+  // aside before the server kept them is taken from this PC, or rebuilt from the order's record.
+  const pickUpOrder = useCallback(async ({ hubEntry }) => {
     const mine = kindOfRole(role);
-    if (rec ? kindOfSession(rec.session) !== mine : kindOfEntry(hubEntry) !== mine) throw new Error(`that order is for ${mine === "sorter" ? "an inspector" : "a sorter"}`);
-    let session = rec?.session, key = rec?.key, hubId = rec?.hubId || hubEntry?.id || null;
-    if (!session && hubEntry) {
-      const mine = await listOrders().then(a => a.find(r => r.key === hubEntry.key)).catch(() => null);
-      if (mine) { session = applyCheckOff(mine, hubEntry).session; key = mine.key; }
-      else {
-        const r = await hub.orders(hubEntry.order);
-        const o = (r.orders || []).find(x => `${x.station}|${x.order}|${x.run || 0}` === hubEntry.key) || (r.orders || [])[0];
-        if (!o) throw new Error("the server has no record of it any more");
-        const p = packFromRecord(o);
-        session = { sessionStarted: true, roster: p.roster, rosterFile: o.rosterFile || null, orderNumber: String(o.order), orderRun: o.run || Date.now(), notes: o.notes || "", jerseyType: o.jerseyType || "",
-          log: p.flags.map(f => ({ ...f, status: S_FLAGGED })), binMap: p.binMap, closedBins: p.closedBins, boxLabelled: [], firstScanTime: o.firstSeen || null, idleSpells: [], awaySpells: [] };
-        key = hubEntry.key;
-      }
+    if (!hubEntry) return;
+    if (kindOfEntry(hubEntry) !== mine) throw new Error(`Order ${hubEntry.order} is for ${mine === "sorter" ? "an inspector" : "a sorter"}.`);
+    try { await hub.takeUnfinished(hubEntry.id, stationId(), operatorName); }
+    catch (e) {
+      if (e.status === 409) throw new Error(`Order ${hubEntry.order} is open on ${stationLabel(e.body?.openOn?.station)} right now (${e.body?.openOn?.operator || "someone"}). One station works an order: ask the supervisor to free it if that is wrong.`);
+      throw new Error(`Could not reach the server (${e.message}). Try again in a moment.`);
     }
-    if (!session) return;
-    if (hubId) hub.releaseUnfinished(hubId).catch(() => {});   // picked up: no longer waiting for a station
-    resumeSession({ ...session, orderRole: kindOfSession(session) === "sorter" || hubEntry?.kind === "sorter" ? "sorter" : "inspector", pickedUp: { key, hubId } });
-  }, [resumeSession, role]);
+    try {
+      const got = await hub.unfinishedOrder(hubEntry.id).catch(e => (e.status === 404 ? null : Promise.reject(e)));
+      const entry = got?.entry || hubEntry;
+      let session = got?.session ? applyCheckOff({ session: got.session }, entry).session : null;
+      if (!session) {
+        const old = await listOrders().then(a => a.find(r => r.key === entry.key)).catch(() => null);
+        if (old) session = applyCheckOff(old, entry).session;
+        else {
+          const r = await hub.orders(entry.order);
+          const o = (r.orders || []).find(x => `${x.station}|${x.order}|${x.run || 0}` === entry.key) || (r.orders || [])[0];
+          if (!o) throw new Error("the server has no record of it any more");
+          const p = packFromRecord(o);
+          session = { sessionStarted: true, roster: p.roster, rosterFile: o.rosterFile || null, orderNumber: String(o.order), orderRun: o.run || Date.now(), notes: o.notes || "", jerseyType: o.jerseyType || "",
+            log: p.flags.map(f => ({ ...f, status: S_FLAGGED })), binMap: p.binMap, closedBins: p.closedBins, boxLabelled: [], firstScanTime: o.firstSeen || null, idleSpells: [], awaySpells: [] };
+        }
+      }
+      resumeSession({ ...session, orderRole: kindOfSession(session) === "sorter" || entry.kind === "sorter" ? "sorter" : "inspector", pickedUp: { key: entry.key, hubId: entry.id } });
+    } catch (e) {
+      hub.releaseUnfinished(hubEntry.id).catch(() => {});   // not opened after all: free it for another station
+      throw new Error(`Order ${hubEntry.order} could not be opened: ${e.message}`);
+    }
+  }, [resumeSession, role, operatorName]);
   // The order on this station, as the Print menu takes it (printjobs.js).
   const printPack = useMemo(() => !sessionStarted || !roster.length ? null
     : { orderNumber, roster, binMap, closedBins, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels },
@@ -3988,20 +4049,39 @@ export default function App() {
     },
     offRosterStart(kind = "off") {
       const o = overlay; if (!o?.scan) return;
-      setOverlay({ mode: "offSize", kind, scan: o.scan, candidates: o.candidates, sizes: sizeChoices(roster), returnTo: o });
+      setOverlay({ mode: "offSize", kind, scan: o.scan, candidates: o.candidates, sizes: sizeChoiceGroups(roster), goalie: false, returnTo: o });
     },
+    // The goalie box on the size screen: off until ticked (the owner, 19 Nov 2026).
+    toggleGoalie() { setOverlay(o => (o?.mode === "offSize" ? { ...o, goalie: !o.goalie } : o)); },
     offRosterSize(size) {
       const o = overlay; if (!o?.scan) return;
       const d = o.scan.detected || {};
+      const sizeText = [String(size || ""), o.goalie ? "Goalie" : ""].filter(Boolean).join(" ");   // the size as it reads on the ticket
+      const sizeBack = { ...o, threw: "" };   // where Back on the flagged screen returns
       if (o.kind === "dup") {   // one more of a number and size that has passed: flagged with no row, the size on the ticket
-        const row = { number: String(d.number || "").trim(), name: String(d.name || "").trim(), team: "", size: String(size || ""), noRow: true };
+        const row = { number: String(d.number || "").trim(), name: String(d.name || "").trim(), team: "", size: sizeText, goalie: !!o.goalie, noRow: true };
         const reason = `Duplicate — #${row.number || "?"}${row.size ? " " + row.size : ""}`;
         const entry = { id: o.scan.id || Date.now(), detected: d, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: row, status: S_FLAGGED, reason, ...stamp() };
         setLog(prev => [entry, ...prev]); setLastResult(entry);
-        setOverlay({ mode: "supervisor", scan: o.scan, match: row, reason: "Duplicate.", route: "Supervisor → check the order", entryId: entry.id, photoFirst: false, damagePhotos: [] });
+        setOverlay({ mode: "supervisor", scan: o.scan, match: row, reason: "Duplicate.", route: "Supervisor → check the order", entryId: entry.id, photoFirst: false, damagePhotos: [], sizeBack });
         playTone("flag"); return;
       }
-      commitTyped(o, { number: String(d.number || "").trim(), name: String(d.name || "").trim(), size: String(size || ""), team: "" }, null, true);
+      commitTyped(o, { number: String(d.number || "").trim(), name: String(d.name || "").trim(), size: sizeText, team: "" }, null, true);
+      setOverlay(cur => (cur?.mode === "supervisor" ? { ...cur, sizeBack } : cur));
+    },
+    // Back on the flagged screen of an extra jersey or a duplicate: the flag is taken
+    // back and the size asked again; the tickets that printed are thrown away.
+    backToSize() {
+      const o = overlay; if (!o?.sizeBack) return;
+      const wrong = o.match?.size || "no size";
+      setLog(prev => prev.map(l => l.id === o.entryId && l.status === S_FLAGGED ? { ...l, status: "undo", reason: `Taken back — wrong size picked (${wrong})` } : l));
+      setLastResult(r => (r?.id === o.entryId ? null : r));
+      // A new id for the next try, on this screen and the ones behind it: the log, the ticket
+      // printer (once per id) and the hub's ledger tell entries apart by it, so the right
+      // size's ticket must not share the wrong one's id.
+      const scan = { ...o.sizeBack.scan, id: Date.now() };
+      const rescan = ov => (ov ? { ...ov, scan, returnTo: rescan(ov.returnTo) } : ov);
+      setOverlay({ ...rescan(o.sizeBack), threw: settings.flagTickets ? wrong : "" });
     },
     // "Enter by hand". On a list the operator already typed for (overlay.typed),
     // "None of these" adds the typed row instead of reopening the form — the
@@ -4055,7 +4135,7 @@ export default function App() {
       setOverlay({ mode: "manual", scan: o.scan, match: null, teams: teamNames, returnTo: null, initial: o.typed });
     },
     };
-  }, [overlay, stamp, armAutoScan, pedalNext, roster, scanRoster, teamNames, noteMistake, lastConfirmed, syncInspect, captureFrame]);
+  }, [overlay, stamp, armAutoScan, pedalNext, roster, scanRoster, teamNames, noteMistake, lastConfirmed, syncInspect, captureFrame, settings.flagTickets]);
 
   // ── Flag resolution (from the result card) ────────────────────────────────
   const resolveFlag = useCallback((logId, decision, note) => {
@@ -4289,7 +4369,7 @@ export default function App() {
           }} />
       )}
 
-      {signedIn && showResume && <ResumeModal session={savedSession} role={role} onResume={() => resumeSession()} onDiscard={discardSession} onSetAside={setAsideSaved} onSignOut={signOut} />}
+      {signedIn && showResume && <ResumeModal session={savedSession} role={role} onResume={() => resumeSession()} onDiscard={discardSession} onSetAside={setAsideSaved} error={asideErr} onSignOut={signOut} />}
 
 
       {showSupervisor && <SupervisorPanel operatorName={operatorName} onSignOut={signOut} />}
@@ -4351,7 +4431,7 @@ export default function App() {
         </div>
       )}
       {noJersey && (
-        <div style={{ position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 1950, background: "#1e293b", color: "#e2e8f0", border: "1px solid #3f4b5c", borderRadius: 999, padding: "10px 22px", fontSize: 20, fontWeight: 700, boxShadow: "0 8px 30px rgba(0,0,0,0.5)", pointerEvents: "none" }}>
+        <div style={{ position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 1950, background: "#1e293b", color: "#fcd34d", border: "2px solid #f59e0b", borderRadius: 999, padding: "10px 22px", fontSize: 20, fontWeight: 800, boxShadow: "0 8px 30px rgba(0,0,0,0.5)", pointerEvents: "none" }}>
           {noJersey}
         </div>
       )}
@@ -4361,15 +4441,32 @@ export default function App() {
         <div style={modalBg}>
           <div style={{ ...modalCard, maxWidth: 640, width: "92vw" }}>
             <div style={{ fontSize: 28, fontWeight: 900, color: "#fcd34d", marginBottom: 8 }}>⏸ Finish order {orderNumber} later?</div>
-            {(() => { const s = outOf(roster); return (
-              <div style={{ fontSize: 18, color: "#e2e8f0", lineHeight: 1.5, marginBottom: 16 }}>
-                {s.done} of {s.total} done. Still out: {s.flagged} flagged · {s.missing} missing · {s.toScan} not scanned.<br />
-                <span style={{ color: "#94a3b8", fontSize: 16 }}>The order is kept on this PC with everything done so far. When the jerseys come back, open it again from "Unfinished orders" on the order screen, or the supervisor assigns it to a station.</span>
+            {/* Plain words and big numbers (the owner, 19 Nov 2026: "Still out" was confusing). */}
+            {(() => { const s = outOf(roster); const tiles = [
+              { n: s.done, label: "Done", colour: "#4ade80" },
+              { n: s.toScan, label: "Not scanned yet", colour: "#e2e8f0" },
+              { n: s.flagged, label: "Flagged", colour: "#f87171" },
+              { n: s.missing, label: "Missing", colour: "#fbbf24" },
+            ]; return (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 20, color: "#e2e8f0", fontWeight: 700, marginBottom: 10 }}>{s.done} of {s.total} jerseys are done.</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 12 }}>
+                  {tiles.map(t => (
+                    <div key={t.label} style={{ borderRadius: 10, background: "#0d1117", border: "1px solid #30363d", padding: "10px 6px", textAlign: "center" }}>
+                      <div style={{ fontFamily: FONT_DISPLAY, fontSize: 40, fontWeight: 800, lineHeight: 1, color: t.n ? t.colour : "#475569" }}>{t.n}</div>
+                      <div style={{ fontSize: 15, color: "#cbd5e1", marginTop: 4 }}>{t.label}</div>
+                    </div>
+                  ))}
+                </div>
+                {offRosterFlags > 0 && <div style={{ fontSize: 17, color: "#fca5a5", marginBottom: 10 }}>Also flagged: {offRosterFlags} {offRosterFlags === 1 ? "jersey that is" : "jerseys that are"} not on this order (extra or duplicate).</div>}
+                <div style={{ fontSize: 17, color: "#cbd5e1", lineHeight: 1.45 }}>
+                  The order is saved on the server, with everything done so far. To carry on, at any station: <strong>Unfinished orders</strong> on the order screen, then tap this order.
+                </div>
               </div>
             ); })()}
             {parkErr && <div style={{ ...errSt, marginBottom: 12 }}>{parkErr}</div>}
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={parkOrder} style={{ ...bigBtn, background: "#f59e0b", color: "#0d1117", flex: 1 }}>⏸ Finish later</button>
+              <button onClick={parkOrder} disabled={parking} style={{ ...bigBtn, background: "#f59e0b", color: "#0d1117", flex: 1, opacity: parking ? 0.6 : 1 }}>{parking ? "Saving on the server…" : "⏸ Finish later"}</button>
               <button onClick={() => { setShowPark(false); setParkErr(""); }} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>Keep going</button>
             </div>
           </div>
@@ -4434,7 +4531,7 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
           {sessionStarted && <button onClick={() => setShowPrint(true)} title="Print any label of this order again, or of an order done before" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>🖨 Print</button>}
-          {sessionStarted && <button onClick={() => setShowPark(true)} title="Park this order: it is kept on this PC until the jerseys out for repair come back. Pick it up again from the order screen" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>⏸ Finish later</button>}
+          {sessionStarted && <button onClick={() => setShowPark(true)} title="Put this order aside: it is saved on the server until the jerseys come back. Any station opens it again from Unfinished orders" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>⏸ Finish later</button>}
           {sessionStarted && <button onClick={askFinish} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#22c55e", color: "#4ade80" }}>🏁 Finish order</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
           <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>

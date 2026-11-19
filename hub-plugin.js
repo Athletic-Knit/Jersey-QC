@@ -19,9 +19,11 @@
 //   DELETE /api/hub/rosters/:id         the station finished it, or the supervisor removes it
 //   GET    /api/hub/unfinished?q=&station=&all=1   { orders } — orders parked unfinished, newest change first; q = the order number (exact first, a part from 3 characters),
 //                                            station = parked at or given to that station, all=1 = the closed ones too (a station learns its order was checked off)
-//   POST   /api/hub/unfinished          { station, order, run, operator, jerseyType, total, done, flagged, missing, toScan, out } — a station parks an order; one entry per station|order|run → { id, entry }
+//   POST   /api/hub/unfinished          { id?, station, order, run, operator, jerseyType, kind, total, done, flagged, missing, toScan, out, session } — a station parks an order; the whole order (`session`) goes to its own file on this PC's disk; one entry per order (`id` when it was picked up from one) → { id, entry }
+//   GET    /api/hub/unfinished/:id/order     { session, entry } — the whole order, from the disk, for any station to pick up
+//   POST   /api/hub/unfinished/:id/take      { station, operator } — a station opens it; another station gets 409 while it is open there → { entry }
 //   POST   /api/hub/unfinished/:id/assign    { station, by } — the supervisor gives it to a station
-//   POST   /api/hub/unfinished/:id/release   takes it off that station again
+//   POST   /api/hub/unfinished/:id/release   takes it off that station again (also one a station has open)
 //   POST   /api/hub/unfinished/:id/checkoff  { ids, all, by } — the supervisor checks off jerseys still out: they count as passed, in the ledger too → { entry }
 //   DELETE /api/hub/unfinished/:id      the station finished the order the normal way
 //   GET    /api/hub/boxes               { model, answers } — the box model (src/lib/boxmodel.js) fitted to every answer so far
@@ -146,10 +148,24 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   const boxFit = () => (boxModel ||= fitBoxModel((state.boxAnswers || []).slice(-600), BOX_PRIOR));
   // Unfinished orders (the owner, 19 Nov 2026). An operator parks an order
   // that cannot be finished yet: jerseys out for repair, missing, or not
-  // scanned. The whole order stays on the station PC; the hub keeps a small
-  // entry so the board can list it, give it to a station and check off the
-  // jerseys still out. An entry goes 90 days after its last change.
+  // scanned. The whole order is kept HERE, on this PC's disk, one file an
+  // order beside the data file (data/hub-orders/<id>.json), not on the station
+  // PC and not in memory: any station picks it up (the owner, 19 Nov 2026).
+  // The small entry in the state lets the board list it, give it to a station
+  // and check off the jerseys still to come. An order on disk stays until it
+  // is finished; an entry with no order file, or one the supervisor closed,
+  // goes 90 days after its last change.
   const UNFINISHED_DAYS = 90;
+  const orderDir = path.join(path.dirname(file), path.basename(file, path.extname(file)) + "-orders");
+  const orderPath = id => path.join(orderDir, String(id).replace(/[^\w-]/g, "") + ".json");
+  const writeOrder = (id, session) => {   // whole or not at all; throws when the disk refuses
+    fs.mkdirSync(orderDir, { recursive: true });
+    const text = JSON.stringify(session), p = orderPath(id);
+    fs.writeFileSync(p + ".tmp", text); fs.renameSync(p + ".tmp", p);
+    return Buffer.byteLength(text);
+  };
+  const readOrder = id => { try { return JSON.parse(fs.readFileSync(orderPath(id), "utf8")); } catch { return null; } };
+  const dropOrderFile = id => { try { fs.unlinkSync(orderPath(id)); } catch { /* none */ } };
   const OUT_STATUS = ["flag", "missing", "short", "todo"];
   const outCount = { flag: "flagged", missing: "missing", short: "missing", todo: "toScan" };   // which count an out jersey is in
   const whole = v => Math.max(0, Math.floor(Number(v)) || 0);
@@ -159,7 +175,10 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   }));
   const pruneUnfinished = () => {
     const pool = state.unfinished || {}; let gone = 0;
-    for (const [k, u] of Object.entries(pool)) if (now_() - (u?.updatedAt || 0) > UNFINISHED_DAYS * 86400000) { delete pool[k]; gone++; }
+    for (const [k, u] of Object.entries(pool)) {
+      if (u?.stored && !u.closed) continue;   // an order kept whole on the disk stays until it is finished
+      if (now_() - (u?.updatedAt || 0) > UNFINISHED_DAYS * 86400000) { delete pool[k]; dropOrderFile(k); gone++; }
+    }
     if (gone) { save(); console.log(`[hub] ${new Date().toLocaleTimeString()} dropped ${gone} unfinished order${gone === 1 ? "" : "s"} older than ${UNFINISHED_DAYS} days`); }
   };
   // The station's way of stamping a scan: local time, "2026-11-19 14:05:12".
@@ -373,16 +392,26 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           const body = await readBody(req);
           const station = String(body.station ?? "").trim(), order = String(body.order ?? "").trim();
           if (!station || !order) return json(res, 400, { error: "station and order required" });
-          const run = Number(body.run) || 0, key = `${station}|${order}|${run}`, at = now_();
-          const prev = Object.values(pool).find(u => u.key === key);
+          const run = Number(body.run) || 0, at = now_();
+          // Picked up at another station and parked again, it is the same entry (its id comes back).
+          const prev = (body.id && pool[body.id]) || Object.values(pool).find(u => u.key === `${station}|${order}|${run}`);
+          const key = prev?.key || `${station}|${order}|${run}`;
           const counts = { total: whole(body.total), done: whole(body.done), flagged: whole(body.flagged), missing: whole(body.missing), toScan: whole(body.toScan) };
           // A jersey the supervisor checked off stays checked off, also when the
           // station has not heard of it yet and sends it as still out.
           const checked = new Set((prev?.checkedOff || []).filter(j => j.rowId !== null).map(j => String(j.rowId)));
           const all = outOf(body.out), out = all.filter(j => j.rowId === null || !checked.has(String(j.rowId)));
           all.filter(j => !out.includes(j)).forEach(j => { const f = outCount[j.status]; counts[f] = Math.max(0, counts[f] - 1); counts.done++; });
+          const newId = prev?.id || at.toString(36) + Math.random().toString(36).slice(2, 6);
+          // The whole order goes on the disk first: if it cannot be written the station is told,
+          // and keeps the order open rather than lose it.
+          let stored = prev?.stored || null;
+          if (body.session && typeof body.session === "object") {
+            try { stored = { bytes: writeOrder(newId, body.session), at }; }
+            catch (e) { console.error(`[hub] ${time} ${station}: order ${order} could NOT be written to the disk: ${e.message}`); return json(res, 507, { error: `the server could not save the order on its disk: ${e.message}` }); }
+          }
           const entry = {
-            id: prev?.id || at.toString(36) + Math.random().toString(36).slice(2, 6), key, order, run, station,
+            id: newId, key, order, run, station, stored, openOn: null,
             operator: String(body.operator ?? prev?.operator ?? ""), jerseyType: String(body.jerseyType ?? prev?.jerseyType ?? ""),
             kind: String(body.kind ?? prev?.kind ?? ""),   // "sorter" for an order started by a sorter, "" for an inspection: only that role picks it up
             parkedAt: prev?.parkedAt ?? at, updatedAt: at, ...counts, out,
@@ -395,7 +424,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
         }
         // The station finished the order the normal way. Gone already is fine.
         if (req.method === "DELETE" && id && parts.length === 2) {
-          const u = pool[id]; delete pool[id];
+          const u = pool[id]; delete pool[id]; dropOrderFile(id);
           if (u) { save(); console.log(`[hub] ${time} ${u.station}: unfinished order ${u.order} finished, taken off the list`); }
           return json(res, 200, { ok: true });
         }
@@ -408,9 +437,25 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           console.log(`[hub] ${time} unfinished order ${u.order} given to ${station}${body.by ? " by " + body.by : ""}`);
           return json(res, 200, { entry: u });
         }
+        // The whole order, for a station to pick it up.
+        if (req.method === "GET" && parts[2] === "order") {
+          const session = u.stored ? readOrder(u.id) : null;
+          if (!session) return json(res, 404, { error: "the whole order is not on the server", entry: u });
+          return json(res, 200, { session, entry: u });
+        }
+        // A station opens it: one station at a time. Parking it again, or the supervisor's
+        // release, lets the next one in.
+        if (req.method === "POST" && parts[2] === "take") {
+          const body = await readBody(req);
+          const station = String(body.station ?? "").trim(); if (!station) return json(res, 400, { error: "station required" });
+          if (u.openOn && u.openOn.station !== station) return json(res, 409, { error: "open on another station", openOn: u.openOn });
+          Object.assign(u, { openOn: { station, operator: String(body.operator ?? ""), at: now_() }, assignedTo: "", assignedBy: "", assignedAt: 0, updatedAt: now_() }); save();
+          console.log(`[hub] ${time} ${station}: picked up unfinished order ${u.order}`);
+          return json(res, 200, { entry: u });
+        }
         if (req.method === "POST" && parts[2] === "release") {
-          const was = u.assignedTo;
-          Object.assign(u, { assignedTo: "", assignedBy: "", assignedAt: 0, updatedAt: now_() }); save();
+          const was = u.assignedTo || u.openOn?.station;
+          Object.assign(u, { assignedTo: "", assignedBy: "", assignedAt: 0, openOn: null, updatedAt: now_() }); save();
           console.log(`[hub] ${time} unfinished order ${u.order} taken off ${was || "no station"}`);
           return json(res, 200, { entry: u });
         }

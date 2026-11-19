@@ -68,11 +68,13 @@ export const hub = {
   ledger:        date           => call(`/api/hub/ledger${date ? "?date=" + encodeURIComponent(date) : ""}`),   // every scan event of a day, all stations
   // Unfinished orders (the owner, 19 Nov 2026): parked at a station, listed on the board, kept 90 days.
   unfinished:    ({ q, station, all } = {}) => call(`/api/hub/unfinished${(s => s ? "?" + s : "")(new URLSearchParams({ ...(q ? { q } : {}), ...(station ? { station } : {}), ...(all ? { all: "1" } : {}) }).toString())}`),   // { orders } — open ones, newest first; all: the closed ones too
-  parkOrder:     entry          => call("/api/hub/unfinished", { method: "POST", body: JSON.stringify(entry) }),          // { station, order, run, operator, jerseyType, total, done, flagged, missing, toScan, out } → { id, entry }
+  parkOrder:     entry          => call("/api/hub/unfinished", { method: "POST", body: JSON.stringify(entry) }),          // { id?, station, order, run, operator, jerseyType, kind, total, done, flagged, missing, toScan, out, session } → { id, entry }; 507 when the server could not write it
   assignUnfinished:   (id, station, by) => call(`/api/hub/unfinished/${id}/assign`, { method: "POST", body: JSON.stringify({ station, by }) }),   // → { entry }
   releaseUnfinished:  id        => call(`/api/hub/unfinished/${id}/release`, { method: "POST" }),                         // → { entry }
   checkOffUnfinished: (id, { ids = [], all = false, by = "" } = {}) => call(`/api/hub/unfinished/${id}/checkoff`, { method: "POST", body: JSON.stringify({ ids, all, by }) }),   // the jerseys still out count as passed → { entry }
   dropUnfinished:     id        => call(`/api/hub/unfinished/${id}`, { method: "DELETE" }),                               // the station finished it the normal way
+  unfinishedOrder:    id        => call(`/api/hub/unfinished/${id}/order`),                                             // { session, entry } — the whole order, kept on the server's disk; 404 when it is not there
+  takeUnfinished:     (id, station, operator) => call(`/api/hub/unfinished/${id}/take`, { method: "POST", body: JSON.stringify({ station, operator }) }),   // a station opens it; 409 { openOn } while another station has it open
 };
 
 // What a station tells the hub: small. The only images are the photos of the

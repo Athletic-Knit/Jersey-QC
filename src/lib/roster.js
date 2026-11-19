@@ -230,22 +230,39 @@ export const blankLabel = field => (field === "size" ? "No size" : "No team");
 export const binFieldOf = binMap => (binMap && binMap.__by === "size" ? "size" : binMap && binMap.__by === "all" ? "all" : "team");
 export const binCount = binMap => Object.keys(binMap || {}).filter(k => k !== "__by").length;
 
-// Sizes in the order they sit on a rack: youth before adult, XS … 3XL.
+// Sizes in the order they sit on a rack: youth before adult before ladies, XS … 3XL.
+// Ladies is "L-" with the dash ("L-M" is ladies medium; a bare "L" is large).
 const SIZE_ORDER = ["xs", "s", "m", "l", "xl", "2xl", "xxl", "3xl", "xxxl", "4xl", "5xl"];
 export function sizeRank(size) {
   const k = teamKey(size).replace(/\s+/g, "");
-  const m = k.match(/^(y|a|youth|adult)?[-/]?(.*)$/);
-  const group = /^y/.test(m?.[1] || "") ? 0 : /^a/.test(m?.[1] || "") ? 1 : 2;
+  const m = k.match(/^(youth|adult|ladies|women|y|a|l(?=[-/])|w(?=[-/]))?[-/]?(.*)$/);
+  const p = m?.[1] || "";
+  const group = /^y/.test(p) ? 0 : /^a/.test(p) ? 1 : /^[lw]/.test(p) ? 2 : 3;
   const i = SIZE_ORDER.indexOf(m?.[2] || k);
   return [group, i < 0 ? 99 : i, k];
 }
 export const bySize = (a, b) => { const x = sizeRank(a), y = sizeRank(b); return (x[0] - y[0]) || (x[1] - y[1]) || x[2].localeCompare(y[2]); };
 
 // The sizes a station may pick for a jersey that is on no roster row (an extra
-// jersey, "Not on the roster" on the pick list): the roster's own sizes, else
-// the usual youth and adult run.
-export const DEFAULT_SIZES = ["Y-XS", "Y-S", "Y-M", "Y-L", "Y-XL", "A-XS", "A-S", "A-M", "A-L", "A-XL", "A-2XL", "A-3XL"];
-export const sizeChoices = roster => { const s = rosterChoices(roster).sizes; return s.length ? s : DEFAULT_SIZES; };
+// jersey or a duplicate, flagged from the pick list). Every size there is, not
+// only the roster's (the owner, 19 Nov 2026: an extra jersey can be any size):
+// youth XS-XL, adult XS-3XL, ladies XS-XL, and any other size this roster has
+// (A-4XL, OSFA …) on a row of its own.
+export const SIZE_GROUPS = [
+  { key: "Y", label: "Youth",  sizes: ["XS", "S", "M", "L", "XL"] },
+  { key: "A", label: "Adult",  sizes: ["XS", "S", "M", "L", "XL", "2XL", "3XL"] },
+  { key: "L", label: "Ladies", sizes: ["XS", "S", "M", "L", "XL"] },
+];
+export const DEFAULT_SIZES = SIZE_GROUPS.flatMap(g => g.sizes.map(s => `${g.key}-${s}`));
+// [{ label: "Youth", sizes: [{ value: "Y-XS", short: "XS" }, …] }, …, { label: "Also on this order", sizes: […] }]
+export function sizeChoiceGroups(roster) {
+  const known = new Set(DEFAULT_SIZES.map(s => teamKey(s)));
+  const groups = SIZE_GROUPS.map(g => ({ label: g.label, sizes: g.sizes.map(s => ({ value: `${g.key}-${s}`, short: s })) }));
+  const other = rosterChoices(roster || []).sizes.filter(s => s && !known.has(teamKey(s).replace(/\s+/g, "")));
+  if (other.length) groups.push({ label: "Also on this order", sizes: [...other].sort(bySize).map(s => ({ value: s, short: s })) });
+  return groups;
+}
+export const sizeChoices = roster => sizeChoiceGroups(roster).flatMap(g => g.sizes.map(s => s.value));
 
 // The pick list's order (the owner, 19 Nov 2026): by size, so the operator
 // finds the row of the size tag at once — on a by-team order the same number

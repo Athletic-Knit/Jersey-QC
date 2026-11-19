@@ -4,12 +4,14 @@
 import { describe, it, expect } from "vitest";
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs";
 import { EventEmitter } from "node:events";
 import { createHub } from "../../../hub-plugin.js";
 
 function makeHub(opts = {}) {
   let t = 1_700_000_000_000;
-  const hub = createHub({ file: path.join(os.tmpdir(), `hub-unfinished-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}.json`), now: () => t, ...opts });
+  const file = path.join(os.tmpdir(), `hub-unfinished-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}.json`);
+  const hub = createHub({ file, now: () => t, ...opts });
   const call = (method, url, body) => new Promise(resolve => {
     const req = new EventEmitter(); req.method = method; req.url = url;
     const res = { statusCode: 200, setHeader() {}, end(s) { resolve({ status: res.statusCode, body: JSON.parse(s) }); } };
@@ -17,7 +19,7 @@ function makeHub(opts = {}) {
     if (body !== undefined) req.emit("data", JSON.stringify(body));
     req.emit("end");
   });
-  return { call, tick: ms => { t += ms; }, now: () => t, state: hub.state };
+  return { call, tick: ms => { t += ms; }, now: () => t, state: hub.state, orderFile: id => path.join(path.dirname(file), path.basename(file, ".json") + "-orders", id + ".json") };
 }
 
 const DAY = 86400000;
@@ -35,7 +37,7 @@ describe("parking an unfinished order", () => {
     expect(r.status).toBe(200);
     expect(r.body.id).toBeTruthy();
     expect(r.body.entry).toEqual({
-      id: r.body.id, key: "st-station1|264247|1000", order: "264247", run: 1000, station: "st-station1", operator: "Pat", jerseyType: "echl", kind: "",
+      id: r.body.id, key: "st-station1|264247|1000", order: "264247", run: 1000, station: "st-station1", stored: null, openOn: null, operator: "Pat", jerseyType: "echl", kind: "",
       parkedAt: now(), updatedAt: now(), total: 4, done: 1, flagged: 1, missing: 1, toScan: 1, out,
       assignedTo: "", assignedBy: "", assignedAt: 0, checkedOff: [], closed: null,
     });
@@ -152,6 +154,53 @@ describe("checking off the jerseys still out", () => {
     await call("POST", `/unfinished/${id}/checkoff`, { ids: [3] });
     const { events } = (await call("GET", "/ledger")).body;
     expect(events[0].resolution).toBe("Checked off by supervisor");
+  });
+});
+
+describe("the whole order, kept on the server's disk (the owner, 19 Nov 2026)", () => {
+  const session = { orderNumber: "264247", roster: [{ _id: 1, number: "7", scanned: "pass" }, { _id: 2, number: "9", scanned: "flag" }], log: [{ id: 5, status: "flagged" }] };
+  it("a park with the session writes it to a file of its own, not into the state", async () => {
+    const { call, state, orderFile } = makeHub();
+    const r = (await call("POST", "/unfinished", park({ session }))).body;
+    expect(r.entry.stored.bytes).toBeGreaterThan(0);
+    expect(JSON.parse(fs.readFileSync(orderFile(r.id), "utf8"))).toEqual(session);
+    expect(JSON.stringify(state())).not.toContain('"scanned"');
+    const got = await call("GET", `/unfinished/${r.id}/order`);
+    expect(got.status).toBe(200);
+    expect(got.body.session).toEqual(session);
+  });
+  it("404 for the order of an entry that has none on the disk", async () => {
+    const { call } = makeHub();
+    const { id } = (await call("POST", "/unfinished", park())).body;
+    expect((await call("GET", `/unfinished/${id}/order`)).status).toBe(404);
+  });
+  it("any station picks it up, one at a time; parking it again keeps the one entry", async () => {
+    const { call, state } = makeHub();
+    const { id } = (await call("POST", "/unfinished", park({ session }))).body;
+    expect((await call("POST", `/unfinished/${id}/take`, { station: "st-station2", operator: "Lee" })).body.entry.openOn.station).toBe("st-station2");
+    const busy = await call("POST", `/unfinished/${id}/take`, { station: "st-station3" });
+    expect(busy.status).toBe(409);
+    expect(busy.body.openOn.station).toBe("st-station2");
+    // station 2 parks it again with its own run: still the same entry, and free again
+    const again = (await call("POST", "/unfinished", park({ id, station: "st-station2", run: 5000, session: { ...session, orderRun: 5000 } }))).body;
+    expect(again.id).toBe(id);
+    expect(again.entry.openOn).toBe(null);
+    expect(again.entry.station).toBe("st-station2");
+    expect(Object.keys(state().unfinished)).toEqual([id]);
+    expect((await call("GET", `/unfinished/${id}/order`)).body.session.orderRun).toBe(5000);
+    // the supervisor's release frees one left open
+    await call("POST", `/unfinished/${id}/take`, { station: "st-station3" });
+    expect((await call("POST", `/unfinished/${id}/release`)).body.entry.openOn).toBe(null);
+  });
+  it("finished, the file goes; kept on the disk, it outlives the 90 days", async () => {
+    const { call, tick, orderFile } = makeHub();
+    const kept = (await call("POST", "/unfinished", park({ order: "1", session }))).body.id;
+    const done = (await call("POST", "/unfinished", park({ order: "2", session }))).body.id;
+    await call("DELETE", `/unfinished/${done}`);
+    expect(fs.existsSync(orderFile(done))).toBe(false);
+    tick(200 * DAY);
+    expect((await call("GET", "/unfinished")).body.orders.map(o => o.id)).toEqual([kept]);
+    expect(fs.existsSync(orderFile(kept))).toBe(true);
   });
 });
 
