@@ -2027,7 +2027,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
 // new bin number and that bin's label prints. Closed bins stay listed, with
 // their list to print again.
 const BOX_CHOICES = BOXES;   // a box on the floor is one box: small, medium or large
-function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, damaged = [], onDamagedList, onFull, onReprint, onLabels, onClose }) {
+function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, damaged = [], onDamagedList, onFull, onReprint, onLabels, onPacking, onClose }) {
   const [asking, setAsking] = useState(null);   // the bin whose box is being asked
   const [unfolded, setUnfolded] = useState(null);   // the box whose jerseys still to scan are listed
   useEffect(() => {
@@ -2044,6 +2044,7 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, da
           <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>📦 Boxes</div>
           <div style={{ fontSize: 17, color: "#94a3b8", flex: 1 }}>{by === "all" ? "the whole order, box after box" : `sorted by ${by}`} — which box is full?</div>
           {onLabels && <button onClick={onLabels} title="The box labels of this order, to print again" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>🖨 Box labels</button>}
+          {onPacking && <button onClick={onPacking} title="Back to Packing: team by team" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap", borderColor: "#22c55e", color: "#86efac" }}>🧾 Packing</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ fontSize: 16, color: "#cbd5e1", marginBottom: 18 }}>
@@ -2139,10 +2140,11 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, da
 // COMPLETE team (every jersey of it in a box). For each team: its boxes, full
 // or open, with what is in them; what is missing from it (flagged or marked
 // missing: it will not arrive by scanning on) and what is still to scan.
-function PackingModal({ groups, by = "team", onClose }) {
+function PackingModal({ groups, by = "team", info = {}, status, onFull, onBoxes, onClose }) {
   useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
   const [open, setOpen] = useState(null);   // the team whose jerseys are listed
   const [only, setOnly] = useState("all");  // all | complete | incomplete
+  const [asking, setAsking] = useState(null);   // the open box whose size is being asked (Box full)
   const num = r => { const n = parseInt(String(r.number ?? "").replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : 1e9; };
   const jersey = (r, colour = "#e2e8f0") => (
     <span key={r._id} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, padding: "3px 8px", borderRadius: 6, background: "#0d1117", color: colour, fontSize: 15 }}>
@@ -2162,8 +2164,14 @@ function PackingModal({ groups, by = "team", onClose }) {
               <button key={id} onClick={() => setOnly(id)} style={{ ...btnGhost, fontSize: 15, padding: "6px 12px", borderColor: only === id ? "#4ade80" : "#334155", color: only === id ? "#fff" : "#94a3b8" }}>{t}</button>
             ))}
           </div>
+          {onBoxes && <button onClick={onBoxes} title="Every box in one list: closed boxes and their lists, the DAMAGED box, the box labels" style={{ ...btnGhost, fontSize: 15, whiteSpace: "nowrap" }}>📦 All boxes</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
+        {status && (
+          <div style={{ marginTop: 12, fontSize: 17, fontWeight: 600, color: status.status === "done" ? "#4ade80" : status.status === "printing" ? "#94a3b8" : "#fbbf24" }}>
+            {status.status === "printing" ? "🖨 Printing… " : "🖨 "}{status.text}
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
           {shown.length === 0 && <div style={{ color: "#7c8ba1", fontSize: 17, padding: 12 }}>None.</div>}
           {shown.map(g => {
@@ -2180,7 +2188,29 @@ function PackingModal({ groups, by = "team", onClose }) {
                     {g.boxes.map(b => <span key={b.bin} title={b.full ? "Full: closed with Box full" : "Open: still filling"} style={{ fontFamily: FONT_DISPLAY, fontSize: 18, fontWeight: 800, padding: "2px 10px", borderRadius: 8, border: `2px solid ${b.full ? "#3b82f6" : "#475569"}`, color: b.full ? "#93c5fd" : "#cbd5e1" }}>Box {b.bin} · {b.rows.length}{b.full ? " · full" : ""}</span>)}
                   </span>
                   <button onClick={() => setOpen(u => (u === g.key ? null : g.key))} style={{ ...btnGhost, fontSize: 14, padding: "5px 12px", marginLeft: "auto" }}>{unfolded ? "▲ Hide" : "▼ Show"} jerseys</button>
+                  {(() => { const ob = g.boxes.find(b => !b.full), inf = ob ? info[ob.bin] || {} : {}, n = ob ? ob.rows.length : 0;
+                    return ob && asking !== ob.bin && onFull ? (
+                      <button onClick={() => n <= 1 ? onFull(ob.bin, null) : setAsking(ob.bin)} disabled={n === 0} title={n === 0 ? "Nothing is in this box yet" : `Box ${ob.bin} is full: close it, print its list, carry on in the next box`}
+                        style={{ ...btnPri, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap", background: inf.heavy >= 0.95 ? "#b91c1c" : "#f59e0b", color: inf.heavy >= 0.95 ? "#fff" : "#0d1117", opacity: n === 0 ? 0.4 : 1, cursor: n === 0 ? "not-allowed" : "pointer" }}>
+                        📦 Box {ob.bin} full
+                      </button>
+                    ) : null; })()}
                 </div>
+                {g.boxes.some(b => !b.full && asking === b.bin) && (() => { const ob = g.boxes.find(b => !b.full), inf = info[ob.bin] || {};
+                  return (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: "#fcd34d", marginBottom: 8 }}>What size is Box {ob.bin}?</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {BOX_CHOICES.map(c => (
+                          <button key={c.id} onClick={() => { setAsking(null); onFull(ob.bin, c.id); }}
+                            style={{ ...(c.id === inf.boxId ? btnPri : btnGhost), fontSize: 17, padding: "12px 18px", ...(c.id === inf.boxId ? { background: "#f59e0b", color: "#0d1117" } : {}) }}>
+                            {c.label}{c.id === inf.boxId ? " · suggested" : ""}
+                          </button>
+                        ))}
+                        <button onClick={() => setAsking(null)} style={{ ...btnGhost, fontSize: 15, padding: "12px 16px", color: "#94a3b8" }}>Not full yet</button>
+                      </div>
+                    </div>
+                  ); })()}
                 {g.short.length > 0 && (
                   <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "baseline" }}>
                     <span style={{ fontWeight: 800, color: "#fbbf24", fontSize: 15 }}>Missing {g.short.length}:</span>
@@ -3971,7 +4001,8 @@ export default function App() {
           {noJersey}
         </div>
       )}
-      {showPacking && binMap && <PackingModal groups={packingGroups} by={binFieldOf(binMap)} onClose={() => closeDialog(() => setShowPacking(false))} />}
+      {showPacking && binMap && <PackingModal groups={packingGroups} by={binFieldOf(binMap)} info={Object.fromEntries(openBins.map(b => [b.bin, b]))} status={binPrint} onFull={binFull}
+        onBoxes={() => { setShowPacking(false); setShowBins(true); }} onClose={() => closeDialog(() => setShowPacking(false))} />}
       {showIssues && <IssuesModal missing={issues.missing} dups={issues.dups} flagged={issues.flagged} binOf={binOf} onClose={() => closeDialog(() => setShowIssues(false))} />}
       {showHistory && (
         <HistoryModal log={log} roster={roster} binOf={binOf} onClose={() => closeDialog(() => setShowHistory(false))}
@@ -3984,7 +4015,7 @@ export default function App() {
       )}
       {showBins && binMap && (
         <BinsModal open={openBins} closed={closedList} by={binFieldOf(binMap)} cap={boxCap} status={binPrint} short={shortByBox} damaged={flaggedRows} onDamagedList={printDamagedList}
-          onFull={binFull} onReprint={reprintBinList} onLabels={() => { setShowBins(false); setBoxAuto(false); setShowBinSetup(true); }} onClose={() => closeDialog(() => setShowBins(false))} />
+          onFull={binFull} onReprint={reprintBinList} onLabels={() => { setShowBins(false); setBoxAuto(false); setShowBinSetup(true); }} onPacking={() => { setShowBins(false); setShowPacking(true); }} onClose={() => closeDialog(() => setShowBins(false))} />
       )}
       {finished && (
         <FinishedModal orderNumber={orderNumber} status={finished} onReprint={printFinishLists} onPrint={() => setShowPrint(true)} onNew={newOrder} onBack={() => closeDialog(() => setFinished(null))} />
@@ -4205,10 +4236,9 @@ export default function App() {
 
               {/* Bottom-left, under the last pass: the order's history, where the hand already is. */}
               {sessionStarted && (
-                <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap", minWidth: 0, overflow: "hidden" }}>{/* wraps onto a second line rather than running under the roster (the owner, 19 Nov 2026) */}
                   <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
-                  {binMap && <button onClick={() => setShowBins(true)} title="A box is full: close it, print the list of what is in it, and carry on in the next box" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#f59e0b", color: "#fcd34d" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Box full"}</button>}
-                  {binMap && <button onClick={() => setShowPacking(true)} title="Team by team: what goes in each box, which teams are complete, what is missing" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: "#22c55e", color: "#86efac" }}>🧾 Packing</button>}
+                  {binMap && <button onClick={() => setShowPacking(true)} title="Packing and Box full: team by team, what goes in each box, which teams are complete, what is missing; close a full box from here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#22c55e", color: "#86efac" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Packing · Box full"}</button>}
                   <button onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: issues.missing.length + issues.dups.length + issues.flagged.length ? "#f59e0b" : "#334155" }}>
                     ⚠ Missing <span style={{ color: "#fbbf24" }}>{issues.missing.length}</span> · Dup <span style={{ color: "#c084fc" }}>{issues.dups.length}</span> · Flagged <span style={{ color: "#f87171" }}>{issues.flagged.length}</span>
                   </button>
