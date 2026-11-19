@@ -2133,6 +2133,85 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, da
   );
 }
 
+// ── Packing: team by team (or size by size) ─────────────────────────────────
+// What goes in each box, box by box, and whether the team is complete (the
+// owner, 19 Nov 2026): a FULL box (closed with Box full) is not the same as a
+// COMPLETE team (every jersey of it in a box). For each team: its boxes, full
+// or open, with what is in them; what is missing from it (flagged or marked
+// missing: it will not arrive by scanning on) and what is still to scan.
+function PackingModal({ groups, by = "team", onClose }) {
+  useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
+  const [open, setOpen] = useState(null);   // the team whose jerseys are listed
+  const [only, setOnly] = useState("all");  // all | complete | incomplete
+  const num = r => { const n = parseInt(String(r.number ?? "").replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : 1e9; };
+  const jersey = (r, colour = "#e2e8f0") => (
+    <span key={r._id} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, padding: "3px 8px", borderRadius: 6, background: "#0d1117", color: colour, fontSize: 15 }}>
+      <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 19 }}>#{r.number || "—"}</strong>{r.name ? <span>{r.name}</span> : null}{r.size ? <span style={{ color: "#4ade80", fontWeight: 700 }}>{r.size}</span> : null}{by === "size" && r.team ? <span style={{ color: "#94a3b8" }}>{r.team}</span> : null}
+    </span>
+  );
+  const complete = g => g.toScan.length === 0 && g.short.length === 0;
+  const shown = groups.filter(g => only === "all" || (only === "complete") === complete(g));
+  const counts = { complete: groups.filter(complete).length, incomplete: groups.filter(g => !complete(g)).length };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #22c55e", padding: 30, maxWidth: 1200, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={STICKY_HEAD}>
+          <div style={{ fontSize: 30, fontWeight: 900, color: "#4ade80" }}>🧾 Packing</div>
+          <div style={{ display: "flex", gap: 6, flex: 1, flexWrap: "wrap" }}>
+            {[["all", `All ${groups.length}`], ["complete", `Complete ${counts.complete}`], ["incomplete", `Not complete ${counts.incomplete}`]].map(([id, t]) => (
+              <button key={id} onClick={() => setOnly(id)} style={{ ...btnGhost, fontSize: 15, padding: "6px 12px", borderColor: only === id ? "#4ade80" : "#334155", color: only === id ? "#fff" : "#94a3b8" }}>{t}</button>
+            ))}
+          </div>
+          <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+          {shown.length === 0 && <div style={{ color: "#7c8ba1", fontSize: 17, padding: 12 }}>None.</div>}
+          {shown.map(g => {
+            const done = complete(g), unfolded = open === g.key;
+            return (
+              <div key={g.key} style={{ borderRadius: 12, border: `2px solid ${done ? "#166534" : g.short.length ? "#92400e" : "#334155"}`, background: "#1e293b", padding: "12px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: "#e2e8f0", minWidth: 140 }}>{g.label}</div>
+                  <span style={{ padding: "4px 12px", borderRadius: 999, fontWeight: 800, fontSize: 15, background: done ? "#166534" : g.toScan.length ? "#334155" : "#92400e", color: "#fff" }}>
+                    {done ? "✓ Complete" : g.toScan.length ? `${g.toScan.length} to scan` : `Short ${g.short.length}`}
+                  </span>
+                  <span style={{ fontSize: 16, color: "#cbd5e1" }}>{g.inBoxes} of {g.total} in boxes</span>
+                  <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {g.boxes.map(b => <span key={b.bin} title={b.full ? "Full: closed with Box full" : "Open: still filling"} style={{ fontFamily: FONT_DISPLAY, fontSize: 18, fontWeight: 800, padding: "2px 10px", borderRadius: 8, border: `2px solid ${b.full ? "#3b82f6" : "#475569"}`, color: b.full ? "#93c5fd" : "#cbd5e1" }}>Box {b.bin} · {b.rows.length}{b.full ? " · full" : ""}</span>)}
+                  </span>
+                  <button onClick={() => setOpen(u => (u === g.key ? null : g.key))} style={{ ...btnGhost, fontSize: 14, padding: "5px 12px", marginLeft: "auto" }}>{unfolded ? "▲ Hide" : "▼ Show"} jerseys</button>
+                </div>
+                {g.short.length > 0 && (
+                  <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "baseline" }}>
+                    <span style={{ fontWeight: 800, color: "#fbbf24", fontSize: 15 }}>Missing {g.short.length}:</span>
+                    {g.short.slice().sort((a, b) => num(a) - num(b)).map(r => <span key={r._id} title={r.scanned === "flag" ? "Flagged" : "Marked missing"}>{jersey(r, r.scanned === "flag" ? "#fca5a5" : "#fcd34d")}</span>)}
+                  </div>
+                )}
+                {unfolded && (
+                  <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                    {g.boxes.map(b => (
+                      <div key={b.bin}>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: b.full ? "#93c5fd" : "#cbd5e1", marginBottom: 4 }}>Box {b.bin} — {b.full ? "full" : "open"} · {b.rows.length}</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{b.rows.length ? b.rows.slice().sort((x, y) => num(x) - num(y)).map(r => jersey(r)) : <span style={{ color: "#7c8ba1" }}>empty</span>}</div>
+                      </div>
+                    ))}
+                    {g.toScan.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: "#94a3b8", marginBottom: 4 }}>Still to scan · {g.toScan.length}</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{g.toScan.slice().sort((x, y) => num(x) - num(y)).map(r => jersey(r, "#94a3b8"))}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Missing · Duplicate · Flagged ────────────────────────────────────────────
 // Three lists behind one small button, so the station screen stays plain (the
 // owner, 19 Nov 2026): what is missing, what came twice, what is flagged. Each
@@ -2616,6 +2695,7 @@ export default function App() {
   const [searchKeys,         setSearchKeys]         = useState(false);    // the on-screen keys under the bar, while the cursor is in the search box
   const searchRef = useRef(null);
   const [showIssues,         setShowIssues]         = useState(false);   // the Missing · Duplicate · Flagged lists
+  const [showPacking,        setShowPacking]        = useState(false);   // the packing view: team by team   // the Missing · Duplicate · Flagged lists
   const [showHistory,        setShowHistory]        = useState(false);   // every jersey scanned this order, latest first   // "pass" | "flag" | "manual" | null — set by clicking a header pill
   const filterRoster = useCallback(kind => { setRosterFilter(f => (f === kind ? null : kind)); setView("roster"); }, []);
   const [error,              setError]              = useState(null);
@@ -2710,6 +2790,20 @@ export default function App() {
   const heavyBin   = openBins.find(b => b.heavy >= 0.95) || null;   // an open bin at the weight limit
   // What each open box lacks before it is sealed (roster.js): for the Boxes and Finish dialogs.
   const shortList  = useMemo(() => shortages(roster, binMap, closedBins), [roster, binMap, closedBins]);
+  // The packing view's teams (or sizes): every box of each, full (closed) or open, with what is in it,
+  // what is missing (flagged or marked missing) and what is still to scan.
+  const packingGroups = useMemo(() => {
+    if (!binMap) return [];
+    const labels = Object.fromEntries(binEntries(roster, binMap).map(e => [e.bin, e.label]));
+    const byOpen = Object.fromEntries(shortList.map(x => [x.bin, x]));
+    return Object.entries(binMap).filter(([k]) => k !== "__by").map(([key, openBin]) => {
+      const boxes = [...closedBins.filter(c => c.key === key).map(c => ({ bin: c.bin, full: true })), { bin: openBin, full: false }]
+        .map(b => ({ ...b, rows: binContents(roster, binMap, closedBins, b.bin) }));
+      const sh = byOpen[openBin] || { waiting: [], short: [] };
+      const inBoxes = boxes.reduce((n, b) => n + b.rows.length, 0);
+      return { key, label: labels[openBin] || key, boxes, toScan: sh.waiting, short: sh.short, inBoxes, total: inBoxes + sh.waiting.length + sh.short.length };
+    }).sort((a, b) => binOrder(a.boxes[0].bin, b.boxes[0].bin));
+  }, [roster, binMap, closedBins, shortList]);
   const shortByBox = useMemo(() => Object.fromEntries(shortList.map(x => [x.bin, x])), [shortList]);
   const flaggedRows = useMemo(() => roster.filter(r => r.scanned === "flag"), [roster]);   // what is in the DAMAGED box
   // The three lists behind the "Missing · Duplicate · Flagged" button. A duplicate is a flag
@@ -3838,6 +3932,7 @@ export default function App() {
           {noJersey}
         </div>
       )}
+      {showPacking && binMap && <PackingModal groups={packingGroups} by={binFieldOf(binMap)} onClose={() => closeDialog(() => setShowPacking(false))} />}
       {showIssues && <IssuesModal missing={issues.missing} dups={issues.dups} flagged={issues.flagged} binOf={binOf} onClose={() => closeDialog(() => setShowIssues(false))} />}
       {showHistory && (
         <HistoryModal log={log} roster={roster} binOf={binOf} onClose={() => closeDialog(() => setShowHistory(false))}
@@ -4074,6 +4169,7 @@ export default function App() {
                 <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
                   <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
                   {binMap && <button onClick={() => setShowBins(true)} title="A box is full: close it, print the list of what is in it, and carry on in the next box" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#f59e0b", color: "#fcd34d" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Box full"}</button>}
+                  {binMap && <button onClick={() => setShowPacking(true)} title="Team by team: what goes in each box, which teams are complete, what is missing" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: "#22c55e", color: "#86efac" }}>🧾 Packing</button>}
                   <button onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: issues.missing.length + issues.dups.length + issues.flagged.length ? "#f59e0b" : "#334155" }}>
                     ⚠ Missing <span style={{ color: "#fbbf24" }}>{issues.missing.length}</span> · Dup <span style={{ color: "#c084fc" }}>{issues.dups.length}</span> · Flagged <span style={{ color: "#f87171" }}>{issues.flagged.length}</span>
                   </button>
