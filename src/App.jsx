@@ -433,7 +433,7 @@ function JerseyTypePicker({ value, onChange }) {
 // by order number; tap one to open it where it stopped. What the supervisor
 // checked off on the board is applied first; an order they closed is listed
 // apart, done.
-function UnfinishedOrders({ onPickUp, stationLabel }) {
+function UnfinishedOrders({ onPickUp, stationLabel, tall = false }) {
   const [local, setLocal] = useState(null);       // records on this PC (null: still reading)
   const [assigned, setAssigned] = useState([]);   // hub entries assigned here that this PC does not have
   const [q, setQ] = useState("");
@@ -483,7 +483,7 @@ function UnfinishedOrders({ onPickUp, stationLabel }) {
   );
   return (
     <div style={{ marginBottom: 12 }}>
-      <label style={labelSt}>Unfinished orders — pick one up again</label>
+      {!tall && <label style={labelSt}>Unfinished orders — pick one up again</label>}
       <div style={{ display: "flex", gap: 6 }}>
         <input ref={qRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Order number" style={{ ...inputSt, flex: 1 }}
           onFocus={() => setKeys(true)} onBlur={() => setKeys(false)} onKeyDown={e => { if (e.key === "Enter" && q.trim() && !open.length && !hubOnes.length) findOnHub(); }} />
@@ -492,7 +492,7 @@ function UnfinishedOrders({ onPickUp, stationLabel }) {
       {keys && <ScreenKeys layout="digits" onKey={k => setQ(v => typeKey(v, k))} onEnter={() => qRef.current?.blur()} enterLabel="Done" />}
       {err && <div style={{ ...errSt, marginTop: 6 }}>{err}</div>}
       {busy && <div style={{ fontSize: 14, color: "#94a3b8", marginTop: 6 }}>{busy}</div>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 190, overflowY: "auto", marginTop: 6 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, ...(tall ? {} : { maxHeight: 190, overflowY: "auto" }), marginTop: 6 }}>
         {local === null && <div style={{ fontSize: 14, color: "#7c8ba1" }}>Reading…</div>}
         {hubOnes.map(e => line("h" + e.id, e.order, e, `Assigned to this station by ${e.assignedBy || "the supervisor"} · parked on ${stationLabel(e.station)} ${new Date(e.parkedAt).toLocaleDateString()}`, () => { setBusy("Opening…"); Promise.resolve(onPickUp({ hubEntry: e })).finally(() => setBusy("")); }, "#60a5fa"))}
         {open.map(r => line(r.key, r.order, r.summary || {}, `Parked ${new Date(r.savedAt).toLocaleString()}`, () => onPickUp({ rec: r })))}
@@ -511,6 +511,20 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   const [file,    setFile]    = useState(null);
   const [error,   setError]   = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showUnfinished, setShowUnfinished] = useState(false);   // the unfinished orders, behind one button (the owner, 19 Nov 2026)
+  const [unfinishedCount, setUnfinishedCount] = useState(0);
+  useEffect(() => {
+    if (!onPickUp) return;
+    let on = true;
+    const load = async () => {
+      const local = await listOrders().then(a => a.filter(r => !r.closed)).catch(() => []);
+      const assigned = await hub.unfinished({ station: stationId() }).then(r => (r.orders || []).filter(e => e.assignedTo === stationId() && !local.some(l => l.key === e.key))).catch(() => []);
+      if (on) setUnfinishedCount(local.length + assigned.length);
+    };
+    load(); const t = setInterval(load, 15000);
+    return () => { on = false; clearInterval(t); };
+  }, [onPickUp, showUnfinished]);
+  useEffect(() => { if (!showUnfinished) return; const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setShowUnfinished(false); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [showUnfinished]);
   const [orderKeys, setOrderKeys] = useState(false);   // on-screen keys under the order number while the cursor is in it: the stations have no keyboard
   const orderRef = useRef(null);
   const [hubRosters, setHubRosters] = useState([]);
@@ -615,7 +629,22 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
             </div>
           </div>
         )}
-        {onPickUp && <UnfinishedOrders onPickUp={onPickUp} stationLabel={stationLabel} />}
+        {onPickUp && (
+          <div style={{ marginBottom: 12 }}>
+            <button onClick={() => setShowUnfinished(true)} title="Orders parked with Finish later, and the ones the supervisor assigned to this station" style={{ ...btnGhost, width: "100%", padding: "12px 14px", fontSize: 18, fontWeight: 800, borderColor: unfinishedCount ? "#f59e0b" : "#334155", color: unfinishedCount ? "#fcd34d" : "#94a3b8" }}>⏸ Unfinished orders · {unfinishedCount}</button>
+          </div>
+        )}
+        {showUnfinished && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #f59e0b", padding: 30, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
+              <div style={STICKY_HEAD}>
+                <div style={{ fontSize: 28, fontWeight: 900, color: "#fcd34d", flex: 1 }}>⏸ Unfinished orders</div>
+                <button onClick={() => setShowUnfinished(false)} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
+              </div>
+              <div style={{ marginTop: 12 }}><UnfinishedOrders tall onPickUp={x => { setShowUnfinished(false); return onPickUp(x); }} stationLabel={stationLabel} /></div>
+            </div>
+          </div>
+        )}
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order number</label>
           <input ref={orderRef} value={order} onChange={e => setOrder(e.target.value)} placeholder="From the roster file, or tap to type it" onKeyDown={onEnter} style={inputSt}
