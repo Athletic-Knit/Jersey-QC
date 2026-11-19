@@ -417,6 +417,16 @@ export const jerseyList = (rows, max = 6) => {
   return rows.slice(0, max).map(one).join(", ") + (rows.length > max ? ` and ${rows.length - max} more` : "");
 };
 
+// How many jerseys the team (or size) of a box has on the roster in all, for
+// the box list's "36/50 pcs" (the owner, 19 Nov 2026). `rows`: what is in the
+// box; an order that is not sorted is the whole roster.
+export function groupSize(roster, binMap, rows) {
+  const field = binFieldOf(binMap);
+  if (field === "all" || !rows?.length) return field === "all" ? (roster || []).length : 0;
+  const k = teamKey(rows[0][field]);
+  return (roster || []).filter(r => teamKey(r[field]) === k).length;
+}
+
 // A row taken back (un-checked) is no longer in the closed bin it was in.
 export const dropFromClosed = (closed, id) => (closed || []).map(c => c.ids.includes(id) ? { ...c, ids: c.ids.filter(x => x !== id) } : c);
 

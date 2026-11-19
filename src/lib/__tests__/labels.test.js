@@ -455,3 +455,19 @@ describe("box list", () => {
     expect(labelsZPL([{ bin: 5, label: "Navy", by: "team", count: 0, orderNumber: "1" }], labelSize("2x1"), "binticket")).toContain("^FDBOX 5^FS");
   });
 });
+
+describe("the box list's count: this box out of the team (the owner, 19 Nov 2026)", () => {
+  it("36 of a 50-jersey team in the first box reads 36/50 pcs; the last 14 read 14/50", async () => {
+    const { groupSize } = await import("../roster.js");
+    const roster = Array.from({ length: 50 }, (_, i) => ({ _id: i, number: String(i), name: "", team: "Navy", size: "A-L" }))
+      .concat([{ _id: 99, number: "1", name: "", team: "Red", size: "A-L" }]);
+    const binMap = { navy: "1.2", red: "2.1" };
+    const first = roster.slice(0, 36), last = roster.slice(36, 50);
+    expect(groupSize(roster, binMap, first)).toBe(50);
+    const a = binListLabels(first, { bin: "1.1", label: "Navy", orderNumber: "264247", by: "team", of: groupSize(roster, binMap, first) });
+    expect(binListZPL(a.at(-1), labelSize("2x1"))).toContain("^FD36/50 pcs^FS");
+    const b = binListLabels(last, { bin: "1.2", label: "Navy", orderNumber: "264247", by: "team", of: groupSize(roster, binMap, last) });
+    expect(binListZPL(b.at(-1), labelSize("2x1"))).toContain("^FD14/50 pcs^FS");
+    expect(groupSize(roster, { __by: "all", "*": "1.1" }, first)).toBe(51);   // not sorted: out of the whole order
+  });
+});

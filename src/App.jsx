@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoices, LIST_SORTS } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoices, LIST_SORTS, groupSize } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -3065,7 +3065,7 @@ export default function App() {
   const printProblem = e => e.status === 503 ? "No label printer for this station" : `Not printed: ${e.status ? e.message : "could not reach the server"}`;
   // What Finish order prints: the list of every bin still open with something in it.
   const finishLists = useMemo(() => !settings.binLists || !binMap ? []
-    : [...openBins.filter(b => b.count > 0).flatMap(b => binListLabels(binContents(roster, binMap, closedBins, b.bin), { bin: b.bin, label: b.label, orderNumber, by: binFieldOf(binMap) })),
+    : [...openBins.filter(b => b.count > 0).flatMap(b => (rows => binListLabels(rows, { bin: b.bin, label: b.label, orderNumber, by: binFieldOf(binMap), of: groupSize(roster, binMap, rows) }))(binContents(roster, binMap, closedBins, b.bin))),
        ...damagedListJobs({ orderNumber, roster, flags: log.filter(l => l.status === S_FLAGGED) })],   // and what is in the DAMAGED box
   [settings.binLists, binMap, openBins, roster, closedBins, orderNumber, log]);
   // `boxId`: the box the operator said the bin is going in (null for a
@@ -3082,7 +3082,7 @@ export default function App() {
     if (boxId && rows.length > 1) hub.boxAnswer({ counts: binCounts(rows, stitched), box: boxId, suggested: guess?.id || "", station: stationId(), order: String(orderNumber || ""), bin })
       .then(res => { if (res?.model) { setBoxModel(res.model); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(res.model)); } catch { /* private window */ } } })
       .catch(() => {});   // the hub is away: the bin is closed all the same, this one answer is not learnt
-    const lists = binListLabels(rows, { bin, label: r.entry.label, orderNumber, by: binFieldOf(binMap) });
+    const lists = binListLabels(rows, { bin, label: r.entry.label, orderNumber, by: binFieldOf(binMap), of: groupSize(roster, binMap, rows) });
     const what  = `Box ${bin} closed with ${r.entry.ids.length} ${r.entry.ids.length === 1 ? "jersey" : "jerseys"}. ${left ? `${r.entry.label} now goes in Box ${r.newBin}` : `Nothing of ${r.entry.label} is left to scan`}`;
     if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Box lists are switched off in Settings.` }); return; }
     setBinPrint({ status: "printing", text: what });
@@ -3099,7 +3099,7 @@ export default function App() {
   const reprintBinList = useCallback(bin => {
     const c = closedBins.find(x => x.bin === bin); if (!c) return;
     const rows  = binContents(roster, binMap, closedBins, bin);
-    const lists = binListLabels(rows, { bin, label: c.label, orderNumber, by: binFieldOf(binMap) });
+    const lists = binListLabels(rows, { bin, label: c.label, orderNumber, by: binFieldOf(binMap), of: groupSize(roster, binMap, rows) });
     if (!lists.length) return;
     setBinPrint({ status: "printing", text: `Box ${bin} list` });
     printOnTicketRoll(lists, "binlist")

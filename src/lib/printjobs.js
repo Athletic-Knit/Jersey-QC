@@ -8,7 +8,7 @@
 // hub's flag events turned into the same shape); `planLabels` are the box
 // labels the station expects the order to need (the open order only).
 // Nothing here prints: each function returns the labels for hub.printLabels.
-import { binContents, binEntries, binFieldOf, binOfRow, binOrder, inBin } from "./roster.js";
+import { binContents, binEntries, binFieldOf, binOfRow, binOrder, inBin, groupSize } from "./roster.js";
 import { binListLabels, jerseyLabel, flagLabel, damagedListLabels } from "./labels.js";
 
 // Every box of the order, closed and open, in box order, with the rows in it.
@@ -37,7 +37,7 @@ export function boxLabelJobs(pack, bin) {
 // something in it. Each box's labels come in print order (labels.js).
 export function boxListJobs(pack, bin) {
   return packBoxes(pack).filter(b => b.count > 0 && (bin === undefined || b.bin === bin))
-    .flatMap(b => binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: pack?.orderNumber, by: binFieldOf(pack?.binMap) }));
+    .flatMap(b => binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: pack?.orderNumber, by: binFieldOf(pack?.binMap), of: groupSize(pack?.roster, pack?.binMap, b.rows) }));
 }
 
 // The jerseys that have a sticker: passed by the camera or by hand.

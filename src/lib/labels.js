@@ -298,7 +298,8 @@ const byNumber = (a, b) => {
 // rows in the box → the labels in print order: the pages of rows, last page
 // first ({ bin, label, orderNumber, page, pages, count, items }), then the
 // count label ({ title: true, bin, label, orderNumber, count, pages }).
-export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "team" } = {}) {
+// `of`: how many jerseys the team (or size) has in all; the count label then reads "36/50 pcs".
+export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "team", of = 0 } = {}) {
   const items = [...(rows || [])].sort(byNumber).map(binListItem);
   if (!items.length) return [];
   const pages = Math.ceil(items.length / BIN_LIST_PER_LABEL);
@@ -311,7 +312,7 @@ export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "t
     t.n++; tally.set(k, t);
   });
   const mix = [...tally.values()].sort((a, b) => (other === "size" ? bySize(a.shown, b.shown) : a.shown.localeCompare(b.shown, undefined, { sensitivity: "base" }))).map(t => `${t.shown} ${t.n}`).join("   ");
-  const base  = { bin, label: String(label || ""), orderNumber: String(orderNumber || ""), pages, count: items.length, by, mix };
+  const base  = { bin, label: String(label || ""), orderNumber: String(orderNumber || ""), pages, count: items.length, by, mix, of: Number(of) || 0 };
   const lists = Array.from({ length: pages }, (_, i) => ({ ...base, page: i + 1, items: items.slice(i * BIN_LIST_PER_LABEL, (i + 1) * BIN_LIST_PER_LABEL) }));
   return [...lists.reverse(), { ...base, title: true, page: 0, items: [] }];
 }
@@ -333,7 +334,7 @@ function binCountZPL(l, size) {
   const order = l.orderNumber ? `Order ${l.orderNumber}` : "";
   const named = l.by !== "all" && !!l.label && !/^whole order$/i.test(l.label);
   const head  = named ? l.label : order || "Order";
-  const pcs   = `${l.count} ${l.count === 1 ? "pc" : "pcs"}`;
+  const pcs   = l.of > 0 ? `${l.count}/${l.of} pcs` : `${l.count} ${l.count === 1 ? "pc" : "pcs"}`;   // 36/50: this box's share of the team's jerseys (the owner, 19 Nov 2026)
   // The box number, small in the bottom-left corner (the owner, 19 Nov 2026):
   // the customer does not need it, the packer finds the box by it. The order
   // line at the bottom keeps clear of it on both sides, so it stays centred.
