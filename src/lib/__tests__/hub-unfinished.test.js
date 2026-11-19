@@ -35,7 +35,7 @@ describe("parking an unfinished order", () => {
     expect(r.status).toBe(200);
     expect(r.body.id).toBeTruthy();
     expect(r.body.entry).toEqual({
-      id: r.body.id, key: "st-station1|264247|1000", order: "264247", run: 1000, station: "st-station1", operator: "Pat", jerseyType: "echl",
+      id: r.body.id, key: "st-station1|264247|1000", order: "264247", run: 1000, station: "st-station1", operator: "Pat", jerseyType: "echl", kind: "",
       parkedAt: now(), updatedAt: now(), total: 4, done: 1, flagged: 1, missing: 1, toScan: 1, out,
       assignedTo: "", assignedBy: "", assignedAt: 0, checkedOff: [], closed: null,
     });

@@ -33,6 +33,13 @@ const run = (mode, fn) => db().then(d => new Promise((resolve, reject) => {
 }));
 
 export const orderKey = (station, order, run) => `${station}|${order}|${run || 0}`;
+// Who an order is for: one started by a sorter is a sorting order and only a sorter
+// continues it; anything else is an inspection (the owner, 19 Nov 2026). From a saved
+// session (`orderRole`, or the role saved with it before orderRole existed), a hub entry
+// (`kind`), or a signed-in role.
+export const kindOfRole = role => (role === "sorter" ? "sorter" : "inspector");
+export const kindOfSession = s => kindOfRole(s?.orderRole || s?.role);
+export const kindOfEntry = e => kindOfRole(e?.kind);
 
 // What is still out of an order: flagged, missing or short-shipped, not scanned.
 export function outOf(roster) {

@@ -10,7 +10,7 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
-import { orderKey, outOf, outList, putOrder, dropOrder, listOrders, applyCheckOff } from "./lib/orderstore.js";
+import { orderKey, outOf, outList, putOrder, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
@@ -246,8 +246,25 @@ function CompareDays({ days = [], stationLabel, onProblem }) {
   );
 }
 
-function ResumeModal({ session, onResume, onDiscard }) {
+function ResumeModal({ session, onResume, onDiscard, role = "", onSetAside, onSignOut }) {
   const done = session.roster.filter(r => r.scanned && r.scanned !== false).length;
+  // A sorter's order is not an inspector's, and the other way round (the owner, 19 Nov 2026).
+  const kind = kindOfSession(session);
+  if (role && kind !== kindOfRole(role)) return (
+    <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #f59e0b", padding: 40, width: 600, maxWidth: "90vw", textAlign: "center" }}>
+        <div style={{ fontWeight: 900, fontSize: 26, marginBottom: 8 }}>Order {session.orderNumber || "—"} is {kind === "sorter" ? "a sorting order" : "an inspection order"}</div>
+        <div style={{ fontSize: 17, color: "#cbd5e1", marginBottom: 20, lineHeight: 1.4 }}>
+          It was started by {session.operatorName || "someone"} as {kind === "sorter" ? "a sorter" : "an inspector"} ({done} of {session.roster.length} done). Only {kind === "sorter" ? "a sorter" : "an inspector"} can continue it.
+          {" "}Set it aside to keep it under Unfinished orders for {kind === "sorter" ? "a sorter" : "an inspector"}, and start your own order here.
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <button onClick={onSetAside} style={{ ...btnPri, fontSize: 18, padding: "14px 26px", background: "#f59e0b", color: "#0d1117" }}>⏸ Set it aside</button>
+          <button onClick={onSignOut} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>Sign out</button>
+        </div>
+      </div>
+    </div>
+  );
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 40, width: 560, maxWidth: "90vw", textAlign: "center" }}>
@@ -433,9 +450,11 @@ function JerseyTypePicker({ value, onChange }) {
 // by order number; tap one to open it where it stopped. What the supervisor
 // checked off on the board is applied first; an order they closed is listed
 // apart, done.
-function UnfinishedOrders({ onPickUp, stationLabel, tall = false }) {
+function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
+  const mine = kindOfRole(role);
   const [local, setLocal] = useState(null);       // records on this PC (null: still reading)
   const [assigned, setAssigned] = useState([]);   // hub entries assigned here that this PC does not have
+  const [other, setOther] = useState(0);          // unfinished orders here for the other role (a sorter's, an inspector's)
   const [q, setQ] = useState("");
   const [keys, setKeys] = useState(false);
   const [err, setErr] = useState("");
@@ -455,13 +474,13 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false }) {
           return next;
         }));
         const have = new Set(recs.map(r => r.key));
-        if (on) setAssigned(hubList.filter(e => !e.closed && e.assignedTo === stationId() && !have.has(e.key)));
+        if (on) setAssigned(hubList.filter(e => !e.closed && e.assignedTo === stationId() && !have.has(e.key) && kindOfEntry(e) === mine));
       }
-      if (on) setLocal(recs);
+      if (on) { setOther(recs.filter(r => !r.closed && kindOfSession(r.session) !== mine).length); setLocal(recs.filter(r => kindOfSession(r.session) === mine)); }
     };
     load(); const t = setInterval(load, 15000);
     return () => { on = false; clearInterval(t); };
-  }, []);
+  }, [mine]);
   const match = o => !q.trim() || String(o).includes(q.trim());
   const open = (local || []).filter(r => !r.closed && match(r.order));
   const closed = (local || []).filter(r => r.closed && match(r.order));
@@ -470,8 +489,8 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false }) {
     setBusy("Looking it up on the server…"); setErr("");
     try {
       const r = await hub.unfinished({ q: q.trim() });
-      const e = (r.orders || [])[0];
-      if (!e) { setErr(`No unfinished order ${q.trim()} on this PC or on the server.`); return; }
+      const e = (r.orders || []).find(x => kindOfEntry(x) === mine);
+      if (!e) { setErr((r.orders || []).length ? `Order ${q.trim()} is ${mine === "sorter" ? "an inspection" : "a sorting"} order: only ${mine === "sorter" ? "an inspector" : "a sorter"} can pick it up.` : `No unfinished order ${q.trim()} on this PC or on the server.`); return; }
       await onPickUp({ hubEntry: e });
     } catch (x) { setErr(`Could not reach the server: ${x.message}`); } finally { setBusy(""); }
   };
@@ -498,6 +517,7 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false }) {
         {open.map(r => line(r.key, r.order, r.summary || {}, `Parked ${new Date(r.savedAt).toLocaleString()}`, () => onPickUp({ rec: r })))}
         {local && !open.length && !hubOnes.length && <div style={{ fontSize: 14, color: "#7c8ba1" }}>{q.trim() ? "None with that number on this PC." : "No unfinished orders."}</div>}
         {closed.length > 0 && <div style={{ fontSize: 14, color: "#4ade80" }}>✓ Closed by the supervisor: {closed.map(r => r.order).join(", ")}</div>}
+        {other > 0 && <div style={{ fontSize: 14, color: "#7c8ba1" }}>{other} more {other === 1 ? "is" : "are"} for {mine === "sorter" ? "an inspector" : "a sorter"}: only {mine === "sorter" ? "an inspector" : "a sorter"} sees {other === 1 ? "it" : "them"}.</div>}
       </div>
     </div>
   );
@@ -517,13 +537,13 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     if (!onPickUp) return;
     let on = true;
     const load = async () => {
-      const local = await listOrders().then(a => a.filter(r => !r.closed)).catch(() => []);
-      const assigned = await hub.unfinished({ station: stationId() }).then(r => (r.orders || []).filter(e => e.assignedTo === stationId() && !local.some(l => l.key === e.key))).catch(() => []);
+      const local = await listOrders().then(a => a.filter(r => !r.closed && kindOfSession(r.session) === kindOfRole(role))).catch(() => []);
+      const assigned = await hub.unfinished({ station: stationId() }).then(r => (r.orders || []).filter(e => e.assignedTo === stationId() && kindOfEntry(e) === kindOfRole(role) && !local.some(l => l.key === e.key))).catch(() => []);
       if (on) setUnfinishedCount(local.length + assigned.length);
     };
     load(); const t = setInterval(load, 15000);
     return () => { on = false; clearInterval(t); };
-  }, [onPickUp, showUnfinished]);
+  }, [onPickUp, showUnfinished, role]);
   useEffect(() => { if (!showUnfinished) return; const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setShowUnfinished(false); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [showUnfinished]);
   const [orderKeys, setOrderKeys] = useState(false);   // on-screen keys under the order number while the cursor is in it: the stations have no keyboard
   const orderRef = useRef(null);
@@ -641,7 +661,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
                 <div style={{ fontSize: 28, fontWeight: 900, color: "#fcd34d", flex: 1 }}>⏸ Unfinished orders</div>
                 <button onClick={() => setShowUnfinished(false)} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
               </div>
-              <div style={{ marginTop: 12 }}><UnfinishedOrders tall onPickUp={x => { setShowUnfinished(false); return onPickUp(x); }} stationLabel={stationLabel} /></div>
+              <div style={{ marginTop: 12 }}><UnfinishedOrders tall role={role} onPickUp={x => Promise.resolve(onPickUp(x)).then(() => setShowUnfinished(false))} stationLabel={stationLabel} /></div>
             </div>
           </div>
         )}
@@ -2946,6 +2966,7 @@ export default function App() {
   const [savedSignIn]   = useState(() => loadSignIn());      // who is at this station outlives any one order
   const [signedIn,           setSignedIn]           = useState(() => !!savedSignIn);
   const [sessionStarted,     setSessionStarted]     = useState(false);
+  const [orderRole,          setOrderRole]          = useState("");     // "sorter" | "inspector": who this order is for, set when it starts
   const [pickedUp,           setPickedUp]           = useState(null);   // { key, hubId } when this order was parked and picked up again: a flagged jersey that comes back passes
   const replayReadRef = useRef(null);   // a replayed read standing in for the camera (development only)
   const [role,               setRole]               = useState(() => savedSignIn?.role || "");
@@ -3232,10 +3253,10 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, orderRole: orderRole || kindOfRole(role), vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
     const t = setTimeout(() => setSaveOk(prev => (prev === saved ? prev : saved)), 0);   // said in the header when it fails
     return () => clearTimeout(t);
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, checksLeft, inspect]);
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, orderRole, checksLeft, inspect]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -3289,7 +3310,7 @@ export default function App() {
   // here now continues it under their own name.
   const resumeSession = useCallback((from = null) => {
     const s = from || savedSession;
-    setPickedUp(s.pickedUp || null);
+    setPickedUp(s.pickedUp || null); setOrderRole(kindOfSession(s));
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
     setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(modernBins(s.binMap || null)); setClosedBins(s.closedBins || []); setBoxLabelled(s.boxLabelled || []); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
@@ -3300,6 +3321,18 @@ export default function App() {
   }, [savedSession, syncInspect]);
 
   const discardSession = useCallback(() => { clearSession(); setResumeDecided(true); }, []);
+  // The saved order is of the other kind (a sorter's, and an inspector signed in, or the other way
+  // round): it goes, whole, to the unfinished orders for its own role, and the station is free.
+  const setAsideSaved = useCallback(async () => {
+    const s = savedSession; if (!s) return;
+    const st = stationId(), summary = outOf(s.roster), kind = kindOfSession(s);
+    const session = { ...s, orderRole: kind, hubRosterId: null };
+    try { await putOrder({ key: orderKey(st, s.orderNumber, s.orderRun || s.savedAt || 0), station: st, order: s.orderNumber, run: s.orderRun || s.savedAt || 0, closed: null, summary, session, hubId: s.pickedUp?.hubId || null }); }
+    catch { return; }   // the PC cannot keep it: leave it where it is
+    hub.parkOrder({ station: st, order: s.orderNumber, run: s.orderRun || s.savedAt || 0, operator: s.operatorName || "", jerseyType: s.jerseyType || "", kind: kind === "sorter" ? "sorter" : "", ...summary, out: outList(s.roster, s.log) }).catch(() => {});
+    if (s.hubRosterId) hub.removeRoster(s.hubRosterId).catch(() => {});
+    clearSession(); setResumeDecided(true);
+  }, [savedSession]);
 
   // Clears the order; the operator stays signed in and goes straight to order setup.
   // The camera pane unmounts with the roster, so the stream must be released too.
@@ -3308,7 +3341,7 @@ export default function App() {
     streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null;   // stopCamera is declared below
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
-    setSessionStarted(false); setResumeDecided(true); setPickedUp(null);
+    setSessionStarted(false); setResumeDecided(true); setPickedUp(null); setOrderRole("");
     setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setClosedBins([]); setBoxLabelled([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
     waitPedalRef.current = false; setWaitPedal(false);
@@ -3394,19 +3427,22 @@ export default function App() {
   const [parkErr,  setParkErr]  = useState("");
   const parkOrder = useCallback(async () => {
     const st = stationId(), key = orderKey(st, orderNumber, orderRun), summary = outOf(roster);
-    const session = { sessionStarted: true, role, roster, rosterFile, orderNumber, orderRun, hubRosterId: null, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() };
+    const kind = orderRole || kindOfRole(role);
+    const session = { sessionStarted: true, role, orderRole: kind, roster, rosterFile, orderNumber, orderRun, hubRosterId: null, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() };
     const rec = { key, station: st, order: orderNumber, run: orderRun, closed: null, summary, session, hubId: pickedUp?.hubId || null };
     try { await putOrder(rec); }
     catch (e) { setParkErr(`The order could NOT be saved on this PC (${e.message}). It is still open: finish it, or call the supervisor.`); return; }
-    hub.parkOrder({ station: st, order: orderNumber, run: orderRun, operator: operatorName, jerseyType, ...summary, out: outList(roster, log) })
+    hub.parkOrder({ station: st, order: orderNumber, run: orderRun, operator: operatorName, jerseyType, kind: kind === "sorter" ? "sorter" : "", ...summary, out: outList(roster, log) })
       .then(r => (r?.id && r.id !== rec.hubId ? putOrder({ ...rec, hubId: r.id }) : null)).catch(() => {});   // the server is away: the order is kept here all the same
     if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});
     setShowPark(false); setParkErr("");
     resetOrder();
-  }, [roster, role, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, resetOrder]);
+  }, [roster, role, orderRole, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, resetOrder]);
   // Pick an unfinished order up again: from this PC (`rec`), or from the hub's pile when the
   // supervisor assigned it here and this PC does not have it (rebuilt from the order's record).
   const pickUpOrder = useCallback(async ({ rec, hubEntry }) => {
+    const mine = kindOfRole(role);
+    if (rec ? kindOfSession(rec.session) !== mine : kindOfEntry(hubEntry) !== mine) throw new Error(`that order is for ${mine === "sorter" ? "an inspector" : "a sorter"}`);
     let session = rec?.session, key = rec?.key, hubId = rec?.hubId || hubEntry?.id || null;
     if (!session && hubEntry) {
       const mine = await listOrders().then(a => a.find(r => r.key === hubEntry.key)).catch(() => null);
@@ -3423,8 +3459,8 @@ export default function App() {
     }
     if (!session) return;
     if (hubId) hub.releaseUnfinished(hubId).catch(() => {});   // picked up: no longer waiting for a station
-    resumeSession({ ...session, pickedUp: { key, hubId } });
-  }, [resumeSession]);
+    resumeSession({ ...session, orderRole: kindOfSession(session) === "sorter" || hubEntry?.kind === "sorter" ? "sorter" : "inspector", pickedUp: { key, hubId } });
+  }, [resumeSession, role]);
   // The order on this station, as the Print menu takes it (printjobs.js).
   const printPack = useMemo(() => !sessionStarted || !roster.length ? null
     : { orderNumber, roster, binMap, closedBins, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels },
@@ -4253,7 +4289,7 @@ export default function App() {
           }} />
       )}
 
-      {signedIn && showResume && <ResumeModal session={savedSession} onResume={() => resumeSession()} onDiscard={discardSession} />}
+      {signedIn && showResume && <ResumeModal session={savedSession} role={role} onResume={() => resumeSession()} onDiscard={discardSession} onSetAside={setAsideSaved} onSignOut={signOut} />}
 
 
       {showSupervisor && <SupervisorPanel operatorName={operatorName} onSignOut={signOut} />}
@@ -4265,7 +4301,7 @@ export default function App() {
           onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile, hubRosterId = null }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team" });
-            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || "");
+            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || ""); setOrderRole(kindOfRole(role));
             setSessionStarted(true); setResumeDecided(true);
           }} />
       )}

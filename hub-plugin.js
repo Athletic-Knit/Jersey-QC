@@ -384,6 +384,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           const entry = {
             id: prev?.id || at.toString(36) + Math.random().toString(36).slice(2, 6), key, order, run, station,
             operator: String(body.operator ?? prev?.operator ?? ""), jerseyType: String(body.jerseyType ?? prev?.jerseyType ?? ""),
+            kind: String(body.kind ?? prev?.kind ?? ""),   // "sorter" for an order started by a sorter, "" for an inspection: only that role picks it up
             parkedAt: prev?.parkedAt ?? at, updatedAt: at, ...counts, out,
             assignedTo: prev?.assignedTo || "", assignedBy: prev?.assignedBy || "", assignedAt: prev?.assignedAt || 0,
             checkedOff: prev?.checkedOff || [], closed: out.length ? null : (prev?.closed ?? null),
