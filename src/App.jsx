@@ -10,6 +10,7 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
+import { orderKey, outOf, outList, putOrder, dropOrder, listOrders, applyCheckOff } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
@@ -426,7 +427,83 @@ function JerseyTypePicker({ value, onChange }) {
   );
 }
 
-function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, onPrint, stationLabel = id => String(id || "").replace(/^st-/, "") }) {
+// ── Unfinished orders on this station (23, 24; the owner, 19 Nov 2026) ─────
+// Every order parked here with "Finish later", kept whole on this PC, plus the
+// ones the supervisor assigned to this station from the board's pile. Search
+// by order number; tap one to open it where it stopped. What the supervisor
+// checked off on the board is applied first; an order they closed is listed
+// apart, done.
+function UnfinishedOrders({ onPickUp, stationLabel }) {
+  const [local, setLocal] = useState(null);       // records on this PC (null: still reading)
+  const [assigned, setAssigned] = useState([]);   // hub entries assigned here that this PC does not have
+  const [q, setQ] = useState("");
+  const [keys, setKeys] = useState(false);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState("");
+  const qRef = useRef(null);
+  useEffect(() => {
+    let on = true;
+    const load = async () => {
+      let recs = await listOrders().catch(e => { if (on) setErr(`This PC cannot keep orders: ${e.message}`); return []; });
+      const hubList = await hub.unfinished({ station: stationId(), all: true }).then(r => r.orders || []).catch(() => null);
+      if (hubList) {
+        const byKey = Object.fromEntries(hubList.map(e => [e.key, e]));
+        recs = await Promise.all(recs.map(async rec => {
+          const e = byKey[rec.key]; if (!e) return rec;
+          const next = applyCheckOff({ ...rec, hubId: rec.hubId || e.id }, e);
+          if (next !== rec) await putOrder(next).catch(() => {});
+          return next;
+        }));
+        const have = new Set(recs.map(r => r.key));
+        if (on) setAssigned(hubList.filter(e => !e.closed && e.assignedTo === stationId() && !have.has(e.key)));
+      }
+      if (on) setLocal(recs);
+    };
+    load(); const t = setInterval(load, 15000);
+    return () => { on = false; clearInterval(t); };
+  }, []);
+  const match = o => !q.trim() || String(o).includes(q.trim());
+  const open = (local || []).filter(r => !r.closed && match(r.order));
+  const closed = (local || []).filter(r => r.closed && match(r.order));
+  const hubOnes = assigned.filter(e => match(e.order));
+  const findOnHub = async () => {
+    setBusy("Looking it up on the server…"); setErr("");
+    try {
+      const r = await hub.unfinished({ q: q.trim() });
+      const e = (r.orders || [])[0];
+      if (!e) { setErr(`No unfinished order ${q.trim()} on this PC or on the server.`); return; }
+      await onPickUp({ hubEntry: e });
+    } catch (x) { setErr(`Could not reach the server: ${x.message}`); } finally { setBusy(""); }
+  };
+  const line = (key, order, s, sub, onClick, colour = "#f59e0b") => (
+    <button key={key} onClick={onClick} style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: colour, color: "#e2e8f0" }}>
+      <div style={{ fontSize: 17, fontWeight: 800 }}>Order {order} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {s.done}/{s.total} done{s.flagged ? ` · ${s.flagged} flagged` : ""}{s.missing ? ` · ${s.missing} missing` : ""}{s.toScan ? ` · ${s.toScan} to scan` : ""}</span></div>
+      <div style={{ fontSize: 14, color: "#94a3b8" }}>{sub}</div>
+    </button>
+  );
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={labelSt}>Unfinished orders — pick one up again</label>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input ref={qRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Order number" style={{ ...inputSt, flex: 1 }}
+          onFocus={() => setKeys(true)} onBlur={() => setKeys(false)} onKeyDown={e => { if (e.key === "Enter" && q.trim() && !open.length && !hubOnes.length) findOnHub(); }} />
+        {q.trim() && !open.length && !hubOnes.length && <button onClick={findOnHub} style={{ ...btnGhost, whiteSpace: "nowrap" }}>Find on the server</button>}
+      </div>
+      {keys && <ScreenKeys layout="digits" onKey={k => setQ(v => typeKey(v, k))} onEnter={() => qRef.current?.blur()} enterLabel="Done" />}
+      {err && <div style={{ ...errSt, marginTop: 6 }}>{err}</div>}
+      {busy && <div style={{ fontSize: 14, color: "#94a3b8", marginTop: 6 }}>{busy}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 190, overflowY: "auto", marginTop: 6 }}>
+        {local === null && <div style={{ fontSize: 14, color: "#7c8ba1" }}>Reading…</div>}
+        {hubOnes.map(e => line("h" + e.id, e.order, e, `Assigned to this station by ${e.assignedBy || "the supervisor"} · parked on ${stationLabel(e.station)} ${new Date(e.parkedAt).toLocaleDateString()}`, () => { setBusy("Opening…"); Promise.resolve(onPickUp({ hubEntry: e })).finally(() => setBusy("")); }, "#60a5fa"))}
+        {open.map(r => line(r.key, r.order, r.summary || {}, `Parked ${new Date(r.savedAt).toLocaleString()}`, () => onPickUp({ rec: r })))}
+        {local && !open.length && !hubOnes.length && <div style={{ fontSize: 14, color: "#7c8ba1" }}>{q.trim() ? "None with that number on this PC." : "No unfinished orders."}</div>}
+        {closed.length > 0 && <div style={{ fontSize: 14, color: "#4ade80" }}>✓ Closed by the supervisor: {closed.map(r => r.order).join(", ")}</div>}
+      </div>
+    </div>
+  );
+}
+
+function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, onPrint, onPickUp, stationLabel = id => String(id || "").replace(/^st-/, "") }) {
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [jerseyType, setJerseyType] = useState("");
@@ -538,6 +615,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
             </div>
           </div>
         )}
+        {onPickUp && <UnfinishedOrders onPickUp={onPickUp} stationLabel={stationLabel} />}
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order number</label>
           <input ref={orderRef} value={order} onChange={e => setOrder(e.target.value)} placeholder="From the roster file, or tap to type it" onKeyDown={onEnter} style={inputSt}
@@ -828,7 +906,98 @@ function RouteTag({ item, size = 10 }) {
 // A station that has not reported for this long steps back off the cards.
 const GONE_MS = 2 * 3600 * 1000;
 // Someone is "at the board" for this long after the last mouse or key.
+// ── The unfinished pile, on the board (23–25; the owner, 19 Nov 2026) ──────
+// Every order a station parked with "Finish later": search by order number,
+// assign one to a station (it appears on that station's order screen), or
+// check off the jerseys still out — ticked ones count as passed, "checked off
+// by supervisor", in the order and the reports; with none left the order is
+// closed. The hub keeps only these small entries (90 days); the whole order
+// stays on the station PC.
+function UnfinishedPile({ by, onClose }) {
+  const [list, setList] = useState(null), [q, setQ] = useState(""), [err, setErr] = useState("");
+  const [open, setOpen] = useState(null);           // the entry being checked off
+  const [ticked, setTicked] = useState(new Set());
+  const [confirm, setConfirm] = useState(false);
+  const load = useCallback(() => hub.unfinished(q.trim() ? { q: q.trim() } : {}).then(r => { setList(r.orders || []); setErr(""); }).catch(e => setErr(`The hub did not answer: ${e.message}`)), [q]);
+  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
+  const act = p => p.then(load).catch(e => setErr(e.message));
+  const entry = (list || []).find(e => e.id === open);
+  const statusWord = { flag: "flagged", missing: "missing", short: "short", todo: "not scanned" };
+  const checkOff = () => {
+    const all = ticked.size === entry.out.length;
+    act(hub.checkOffUnfinished(entry.id, all ? { all: true, by } : { ids: [...ticked], by }).then(() => { setConfirm(false); setTicked(new Set()); if (all) setOpen(null); }));
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #f59e0b", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={STICKY_HEAD}>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#fcd34d" }}>⏸ Unfinished orders{list ? ` · ${list.length}` : ""}</div>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search order number" style={{ ...inputSt, flex: 1, minWidth: 160, fontSize: 16 }} />
+          <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
+        </div>
+        {err && <div style={{ ...errSt, marginTop: 10 }}>{err}</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
+          {list === null && <div style={{ color: "#94a3b8" }}>Loading…</div>}
+          {list && !list.length && <div style={{ color: "#7c8ba1", fontSize: 16, padding: 8 }}>{q.trim() ? "No unfinished order with that number." : "No unfinished orders."}</div>}
+          {(list || []).map(e => (
+            <div key={e.id} style={{ borderRadius: 12, border: `2px solid ${open === e.id ? "#f59e0b" : "#334155"}`, background: "#1e293b", padding: "12px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 22, fontWeight: 900 }}>Order {e.order}</div>
+                <div style={{ fontSize: 15, color: "#cbd5e1", flex: 1, minWidth: 220 }}>
+                  {e.done}/{e.total} done{e.flagged ? <> · <span style={{ color: "#f87171" }}>{e.flagged} flagged</span></> : null}{e.missing ? <> · <span style={{ color: "#fbbf24" }}>{e.missing} missing</span></> : null}{e.toScan ? <> · {e.toScan} not scanned</> : null}
+                  <div style={{ fontSize: 13, color: "#94a3b8" }}>parked on {stationLabel(e.station)} by {e.operator || "—"} · {new Date(e.parkedAt).toLocaleDateString()}{e.assignedTo ? <span style={{ color: "#60a5fa", fontWeight: 700 }}> · assigned to {stationLabel(e.assignedTo)}</span> : null}{e.checkedOff?.length ? ` · ${e.checkedOff.length} checked off` : ""}</div>
+                </div>
+                <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {STATIONS.map(s => (
+                    <button key={s.id} onClick={() => act(e.assignedTo === "st-" + s.id ? hub.releaseUnfinished(e.id) : hub.assignUnfinished(e.id, "st-" + s.id, by))} title={e.assignedTo === "st-" + s.id ? "Take it back from this station" : `Send it to ${s.label}: it shows on that station's order screen`}
+                      style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: e.assignedTo === "st-" + s.id ? "#60a5fa" : "#334155", color: e.assignedTo === "st-" + s.id ? "#fff" : "#94a3b8", background: e.assignedTo === "st-" + s.id ? "rgba(59,130,246,0.2)" : "transparent" }}>
+                      → {s.label}
+                    </button>
+                  ))}
+                  <button onClick={() => { setOpen(o => (o === e.id ? null : e.id)); setTicked(new Set()); setConfirm(false); }} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px", borderColor: "#22c55e", color: "#86efac" }}>{open === e.id ? "▲ Close" : "✓ Check off…"}</button>
+                </span>
+              </div>
+              {open === e.id && entry && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 15, color: "#cbd5e1", marginBottom: 8 }}>Tick the jerseys that are back and good. They count as passed, marked "checked off by supervisor". When none is left the order is closed.</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 6 }}>
+                    {entry.out.map(j => (
+                      <label key={j.rowId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: ticked.has(j.rowId) ? "rgba(34,197,94,0.15)" : "#0d1117", border: `1px solid ${ticked.has(j.rowId) ? "#22c55e" : "#21262d"}`, cursor: "pointer" }}>
+                        <input type="checkbox" checked={ticked.has(j.rowId)} onChange={() => setTicked(t => { const n = new Set(t); if (n.has(j.rowId)) n.delete(j.rowId); else n.add(j.rowId); return n; })} style={{ width: 20, height: 20 }} />
+                        <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{j.number || "—"}</strong>
+                        {j.name && <span>{j.name}</span>}
+                        {j.size && <span style={{ color: "#4ade80", fontWeight: 700 }}>{j.size}</span>}
+                        {j.team && <span style={{ color: "#94a3b8" }}>{j.team}</span>}
+                        <span style={{ marginLeft: "auto", fontSize: 12, color: j.status === "flag" ? "#f87171" : j.status === "todo" ? "#94a3b8" : "#fbbf24" }}>{statusWord[j.status] || j.status}{j.reason ? `: ${j.reason}` : ""}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <button onClick={() => setTicked(t => (t.size === entry.out.length ? new Set() : new Set(entry.out.map(j => j.rowId))))} style={{ ...btnGhost, fontSize: 15 }}>{ticked.size === entry.out.length ? "Untick all" : "Tick all"}</button>
+                    {!confirm && <button disabled={!ticked.size} onClick={() => setConfirm(true)} style={{ ...btnPri, fontSize: 16, padding: "10px 18px", background: "#22c55e", color: "#0d1117", opacity: ticked.size ? 1 : 0.4 }}>✓ Check off {ticked.size}</button>}
+                    {confirm && (
+                      <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 16, fontWeight: 800 }}>Check off {ticked.size} of {entry.out.length}{ticked.size === entry.out.length ? " and close the order" : ""}?</span>
+                        <button onClick={checkOff} style={{ ...btnPri, fontSize: 16, padding: "10px 18px", background: "#22c55e", color: "#0d1117" }}>✓ Yes</button>
+                        <button onClick={() => setConfirm(false)} style={{ ...btnGhost, fontSize: 15 }}>Cancel</button>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SupervisorPanel({ operatorName, onSignOut }) {
+  const [showPile, setShowPile] = useState(false);   // the unfinished orders
+  const [pileCount, setPileCount] = useState(0);
+  useEffect(() => { let on = true; const load = () => hub.unfinished().then(r => { if (on) setPileCount((r.orders || []).length); }).catch(() => {}); load(); const t = setInterval(load, 15000); return () => { on = false; clearInterval(t); }; }, []);
   const [data,    setData]    = useState(() => ({ stations: [], now: Date.now() }));
   const [rosters, setRosters] = useState([]);
   const [orders,  setOrders]  = useState([]);     // every order any station worked on the chosen day (from the hub's ledger)
@@ -958,10 +1127,12 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="#ef4444">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => setShowPile(true)} title="Orders parked with Finish later: search, assign to a station, check off" style={{ ...btnGhost, padding: "6px 12px", borderColor: pileCount ? "#f59e0b" : "#334155", color: pileCount ? "#fcd34d" : undefined }}>⏸ Unfinished · {pileCount}</button>
           <button onClick={() => setWall(true)} title="One row per station in big letters, for a TV on the floor. Click or Esc comes back; ?view=wall in the address opens straight into it." style={{ ...btnGhost, padding: "6px 12px" }}>📺 Wall</button>
           <button onClick={onSignOut} title="End your shift on this PC" style={{ ...btnGhost, padding: "6px 14px" }}>Sign out</button>
         </div>
       </div>
+      {showPile && <UnfinishedPile by={operatorName} onClose={() => setShowPile(false)} />}
       {hubDown && (
         <div style={{ background: "#7f1d1d", color: "#fff", padding: "10px 16px", fontSize: 14, fontWeight: 700, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <span>⚠ The hub stopped answering at {new Date(hubDown).toLocaleTimeString()} — nothing below is live. Stations keep scanning on their own. Is the server window still open on the host PC?</span>
@@ -2702,6 +2873,7 @@ export default function App() {
   const [savedSignIn]   = useState(() => loadSignIn());      // who is at this station outlives any one order
   const [signedIn,           setSignedIn]           = useState(() => !!savedSignIn);
   const [sessionStarted,     setSessionStarted]     = useState(false);
+  const [pickedUp,           setPickedUp]           = useState(null);   // { key, hubId } when this order was parked and picked up again: a flagged jersey that comes back passes
   const replayReadRef = useRef(null);   // a replayed read standing in for the camera (development only)
   const [role,               setRole]               = useState(() => savedSignIn?.role || "");
   const [roster,             setRoster]             = useState([]);
@@ -2846,6 +3018,10 @@ export default function App() {
   }, [roster, binMap, closedBins, shortList]);
   const shortByBox = useMemo(() => Object.fromEntries(shortList.map(x => [x.bin, x])), [shortList]);
   const flaggedRows = useMemo(() => roster.filter(r => r.scanned === "flag"), [roster]);   // what is in the DAMAGED box
+  // What the matcher sees. On an order picked up again a flagged jersey that comes back from
+  // repair is open again, so it can go green (the owner, 19 Nov 2026); otherwise it is with the
+  // supervisor and scanning it shows the flag.
+  const scanRoster = useMemo(() => (pickedUp ? roster.map(r => (r.scanned === "flag" ? { ...r, scanned: false } : r)) : roster), [roster, pickedUp]);
   // The three lists behind the "Missing · Duplicate · Flagged" button. A duplicate is a flag
   // whose reason says so; flagged is every roster row out for a flag (its newest reason) and
   // every open flag with no row (not on the roster, no size tag), duplicates apart.
@@ -2983,10 +3159,10 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
     const t = setTimeout(() => setSaveOk(prev => (prev === saved ? prev : saved)), 0);   // said in the header when it fails
     return () => clearTimeout(t);
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, checksLeft, inspect]);
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, checksLeft, inspect]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -3038,8 +3214,9 @@ export default function App() {
 
   // The order belongs to the station, not to a person: whoever is signed in
   // here now continues it under their own name.
-  const resumeSession = useCallback(() => {
-    const s = savedSession;
+  const resumeSession = useCallback((from = null) => {
+    const s = from || savedSession;
+    setPickedUp(s.pickedUp || null);
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
     setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(modernBins(s.binMap || null)); setClosedBins(s.closedBins || []); setBoxLabelled(s.boxLabelled || []); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
@@ -3058,7 +3235,7 @@ export default function App() {
     streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null;   // stopCamera is declared below
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
-    setSessionStarted(false); setResumeDecided(true);
+    setSessionStarted(false); setResumeDecided(true); setPickedUp(null);
     setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setClosedBins([]); setBoxLabelled([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
     waitPedalRef.current = false; setWaitPedal(false);
@@ -3136,8 +3313,45 @@ export default function App() {
   const newOrder     = useCallback(() => {
     setFinished(null); setShowPrint(false);
     if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});   // the hub keeps the order's record and sheets in its ledger
+    if (pickedUp) { dropOrder(pickedUp.key).catch(() => {}); if (pickedUp.hubId) hub.dropUnfinished(pickedUp.hubId).catch(() => {}); }   // finished: out of the unfinished pile
     resetOrder();
-  }, [resetOrder, hubRosterId]);
+  }, [resetOrder, hubRosterId, pickedUp]);
+  // ── Finish later (23, 24): park the order, whole, on this PC; a small entry on the hub ──
+  const [showPark, setShowPark] = useState(false);
+  const [parkErr,  setParkErr]  = useState("");
+  const parkOrder = useCallback(async () => {
+    const st = stationId(), key = orderKey(st, orderNumber, orderRun), summary = outOf(roster);
+    const session = { sessionStarted: true, role, roster, rosterFile, orderNumber, orderRun, hubRosterId: null, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() };
+    const rec = { key, station: st, order: orderNumber, run: orderRun, closed: null, summary, session, hubId: pickedUp?.hubId || null };
+    try { await putOrder(rec); }
+    catch (e) { setParkErr(`The order could NOT be saved on this PC (${e.message}). It is still open: finish it, or call the supervisor.`); return; }
+    hub.parkOrder({ station: st, order: orderNumber, run: orderRun, operator: operatorName, jerseyType, ...summary, out: outList(roster, log) })
+      .then(r => (r?.id && r.id !== rec.hubId ? putOrder({ ...rec, hubId: r.id }) : null)).catch(() => {});   // the server is away: the order is kept here all the same
+    if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});
+    setShowPark(false); setParkErr("");
+    resetOrder();
+  }, [roster, role, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, resetOrder]);
+  // Pick an unfinished order up again: from this PC (`rec`), or from the hub's pile when the
+  // supervisor assigned it here and this PC does not have it (rebuilt from the order's record).
+  const pickUpOrder = useCallback(async ({ rec, hubEntry }) => {
+    let session = rec?.session, key = rec?.key, hubId = rec?.hubId || hubEntry?.id || null;
+    if (!session && hubEntry) {
+      const mine = await listOrders().then(a => a.find(r => r.key === hubEntry.key)).catch(() => null);
+      if (mine) { session = applyCheckOff(mine, hubEntry).session; key = mine.key; }
+      else {
+        const r = await hub.orders(hubEntry.order);
+        const o = (r.orders || []).find(x => `${x.station}|${x.order}|${x.run || 0}` === hubEntry.key) || (r.orders || [])[0];
+        if (!o) throw new Error("the server has no record of it any more");
+        const p = packFromRecord(o);
+        session = { sessionStarted: true, roster: p.roster, rosterFile: o.rosterFile || null, orderNumber: String(o.order), orderRun: o.run || Date.now(), notes: o.notes || "", jerseyType: o.jerseyType || "",
+          log: p.flags.map(f => ({ ...f, status: S_FLAGGED })), binMap: p.binMap, closedBins: p.closedBins, boxLabelled: [], firstScanTime: o.firstSeen || null, idleSpells: [], awaySpells: [] };
+        key = hubEntry.key;
+      }
+    }
+    if (!session) return;
+    if (hubId) hub.releaseUnfinished(hubId).catch(() => {});   // picked up: no longer waiting for a station
+    resumeSession({ ...session, pickedUp: { key, hubId } });
+  }, [resumeSession]);
   // The order on this station, as the Print menu takes it (printjobs.js).
   const printPack = useMemo(() => !sessionStarted || !roster.length ? null
     : { orderNumber, roster, binMap, closedBins, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels },
@@ -3244,7 +3458,7 @@ export default function App() {
       console.log(`Read in ${Date.now() - t0} ms: #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"}${r.laid_flat ? "" : " [not flat]"} (${r.jersey_colour || "?"}${r.trim_colour ? "/" + r.trim_colour : ""}; sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
       return r;
     };
-    const matchOf = d => (!d.name && !d.number) ? null : findMatches(roster, d.name, d.number, {
+    const matchOf = d => (!d.name && !d.number) ? null : findMatches(scanRoster, d.name, d.number, {
       nameComplete: d.name_complete, numberComplete: d.number_complete,
       position: d.number_position, obstruction: d.obstruction,
       colour: d.jersey_colour, trim: d.trim_colour, laidFlat: d.laid_flat, orientation: d.orientation,
@@ -3345,7 +3559,7 @@ export default function App() {
     else if (m.type === "duplicate") { scanObj.shown = { mode: "duplicate", id: m.match._id }; setOverlay({ mode: "duplicate", scan: scanObj, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.size ? " · " + m.match.size : ""}${m.match.scanned === "flag" ? " is flagged — with the supervisor." : " already passed this session."}` }); playTone("flag"); }
     else if (m.type === "pick" || m.type === "close") { scanObj.shown = { mode: m.type, ids: m.candidates.map(c => c._id) }; setOverlay({ mode: m.type, scan: scanObj, candidates: m.candidates, reason: m.reason }); }
     else showFlag(`"${detected.name || "?"}" #${detected.number || "?"} is not on this roster.${m.reason ? ` Camera: ${m.reason}.` : ""}`, "NOT FOUND");
-  }, [roster, firstScanTime]);
+  }, [roster, scanRoster, firstScanTime]);
 
   // ── Camera scan trigger ───────────────────────────────────────────────────
   // The current camera frame as { base64, dataUrl }, rotated as the settings
@@ -3691,7 +3905,7 @@ export default function App() {
     manualSubmit({ number, name, size, team }) {
       const o = overlay; if (!o) return;
       const typed = { number, name, size, team };
-      let m = findMatches(roster, name, number, { typed: true });
+      let m = findMatches(scanRoster, name, number, { typed: true });
       // The team the operator chose settles same-number rows: one row of that
       // team is the jersey (or a duplicate if it is done); several keep the list,
       // narrowed to that team.
@@ -3732,7 +3946,7 @@ export default function App() {
       setOverlay({ mode: "manual", scan: o.scan, match: null, teams: teamNames, returnTo: null, initial: o.typed });
     },
     };
-  }, [overlay, stamp, armAutoScan, pedalNext, roster, teamNames, noteMistake, lastConfirmed, syncInspect, captureFrame]);
+  }, [overlay, stamp, armAutoScan, pedalNext, roster, scanRoster, teamNames, noteMistake, lastConfirmed, syncInspect, captureFrame]);
 
   // ── Flag resolution (from the result card) ────────────────────────────────
   const resolveFlag = useCallback((logId, decision, note) => {
@@ -3966,7 +4180,7 @@ export default function App() {
           }} />
       )}
 
-      {signedIn && showResume && <ResumeModal session={savedSession} onResume={resumeSession} onDiscard={discardSession} />}
+      {signedIn && showResume && <ResumeModal session={savedSession} onResume={() => resumeSession()} onDiscard={discardSession} />}
 
 
       {showSupervisor && <SupervisorPanel operatorName={operatorName} onSignOut={signOut} />}
@@ -3974,7 +4188,7 @@ export default function App() {
       {sessionStarted && !showSupervisor && <IdleWatch pulse={log.filter(l => l.status === S_PASS || l.status === S_MANUAL || l.status === S_FLAGGED).length} onSpell={recordIdle} />}
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
-        <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onPrint={() => setShowPrint(true)} stationLabel={stationLabel}
+        <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onPrint={() => setShowPrint(true)} stationLabel={stationLabel} onPickUp={pickUpOrder}
           onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile, hubRosterId = null }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team" });
@@ -4034,6 +4248,24 @@ export default function App() {
       )}
       {showPacking && binMap && <PackingModal groups={packingGroups} by={binFieldOf(binMap)} info={Object.fromEntries(openBins.map(b => [b.bin, b]))} status={binPrint} onFull={binFull} onPrintBoxes={printBoxesList} doneCount={boxesDone.length} notDoneCount={boxesNotDone.length}
         onBoxes={() => { setShowPacking(false); setShowBins(true); }} onClose={() => closeDialog(() => setShowPacking(false))} />}
+      {showPark && (
+        <div style={modalBg}>
+          <div style={{ ...modalCard, maxWidth: 640, width: "92vw" }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: "#fcd34d", marginBottom: 8 }}>⏸ Finish order {orderNumber} later?</div>
+            {(() => { const s = outOf(roster); return (
+              <div style={{ fontSize: 18, color: "#e2e8f0", lineHeight: 1.5, marginBottom: 16 }}>
+                {s.done} of {s.total} done. Still out: {s.flagged} flagged · {s.missing} missing · {s.toScan} not scanned.<br />
+                <span style={{ color: "#94a3b8", fontSize: 16 }}>The order is kept on this PC with everything done so far. When the jerseys come back, open it again from "Unfinished orders" on the order screen, or the supervisor assigns it to a station.</span>
+              </div>
+            ); })()}
+            {parkErr && <div style={{ ...errSt, marginBottom: 12 }}>{parkErr}</div>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={parkOrder} style={{ ...bigBtn, background: "#f59e0b", color: "#0d1117", flex: 1 }}>⏸ Finish later</button>
+              <button onClick={() => { setShowPark(false); setParkErr(""); }} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>Keep going</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showIssues && <IssuesModal missing={issues.missing} dups={issues.dups} flagged={issues.flagged} binOf={binOf} onClose={() => closeDialog(() => setShowIssues(false))} />}
       {showHistory && (
         <HistoryModal log={log} roster={roster} binOf={binOf} onClose={() => closeDialog(() => setShowHistory(false))}
@@ -4093,6 +4325,7 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
           {sessionStarted && <button onClick={() => setShowPrint(true)} title="Print any label of this order again, or of an order done before" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>🖨 Print</button>}
+          {sessionStarted && <button onClick={() => setShowPark(true)} title="Park this order: it is kept on this PC until the jerseys out for repair come back. Pick it up again from the order screen" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>⏸ Finish later</button>}
           {sessionStarted && <button onClick={askFinish} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#22c55e", color: "#4ade80" }}>🏁 Finish order</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
           <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>

@@ -17,6 +17,13 @@
 //   POST   /api/hub/rosters/:id/take    { station, operator } — a station starts it; 409 if another station already has it
 //   POST   /api/hub/rosters/:id/release the supervisor frees it for another station
 //   DELETE /api/hub/rosters/:id         the station finished it, or the supervisor removes it
+//   GET    /api/hub/unfinished?q=&station=&all=1   { orders } — orders parked unfinished, newest change first; q = the order number (exact first, a part from 3 characters),
+//                                            station = parked at or given to that station, all=1 = the closed ones too (a station learns its order was checked off)
+//   POST   /api/hub/unfinished          { station, order, run, operator, jerseyType, total, done, flagged, missing, toScan, out } — a station parks an order; one entry per station|order|run → { id, entry }
+//   POST   /api/hub/unfinished/:id/assign    { station, by } — the supervisor gives it to a station
+//   POST   /api/hub/unfinished/:id/release   takes it off that station again
+//   POST   /api/hub/unfinished/:id/checkoff  { ids, all, by } — the supervisor checks off jerseys still out: they count as passed, in the ledger too → { entry }
+//   DELETE /api/hub/unfinished/:id      the station finished the order the normal way
 //   GET    /api/hub/boxes               { model, answers } — the box model (src/lib/boxmodel.js) fitted to every answer so far
 //   POST   /api/hub/boxes               { counts, box, station, order, bin, suggested } — a bin was closed and went in this box; → { model, answers }
 //   GET    /api/hub/print?station=…     { printer, printers, labelSize, flagPrinter, flagLabelSize } — the label printer for that station (JERSEY_PRINTER_<STATION>), else the hub's (JERSEY_PRINTER, else the first Zebra queue); the flag-ticket printer likewise (JERSEY_FLAG_PRINTER_<STATION>, JERSEY_FLAG_PRINTER), else the label printer
@@ -137,6 +144,56 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   const BOX_IDS = [...BOXES.map(b => b.id), MORE];
   let boxModel = null;
   const boxFit = () => (boxModel ||= fitBoxModel((state.boxAnswers || []).slice(-600), BOX_PRIOR));
+  // Unfinished orders (the owner, 19 Nov 2026). An operator parks an order
+  // that cannot be finished yet: jerseys out for repair, missing, or not
+  // scanned. The whole order stays on the station PC; the hub keeps a small
+  // entry so the board can list it, give it to a station and check off the
+  // jerseys still out. An entry goes 90 days after its last change.
+  const UNFINISHED_DAYS = 90;
+  const OUT_STATUS = ["flag", "missing", "short", "todo"];
+  const outCount = { flag: "flagged", missing: "missing", short: "missing", todo: "toScan" };   // which count an out jersey is in
+  const whole = v => Math.max(0, Math.floor(Number(v)) || 0);
+  const outOf = list => (Array.isArray(list) ? list : []).filter(j => j && typeof j === "object").slice(0, 5000).map(j => ({
+    rowId: j.rowId ?? null, number: String(j.number ?? ""), name: String(j.name ?? ""), size: String(j.size ?? ""), team: String(j.team ?? ""),
+    status: OUT_STATUS.includes(j.status) ? j.status : "todo", reason: String(j.reason ?? ""),
+  }));
+  const pruneUnfinished = () => {
+    const pool = state.unfinished || {}; let gone = 0;
+    for (const [k, u] of Object.entries(pool)) if (now_() - (u?.updatedAt || 0) > UNFINISHED_DAYS * 86400000) { delete pool[k]; gone++; }
+    if (gone) { save(); console.log(`[hub] ${new Date().toLocaleTimeString()} dropped ${gone} unfinished order${gone === 1 ? "" : "s"} older than ${UNFINISHED_DAYS} days`); }
+  };
+  // The station's way of stamping a scan: local time, "2026-11-19 14:05:12".
+  const localStamp = ms => { const d = new Date(ms), p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+  // A check-off goes in the ledger too, so the order sheet and the day sheet
+  // show it: the rows pass on the newest day that has the order's record, and
+  // today gets one pass event a jersey, "Checked off by supervisor".
+  const checkOffInLedger = (u, off, by, at) => {
+    const led = (state.ledger ||= {});
+    const same = o => o && o.station === u.station && String(o.order) === String(u.order) && (Number(o.run) || 0) === (u.run || 0);
+    const date = Object.keys(led).sort().reverse().find(d => Object.values(led[d]?.orders || {}).some(same));
+    const rec = date && Object.values(led[date].orders).find(same);
+    if (rec) {
+      const ids = new Set(off.map(j => String(j.rowId)));
+      const counts = rec.counts ? { ...rec.counts } : null;
+      rec.rows = (rec.rows || []).map(r => {
+        if (!ids.has(String(r?._id)) || r.scanned === "pass" || r.scanned === "manual") return r;
+        if (counts) {
+          const f = r.scanned ? r.scanned : "remaining";   // a jersey not scanned is in remaining; a flagged, missing or short one in its own count
+          if (typeof counts[f] === "number") counts[f] = Math.max(0, counts[f] - 1);
+          counts.pass = (counts.pass || 0) + 1;
+        }
+        return { ...r, scanned: "pass", checkedBy: "supervisor", checkedAt: at };
+      });
+      if (counts) rec.counts = counts;
+    }
+    const dayLed = (led[new Date(at).toLocaleDateString("en-CA")] ||= { events: {}, orders: {} });
+    const events = (dayLed.events ||= {});
+    off.forEach(j => {
+      const evId = `co-${j.rowId}-${at}`;
+      events[`${u.station}|${evId}`] = { id: evId, t: localStamp(at), status: "pass", order: u.order, run: u.run, jerseyType: u.jerseyType || "", station: u.station, rowId: j.rowId,
+        number: j.number, name: j.name, size: j.size, team: j.team, reason: "Checked off by supervisor", resolution: "Checked off by supervisor" + (by ? ` (${by})` : ""), operator: by };
+    });
+  };
   const summary = r => ({ id: r.id, orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
 
   async function handle(req, res) {
@@ -291,6 +348,90 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           return json(res, 200, { ok: true });
         }
         if (req.method === "DELETE" && id) { delete state.rosters[id]; save(); return json(res, 200, { ok: true }); }
+      }
+      if (kind === "unfinished") {
+        pruneUnfinished();
+        const pool = (state.unfinished ||= {});
+        const time = new Date().toLocaleTimeString();
+        if (req.method === "GET" && !id) {
+          const q = new URL(req.url, "http://hub").searchParams;
+          const term = String(q.get("q") || "").trim().toLowerCase(), st = String(q.get("station") || "").trim().toLowerCase(), all = ["1", "true"].includes(q.get("all"));
+          const orders = Object.values(pool)
+            .filter(u => all || !u.closed)
+            .filter(u => !st || String(u.station).toLowerCase() === st || String(u.assignedTo || "").toLowerCase() === st)
+            .map(u => ({ u, exact: !!term && String(u.order).trim().toLowerCase() === term }))
+            .filter(({ u, exact }) => !term || exact || (term.length >= 3 && String(u.order).toLowerCase().includes(term)))
+            .sort((a, b) => (b.exact - a.exact) || ((b.u.updatedAt || 0) - (a.u.updatedAt || 0)))
+            .map(x => x.u);
+          return json(res, 200, { orders });
+        }
+        // A station parks an order (or parks it again with what is still out).
+        // One entry per station|order|run: parked again, it keeps its id, when
+        // it was first parked, the station it was given to and what the
+        // supervisor checked off.
+        if (req.method === "POST" && !id) {
+          const body = await readBody(req);
+          const station = String(body.station ?? "").trim(), order = String(body.order ?? "").trim();
+          if (!station || !order) return json(res, 400, { error: "station and order required" });
+          const run = Number(body.run) || 0, key = `${station}|${order}|${run}`, at = now_();
+          const prev = Object.values(pool).find(u => u.key === key);
+          const counts = { total: whole(body.total), done: whole(body.done), flagged: whole(body.flagged), missing: whole(body.missing), toScan: whole(body.toScan) };
+          // A jersey the supervisor checked off stays checked off, also when the
+          // station has not heard of it yet and sends it as still out.
+          const checked = new Set((prev?.checkedOff || []).filter(j => j.rowId !== null).map(j => String(j.rowId)));
+          const all = outOf(body.out), out = all.filter(j => j.rowId === null || !checked.has(String(j.rowId)));
+          all.filter(j => !out.includes(j)).forEach(j => { const f = outCount[j.status]; counts[f] = Math.max(0, counts[f] - 1); counts.done++; });
+          const entry = {
+            id: prev?.id || at.toString(36) + Math.random().toString(36).slice(2, 6), key, order, run, station,
+            operator: String(body.operator ?? prev?.operator ?? ""), jerseyType: String(body.jerseyType ?? prev?.jerseyType ?? ""),
+            parkedAt: prev?.parkedAt ?? at, updatedAt: at, ...counts, out,
+            assignedTo: prev?.assignedTo || "", assignedBy: prev?.assignedBy || "", assignedAt: prev?.assignedAt || 0,
+            checkedOff: prev?.checkedOff || [], closed: out.length ? null : (prev?.closed ?? null),
+          };
+          pool[entry.id] = entry; save();
+          console.log(`[hub] ${time} ${station}: parked order ${order} unfinished, ${out.length} jersey${out.length === 1 ? "" : "s"} out${prev ? " (again)" : ""}`);
+          return json(res, 200, { id: entry.id, entry });
+        }
+        // The station finished the order the normal way. Gone already is fine.
+        if (req.method === "DELETE" && id && parts.length === 2) {
+          const u = pool[id]; delete pool[id];
+          if (u) { save(); console.log(`[hub] ${time} ${u.station}: unfinished order ${u.order} finished, taken off the list`); }
+          return json(res, 200, { ok: true });
+        }
+        const u = id ? pool[id] : null;
+        if (id && !u) return json(res, 404, { error: "no such unfinished order" });
+        if (req.method === "POST" && parts[2] === "assign") {
+          const body = await readBody(req);
+          const station = String(body.station ?? "").trim(); if (!station) return json(res, 400, { error: "station required" });
+          Object.assign(u, { assignedTo: station, assignedBy: String(body.by ?? ""), assignedAt: now_(), updatedAt: now_() }); save();
+          console.log(`[hub] ${time} unfinished order ${u.order} given to ${station}${body.by ? " by " + body.by : ""}`);
+          return json(res, 200, { entry: u });
+        }
+        if (req.method === "POST" && parts[2] === "release") {
+          const was = u.assignedTo;
+          Object.assign(u, { assignedTo: "", assignedBy: "", assignedAt: 0, updatedAt: now_() }); save();
+          console.log(`[hub] ${time} unfinished order ${u.order} taken off ${was || "no station"}`);
+          return json(res, 200, { entry: u });
+        }
+        // The supervisor checks off jerseys still out: they count as passed.
+        // When none is left out the order is closed.
+        if (req.method === "POST" && parts[2] === "checkoff") {
+          const body = await readBody(req);
+          const ids = new Set((Array.isArray(body.ids) ? body.ids : []).map(String));
+          const by = String(body.by ?? "").trim(), at = now_();
+          const off = (u.out || []).filter(j => body.all ? true : ids.has(String(j.rowId)));
+          if (off.length) {
+            u.out = u.out.filter(j => !off.includes(j));
+            off.forEach(j => { const f = outCount[j.status] || "toScan"; u[f] = Math.max(0, (u[f] || 0) - 1); u.done = (u.done || 0) + 1; });
+            u.checkedOff = [...(u.checkedOff || []), ...off.map(j => ({ ...j, by, at }))];
+            u.updatedAt = at;
+            if (!u.out.length) u.closed = { by, at };
+            checkOffInLedger(u, off, by, at);
+            save();
+            console.log(`[hub] ${time} ${u.station}: ${off.length} jersey${off.length === 1 ? "" : "s"} of unfinished order ${u.order} checked off${by ? " by " + by : ""}${u.closed ? ", order closed" : ""}`);
+          }
+          return json(res, 200, { entry: u });
+        }
       }
       if (kind === "boxes" && !id) {
         if (req.method === "GET") return json(res, 200, { model: boxFit(), answers: (state.boxAnswers || []).length });

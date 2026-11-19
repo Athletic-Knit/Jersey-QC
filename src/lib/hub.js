@@ -66,6 +66,13 @@ export const hub = {
   orders:        q              => call(`/api/hub/orders?q=${encodeURIComponent(q)}`),                                    // { orders } — an order by its number, any day the ledger has: rows, boxes, flags
   ledgerRange:   (from, to)     => call(`/api/hub/ledger?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),      // { days: [{ date, events, orders }] } — slim, for comparing days
   ledger:        date           => call(`/api/hub/ledger${date ? "?date=" + encodeURIComponent(date) : ""}`),   // every scan event of a day, all stations
+  // Unfinished orders (the owner, 19 Nov 2026): parked at a station, listed on the board, kept 90 days.
+  unfinished:    ({ q, station, all } = {}) => call(`/api/hub/unfinished${(s => s ? "?" + s : "")(new URLSearchParams({ ...(q ? { q } : {}), ...(station ? { station } : {}), ...(all ? { all: "1" } : {}) }).toString())}`),   // { orders } — open ones, newest first; all: the closed ones too
+  parkOrder:     entry          => call("/api/hub/unfinished", { method: "POST", body: JSON.stringify(entry) }),          // { station, order, run, operator, jerseyType, total, done, flagged, missing, toScan, out } → { id, entry }
+  assignUnfinished:   (id, station, by) => call(`/api/hub/unfinished/${id}/assign`, { method: "POST", body: JSON.stringify({ station, by }) }),   // → { entry }
+  releaseUnfinished:  id        => call(`/api/hub/unfinished/${id}/release`, { method: "POST" }),                         // → { entry }
+  checkOffUnfinished: (id, { ids = [], all = false, by = "" } = {}) => call(`/api/hub/unfinished/${id}/checkoff`, { method: "POST", body: JSON.stringify({ ids, all, by }) }),   // the jerseys still out count as passed → { entry }
+  dropUnfinished:     id        => call(`/api/hub/unfinished/${id}`, { method: "DELETE" }),                               // the station finished it the normal way
 };
 
 // What a station tells the hub: small. The only images are the photos of the
