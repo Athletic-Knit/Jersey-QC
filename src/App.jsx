@@ -2829,18 +2829,23 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
   ];
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#161b22", borderRadius: 16, border: `2px solid ${remaining ? "#f59e0b" : "#22c55e"}`, padding: 44, maxWidth: 640, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
-        <div style={{ fontSize: 56, marginBottom: 10 }}>🏁</div>
-        <div style={{ fontSize: 36, fontWeight: 900, color: "#e2e8f0", marginBottom: 10 }}>Finish order {orderNumber || "—"}?</div>
-        <div style={{ fontSize: 18, color: "#cbd5e1", marginBottom: 22, lineHeight: 1.4 }}>
+      {/* Fits the screen whatever the order (the owner, 19 Nov 2026: on a 30-box order it ran off the
+          bottom and Finish could not be reached): the title, the counts and the buttons always show,
+          and only the lists in the middle scroll, as one. */}
+      <div style={{ background: "#161b22", borderRadius: 16, border: `2px solid ${remaining ? "#f59e0b" : "#22c55e"}`, padding: "24px 32px", maxWidth: 760, width: "92vw", maxHeight: "94%", display: "flex", flexDirection: "column", textAlign: "center", boxSizing: "border-box" }}>
+        <div style={{ flexShrink: 0 }}>
+        <div style={{ fontSize: 34, fontWeight: 900, color: "#e2e8f0", marginBottom: 8 }}>🏁 Finish order {orderNumber || "—"}?</div>
+        <div style={{ fontSize: 18, color: "#cbd5e1", marginBottom: 14, lineHeight: 1.4 }}>
           {remaining
             ? `${remaining} ${remaining === 1 ? "jersey is" : "jerseys are"} not scanned yet. You can finish anyway; the supervisor keeps this order's record and sheets.`
             : "Every jersey is scanned. The supervisor keeps this order's record and sheets."}
           {scans === 0 ? " Nothing was scanned on it." : ""}
           {binLists > 0 ? ` Every open box is closed and its list prints: ${binLists} ${binLists === 1 ? "label" : "labels"}.` : ""}
         </div>
+        </div>
+        <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", margin: "0 -8px", padding: "0 8px" }}>
         {lacking > 0 && (
-          <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 10, border: "2px solid #f59e0b", background: "rgba(245,158,11,0.1)", textAlign: "left", maxHeight: "24cqh", overflowY: "auto" }}>
+          <div style={{ marginBottom: 12, padding: "12px 16px", borderRadius: 10, border: "2px solid #f59e0b", background: "rgba(245,158,11,0.1)", textAlign: "left" }}>
             <div style={{ fontSize: 19, fontWeight: 900, color: "#fbbf24", marginBottom: 6 }}>⚠ Before the boxes are sealed: {lacking} {lacking === 1 ? "jersey is" : "jerseys are"} in no box</div>
             {short.map(x => (
               <div key={x.bin} style={{ fontSize: 16, color: "#e2e8f0", lineHeight: 1.45 }}>
@@ -2852,7 +2857,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
           </div>
         )}
         {bins.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 22, maxHeight: "22cqh", overflowY: "auto", textAlign: "left", fontSize: 17, color: "#cbd5e1" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, textAlign: "left", fontSize: 17, color: "#cbd5e1" }}>
             {bins.map(b => (
               <div key={b.bin} style={{ display: "flex", gap: 12, padding: "5px 14px", borderRadius: 8, background: "#1e293b" }}>
                 <span style={{ fontWeight: 800, color: "#60a5fa", minWidth: 62 }}>Box {b.bin}</span>
@@ -2862,7 +2867,9 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
             ))}
           </div>
         )}
-        <div style={{ display: "flex", justifyContent: "center", gap: 28, marginBottom: 30 }}>
+        </div>
+        <div style={{ flexShrink: 0, borderTop: "1px solid #21262d", paddingTop: 14, marginTop: 10 }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 28, marginBottom: 16 }}>
           {stats.map(s => (
             <div key={s.label}>
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 52, fontWeight: 900, color: s.color, lineHeight: 1 }}>{s.value}</div>
@@ -2873,6 +2880,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
           <button onClick={onConfirm} style={{ ...btnPri, fontSize: 19, padding: "14px 32px", background: remaining ? "#f59e0b" : "#22c55e", color: "#0d1117" }}>✓ Finish order <Kbd>Enter</Kbd></button>
           <button onClick={onCancel} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>← Keep going <Kbd light>Esc</Kbd></button>
+        </div>
         </div>
       </div>
     </div>
