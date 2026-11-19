@@ -10,6 +10,7 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
+import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { pace } from "./lib/pace.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.js";
@@ -268,6 +269,9 @@ function ResumeModal({ session, onResume, onDiscard }) {
 // ── Sign-in (once per shift) ──────────────────────────────────────────────────
 // Which station this page is, from ?station= in the address ("" when none).
 const urlStation = () => { try { return new URLSearchParams(window.location.search).get("station") || ""; } catch { return ""; } };
+// Replay (development only, src/lib/replay.js): ?replay=<order> on the station
+// page, kept in sessionStorage so the sign-in's reload does not lose it.
+const replayRequested = () => { try { const q = new URLSearchParams(window.location.search).get("replay"); if (q) sessionStorage.setItem("jerseyqc.replay", q); return sessionStorage.getItem("jerseyqc.replay") || ""; } catch { return ""; } };
 // Switch this page to a station: the address changes and the page reloads, so
 // the saved order, the sign-in and the hub id all follow the station.
 const goToStation = id => { const u = new URL(window.location.href); u.searchParams.set("station", id); window.location.href = u.toString(); };
@@ -2519,6 +2523,7 @@ export default function App() {
   const [savedSignIn]   = useState(() => loadSignIn());      // who is at this station outlives any one order
   const [signedIn,           setSignedIn]           = useState(() => !!savedSignIn);
   const [sessionStarted,     setSessionStarted]     = useState(false);
+  const replayReadRef = useRef(null);   // a replayed read standing in for the camera (development only)
   const [role,               setRole]               = useState(() => savedSignIn?.role || "");
   const [roster,             setRoster]             = useState([]);
   const [rosterFile,         setRosterFile]         = useState(null);
@@ -3007,6 +3012,7 @@ export default function App() {
     playTone("scan");
 
     const readOne = async (b64, url) => {
+      if (import.meta.env.DEV && replayReadRef.current) return replayReadRef.current;   // replay: yesterday's read stands in for the camera (src/lib/replay.js)
       // Send a smaller frame than the camera gives: same read, faster answer.
       const sendB64 = await frameForUpload(url, SEND_MAX_PX).catch(() => b64);
       const t0 = Date.now();
@@ -3607,6 +3613,72 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, showBins, finished, showPrint, showBlanks, showHistory, showSupervisor, sessionStarted, scanKey, doTriggerScan, onTrial]);
 
+  // ── Replay (development only): yesterday's scans through today's screens ──
+  // The station page with ?replay=<order> loads public/sim/replay-<order>.json
+  // (the ledger's reads and what the operator did; the file stays out of git)
+  // and, once that order is open, hands each read to the scan in place of the
+  // camera, then acts as the operator did after a pause: confirms the green,
+  // picks the same row on a list, flags the extra jersey. See src/lib/replay.js.
+  const replayName = import.meta.env.DEV ? replayRequested() : "";
+  const [replay, setReplay] = useState(null);
+  useEffect(() => {
+    if (!replayName) return;
+    const blank = { name: replayName, steps: [], i: 0, phase: "scan", playing: false, delay: 1500, seen: false, tally: {}, error: "" };
+    fetch(`/sim/replay-${encodeURIComponent(replayName)}.json`).then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then(d => setReplay({ ...blank, steps: replaySteps(d.events) }))
+      .catch(e => setReplay({ ...blank, error: `No replay file for ${replayName} (${e.message})` }));
+  }, [replayName]);
+  const replayStep = replay?.steps[replay.i] || null;
+  useEffect(() => {
+    if (!replay || !replay.playing || !sessionStarted || !replayStep) return;
+    const next = () => setReplay(r => ({ ...r, i: r.i + 1, phase: "scan", seen: false }));
+    if (replay.phase === "scan") {
+      if (scanning || overlay) return;                                   // the last screen is still up
+      if (replayStep.kind === "scan") {
+        replayReadRef.current = replayStep.detected;
+        const frame = placeholderFrame(replayStep.detected.number, replayStep.detected.name);
+        setReplay(r => ({ ...r, phase: "act" }));
+        doRunScan(frame.split(",")[1], frame);
+        return;
+      }
+      if (replayStep.kind === "undo")    { const row = findReplayRow(roster, replayStep, true); if (row) unscan(row._id); }
+      if (replayStep.kind === "missing") { const row = findReplayRow(roster, replayStep); if (row) markRow(row._id, "missing"); }
+      if (replayStep.kind === "skip")    setReplay(r => ({ ...r, tally: { ...r.tally, skipped: (r.tally.skipped || 0) + 1 } }));
+      next(); return;
+    }
+    // "act": the screen is up (or came and went); after the pause, do what the operator did
+    if (scanning) return;
+    replayReadRef.current = null;
+    if (!overlay) { const t = setTimeout(next, 400); return () => clearTimeout(t); }   // the screen closed (or has not opened yet: the scan sets its state in two steps): on to the next scan after a moment
+    if (!replay.seen) {                                                  // the first screen of this scan: count it
+      const m = overlay.mode, list = m === "pick" || m === "close";
+      setReplay(r => ({ ...r, seen: true, tally: { ...r.tally, screens: (r.tally.screens || 0) + 1, green: (r.tally.green || 0) + (m === "confirm" ? 1 : 0), list: (r.tally.list || 0) + (list ? 1 : 0), listRows: (r.tally.listRows || 0) + (list ? (overlay.candidates || []).length : 0), red: (r.tally.red || 0) + (m === "flag" ? 1 : 0), duplicate: (r.tally.duplicate || 0) + (m === "duplicate" ? 1 : 0) } }));
+      return;
+    }
+    if (overlay.mode === "done") return;                                 // the green flash dismisses itself
+    const t = setTimeout(() => {
+      const o = overlay, s = replayStep, a = actions;
+      switch (o.mode) {
+        case "confirm":    if (s.off) a.manual(); else a.confirm(); break;
+        case "pick": case "close": {
+          if (s.off) { a.offRosterStart(); break; }
+          const c = (o.candidates || []).find(x => !isDone(x) && sameReplayRow(x, s));
+          if (c) a.pick(c); else a.manual();                            // yesterday's row is not on today's list: typed in, as the operator would
+          break;
+        }
+        case "offSize":    a.offRosterSize(s.size || ""); break;
+        case "manual":     a.manualSubmit({ number: s.number, name: s.name || "", size: s.off ? "" : s.size || "", team: s.off ? "" : s.team || "" }); break;
+        case "manualDone": a.continueManual(); break;
+        case "duplicate":  if (s.dup) a.flagDuplicate(); else a.skipDuplicate(); break;
+        case "flag":       a.manual(); break;                            // could not read / not found: typed in
+        case "supervisor": a.continueSupervisor(); break;
+        case "reasons": case "clean": case "reasonText": a.back(); break;
+        default: break;
+      }
+    }, replay.delay);
+    return () => clearTimeout(t);
+  }, [replay, replayStep, sessionStarted, scanning, overlay, roster, actions, doRunScan, unscan, markRow]);
+
   const overlayKey = overlay ? `${overlay.mode}:${overlay.scan?.id}:${(overlay.candidates || []).map(c => c._id).join(",")}` : "";
   const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType), idleSpells, awaySpells, bins: binSummary, categoryOf: reasonCategory };
 
@@ -3650,6 +3722,22 @@ export default function App() {
           stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
       )}
 
+      {replay && (
+        <div style={{ position: "fixed", left: "50%", bottom: 10, transform: "translateX(-50%)", zIndex: 3000, background: "#0d1117", border: "3px solid #f59e0b", borderRadius: 14, padding: "10px 16px", color: "#e2e8f0", fontSize: 15, display: "flex", alignItems: "center", gap: 12, maxWidth: "96vw", boxShadow: "0 10px 30px rgba(0,0,0,0.6)" }}>
+          <span style={{ fontWeight: 900, color: "#fcd34d", whiteSpace: "nowrap" }}>▶ Replay {replay.name}</span>
+          {replay.error ? <span style={{ color: "#f87171" }}>{replay.error}</span> : (<>
+            <span style={{ whiteSpace: "nowrap" }}>{Math.min(replay.i + 1, replay.steps.length)} / {replay.steps.length}</span>
+            <span style={{ color: "#94a3b8", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replayStep ? replayStep.label : "done"}</span>
+            <span style={{ color: "#94a3b8", whiteSpace: "nowrap" }}>green {replay.tally.green || 0} · lists {replay.tally.list || 0}{replay.tally.list ? ` (${(replay.tally.listRows / replay.tally.list).toFixed(1)} rows)` : ""} · red {replay.tally.red || 0} · dup {replay.tally.duplicate || 0}</span>
+            {!sessionStarted && <span style={{ color: "#fcd34d" }}>start order {replay.name} first</span>}
+            <button onClick={() => setReplay(r => ({ ...r, playing: !r.playing }))} style={{ ...btnPri, padding: "6px 14px", fontSize: 15 }}>{replay.playing ? "⏸ Pause" : "▶ Play"}</button>
+            <select value={replay.delay} onChange={e => setReplay(r => ({ ...r, delay: Number(e.target.value) }))} style={{ ...inputSt, padding: "4px 8px", fontSize: 14 }}>
+              {[[600, "fast"], [1500, "normal"], [3000, "slow"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </>)}
+          <button onClick={() => { try { sessionStorage.removeItem("jerseyqc.replay"); } catch { /* fine */ } setReplay(null); }} style={{ ...btnGhost, padding: "4px 10px" }}>✕</button>
+        </div>
+      )}
       {showSettings && (
         <SettingsPanel settings={settings} cameras={cameras} onSave={setSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
       )}
