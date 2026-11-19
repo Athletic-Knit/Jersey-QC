@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoices, LIST_SORTS } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
@@ -16,7 +16,7 @@ import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.j
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel } from "./lib/printjobs.js";
 const SECOND_LOOK = false;
 import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG } from "./config.js";
 
 
 const S_PASS    = "pass";
@@ -1156,25 +1156,37 @@ function twoColumns(n) {
 const hintSt = (on, accent, gap = 12) => ({ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap", marginLeft: gap, visibility: on ? "visible" : "hidden" });
 const liftSt = on => ({ transform: on ? "scale(1.012)" : "none", transition: "transform 90ms ease-out", position: "relative", zIndex: on ? 1 : 0 });
 
+// A tile of the pick list. The SIZE sits on the right as big as the number:
+// on a by-team order the same number comes up on several teams and sizes, and
+// the size tag is all the operator checks (the owner, 19 Nov 2026). The team
+// and the rest go small under the number.
 function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, accent, onClick, onHover }) {
   const head = primary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")).filter(Boolean).join(" · ");
   const sub  = [...secondary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")), ...extraCols.map(k => c[k] ? `${cap(k)}: ${c[k]}` : "")].filter(Boolean).join(" · ");
+  const size = String(c.size || "").trim();
   return (
     <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover} data-sel={selected ? "1" : undefined}
-      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...liftSt(selected && !disabled) }}>
-      <div style={{ minWidth: 0 }}>
-        <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px, 3vw, 42px)", fontWeight: 800, lineHeight: 1, color: disabled ? "#64748b" : "#fff" }}>{head || "—"}</span>
-        {sub && <span style={{ fontSize: 20, color: "#cbd5e1", marginLeft: 14, display: "inline-block", whiteSpace: "nowrap" }}>{sub}</span>}
-        {disabled && (c.scanned === "flag"
-          ? <span style={{ fontSize: 17, color: "#f87171", marginLeft: 12, fontWeight: 700 }}>🚩 Flagged</span>
-          : <span style={{ fontSize: 17, color: "#22c55e", marginLeft: 12, fontWeight: 700 }}>✓ Already passed</span>)}
+      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px 10px 18px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...liftSt(selected && !disabled) }}>
+      <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px, 3vw, 42px)", fontWeight: 800, lineHeight: 1, color: disabled ? "#64748b" : "#fff", overflowWrap: "anywhere" }}>{head || "—"}</span>
+        {(sub || disabled) && (
+          <span style={{ fontSize: 21, color: "#cbd5e1", lineHeight: 1.1, fontWeight: 700 }}>
+            {sub}
+            {disabled && (c.scanned === "flag"
+              ? <span style={{ fontSize: 17, color: "#f87171", marginLeft: sub ? 12 : 0 }}>🚩 Flagged</span>
+              : <span style={{ fontSize: 17, color: "#22c55e", marginLeft: sub ? 12 : 0 }}>✓ Already passed</span>)}
+          </span>
+        )}
       </div>
-      {!disabled && <span style={hintSt(selected, accent, 10)} aria-hidden="true">←</span>}
+      {size && (
+        <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(34px, 3.6vw, 52px)", fontWeight: 900, lineHeight: 1, letterSpacing: 1, whiteSpace: "nowrap", padding: "6px 14px", borderRadius: 12, border: `3px solid ${disabled ? "rgba(255,255,255,0.1)" : "rgba(245,158,11,0.75)"}`, background: disabled ? "transparent" : "rgba(245,158,11,0.14)", color: disabled ? "#64748b" : "#fff", flexShrink: 0 }}>{size}</span>
+      )}
+      {!disabled && <span style={hintSt(selected, accent, 0)} aria-hidden="true">←</span>}
     </div>
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, onTrial = null }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, onTrial = null, listSort = "size" }) {
   const reasons = reasonsFor(jerseyType);
   // Input trial (src/lib/trial.js): the overlay is mounted anew for every
   // screen (its key is the mode and the scan), so "shown" is the mount; every
@@ -1198,16 +1210,17 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const numberDoubt = mode === "confirm" && !!seen && String(state.match?.number ?? "") !== ""
     && seen.number_complete === false;   // only when the camera says the number itself is covered or cut off: not for a jersey that is merely not flat or a number off centre, or the line would show too often to be read
   const isList  = mode === "pick" || mode === "close";
+  const isSizePick = mode === "offSize";   // "Not on the roster" from the list: what size is it?
   const isRed   = mode === "flag" || mode === "duplicate" || mode === "supervisor";
   const isMenu  = mode === "reasons" || mode === "reasonText";
   const isManual = mode === "manual" || mode === "manualDone";
   const isClean = mode === "clean";   // "Dirt or mark": clean it at the station
 
-  const bg     = isGreen ? "#052e16" : (isList || isManual) ? "#1c1a06" : isMenu ? "#1a1033" : isClean ? "#082f49" : "#450a0a";
-  const accent = isGreen ? "#22c55e" : (isList || isManual) ? "#f59e0b" : isMenu ? "#a78bfa" : isClean ? "#38bdf8" : "#ef4444";
+  const bg     = isGreen ? "#052e16" : (isList || isManual || isSizePick) ? "#1c1a06" : isMenu ? "#1a1033" : isClean ? "#082f49" : "#450a0a";
+  const accent = isGreen ? "#22c55e" : (isList || isManual || isSizePick) ? "#f59e0b" : isMenu ? "#a78bfa" : isClean ? "#38bdf8" : "#ef4444";
 
   const match      = state.match || state.scan?.match || null;
-  const candidates = useMemo(() => state.candidates || [], [state.candidates]);
+  const candidates = useMemo(() => sortCandidates(state.candidates || [], listSort), [state.candidates, listSort]);   // by size unless the station says otherwise (Settings → Pick list)
   const detected   = state.scan?.detected;
 
   // Damage photo on the supervisor screen: the scan photo only ever shows the
@@ -1239,7 +1252,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   useEffect(() => { actionsRef.current = actions; }, [actions]);
 
   // Adaptive headline: whatever differs between the candidates becomes the big text.
-  const fields  = useMemo(() => [...CORE_COLUMNS, ...extraCols], [extraCols]);
+  const fields  = useMemo(() => [...CORE_COLUMNS.filter(f => f !== "size"), ...extraCols], [extraCols]);   // the size has its own place on every tile
   const diff    = useMemo(() => differingFields(candidates, fields), [candidates, fields]);
   const primary = diff.length && !diff.some(f => HEADLINE_FIELDS.includes(f)) ? diff : HEADLINE_FIELDS;
   const secondary = fields.filter(f => !primary.includes(f) && !extraCols.includes(f));
@@ -1255,11 +1268,16 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         ? { ...byHand, label: `🛑 #${t.number || "?"}${t.name ? " " + t.name : ""} — not on the roster` }
         : { ...byHand, label: "⌨ None of these" };
       const back = { id: "back", label: "← Back", run: actions.editTyped };   // mistyped: back to the form, as typed
-      // No Flag on a list: nobody has said yet which jersey this is, so there is nothing to
-      // flag (owner, 17 Nov 2026). Pick the jersey, or say it is none of these; a defect is
+      // No general Flag on a list: nobody has said yet which jersey this is (owner, 17 Nov
+      // 2026). Two flags that need no row are here (the owner, 19 Nov 2026): a jersey with
+      // NO SIZE TAG (nothing to pick a row by), and an EXTRA jersey that is not on the
+      // roster, which asks the size first so the ticket carries it. Any other defect is
       // flagged from the screen that follows, or with "Flag it" on the last pass.
-      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back] : [retry]), none];
+      const noSize    = { id: "nosize",    label: "🏷 No size tag",       run: actions.noSizeTag };
+      const offRoster = { id: "offroster", label: "🚩 Not on the roster", run: actions.offRosterStart };
+      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back, none] : [retry, noSize, offRoster, { ...byHand, label: "⌨ Enter by hand" }])];
     }
+    if (mode === "offSize")    return [...(state.sizes || []).map(s => ({ id: "sz" + s, label: s, run: () => actions.offRosterSize(s) })), { id: "notag", label: "🏷 No size tag", run: () => actions.offRosterSize("") }, { id: "back", label: "← Back", run: actions.back }];
     if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "🚩 Bad jersey" }];
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }, { ...notRight, run: actions.reopenLast }];
     if (mode === "manual")     return [];
@@ -1278,7 +1296,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     }
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [mode, isList, candidates, actions, state.typed, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount]);
+  }, [mode, isList, candidates, actions, state.typed, state.sizes, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount]);
 
   const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
   const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
@@ -1311,6 +1329,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (e.repeat) return;                       // a held key or pedal is one press, not many
       if (mode === "done") return;
       if (mode === "manual" || mode === "reasonText") { if (e.code === "Escape") { e.preventDefault(); actions.back(); } return; }   // typing, not navigating
+      if (mode === "offSize" && e.code === "Escape") { e.preventDefault(); actions.back(); return; }
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target?.tagName)) return;   // the Enter that submitted the form is still bubbling: it must not also pick the first row of the list it opened
       if (e.code === retryKey) { if (mode === "confirm") { e.preventDefault(); showNudge(); return; } const i = options.findIndex(x => x.id === "retry"); if (i >= 0) { e.preventDefault(); lastKeyRef.current = Date.now(); fire(options[i], i, "key", e.code, options); } return; }
@@ -1439,9 +1458,15 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       {/* ── YELLOW: pick / close ── */}
       {isList && (
         <>
-          <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 4 }}>{mode === "pick" ? "⚠️" : "🔍"}</div>
-          <div style={{ fontSize: "clamp(28px, 4.5vw, 48px)", fontWeight: 900, color: accent, marginBottom: 6, textAlign: "center", padding: "0 24px", lineHeight: 1.1 }}>
-            {mode === "pick" ? "Which jersey is this?" : "No exact match"}
+          {/* The number read, big, so the operator knows the read was right before the green
+              screen (the owner, 19 Nov 2026); the typed number when the operator typed. */}
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 13cqh, 128px)", fontWeight: 900, color: "#fff", lineHeight: 0.95, textAlign: "center", padding: "0 24px", maxWidth: "100%", overflowWrap: "anywhere" }}>
+            {state.typed
+              ? `#${state.typed.number || "?"}${state.typed.name ? " · " + state.typed.name : ""}`
+              : `#${detected?.number || "?"}${detected?.number && detected?.number_complete === false ? "?" : ""}${detected?.name ? " · " + detected.name + (detected.name_complete === false ? "…" : "") : ""}`}
+          </div>
+          <div style={{ fontSize: "clamp(24px, 3.6vw, 40px)", fontWeight: 900, color: accent, margin: "6px 0", textAlign: "center", padding: "0 24px", lineHeight: 1.1 }}>
+            {mode === "pick" ? "Which jersey is this? Check the size tag." : "No exact match — is it one of these?"}
           </div>
           {state.reason && (
             <div style={{ fontSize: 24, color: "#fcd34d", marginBottom: 6, opacity: 0.95, textAlign: "center", padding: "0 24px" }}>
@@ -1468,6 +1493,29 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           </div>
           <div style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
             {options.map((o, i) => !o.candidate && <OptionButton key={o.id} o={o} i={i} />)}
+          </div>
+        </>
+      )}
+
+      {/* ── YELLOW: "Not on the roster" asks the size first, for the ticket ── */}
+      {isSizePick && (
+        <>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(44px, 10cqh, 96px)", fontWeight: 900, color: "#fff", lineHeight: 1, textAlign: "center", padding: "0 24px" }}>
+            #{detected?.number || "?"}{detected?.name ? ` · ${detected.name}` : ""}
+          </div>
+          <div style={{ fontSize: "clamp(26px, 4vw, 44px)", fontWeight: 900, color: accent, margin: "8px 0 4px", textAlign: "center", padding: "0 24px", lineHeight: 1.1 }}>Not on the roster — what size is it?</div>
+          <div style={{ fontSize: 22, color: "#fcd34d", marginBottom: 16, textAlign: "center", padding: "0 24px" }}>Read the size tag. It goes on the flag ticket.</div>
+          <div style={{ width: "100%", maxWidth: 1200, padding: "0 24px", boxSizing: "border-box", maxHeight: "68%", overflowY: "auto", ...twoColumns(options.length) }}>
+            {options.map((o, i) => {
+              const sel = i === selectedIdx;
+              return (
+                <button key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderRadius: 14, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.14)"}`, background: sel ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", color: "#fff", cursor: "pointer", textAlign: "left", ...liftSt(sel) }}>
+                  <span style={{ fontFamily: o.id.startsWith("sz") ? FONT_DISPLAY : FONT_UI, fontSize: o.id.startsWith("sz") ? "clamp(34px, 3.6vw, 52px)" : 22, fontWeight: 800, lineHeight: 1 }}>{o.label}</span>
+                  <span style={hintSt(sel, accent)} aria-hidden="true">←</span>
+                </button>
+              );
+            })}
           </div>
         </>
       )}
@@ -1776,6 +1824,17 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
               <span>seconds</span>
             </div>
           )}
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <div style={labelSt}>Pick list</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <div style={{ fontSize: 16, color: "#cbd5e1", width: 150, flexShrink: 0 }}>Sort the list by</div>
+            <select value={temp.listSort || "size"} onChange={e => setTemp(t => ({ ...t, listSort: e.target.value }))} style={selSt}>
+              {LIST_SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </div>
+          <div style={{ fontSize: 14, color: "#7c8ba1" }}>The yellow "Which jersey is this?" list. By size, the operator finds the row of the size tag at once; by team or number for an order that is sorted another way.</div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -2671,7 +2730,7 @@ export default function App() {
   const triggerRef = useRef(null);
   const armRef     = useRef(() => {});   // re-arm hands-free from inside a scan (set once armAutoScan exists)
   const passCount      = roster.filter(r => r.scanned === "pass").length;
-  const offRosterFlags = log.filter(l => l.status === S_FLAGGED && l.match?.offRoster && !l.resolution).length;   // typed jerseys that are not on the roster have no row
+  const offRosterFlags = log.filter(l => l.status === S_FLAGGED && (l.match?.offRoster || l.match?.noRow) && !l.resolution).length;   // jerseys that are not on the roster, or flagged with no row (no size tag), have no row to count
   const flagCount      = roster.filter(r => r.scanned === "flag").length + offRosterFlags;
   const manualCount    = roster.filter(r => r.scanned === "manual").length;
   const teamNames      = useMemo(() => [...new Set(roster.map(r => r.team).filter(Boolean))], [roster]);
@@ -3222,14 +3281,14 @@ export default function App() {
     // Commit a hand-typed jersey. On the roster: that row passes as MANUAL for
     // the supervisor to sign off. Not on the roster: nothing is added — the
     // roster is the order — it is flagged to the supervisor right away.
-    const commitTyped = (o, { number, name, size, team }, exactRow) => {
+    const commitTyped = (o, { number, name, size, team }, exactRow, fromList = false) => {
       // What the app showed first for this jersey, against what the operator
       // says it is. The app was wrong when: a green was a different jersey (or
       // not on the roster); a list did not have it; it could not read a jersey
       // that is on the roster.
       const shown = o?.scan?.shown;
       if (shown?.mode === "confirm" && exactRow?._id !== shown.id) noteMistake("greenOverridden");
-      else if ((shown?.mode === "pick" || shown?.mode === "close") && !(exactRow && shown.ids?.includes(exactRow._id))) noteMistake("notOnList");
+      else if ((shown?.mode === "pick" || shown?.mode === "close") && !(exactRow && shown.ids?.includes(exactRow._id)) && !fromList) noteMistake("notOnList");   // an extra jersey flagged from the list is not the app missing a row
       else if (shown?.mode === "flag" && exactRow) noteMistake("couldNotRead");
       if (exactRow) {
         const reason = "Entered by operator — the camera could not read it";
@@ -3242,8 +3301,8 @@ export default function App() {
         return;
       }
       const typedRow = { number, name, team, size, offRoster: true };   // no _id: never a roster row
-      const label  = `#${number || "?"}${name ? " " + name : ""}${team ? " (" + team + ")" : ""}`;
-      const reason = `Not on the roster — operator typed ${label}`;
+      const label  = `#${number || "?"}${name ? " " + name : ""}${size ? " " + size : ""}${team ? " (" + team + ")" : ""}`;
+      const reason = fromList ? `Not on the roster — ${label}` : `Not on the roster — operator typed ${label}`;   // from the pick list the size was picked at the station
       const entry  = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: typedRow, status: S_FLAGGED, reason, ...stamp() };
       setLog(prev => [entry, ...prev]); setLastResult(entry);
       setOverlay({ mode: "supervisor", scan: o.scan, match: typedRow, reason: "Not on the roster.", route: "Supervisor → check the order", entryId: entry.id, photoFirst: false, damagePhotos: [] });
@@ -3353,6 +3412,32 @@ export default function App() {
       setOverlay(cur => cur?.mode === "supervisor" && cur.entryId === o.entryId ? { ...cur, damagePhotos: (cur.damagePhotos || []).slice(0, -1) } : cur);
     },
     dismissDone() { setOverlay(null); armAutoScan(); },
+    // "No size tag" on the pick list (the owner, 19 Nov 2026): with no size to
+    // read there is no row to pick, so the jersey is flagged as it is — the
+    // number (and name) read, the team when every row on the list agrees, no
+    // row marked — and goes to the stitcher for a tag.
+    noSizeTag() {
+      const o = overlay; if (!o?.scan) return;
+      const d = o.scan.detected || {};
+      const teams = [...new Set((o.candidates || []).map(c => teamKey(c.team)).filter(Boolean))];
+      const row = { number: String(d.number || "").trim(), name: String(d.name || "").trim(), team: teams.length === 1 ? (o.candidates.find(c => c.team)?.team || "") : "", size: "", noRow: true };
+      inspectRef.current.defect(); syncInspect();
+      const entry = { id: o.scan.id || Date.now(), detected: d, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: row, status: S_FLAGGED, reason: NO_SIZE_TAG.label, reasonId: NO_SIZE_TAG.id, ...stamp() };
+      setLog(prev => [entry, ...prev]); setLastResult(entry);
+      setOverlay({ mode: "supervisor", scan: o.scan, match: row, reason: NO_SIZE_TAG.label, route: NO_SIZE_TAG.route, entryId: entry.id, photoFirst: false, damagePhotos: [] });
+      playTone("flag");
+    },
+    // "Not on the roster" on the pick list: an extra jersey. The size is asked
+    // first (the roster has no row to take it from) so the ticket carries it.
+    offRosterStart() {
+      const o = overlay; if (!o?.scan) return;
+      setOverlay({ mode: "offSize", scan: o.scan, candidates: o.candidates, sizes: sizeChoices(roster), returnTo: o });
+    },
+    offRosterSize(size) {
+      const o = overlay; if (!o?.scan) return;
+      const d = o.scan.detected || {};
+      commitTyped(o, { number: String(d.number || "").trim(), name: String(d.name || "").trim(), size: String(size || ""), team: "" }, null, true);
+    },
     // "Enter by hand". On a list the operator already typed for (overlay.typed),
     // "None of these" adds the typed row instead of reopening the form — the
     // typed value is the truth, and the screen can never loop back on itself.
@@ -3561,7 +3646,7 @@ export default function App() {
       )}
 
       {overlay && !wide && (
-        <ScanOverlay key={overlayKey} inspect={inspect} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial}
+        <ScanOverlay key={overlayKey} inspect={inspect} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort}
           stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
       )}
 
@@ -3825,7 +3910,7 @@ export default function App() {
         {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && wide && (
-            <ScanOverlay key={overlayKey} inspect={inspect} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial}
+            <ScanOverlay key={overlayKey} inspect={inspect} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort}
               stream={null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
           )}
 

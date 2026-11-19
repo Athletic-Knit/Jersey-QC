@@ -241,6 +241,28 @@ export function sizeRank(size) {
 }
 export const bySize = (a, b) => { const x = sizeRank(a), y = sizeRank(b); return (x[0] - y[0]) || (x[1] - y[1]) || x[2].localeCompare(y[2]); };
 
+// The sizes a station may pick for a jersey that is on no roster row (an extra
+// jersey, "Not on the roster" on the pick list): the roster's own sizes, else
+// the usual youth and adult run.
+export const DEFAULT_SIZES = ["Y-XS", "Y-S", "Y-M", "Y-L", "Y-XL", "A-XS", "A-S", "A-M", "A-L", "A-XL", "A-2XL", "A-3XL"];
+export const sizeChoices = roster => { const s = rosterChoices(roster).sizes; return s.length ? s : DEFAULT_SIZES; };
+
+// The pick list's order (the owner, 19 Nov 2026): by size, so the operator
+// finds the row of the size tag at once — on a by-team order the same number
+// comes up on several teams and the size tag is all they check. A station
+// can choose team or number instead (Settings → Pick list). Ties keep the
+// matcher's order (Array.prototype.sort is stable).
+export const LIST_SORTS = [{ id: "size", label: "Size" }, { id: "team", label: "Team" }, { id: "number", label: "Number" }];
+export function sortCandidates(rows, by = "size") {
+  const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
+  const team = (a, b) => String(a.team || "").localeCompare(String(b.team || ""), undefined, { sensitivity: "base", numeric: true });
+  const size = (a, b) => bySize(a.size || "", b.size || "");
+  const cmp = by === "team"   ? (a, b) => team(a, b) || size(a, b) || num(a) - num(b)
+            : by === "number" ? (a, b) => num(a) - num(b) || size(a, b) || team(a, b)
+            :                   (a, b) => size(a, b) || team(a, b) || num(a) - num(b);
+  return [...rows].sort(cmp);
+}
+
 // ── The roster table's sort ──────────────────────────────────────────────────
 // Size is the default: the rack order (youth before adult, XS before 3XL), the
 // numbers within a size. Status puts what is still to do first. Ties keep the

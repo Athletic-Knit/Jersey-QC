@@ -85,15 +85,9 @@ describe("matcher invariants over random rosters and reads", () => {
           expect(full || cut, "2 named row needs its name (a cut-short name counts only with the exact number): " + ctx).toBe(true);
         }
         if (normNum(read.number)) expect(normNum(g.number), "3 the number read: " + ctx).toBe(normNum(read.number));
-        const nNum = normNum(read.number);
-        if (nNum.length === 1 && (read.flags.numberComplete === false || read.flags.laidFlat === false)) {
-          // A hidden digit only competes when the row it would make could be
-          // this jersey: any open two-digit row for a nameless read, but only
-          // an open row with THE SAME NAME once the whole name was read.
-          const namedFull = !!g.name && read.flags.nameComplete !== false && nameMatches(norm(read.name), g.name);
-          const hiddenOpen = roster.some(x => !x.scanned && x !== g && normNum(x.number).length === 2 && normNum(x.number).includes(nNum) && (!namedFull || nameMatches(norm(read.name), x.name)));
-          expect(hiddenOpen, "4 hidden digit alternative open: " + ctx).toBe(false);
-        }
+        // (Rule 4, "no green on a one-digit doubtful read while a two-digit row
+        // containing the digit is open", was dropped on 19 Nov 2026: the rows a
+        // hidden digit would make are no longer offered, by the owner's decision.)
         const twins = roster.filter(x => !x.scanned && x !== g && normNum(x.number) === normNum(g.number) && (!g.name || nameMatches(norm(read.name), x.name)));
         if (twins.length) {
           const fam = colourFamilies(read.flags.colour);

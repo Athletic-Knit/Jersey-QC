@@ -36,6 +36,10 @@ export const REASONS = [
 ];
 // "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
 export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning" };
+// A jersey with no size tag, flagged from the pick list (the owner, 19 Nov
+// 2026): with no size to read there is no row to pick, so it is flagged as it
+// is — the number read, no row — and goes to the stitcher for a tag.
+export const NO_SIZE_TAG = { id: "no_size_tag", label: "No size tag", route: "Supervisor → stitcher", cat: "Label" };
 
 // What the order is made of. ECHL and ECHL replica jerseys have the names,
 // numbers and crests stitched on as twill; sublimated jerseys have them
@@ -104,6 +108,7 @@ export const DEFAULT_SETTINGS = {
   boxWeights: false,      // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station
   boxWeightCap: 45,       // lb: no box heavier than this, when boxWeights is on (src/lib/boxmodel.js)
   trialMethod: "",        // input trial: "" | "mouse" | "keys" — which setup this station is timing (src/lib/trial.js)
+  listSort: "size",       // the pick list's order: "size" | "team" | "number" (LIST_SORTS in roster.js; the owner, 19 Nov 2026: by size, the tag is all the operator checks)
 };
 
 // ── Where a flagged jersey goes, from the reason the operator picked ────────
@@ -132,7 +137,7 @@ const OLD_REASONS = [
   ["Print or colour", "Supervisor → full remake", "Artwork"],     // the sublimated menu's wording for one day, 17 Nov 2026
   ["Something else", "Supervisor decides", "Other"],              // the last item of the menu that day, with a text box
 ].map(([label, route, cat]) => ({ label, route, cat }));
-const ALL_REASONS = [...REASONS, MARK_STAYS, ...OLD_REASONS];
+const ALL_REASONS = [...REASONS, MARK_STAYS, NO_SIZE_TAG, ...OLD_REASONS];
 // The defect category of a flag, from its reason's label, for the reports'
 // breakdown. A reason typed by the operator is "Other"; a jersey that is not
 // on the roster, or a duplicate, is an order problem, not a defect.

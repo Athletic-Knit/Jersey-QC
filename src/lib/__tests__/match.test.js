@@ -24,7 +24,7 @@ describe("findMatches: exact and ambiguity", () => {
     const m = findMatches(roster, "", "7");
     expect(m.type).toBe("pick");
     expect(m.candidates.map(c => c._id).slice(0, 2)).toEqual([0, 1]);
-    expect(m.candidates.map(c => c._id)).toContain(4);      // #77: a hidden digit would make 7 from it
+    expect(m.candidates.map(c => c._id)).not.toContain(4);  // #77: the rows a hidden digit would make are not offered when the read is on the roster (the owner, 19 Nov 2026)
   });
   it("yellow for colour-only twins, never green", () => {
     const m = findMatches(roster, "", "35");

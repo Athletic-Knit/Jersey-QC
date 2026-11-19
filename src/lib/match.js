@@ -170,7 +170,7 @@ function sameReadRows(rows, read, reason, eligible = rows) {
   if (sure) return sure;
   const { rows: agree, narrowed } = narrowByColour(rows, read);
   const seen = narrowed && read.colour ? ` — the jersey looks ${String(read.colour).trim()}` : "";
-  return { type: "pick", candidates: dedupe([...agree, ...rows]), reason: reason + seen };
+  return { type: "pick", candidates: dedupe([...agree, ...rows]), reason: reason + seen, twins: true };   // twins: the one left open may be the passed one scanned again (the colour seen says so), so a list of one here stays a list
 }
 
 const soleOpen = (direct, cands) => {
@@ -214,19 +214,36 @@ function withoutNamed(cands, nName, read, numberOnly) {
   if (pos === "left" || pos === "right") return cands;                 // off-centre: the name may be out of frame too
   if (/\bname\b/i.test(String(read.obstruction || ""))) return cands; // something lies over the name area
   if (!cands.some(r => !norm(r.name) && !isDone(r))) return cands;
-  return cands.filter(r => !norm(r.name));
+  return Object.assign(cands.filter(r => !norm(r.name)), { trimmed: true });   // trimmed: the named rows still count, so a list of one here stays a list
 }
 
 export function findMatches(roster, name, number, read = {}) {
-  const m = findMatchesInner(roster, name, number, read);
+  let m = findMatchesInner(roster, name, number, read);
   // A list on which every row has already passed is not a choice: the jersey
   // was scanned before (two #84 rows, both done). Say so.
   if ((m.type === "pick" || m.type === "close") && m.candidates.length && m.candidates.every(isDone)) return { type: "duplicate", match: m.candidates[0] };
   // Otherwise a row that has passed (or is with the supervisor) is not a
   // choice either: it leaves the list, so the operator only sees jerseys
   // still to do (9 Nov 2026: "#37 · Already passed" was cluttering the list).
-  if ((m.type === "pick" || m.type === "close") && m.candidates.some(isDone)) return { ...m, candidates: m.candidates.filter(r => !isDone(r)) };
+  if ((m.type === "pick" || m.type === "close") && m.candidates.some(isDone)) m = { ...m, candidates: m.candidates.filter(r => !isDone(r)) };
+  // A list with one jersey on it is not a choice either: it goes straight to
+  // the green (the owner, 19 Nov 2026: "why bother with showing it"). Only
+  // when that jersey is what was read — its number is the number read, and
+  // its name, if it has one, the name read; typed by the operator, always.
+  // A near miss ("close": nothing exact) or a contradiction stays a question;
+  // so does a list that was trimmed for the operator's eyes (`trimmed`: the
+  // named rows still count) and a last open twin the colour seen argues
+  // against (`twins`: the passed twin scanned again).
+  if (m.type === "pick" && m.candidates.length === 1 && !m.trimmed && !m.twins && agreesWithRead(m.candidates[0], name, number, read)) return { type: "exact", match: m.candidates[0] };
   return m;
+}
+
+function agreesWithRead(row, name, number, read) {
+  if (read.typed) return true;
+  const nName = norm(name), nNum = normNum(number);
+  if (normNum(row.number) && normNum(row.number) !== nNum) return false;
+  if (norm(row.name) && !(nName && read.nameComplete !== false && nameMatches(nName, row.name))) return false;
+  return true;
 }
 
 function findMatchesInner(roster, name, number, read = {}) {
@@ -299,19 +316,21 @@ function findMatchesInner(roster, name, number, read = {}) {
     const what = read.obstruction ? ` (${String(read.obstruction).trim()})` : "";
     // What to offer. If the read points at rows on the roster, offer THOSE and
     // only those — a #30 read never lists #31 or #70, they have nothing to do
-    // with it. The one addition is for a single-digit read: the two-digit rows
-    // a hidden digit would make (#4 → #40, #14), the case this guard exists
-    // for. Only when the read matches no row at all do the near misses come
-    // in: one-digit substitutions, and for a covered two-digit read, each
+    // with it, and a #4 read lists the #4 rows and not #40 or #14 (the owner,
+    // 19 Nov 2026: on a 521-jersey order every one-digit read put the whole
+    // column of two-digit numbers on the list; a digit under a fold is rare,
+    // and a rescan sorts it out). Only when the read matches no row at all do
+    // the rows a hidden digit would make (#4 → #40, #14) and the near misses
+    // come in: one-digit substitutions, and for a covered two-digit read, each
     // digit on its own ("35" guessed as 55 or 75 still finds #35 and #5).
     const exact = dedupe([...byBoth, ...byName, ...byNum]);
-    const hidden = nNum.length === 1 ? hiddenDigitNumbers(nNum, roster) : [];
+    const hidden = nNum.length === 1 && !exact.length ? hiddenDigitNumbers(nNum, roster) : [];
     // A COVERED two-digit read is a guess at the hidden digit ("21" with the 3
     // under a hand is the #31), so it also offers the rows one digit away.
     const side = coverSide(read.obstruction);
     const guessedDigit = partialNum && read.numberComplete === false && nNum.length === 2 ? nearNumbers(nNum, roster, { anyDigit: true, side, sameLength: true }) : [];
     const cands = exact.length
-      ? dedupe([...exact, ...hidden, ...guessedDigit])
+      ? dedupe([...exact, ...guessedDigit])
       : dedupe([...hidden, ...(nNum.length === 1 && hidden.length ? [] : nearNumbers(nNum, roster, { anyDigit: partialNum })), ...(partialNum ? subNumberCandidates(nNum, roster) : []), ...(partialName ? [] : nearNames(nName, roster))]);   // a covered lone digit with hidden-digit rows to offer needs no substitutions
     // Name and number pointing at different rows is a contradiction: always ask.
     const contradiction = byName.length >= 1 && byNum.length >= 1 && byBoth.length === 0;
@@ -352,7 +371,11 @@ function findMatchesInner(roster, name, number, read = {}) {
         if (sure2) return sure2;
       }
     }
-    if (cands.length) return { type: "pick", candidates: withoutNamed(trimBySide(cands, nNum, side, partialNum && read.numberComplete === false), nName, read, numberOnly), reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true };
+    if (cands.length) {
+      const shown = withoutNamed(trimBySide(cands, nNum, side, partialNum && read.numberComplete === false), nName, read, numberOnly);
+      const sameNum = nNum ? exact.filter(r => normNum(r.number) === nNum) : [];
+      return { type: "pick", candidates: shown, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true, trimmed: !!shown.trimmed || undefined, twins: sameNum.length > 1 || undefined };
+    }
     return { type: "none", reason: `${why.join("; ")}${what}`, soft: true };
   }
 
@@ -362,12 +385,12 @@ function findMatchesInner(roster, name, number, read = {}) {
   }
 
   // A number with no name, where the row it points at HAS a name: the name may
-  // be hidden or out of frame, and so may a digit. Green needs both. The
-  // operator sees the #4 row first, then rows a hidden digit would make (#40,
-  // #14). A row with no name of its own (a mixed roster) has nothing to read
-  // and stays green on a clean number.
+  // be hidden or out of frame. Green needs both. The operator sees the rows
+  // with that number (not the rows a hidden digit would make: see above). A
+  // row with no name of its own (a mixed roster) has nothing to read and
+  // stays green on a clean number.
   if (byNum.length >= 1 && nName === "" && !typed && byNum.some(r => norm(r.name))) {
-    const cands = dedupe([...byNum, ...hiddenDigitNumbers(nNum, roster)]);
+    const cands = byNum;
     if (cands.length === 1 && isDone(cands[0])) return { type: "duplicate", match: cands[0] };
     // No "sole candidate" shortcut here: every row in byNum that could be
     // green has a name, and that name was not read. The floor showed what the
@@ -376,11 +399,12 @@ function findMatchesInner(roster, name, number, read = {}) {
     // among rows with NO name, and only on the body colour. A row with a name
     // needs its name read before it can be green; a nameless read that lands
     // on "DONNELLY" because the jersey's trim is red is exactly the wrong green.
-    if (byNum.length > 1 && !cands.some(r => !byNum.includes(r) && !isDone(r))) {   // no open hidden-digit row competing
+    if (byNum.length > 1) {
       const s2 = settleTwins(byNum, byNum.filter(r => !norm(r.name)), read);
       if (s2) return s2;
     }
-    return { type: "pick", candidates: withoutNamed(cands, nName, read, numberOnly), reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?`, soft: true };
+    const shown = withoutNamed(cands, nName, read, numberOnly);
+    return { type: "pick", candidates: shown, reason: `Read #${nNum} but no name — is the name hidden or out of frame? Is it one of these?`, soft: true, trimmed: !!shown.trimmed || undefined, twins: byNum.length > 1 || undefined };
   }
 
   // The name points at one row, the number at another: a digit was misread
