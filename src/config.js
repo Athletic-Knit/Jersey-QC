@@ -74,6 +74,10 @@ export function reasonsFor(jerseyType) {
 const env = import.meta.env;
 export const ROLES = [
   { id: "inspector",  label: "Inspector",  pin: env.VITE_PIN_INSPECTOR  || "1111" },
+  // A sorter only sorts (the owner, 19 Nov 2026): no cleaning, no inspection. Signs in at a
+  // station with the station's PIN, like an inspector; no quick look, no full inspection, no
+  // double-check, no damage photo, and the only flags are No size tag, Duplicate and Not on the roster.
+  { id: "sorter",     label: "Sorter",     pin: env.VITE_PIN_SORTER     || "4444" },
   { id: "packer",     label: "Packer",     pin: env.VITE_PIN_PACKER     || "2222" },
   { id: "supervisor", label: "Supervisor", pin: env.VITE_PIN_SUPERVISOR || "3333" },
   { id: "admin",      label: "Admin",      pin: env.VITE_PIN_ADMIN      || "9999" },

@@ -283,9 +283,14 @@ const goToStation = id => { const u = new URL(window.location.href); u.searchPar
 // PIN. The page's ?station= says where it is: station1..3 for inspectors,
 // "packing" for the packer, "supervisor" for the supervisor's board.
 const ROLE_CHOICES = ROLES.filter(r => r.id !== "admin");
+// The head of a long dialog (its title and Close) stays at the top while the
+// list under it scrolls, like a frozen header row in Excel (the owner, 19 Nov
+// 2026: no keyboard on the floor, so Esc was a scroll to the end and a click).
+const STICKY_HEAD = { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap", position: "sticky", top: -30, zIndex: 3, background: "#161b22", margin: "-30px -30px 0", padding: "30px 30px 12px", borderBottom: "1px solid #21262d" };
 const BLOCKED_ROLES = ["packer"];   // shown, but not signable: the packer side is not built yet
 const roleOfStation = id => stationOf(id) ? "inspector" : id === "packing" ? "packer" : id === "supervisor" ? "supervisor" : "";
-const pageFor = (role, station) => role === "inspector" ? station : role === "packer" ? "packing" : "supervisor";
+const atStation = role => role === "inspector" || role === "sorter";   // signs in at a station, with the station's PIN
+const pageFor = (role, station) => atStation(role) ? station : role === "packer" ? "packing" : "supervisor";
 
 function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + title: hand the station to another operator without losing the order
   const here = urlStation();
@@ -307,17 +312,17 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const busyBy = id => { const u = use["st-" + id]; return u && u.live && !u.mine ? (u.operator || "someone") : ""; };
   const roleDef = ROLES.find(r => r.id === role);
   const stDef   = stationOf(station);
-  const pinOwner = role === "inspector" ? stDef : roleDef;      // whose PIN opens this page
+  const pinOwner = atStation(role) ? stDef : roleDef;      // whose PIN opens this page
   const target   = pageFor(role, station);                      // where the page should be for this choice
   // A new sign-in moves the page to the chosen station or board (reload, so the
   // saved order, the sign-in and the hub id follow); a take-over keeps it.
-  const pickRole    = r  => { setRole(r.id); const t = pageFor(r.id, station); if (r.id !== "inspector" && t !== here && !onCancel) goToStation(t); };
+  const pickRole    = r  => { setRole(r.id); const t = pageFor(r.id, station); if (!atStation(r.id) && t !== here && !onCancel) goToStation(t); };
   const pickStation = id => { setStation(id); if (id !== here && !onCancel) goToStation(id); };
 
   const submit = () => {
     if (PIN_REQUIRED && pin !== pinOwner.pin) { setError("Wrong PIN for " + pinOwner.label + "."); return; }
     if (!name.trim()) { setError("Please enter your name."); return; }
-    if (role === "inspector" && !onCancel && busyBy(station)) { setError(`${stDef.label} is in use by ${busyBy(station)} on another PC. Pick a free station, or sign out on that PC first.`); return; }
+    if (atStation(role) && !onCancel && busyBy(station)) { setError(`${stDef.label} is in use by ${busyBy(station)} on another PC. Pick a free station, or sign out on that PC first.`); return; }
     // The page is not on the chosen station yet (opened from the bare address):
     // it has to reload there. Save the sign-in for that station FIRST, or the
     // reload throws the name and PIN away and the operator has to do it twice.
@@ -353,7 +358,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
             })}
           </div>
         </div>
-        {role === "inspector" && (
+        {atStation(role) && (
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Which station?</label>
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${STATIONS.length},1fr)`, gap: 6 }}>
@@ -1192,7 +1197,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, onTrial = null, listSort = "size" }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, onTrial = null, listSort = "size" }) {
   const reasons = reasonsFor(jerseyType);
   // Input trial (src/lib/trial.js): the overlay is mounted anew for every
   // screen (its key is the mode and the scan), so "shown" is the mount; every
@@ -1265,7 +1270,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
 
   const options = useMemo(() => {
     const retry    = { id: "retry",    label: "↻ Retry scan",    run: actions.retry };
-    const notRight = { id: "notright", label: "🚩 Flag",          run: actions.reasons };
+    const notRight = { id: "notright", label: "🚩 Flag",          run: sorter ? actions.listFlag : actions.reasons };   // a sorter flags No size tag, Duplicate, Not on the roster only
     const byHand   = { id: "manual",   label: "⌨ Enter by hand", run: actions.manual };
     if (mode === "confirm")    return [{ id: "confirm", label: "✓ Confirm", primary: true, run: actions.confirm }, { ...retry, mouseOnly: true }, notRight];   // Retry on a green is a mouse click only (see showNudge)
     if (isList) {
@@ -1304,7 +1309,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     }
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [mode, isList, candidates, actions, state.typed, state.sizes, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount]);
+  }, [mode, isList, candidates, actions, state.typed, state.sizes, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter]);
 
   const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
   const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
@@ -1887,7 +1892,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, position: "sticky", bottom: -28, margin: "0 -28px -28px", padding: "14px 28px 28px", background: "#161b22", borderTop: "1px solid #21262d" }}>{/* Save and Cancel stay in view while the panel scrolls */}
           <button disabled={problems.length > 0} onClick={() => { onSave(temp); onClose(temp); }} style={{ ...btnPri, flex: 1, opacity: problems.length ? 0.5 : 1 }}>Save</button>
           <button onClick={onClose} style={btnGhost}>Cancel</button>
         </div>
@@ -2035,10 +2040,11 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, da
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 32, maxWidth: 760, width: "92vw", maxHeight: "92%", overflowY: "auto", boxSizing: "border-box" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 6 }}>
+        <div style={{ ...STICKY_HEAD, marginBottom: 6 }}>
           <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>📦 Boxes</div>
           <div style={{ fontSize: 17, color: "#94a3b8", flex: 1 }}>{by === "all" ? "the whole order, box after box" : `sorted by ${by}`} — which box is full?</div>
           {onLabels && <button onClick={onLabels} title="The box labels of this order, to print again" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>🖨 Box labels</button>}
+          <button onClick={onClose} style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ fontSize: 16, color: "#cbd5e1", marginBottom: 18 }}>
           A full box is closed: the list of what is in it prints, to stick on the box when it is taped, and {by === "all" ? "the order" : `its ${by}`} carries on in the next box (5.1, then 5.2).
@@ -2190,7 +2196,7 @@ function BlanksModal({ groups, boxOf, last, sticker, scanKey, onCount, onFlag, o
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 30, maxWidth: 860, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+        <div style={STICKY_HEAD}>
           <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>Blank jerseys</div>
           <div style={{ fontSize: 17, color: "#94a3b8", flex: 1 }}>{left} still to count</div>
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
@@ -2307,7 +2313,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 30, maxWidth: 860, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+        <div style={STICKY_HEAD}>
           <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>🖨 Print</div>
           <div style={{ fontSize: 19, color: "#e2e8f0", fontWeight: 700, flex: 1 }}>
             {pack ? <>Order {pack.orderNumber || "—"}{past ? <span style={{ color: "#fcd34d", fontWeight: 400 }}> · a past order{pack.past?.date ? `, ${pack.past.date}` : ""}{pack.past?.station ? `, ${String(pack.past.station).replace(/^st-/, "")}` : ""}</span> : <span style={{ color: "#94a3b8", fontWeight: 400 }}> · the order on this station</span>}</> : <span style={{ color: "#94a3b8", fontWeight: 400 }}>No order is open: find one by its number</span>}
@@ -2596,7 +2602,8 @@ export default function App() {
   const [noJersey, setNoJersey] = useState("");      // a B press that read nothing: a quiet notice for a moment, no screen
   const [retried, setRetried] = useState(null);      // the last read dropped by Retry: { number, name }, shown until the next scan so a retry never passes for a pass
   const noJerseyTimer = useRef(null);
-  const noteMistake = useCallback(kind => { vigilRef.current.noteMistake(kind); setChecksLeft(vigilRef.current.remaining); }, []);
+  const sortingRef = useRef(false);   // a sorter: no double-check after a mistake (kept in a ref for the scan's callbacks)
+  const noteMistake = useCallback(kind => { if (sortingRef.current) return; vigilRef.current.noteMistake(kind); setChecksLeft(vigilRef.current.remaining); }, []);
   // The operator's own regime: full inspection of the next 5 after a defect,
   // a spot check after 10 clean (createInspection). `inspect` mirrors it for
   // the header pill and the green screen.
@@ -2740,6 +2747,8 @@ export default function App() {
   const manualCount    = roster.filter(r => r.scanned === "manual").length;
   const teamNames      = useMemo(() => [...new Set(roster.map(r => r.team).filter(Boolean))], [roster]);
   const canSupervise   = role === "supervisor" || role === "admin";
+  const sorting        = role === "sorter";   // sorts only: no quick look, no full inspection, no double-check (the owner, 19 Nov 2026)
+  useEffect(() => { sortingRef.current = sorting; }, [sorting]);
   const openCount      = roster.filter(r => r.scanned === "flag" || r.scanned === "missing" || r.scanned === "short").length;
   const rosterComplete = roster.length > 0 && remaining === 0;
   // The roster table: the header pill's status, then the size, team, box and
@@ -3057,7 +3066,7 @@ export default function App() {
       // Self-check: checks are owed after a mistake, so read a second frame and
       // let the two reads settle the screen between them — green only when
       // both say the same jersey. A silent empty-table read is left alone.
-      if (vigilRef.current.active && detected.jersey_present !== false && version === rosterVersion.current) {
+      if (!sortingRef.current && vigilRef.current.active && detected.jersey_present !== false && version === rosterVersion.current) {
         const again = recapture ? recapture() : null;
         console.log(`[self-check] ${vigilRef.current.remaining} to go — reading ${again ? "a second frame" : "the frame again"}`);
         const d2 = await readOne(again?.base64 || base64, again?.dataUrl || dataUrl);
@@ -3731,8 +3740,8 @@ export default function App() {
       )}
 
       {overlay && !wide && (
-        <ScanOverlay key={overlayKey} inspect={inspect} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort}
-          stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
+        <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort}
+          stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera" && !sorting} />
       )}
 
       {replay && replay.hidden && (
@@ -3817,8 +3826,9 @@ export default function App() {
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flex: 1, minWidth: 0, overflow: "hidden", justifyContent: "flex-end" }}>
           <Pill color="#22c55e" active={rosterFilter === "pass"} onClick={() => filterRoster("pass")} title="Show the passed jerseys">{passCount} Pass</Pill>
           <Pill color="#ef4444" active={rosterFilter === "flag"} onClick={() => filterRoster("flag")} title="Show the flagged jerseys">{flagCount} Flag</Pill>
-          {checksLeft > 0 && <span title="After a mistake the next jerseys are read twice and must agree before a green"><Pill color="#60a5fa">Checking · {checksLeft}</Pill></span>}
-          {sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect)}</Pill></span>}
+          {sorting && <span title="Signed in as a sorter: sorting only, no inspection"><Pill color="#a78bfa">Sorting</Pill></span>}
+          {!sorting && checksLeft > 0 && <span title="After a mistake the next jerseys are read twice and must agree before a green"><Pill color="#60a5fa">Checking · {checksLeft}</Pill></span>}
+          {!sorting && sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect)}</Pill></span>}
           {manualCount > 0 && <Pill color="#f59e0b" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the jerseys entered by hand">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
           {saveOk === false && <Pill color="#f87171" title="This PC's storage is full or blocked: the order is not being saved, so a reload or a crash would lose the work since. Tell the supervisor; do not close or reload this page.">⚠ NOT SAVING — tell the supervisor</Pill>}
@@ -3916,7 +3926,7 @@ export default function App() {
                           <div style={{ width: 12, height: 12, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused || (waitPedal && handsFree) ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused || (waitPedal && handsFree) ? "#94a3b8" : "#22c55e"}` }} />
                           <span style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? `Hands-free paused — ${keyLabel} to scan` : !settings.autoScan ? `Hands-free off — ${keyLabel} to scan` : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : waitPedal ? `Flagged — press ${keyLabel} to scan the next jersey` : "Ready"}</span>
                         </div>
-                        {checksLeft > 0 && (
+                        {!sorting && checksLeft > 0 && (
                           <div title="After a mistake the next jerseys are read twice and must agree before a green" style={{ position: "absolute", top: 54, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(37,99,235,0.85)", padding: "8px 16px", borderRadius: 999 }}>
                             <span style={{ fontSize: 17, fontWeight: 700, color: "#fff" }}>Double-checking · {checksLeft} to go</span>
                           </div>
@@ -4015,8 +4025,8 @@ export default function App() {
         {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && wide && (
-            <ScanOverlay key={overlayKey} inspect={inspect} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort}
-              stream={null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera"} />
+            <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort}
+              stream={null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera" && !sorting} />
           )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", borderBottom: "1px solid #21262d", flexShrink: 0 }}>{/* no ETA here (the owner, 19 Nov 2026): it is on the board and the Wall */}
