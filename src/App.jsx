@@ -2133,6 +2133,50 @@ function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, da
   );
 }
 
+// ── Missing · Duplicate · Flagged ────────────────────────────────────────────
+// Three lists behind one small button, so the station screen stays plain (the
+// owner, 19 Nov 2026): what is missing, what came twice, what is flagged. Each
+// line is the jersey (number, name, size, team), its box, and for a flag why.
+function IssuesModal({ missing, dups, flagged, binOf, onClose }) {
+  useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
+  const line = (key, j, extra, colour) => {
+    const box = j._id !== undefined ? binOf(j) : null;
+    return (
+      <div key={key} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "6px 10px", borderRadius: 8, background: "#0d1117", flexWrap: "wrap" }}>
+        <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 24, lineHeight: 1 }}>#{j.number || "?"}</strong>
+        {j.name && <span style={{ fontWeight: 700 }}>{j.name}</span>}
+        {j.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "#4ade80", fontWeight: 800 }}>{j.size}</span>}
+        {j.team && <span style={{ color: "#94a3b8" }}>{j.team}</span>}
+        {box !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 18, color: "#60a5fa", fontWeight: 800 }}>Box {box}</span>}
+        {extra && <span style={{ color: colour, fontSize: 15, marginLeft: "auto" }}>{extra}</span>}
+      </div>
+    );
+  };
+  const col = (title, colour, items, empty) => (
+    <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+      <div style={{ fontSize: 22, fontWeight: 900, color: colour, marginBottom: 8 }}>{title} · {items.length}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {items.length ? items : <div style={{ color: "#7c8ba1", fontSize: 16, padding: "6px 2px" }}>{empty}</div>}
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #f59e0b", padding: 30, maxWidth: 1300, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={STICKY_HEAD}>
+          <div style={{ fontSize: 30, fontWeight: 900, color: "#fcd34d", flex: 1 }}>Missing · Duplicate · Flagged</div>
+          <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
+        </div>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start", marginTop: 16 }}>
+          {col("Missing", "#fbbf24", missing.map(r => line("m" + r._id, r, r.scanned === "short" ? "short-shipped" : "", "#fbbf24")), "Nothing is marked missing.")}
+          {col("Duplicate", "#c084fc", dups.map(l => line("d" + l.id, l.match || l.detected || {}, String(l.timestamp || "").slice(11, 16), "#94a3b8")), "No duplicates.")}
+          {col("Flagged", "#f87171", flagged.map(f => line("f" + f.key, f.jersey, f.reason, "#fecaca")), "Nothing is flagged.")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Roster complete modal ─────────────────────────────────────────────────────
 // ── History: every jersey scanned this order, latest first ──────────────────
 // One line per jersey (its latest log entry). A passed jersey can be flagged
@@ -2571,6 +2615,7 @@ export default function App() {
   const [rosterSearch,       setRosterSearch]       = useState("");       // the table's search box: a jersey number, a name, or both
   const [searchKeys,         setSearchKeys]         = useState(false);    // the on-screen keys under the bar, while the cursor is in the search box
   const searchRef = useRef(null);
+  const [showIssues,         setShowIssues]         = useState(false);   // the Missing · Duplicate · Flagged lists
   const [showHistory,        setShowHistory]        = useState(false);   // every jersey scanned this order, latest first   // "pass" | "flag" | "manual" | null — set by clicking a header pill
   const filterRoster = useCallback(kind => { setRosterFilter(f => (f === kind ? null : kind)); setView("roster"); }, []);
   const [error,              setError]              = useState(null);
@@ -2667,6 +2712,20 @@ export default function App() {
   const shortList  = useMemo(() => shortages(roster, binMap, closedBins), [roster, binMap, closedBins]);
   const shortByBox = useMemo(() => Object.fromEntries(shortList.map(x => [x.bin, x])), [shortList]);
   const flaggedRows = useMemo(() => roster.filter(r => r.scanned === "flag"), [roster]);   // what is in the DAMAGED box
+  // The three lists behind the "Missing · Duplicate · Flagged" button. A duplicate is a flag
+  // whose reason says so; flagged is every roster row out for a flag (its newest reason) and
+  // every open flag with no row (not on the roster, no size tag), duplicates apart.
+  const issues = useMemo(() => {
+    const open = log.filter(l => l.status === S_FLAGGED && !l.resolution);
+    const isDup = l => /^duplicate/i.test(String(l.reason || ""));
+    const dups = open.filter(isDup);
+    const reasonOf = id => log.find(l => l.status === S_FLAGGED && l.match?._id === id)?.reason || "";
+    const flagged = [
+      ...flaggedRows.map(r => ({ key: "r" + r._id, jersey: r, reason: String(reasonOf(r._id)).replace(/ — found after it passed$/, "") })),
+      ...open.filter(l => !isDup(l) && l.match && l.match._id === undefined).map(l => ({ key: "e" + l.id, jersey: l.match, reason: String(l.reason || "").replace(/ — operator typed.*$/, "") })),
+    ];
+    return { missing: roster.filter(r => r.scanned === "missing" || r.scanned === "short"), dups, flagged };
+  }, [log, roster, flaggedRows]);
   const binSummary = useMemo(() => [...closedList, ...openBins].sort((a, b) => binOrder(a.bin, b.bin)), [closedList, openBins]);
   // How many boxes each team or size is expected to fill from its open box on
   // (the box model on every jersey of it not yet in a closed box), for the
@@ -3779,6 +3838,7 @@ export default function App() {
           {noJersey}
         </div>
       )}
+      {showIssues && <IssuesModal missing={issues.missing} dups={issues.dups} flagged={issues.flagged} binOf={binOf} onClose={() => closeDialog(() => setShowIssues(false))} />}
       {showHistory && (
         <HistoryModal log={log} roster={roster} binOf={binOf} onClose={() => closeDialog(() => setShowHistory(false))}
           onFlag={l => { setShowHistory(false); actions.reopen(l); }} />
@@ -4014,7 +4074,9 @@ export default function App() {
                 <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
                   <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
                   {binMap && <button onClick={() => setShowBins(true)} title="A box is full: close it, print the list of what is in it, and carry on in the next box" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#f59e0b", color: "#fcd34d" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Box full"}</button>}
-                  <span style={{ fontSize: 13, color: "#7c8ba1" }}>Every jersey scanned this order — flag one after the fact</span>
+                  <button onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: issues.missing.length + issues.dups.length + issues.flagged.length ? "#f59e0b" : "#334155" }}>
+                    ⚠ Missing <span style={{ color: "#fbbf24" }}>{issues.missing.length}</span> · Dup <span style={{ color: "#c084fc" }}>{issues.dups.length}</span> · Flagged <span style={{ color: "#f87171" }}>{issues.flagged.length}</span>
+                  </button>
                 </div>
               )}
 
