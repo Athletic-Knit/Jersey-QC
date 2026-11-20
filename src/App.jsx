@@ -2280,8 +2280,9 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
   }[print.status];
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 44, maxWidth: 680, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
-        <div style={{ fontSize: 56, marginBottom: 12 }}>🗂️</div>
+      {/* Fits any screen height: the title, words and buttons always show, only the list of boxes scrolls (it ran off a screen with the taskbar showing, 20 Nov 2026). */}
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: "28px 44px", maxWidth: 680, width: "90vw", maxHeight: "96%", display: "flex", flexDirection: "column", textAlign: "center", boxSizing: "border-box" }}>
+        <div style={{ fontSize: 48, marginBottom: 4, flexShrink: 0 }}>🗂️</div>
         <div style={{ fontSize: 36, fontWeight: 900, color: "#60a5fa", marginBottom: 8 }}>Set out {labels.length || entries.length} {(labels.length || entries.length) === 1 ? "box" : "boxes"}</div>
         <div style={{ fontSize: 19, color: "#cbd5e1", marginBottom: 26 }}>
           {by === "all"
@@ -2289,7 +2290,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
             : <>This order is sorted <strong style={{ color: "#e2e8f0" }}>by {by}</strong>: {entries.length} {by === "size" ? (entries.length === 1 ? "size" : "sizes") : (entries.length === 1 ? "team" : "teams")}. </>}
           {autoPrint ? "The labels are printing: stick" : "Print the labels and stick"} one inside each box before scanning. How many boxes is an estimate; a box that fills sooner gets its next label at Box full.
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 30, maxHeight: 400, overflowY: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 22, flex: "1 1 auto", minHeight: 120, overflowY: "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "12px 22px", borderRadius: 12, background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", order: 99 }}>
             <div style={{ fontFamily: FONT_DISPLAY, fontSize: 34, fontWeight: 900, color: "#f87171", minWidth: 150, flexShrink: 0, textAlign: "center", lineHeight: 1, whiteSpace: "nowrap" }}>DAMAGED</div>
             <div style={{ textAlign: "left", fontSize: 17, color: "#fecaca" }}>One more box, off to the side, for flagged jerseys. It is the same box all day: print its label from Boxes or the Print menu when you need one.</div>

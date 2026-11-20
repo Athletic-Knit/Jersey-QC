@@ -20,8 +20,13 @@ button, input, select, textarea, kbd { font-family: inherit; }
    from 4–5 ft; this scales the whole station by the screen it is on, so the
    same layout stays readable on a laptop, a 1080p monitor and a 1440p one.
    Everything inside is laid out in a smaller logical viewport and then
-   enlarged, so nothing has to be designed twice. */
-@media (min-width: 1600px) and (min-height: 800px) { #root { zoom: 1.3; } }
+   enlarged, so nothing has to be designed twice.
+   The height decides as much as the width: a 1080p screen in a browser
+   window with the taskbar showing leaves ~945 px, and at 1.3 the dialogs ran
+   off the top and bottom (AK-NB-165, 20 Nov 2026). Such a screen gets 1.15,
+   which lays it out like a full-screen station (~820 px tall). */
+@media (min-width: 1600px) and (min-height: 800px) { #root { zoom: 1.15; } }
+@media (min-width: 1600px) and (min-height: 1000px) { #root { zoom: 1.3; } }
 @media (min-width: 2300px) and (min-height: 1200px) { #root { zoom: 1.7; } }
 
 /* A visible focus ring for keyboard and pedal users — the app is driven by
