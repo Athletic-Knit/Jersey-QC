@@ -464,6 +464,7 @@ function JerseyTypePicker({ value, onChange }) {
 function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
   const mine = kindOfRole(role), me = stationId();
   const [list, setList] = useState(null);         // the server's entries (null: still asking)
+  const [seenAt, setSeenAt] = useState(0);         // when the list came (a finished order is mentioned for a day only)
   const [q, setQ] = useState("");
   const [keys, setKeys] = useState(false);
   const [err, setErr] = useState("");
@@ -473,7 +474,7 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
     let on = true;
     const load = async () => {
       await moveLocalToServer(hub.parkOrder).catch(() => 0);   // any order still on this PC from before
-      try { const r = await hub.unfinished({ all: true }); if (on) { setList(r.orders || []); setErr(""); } }
+      try { const r = await hub.unfinished({ all: true }); if (on) { setList(r.orders || []); setSeenAt(Date.now()); setErr(""); } }
       catch (e) { if (on) { setList(l => l || []); setErr(`The server did not answer (${e.message}). The unfinished orders are kept there: try again in a moment.`); } }
     };
     load(); const t = setInterval(load, 15000);
@@ -484,7 +485,9 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
   const ofMine = (list || []).filter(e => kindOfEntry(e) === mine);
   const open = ofMine.filter(e => !e.closed && match(e))
     .sort((a, b) => ((b.assignedTo === me) - (a.assignedTo === me)) || ((b.updatedAt || 0) - (a.updatedAt || 0)));
-  const closed = ofMine.filter(e => e.closed && match(e));
+  // An order the supervisor finished on the board is mentioned for a day, to the station that put it
+  // aside or was given it, then no more (the owner, 20 Nov 2026: it showed every time, for 90 days).
+  const closed = ofMine.filter(e => e.closed && match(e) && (e.station === me || e.assignedTo === me) && seenAt - (e.closed.at || 0) < 86400000);
   const other = (list || []).filter(e => !e.closed && kindOfEntry(e) !== mine).length;
   const pick = e => { setBusy(`Opening order ${e.order}…`); setErr(""); Promise.resolve(onPickUp({ hubEntry: e })).catch(x => setErr(x.message)).finally(() => setBusy("")); };
   const day = ms => new Date(ms).toLocaleDateString([], { day: "numeric", month: "short" });
