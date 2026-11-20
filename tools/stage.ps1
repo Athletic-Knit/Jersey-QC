@@ -110,11 +110,26 @@ if ($Stage -eq "development") {
 
 # ---- The server ------------------------------------------------------------
 Step "The server"
+# A development or testing server started by this script answers /api/replay. One that
+# answers the port but not that was started some other way (the testing server set up by
+# hand on 19 Nov 2026, its "Jersey QC testing server" task) runs an older setup: no
+# replay, and it never takes a change of its settings. It is stopped and this one started.
+function IsOurs { $out = & curl.exe -sk -m 5 "https://localhost:$port/api/replay?q=" 2>$null; return [bool]($out -match '"runs"') }
+if ($Stage -eq "testing" -and (Get-ScheduledTask -TaskName "Jersey QC testing server" -ErrorAction SilentlyContinue)) {
+  try { Disable-ScheduledTask -TaskName "Jersey QC testing server" -ErrorAction Stop | Out-Null; Say "The old 'Jersey QC testing server' task is switched off (this window runs the testing server now)." }
+  catch { Say "Could not switch off the old 'Jersey QC testing server' task: $($_.Exception.Message)" Yellow }
+}
 if (Answers) {
-  Say "The $Stage server is already running on this PC: it has taken the new files by itself." Green
-  Links
-  Start-Process "https://localhost:$port/"
-  exit 0
+  if ($Stage -eq "production" -or (IsOurs)) {
+    Say "The $Stage server is already running on this PC: it has taken the new files by itself." Green
+    Links
+    Start-Process "https://localhost:$port/"
+    exit 0
+  }
+  Say "An older $Stage server is running on port $port, started some other way. Stopping it and starting this one." Yellow
+  Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+  foreach ($i in 1..10) { Start-Sleep 1; if (-not (Answers)) { break } }
+  if (Answers) { Say "Port $port is still taken: close the other window or program using it and run this again." Red; exit 1 }
 }
 
 # Other PCs cannot reach the port until the firewall lets it in.
