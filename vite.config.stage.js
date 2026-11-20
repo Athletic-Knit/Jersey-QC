@@ -11,6 +11,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import hubPlugin from './hub-plugin.js'
+import replayPlugin from './replay-plugin.js'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -27,10 +28,18 @@ export default defineConfig(({ mode }) => {
   const stage = STAGES[name]
   if (!stage) throw new Error(`JQC_STAGE must be ${Object.keys(STAGES).join(' or ')} (it is "${name}")`)
   const env = loadEnv(mode, here, '')
+  // The replay is on for development and testing, never on the floor (the owner,
+  // 20 Nov 2026: on the testing server without a special link). It reads floor
+  // orders from the floor's data file, read only: C:\JerseyQC\data\hub.json, or
+  // the files named in JQC_REPLAY_FROM (;-separated) in .env.local.
+  process.env.VITE_REPLAY = '1'
+  const dataFile = path.join(here, 'data', stage.data)
+  const floor = String(env.JQC_REPLAY_FROM || 'C:\\JerseyQC\\data\\hub.json').split(';').map(s => s.trim()).filter(Boolean)
+  const replayFiles = [...floor.map(file => ({ label: 'floor', file })), { label: `this ${name} server`, file: dataFile }]
   return {
     root: here,
     cacheDir: path.join(here, `.vite-${name}`),
-    plugins: [react(), basicSsl(), hubPlugin({ file: path.join(here, 'data', stage.data), ...printerEnv(env) })],
+    plugins: [react(), basicSsl(), hubPlugin({ file: dataFile, ...printerEnv(env) }), replayPlugin({ files: replayFiles })],
     server: {
       host: true, port: stage.port, strictPort: true,
       fs: { strict: false },   // node_modules may be a link into the production folder: the fonts live there

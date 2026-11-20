@@ -9,7 +9,7 @@ import { playTone } from "./lib/audio.js";
 import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
-import { hub, stationId, snapshotOf, stationUse } from "./lib/hub.js";
+import { hub, stationId, snapshotOf, stationUse, holdPrints } from "./lib/hub.js";
 import { outOf, outList, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
@@ -287,9 +287,15 @@ function ResumeModal({ session, onResume, onDiscard, role = "", onSetAside, onSi
 // ── Sign-in (once per shift) ──────────────────────────────────────────────────
 // Which station this page is, from ?station= in the address ("" when none).
 const urlStation = () => { try { return new URLSearchParams(window.location.search).get("station") || ""; } catch { return ""; } };
-// The replay is ours, never the floor's (the owner, 19 Nov 2026): it runs only where VITE_REPLAY=1 is in
-// .env.local, which only the development copy has. The floor runs Vite in dev mode too, so DEV is not enough.
+// The replay is ours, never the floor's (the owner, 19 Nov 2026): it runs only where VITE_REPLAY=1, which
+// the development and testing servers set (vite.config.stage.js; the owner, 20 Nov 2026: on the testing
+// server without a special link) and the floor's vite.config.js never does. The floor runs Vite in dev mode
+// too, so DEV is not enough.
 const REPLAY_ON = import.meta.env.VITE_REPLAY === "1";
+// A replay started from the order screen ("Replay an order") is kept for the tab, so a reload carries on.
+const REPLAY_KEY = "jerseyqc.replayRun";
+const storedReplay = () => { try { return JSON.parse(sessionStorage.getItem(REPLAY_KEY) || "null"); } catch { return null; } };
+const storeReplay = run => { try { if (run) sessionStorage.setItem(REPLAY_KEY, JSON.stringify(run)); else sessionStorage.removeItem(REPLAY_KEY); } catch { /* too big or blocked: this tab only */ } };
 // Replay (development only, src/lib/replay.js): ?replay=<order> on the station
 // page, kept in sessionStorage so the sign-in's reload does not lose it.
 const replayRequested = () => { try { const q = new URLSearchParams(window.location.search).get("replay"); if (q) sessionStorage.setItem("jerseyqc.replay", q); return sessionStorage.getItem("jerseyqc.replay") || ""; } catch { return ""; } };
@@ -516,7 +522,8 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
   );
 }
 
-function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, onPrint, onPickUp, stationLabel = id => String(id || "").replace(/^st-/, "") }) {
+function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, onPrint, onPickUp, onReplay, stationLabel = id => String(id || "").replace(/^st-/, "") }) {
+  const [showReplay, setShowReplay] = useState(false);   // development and testing only: replay a floor order
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [jerseyType, setJerseyType] = useState("");
@@ -632,6 +639,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         )}
         <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
           <button onClick={() => setShowAssigned(true)} title="The orders the supervisor sent to this station, or to any station" style={{ ...btnGhost, flex: 1, padding: "12px 14px", fontSize: 18, fontWeight: 800, borderColor: hubRosters.length ? "#60a5fa" : "#334155", color: hubRosters.length ? "#93c5fd" : "#94a3b8" }}>📥 Assigned orders · {hubRosters.length}</button>
+          {onReplay && <button onClick={() => setShowReplay(true)} title="Testing only: run a floor order again through these screens, from what the camera read then" style={{ ...btnGhost, flex: 1, padding: "12px 14px", fontSize: 18, fontWeight: 800, borderColor: "#a855f7", borderStyle: "dashed", color: "#d8b4fe" }}>▶ Replay an order</button>}
           {onPickUp && <button onClick={() => setShowUnfinished(true)} title="Orders put aside with Finish later, and the ones the supervisor gave to this station" style={{ ...btnGhost, flex: 1, padding: "12px 14px", fontSize: 18, fontWeight: 800, borderColor: unfinishedCount ? "#f59e0b" : "#334155", color: unfinishedCount ? "#fcd34d" : "#94a3b8" }}>⏸ Unfinished orders · {unfinishedCount}</button>}
         </div>
         {showAssigned && (
@@ -659,6 +667,14 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
               </div>
             </div>
           </div>
+        )}
+        {showReplay && (
+          <ReplayFinder stationLabel={stationLabel} onClose={() => setShowReplay(false)}
+            onPick={run => {
+              const when = new Date(run.lastSeen || run.firstSeen || Date.now()).toLocaleDateString();
+              onReplay({ name: run.order, events: run.events });
+              onStart({ roster: normaliseRosterRows(run.rows), orderNumber: run.order, notes: "", jerseyType: run.jerseyType || "", binBy: run.binBy || "team", rosterFile: `replay of ${run.order} (${stationLabel(run.station)}, ${when})` });
+            }} />
         )}
         {showUnfinished && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2331,6 +2347,59 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
 // prints (what is in it, ten jerseys a label), the team or size moves to a
 // new bin number and that bin's label prints. Closed bins stay listed, with
 // their list to print again.
+// ── Replay an order (development and testing only; the owner, 20 Nov 2026) ───────
+// Type a floor order's number; every run of it the floor's data file has (a
+// station, a start) is listed; tapping one starts that order here with its
+// roster and loads its reads into the replay bar. Nothing is printed while a
+// replay is loaded.
+function ReplayFinder({ onPick, onClose, stationLabel }) {
+  const [q, setQ] = useState("");
+  const [state, setState] = useState({ busy: false, runs: null, error: "", sources: [] });
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [onClose]);
+  const find = () => {
+    if (!q.trim()) return;
+    setState(s => ({ ...s, busy: true, error: "" }));
+    hub.replayRuns(q.trim()).then(r => setState({ busy: false, runs: r.runs || [], sources: r.sources || [], error: "" }))
+      .catch(e => setState({ busy: false, runs: null, sources: [], error: e.status === 404 ? "This server has no replay (only the development and testing servers do)." : "Could not ask the server: " + e.message }));
+  };
+  const missing = state.sources.filter(s => s.label === "floor" && !s.found);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px dashed #a855f7", padding: 30, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={STICKY_HEAD}>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#d8b4fe", flex: 1 }}>▶ Replay an order</div>
+          <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
+        </div>
+        <div style={{ fontSize: 16, color: "#cbd5e1", margin: "10px 0 12px", lineHeight: 1.45 }}>
+          Runs a floor order again through these screens, from what the camera read then. No pictures, and <strong>nothing is printed</strong> while the replay is on (✕ on the replay bar ends it).
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input ref={ref} autoFocus value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") find(); }} placeholder="Order number" style={{ ...inputSt, flex: 1 }} />
+          <button onClick={find} disabled={!q.trim() || state.busy} style={{ ...btnPri, padding: "10px 22px", fontSize: 18 }}>{state.busy ? "Looking…" : "Find"}</button>
+        </div>
+        <ScreenKeys layout="digits" onKey={k => setQ(v => typeKey(v, k))} onEnter={find} enterLabel="Find" />
+        {state.error && <div style={{ ...errSt, marginTop: 12 }}>{state.error}</div>}
+        {missing.length > 0 && <div style={{ marginTop: 10, color: "#fbbf24", fontSize: 15 }}>The floor's data file was not found ({missing.map(m => m.file).join(", ")}): only this server's own orders are searched.</div>}
+        {state.runs && state.runs.length === 0 && <div style={{ marginTop: 14, color: "#cbd5e1", fontSize: 18 }}>No order {q.trim()} in the data. The floor keeps 90 days.</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+          {(state.runs || []).map(r => (
+            <button key={`${r.source}|${r.station}|${r.run}`} onClick={() => onPick(r)} disabled={!r.rows.length}
+              style={{ ...btnGhost, textAlign: "left", padding: "10px 14px", borderColor: "#6b21a8", opacity: r.rows.length ? 1 : 0.5 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>Order {r.order} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.total} jerseys · {r.done} done then · {r.events.length} scans</span></div>
+              <div style={{ fontSize: 15, color: "#94a3b8" }}>{stationLabel(r.station)}{r.operator ? ` · ${r.operator}` : ""} · {new Date(r.firstSeen || r.lastSeen || 0).toLocaleString()} · from {r.source}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Who a flag from a list is about (No size tag, Duplicate, Not on the roster): the
 // number the operator typed when a number was typed, else the camera's read.
 function flaggedAs(o) {
@@ -4270,15 +4339,22 @@ export default function App() {
   // and, once that order is open, hands each read to the scan in place of the
   // camera, then acts as the operator did after a pause: confirms the green,
   // picks the same row on a list, flags the extra jersey. See src/lib/replay.js.
+  // Or, on the development and testing servers, from the order screen's "Replay an order"
+  // (the owner, 20 Nov 2026): a floor order found by its number (replay-plugin.js), no link.
   const replayName = REPLAY_ON ? replayRequested() : "";
-  const [replay, setReplay] = useState(null);
+  const blankReplay = name => ({ name, steps: [], i: 0, phase: "scan", playing: false, delay: 1500, seen: false, tally: {}, error: "" });
+  const [replay, setReplay] = useState(() => { const r = REPLAY_ON && !replayName ? storedReplay() : null; if (r) holdPrints("Replay: nothing is printed"); return r ? { ...blankReplay(r.name), steps: replaySteps(r.events) } : null; });
   useEffect(() => {
     if (!replayName) return;
-    const blank = { name: replayName, steps: [], i: 0, phase: "scan", playing: false, delay: 1500, seen: false, tally: {}, error: "" };
     fetch(`/sim/replay-${encodeURIComponent(replayName)}.json`).then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(d => setReplay({ ...blank, steps: replaySteps(d.events) }))
-      .catch(e => setReplay({ ...blank, error: `No replay file for ${replayName} (${e.message})` }));
+      .then(d => setReplay({ ...blankReplay(replayName), steps: replaySteps(d.events) }))
+      .catch(e => setReplay({ ...blankReplay(replayName), error: `No replay file for ${replayName} (${e.message})` }));
   }, [replayName]);
+  const startReplay = useCallback(run => { holdPrints("Replay: nothing is printed"); storeReplay({ name: run.name, events: run.events }); setReplay({ ...blankReplay(run.name), steps: replaySteps(run.events) }); }, []);
+  const endReplay = useCallback(() => { try { sessionStorage.removeItem("jerseyqc.replay"); } catch { /* fine */ } storeReplay(null); setReplay(null); }, []);
+  // Nothing goes to a label printer while a replay is loaded (hub.js holdPrints). startReplay holds them at
+  // once too: the set-out screen prints in its first effect, which runs before this one.
+  useEffect(() => { holdPrints(replay ? "Replay: nothing is printed" : ""); }, [replay]);
   const replayStep = replay?.steps[replay.i] || null;
   // Skip ahead to `target` jerseys done (the station's Done count, 214 of 521; the
   // owner, 19 Nov 2026): the steps are done at once, as the operator did them,
@@ -4390,6 +4466,7 @@ export default function App() {
 
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
         <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onPrint={() => setShowPrint(true)} stationLabel={stationLabel} onPickUp={pickUpOrder}
+          onReplay={REPLAY_ON ? startReplay : null}
           onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile, hubRosterId = null }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team" });
@@ -4429,7 +4506,7 @@ export default function App() {
             </select>
           </>)}
           <button onClick={() => setReplay(r => ({ ...r, hidden: true }))} title="Hide the replay bar (it keeps playing)" style={{ ...btnGhost, padding: "4px 10px" }}>▼ Hide</button>
-          <button onClick={() => { try { sessionStorage.removeItem("jerseyqc.replay"); } catch { /* fine */ } setReplay(null); }} style={{ ...btnGhost, padding: "4px 10px" }}>✕</button>
+          <button onClick={endReplay} title="End the replay (printing comes back on)" style={{ ...btnGhost, padding: "4px 10px" }}>✕</button>
         </div>
       )}
       {showSettings && (
