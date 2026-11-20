@@ -61,3 +61,16 @@ describe("boxes left open on the hub", () => {
     expect((await call("GET", "/openboxes?orders=264248")).body.boxes).toEqual([]);
   });
 });
+
+describe("a box that holds two orders", () => {
+  it("its list has every jersey in it, and the count label names both orders with their pieces", async () => {
+    const { boxListJobs } = await import("../printjobs.js");
+    const roster = [{ _id: 0, number: "6", name: "FOX", team: "Navy", size: "A-L", scanned: "pass" }, { _id: 1, number: "8", name: "HILL", team: "Green", size: "A-M", scanned: false }];
+    const pack = { orderNumber: "777302", roster, binMap: { navy: "1.1", green: "2.1" }, closedBins: [],
+      carried: [{ bin: "1.1", key: "navy", items: [{ order: "777301", number: "1", name: "ADAMS", size: "A-L", team: "Navy" }, { order: "777301", number: "2", name: "BAKER", size: "A-M", team: "Navy" }] }] };
+    const labels = boxListJobs(pack, "1.1");
+    const count = labels.find(l => l.title);
+    expect(count).toMatchObject({ count: 3, orderNumber: "777302 (1) + 777301 (2)", of: 0 });
+    expect(labels.filter(l => !l.title).flatMap(l => l.items)).toEqual(["1-ADAMS-AL", "2-BAKER-AM", "6-FOX-AL"]);
+  });
+});

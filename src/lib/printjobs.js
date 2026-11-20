@@ -12,6 +12,14 @@ import { binContents, binEntries, binFieldOf, binOfRow, binOrder, inBin, groupSi
 import { binListLabels, jerseyLabel, flagLabel, damagedListLabels } from "./labels.js";
 
 // Every box of the order, closed and open, in box order, with the rows in it.
+// A box an earlier ship-with order left open (`pack.carried`, the owner, 20 Nov 2026) holds that
+// order's jerseys too; its list names every order in it: "264247 (12) + 264248 (8)".
+const carriedRows = (pack, bin) => (pack?.carried || []).filter(c => c.bin === bin).flatMap(c => (c.items || []).map(x => ({ ...x, scanned: "pass", carried: true })));
+export function ordersInBox(pack, bin, rows) {
+  const prev = carriedRows(pack, bin); if (!prev.length) return String(pack?.orderNumber || "");
+  const n = new Map(); rows.forEach(r => { const o = r.carried ? r.order || "?" : String(pack?.orderNumber || ""); n.set(o, (n.get(o) || 0) + 1); });
+  return [...n].map(([o, k]) => `${o} (${k})`).join(" + ");
+}
 export function packBoxes(pack) {
   const { roster = [], binMap = null } = pack || {};
   const closedBins = pack?.closedBins || [];
@@ -19,7 +27,7 @@ export function packBoxes(pack) {
   const closed = closedBins.map(c => ({ bin: c.bin, label: c.label, open: false }));
   const open   = binEntries(roster, binMap).map(e => ({ bin: e.bin, label: e.label, open: true }));
   return [...closed, ...open]
-    .map(b => { const rows = binContents(roster, binMap, closedBins, b.bin); return { ...b, rows, count: rows.length }; })
+    .map(b => { const rows = [...binContents(roster, binMap, closedBins, b.bin), ...carriedRows(pack, b.bin)]; return { ...b, rows, count: rows.length }; })
     .sort((a, b) => binOrder(a.bin, b.bin));
 }
 
@@ -37,7 +45,7 @@ export function boxLabelJobs(pack, bin) {
 // something in it. Each box's labels come in print order (labels.js).
 export function boxListJobs(pack, bin) {
   return packBoxes(pack).filter(b => b.count > 0 && (bin === undefined || b.bin === bin))
-    .flatMap(b => binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: pack?.orderNumber, by: binFieldOf(pack?.binMap), of: groupSize(pack?.roster, pack?.binMap, b.rows) }));
+    .flatMap(b => binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: ordersInBox(pack, b.bin, b.rows), by: binFieldOf(pack?.binMap), of: b.rows.some(r => r.carried) ? 0 : groupSize(pack?.roster, pack?.binMap, b.rows) }));
 }
 
 // The jerseys that have a sticker: passed by the camera or by hand.

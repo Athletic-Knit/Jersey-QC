@@ -3414,12 +3414,12 @@ export default function App() {
     const byOpen = Object.fromEntries(shortList.map(x => [x.bin, x]));
     return Object.entries(binMap).filter(([k]) => k !== "__by").map(([key, openBin]) => {
       const boxes = [...closedBins.filter(c => c.key === key).map(c => ({ bin: c.bin, full: true })), { bin: openBin, full: false }]
-        .map(b => ({ ...b, rows: binContents(roster, binMap, closedBins, b.bin) }));
+        .map(b => ({ ...b, rows: inBox(b.bin) }));   // a carried box: the earlier order's jerseys too
       const sh = byOpen[openBin] || { waiting: [], short: [] };
       const inBoxes = boxes.reduce((n, b) => n + b.rows.length, 0);
       return { key, label: labels[openBin] || key, boxes, toScan: sh.waiting, short: sh.short, inBoxes, total: inBoxes + sh.waiting.length + sh.short.length };
     }).sort((a, b) => binOrder(a.boxes[0].bin, b.boxes[0].bin));
-  }, [roster, binMap, closedBins, shortList]);
+  }, [roster, binMap, closedBins, shortList, inBox]);
   const shortByBox = useMemo(() => Object.fromEntries(shortList.map(x => [x.bin, x])), [shortList]);
   const flaggedRows = useMemo(() => roster.filter(r => r.scanned === "flag"), [roster]);   // what is in the DAMAGED box
   // What the matcher sees. On an order picked up again a flagged jersey that comes back from
@@ -3821,8 +3821,8 @@ export default function App() {
   }, [resumeSession, role, operatorName]);
   // The order on this station, as the Print menu takes it (printjobs.js).
   const printPack = useMemo(() => !sessionStarted || !roster.length ? null
-    : { orderNumber, roster, binMap, closedBins, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels },
-  [sessionStarted, roster, orderNumber, binMap, closedBins, log, boxPlanLabels]);
+    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels },
+  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels]);
   const flagTag = useCallback(reason => severityOf(reason).tag, []);
   // The list of what is in the DAMAGED box, whenever the inspector asks for it.
   // The list of boxes that are done (full, or their team complete) and the list
