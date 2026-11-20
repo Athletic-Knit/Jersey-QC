@@ -1,6 +1,6 @@
 # One double-click a stage (the owner, 20 Nov 2026: "3 bat files, development,
 # test and production, when I click each it starts those servers and promotes
-# the previous changes as well"). Run by the .bat files in the project folder:
+# the previous changes as well"). Run by the .bat files in the Servers folder:
 #   Development server.bat   takes the newest development from GitHub into the
 #                            development folder and starts its server (5174)
 #   Testing server.bat       promotes development to testing, takes it into
@@ -47,7 +47,7 @@ if ($Stage -eq "production") {
   if (-not (Test-Path (Join-Path $prodDir ".git"))) {
     Say ""
     Say "Production runs on the server PC, in $prodDir, and that folder is not on this PC ($pc)." Red
-    Say "Run Production server.bat on the server PC. Nothing was changed." Red
+    Say "Run Servers\Production server.bat on the server PC. Nothing was changed." Red
     exit 2
   }
 } elseif (-not (Test-Path (Join-Path $dir ".git"))) {
