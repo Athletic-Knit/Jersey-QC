@@ -1,0 +1,40 @@
+// The DEVELOPMENT and TESTING servers (the owner, 20 Nov 2026: one double-click
+// each, "Development server.bat" and "Testing server.bat", see tools\stage.ps1).
+// Production keeps vite.config.js (port 5173, started by the "Jersey QC server"
+// task). Each stage runs from its own folder with its own data file, so trying
+// something on one can never touch the floor's orders:
+//   development  port 5174  data\hub-test.json   (the development folder)
+//   testing      port 5175  data\hub.json        (C:\JerseyQC-testing)
+// Both are HTTPS and open to the network like production, so a station PC can
+// try them (the camera needs HTTPS off this PC). JQC_STAGE picks the stage.
+import { defineConfig, loadEnv } from 'vite'
+import react from '@vitejs/plugin-react'
+import basicSsl from '@vitejs/plugin-basic-ssl'
+import hubPlugin from './hub-plugin.js'
+import path from 'node:path'
+import process from 'node:process'
+import { fileURLToPath } from 'node:url'
+import { printerEnv, anthropicProxy } from './vite.config.js'
+
+export const STAGES = {
+  development: { port: 5174, data: 'hub-test.json' },
+  testing:     { port: 5175, data: 'hub.json' },
+}
+const here = path.dirname(fileURLToPath(import.meta.url))
+
+export default defineConfig(({ mode }) => {
+  const name = String(process.env.JQC_STAGE || '').toLowerCase()
+  const stage = STAGES[name]
+  if (!stage) throw new Error(`JQC_STAGE must be ${Object.keys(STAGES).join(' or ')} (it is "${name}")`)
+  const env = loadEnv(mode, here, '')
+  return {
+    root: here,
+    cacheDir: path.join(here, `.vite-${name}`),
+    plugins: [react(), basicSsl(), hubPlugin({ file: path.join(here, 'data', stage.data), ...printerEnv(env) })],
+    server: {
+      host: true, port: stage.port, strictPort: true,
+      fs: { strict: false },   // node_modules may be a link into the production folder: the fonts live there
+      proxy: { '/api/anthropic': anthropicProxy(env, { log: true }) },
+    },
+  }
+})

@@ -34,3 +34,4 @@ tools/sim-models.json
 
 # Development test server cache and data (this PC only)
 .vite-dev
+.vite-*/

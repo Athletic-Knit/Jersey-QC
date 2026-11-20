@@ -133,6 +133,19 @@ describe("bin labels on the hub's printer", () => {
     expect(body.printer).toBe("RICOH SP C360DNw");
     expect(body.labelSize).toBe("4x6");
   });
+  it("a Zebra plugged into the server PC beats a JERSEY_PRINTER shared from another PC (the owner, 20 Nov 2026)", async () => {
+    const f = fakes();
+    const { call } = makeHub({ ...f.opts, printer: "\\\\SOME-OTHER-PC\\Zebra", flagPrinter: "\\\\SOME-OTHER-PC\\Tickets" });
+    expect((await call("GET", "/print")).body).toMatchObject({ printer: "ZDesigner ZD411-203dpi ZPL", flagPrinter: "ZDesigner ZD411-203dpi ZPL" });
+    await call("POST", "/print", { kind: "jersey", station: "st-station1", labels: [{ bin: 3, by: "team", value: "Navy", orderNumber: "264247" }] });
+    expect(f.printed[0].printer).toBe("ZDesigner ZD411-203dpi ZPL");
+    // no Zebra on the server PC (a connection to another PC's does not count): the shared one stays
+    const away = makeHub({ ...fakes([queues[0], { name: "\\\\SOME-OTHER-PC\\Zebra", driver: "ZDesigner ZD411-203dpi ZPL", port: "" }]).opts, printer: "\\\\SOME-OTHER-PC\\Zebra" });
+    expect((await away.call("GET", "/print")).body.printer).toBe("\\\\SOME-OTHER-PC\\Zebra");
+    // a station's own printer is never overridden
+    const own = makeHub({ ...fakes().opts, printer: "\\\\SOME-OTHER-PC\\Zebra", printers: { "st-station1": "\\\\SOME-OTHER-PC\\Zebra" } });
+    expect((await own.call("GET", "/print?station=st-station1")).body.printer).toBe("\\\\SOME-OTHER-PC\\Zebra");
+  });
   it("a station's own printer (JERSEY_PRINTER_STATION1) wins for that station only", async () => {
     const f = fakes();
     const { call } = makeHub({ ...f.opts, printers: { "st-station1": "\\\\AK-NB-164\\ZDesigner ZD411-203dpi ZPL", "st-station2": "" } });

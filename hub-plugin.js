@@ -138,8 +138,22 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
     catch (e) { console.error("[hub] could not list printers:", e.message); printers = { at: now_(), list: printers.list, ok: false }; }
     return printers.list;
   };
-  const labelPrinter = async station => perStation[String(station || "").trim().toLowerCase()] || printerName || (await printerList()).find(isLabelPrinter)?.name || null;
-  const ticketPrinter = async station => perStationFlag[String(station || "").trim().toLowerCase()] || flagName || labelPrinter(station);
+  // A Zebra plugged into THIS PC beats a JERSEY_PRINTER (or JERSEY_FLAG_PRINTER)
+  // shared from another PC: the owner moved the Zebra from AK-NB-164 to the
+  // server PC and wants it to answer to the server, not to a PC (20 Nov 2026),
+  // and every copy of .env.local still named \\AK-NB-164\Zebra. A name on this
+  // PC (a local queue, or \\<this PC>\share) is used as it is; a station's own
+  // printer (JERSEY_PRINTER_STATION1) is never overridden.
+  const thisPC = os.hostname().toLowerCase();
+  const onOtherPC = name => { const m = /^\\\\([^\\]+)\\/.exec(name); return !!m && !["localhost", "127.0.0.1", thisPC].includes(m[1].toLowerCase()); };
+  const hubPrinter = async name => {
+    if (name && !onOtherPC(name)) return name;
+    const list = await printerList();
+    const here = list.find(p => isLabelPrinter(p) && !String(p.name).startsWith("\\\\"));
+    return here?.name || name || list.find(isLabelPrinter)?.name || null;
+  };
+  const labelPrinter = async station => perStation[String(station || "").trim().toLowerCase()] || hubPrinter(printerName);
+  const ticketPrinter = async station => perStationFlag[String(station || "").trim().toLowerCase()] || (flagName ? hubPrinter(flagName) : labelPrinter(station));
   // The box model: every "this bin went in that box" answer from every
   // station is kept (the newest 3000) and the model is fitted to the newest
   // 600, so all stations learn from the same floor.
