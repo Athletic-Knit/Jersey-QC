@@ -38,7 +38,8 @@ A React/Vite web app for quality-control scanning of sports jerseys in a manufac
 5. Match result shows as a full-screen overlay:
    - **Green** = exact match → confirm with Enter (the Select key), or edit with `A`
    - **Yellow** = multiple candidates or close match → pick from list. A list offers the candidates, Retry scan (or Back after typing) and "None of these"; it has no Flag button, as nobody has said yet which jersey it is (owner, 17 Nov 2026)
-   - **Red** = not found or API error → flag and continue
+   - **Red** = not found or API error → only "↻ Retry scan" and "🚩 Flag" (the owner, 20 Nov 2026: no Enter by hand, no Bad jersey); Flag opens the yellow list's menu (No size tag, Duplicate, Not on the roster)
+   - The header's Flag count includes flags with no roster row (not on the roster, duplicate, no size tag); its filter lists them under the table (`offRosterList`)
 6. Flagged items appear in the log and can be resolved (Accept / Reject / Note)
 7. When all roster entries are scanned, a completion modal offers Excel export
 8. "🏁 Finish order" (header, and on the completion modal) shows a confirm with passed / open / not-scanned counts; Enter or ✓ prints the list of every open box and then STAYS on an "Order N is done" screen (`FinishedModal`, `finished`; owner, 12 Nov 2026): "Print the box lists again", "Print something else…" (the Print menu), "New order →" and "Back to this order". Only "New order" clears the order, removes the roster from the hub (no station is offered it again) and returns the station to "waiting for an order" (the hub keeps the order's record and sheets); until then the order is still open and saved, so a reload offers it again. No key acts on that screen (the pedal must not start a new order). Esc on the confirm keeps going

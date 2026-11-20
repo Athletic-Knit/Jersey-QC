@@ -1584,7 +1584,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       { id: "goalie", label: state.goalie ? "☑ Goalie jersey" : "☐ Goalie jersey", on: !!state.goalie, run: actions.toggleGoalie },
       { id: "notag", label: "🏷 No size tag", run: () => actions.offRosterSize("") },
       { id: "back", label: "← Back", run: actions.back }];
-    if (mode === "flag")       return [{ ...retry, primary: true }, byHand, { id: "flag", label: "🚩 Flag & continue", run: actions.flagContinue }, { ...notRight, label: "🚩 Bad jersey" }];
+    if (mode === "flag")       return [{ ...retry, primary: true }, { id: "listflag", label: "🚩 Flag", run: actions.listFlag }];   // Retry and Flag only (the owner, 20 Nov 2026); Flag opens the yellow list's menu: No size tag, Duplicate, Not on the roster
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }, { ...notRight, run: actions.reopenLast }];
     if (mode === "manual")     return [];
     if (mode === "clean")      return [{ id: "cleaned", label: "✓ It is clean now", primary: true, run: actions.cleaned }, { id: "stays", label: "🚩 It will not come out", run: actions.cleanFailed }, { id: "back", label: "← Back", run: actions.back }];
@@ -3353,7 +3353,8 @@ export default function App() {
   const triggerRef = useRef(null);
   const armRef     = useRef(() => {});   // re-arm hands-free from inside a scan (set once armAutoScan exists)
   const passCount      = roster.filter(r => r.scanned === "pass").length;
-  const offRosterFlags = log.filter(l => l.status === S_FLAGGED && (l.match?.offRoster || l.match?.noRow) && !l.resolution).length;   // jerseys that are not on the roster, or flagged with no row (no size tag), have no row to count
+  const offRosterList  = log.filter(l => l.status === S_FLAGGED && (l.match?.offRoster || l.match?.noRow) && !l.resolution);
+  const offRosterFlags = offRosterList.length;   // jerseys that are not on the roster, or flagged with no row (no size tag), have no row to count
   const flagCount      = roster.filter(r => r.scanned === "flag").length + offRosterFlags;
   const manualCount    = roster.filter(r => r.scanned === "manual").length;
   const teamNames      = useMemo(() => [...new Set(roster.map(r => r.team).filter(Boolean))], [roster]);
@@ -4924,7 +4925,7 @@ export default function App() {
                   )}
                   {(rosterFilter || rosterSearch.trim() || sizeFilter || teamFilter || boxFilter || doneFilter) && (
                     <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, fontWeight: 700, color: rosterFilter === "pass" ? "#22c55e" : rosterFilter === "flag" ? "#f87171" : rosterFilter ? "#fbbf24" : "#cbd5e1" }}>
-                      <span>{shownRows.length} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : rosterFilter ? "by hand" : "shown"}{sizeFilter ? ` · ${sizeFilter}` : ""}{teamFilter ? ` · ${teamFilter}` : ""}{boxFilter ? ` · Box ${boxFilter}` : ""}{doneFilter === "done" ? " · done" : doneFilter === "todo" ? " · to do" : ""}{rosterSearch.trim() ? ` · “${rosterSearch.trim()}”` : ""}</span>
+                      <span>{shownRows.length + (rosterFilter === "flag" ? offRosterFlags : 0)} {rosterFilter === "pass" ? "passed" : rosterFilter === "flag" ? "flagged" : rosterFilter ? "by hand" : "shown"}{sizeFilter ? ` · ${sizeFilter}` : ""}{teamFilter ? ` · ${teamFilter}` : ""}{boxFilter ? ` · Box ${boxFilter}` : ""}{doneFilter === "done" ? " · done" : doneFilter === "todo" ? " · to do" : ""}{rosterSearch.trim() ? ` · “${rosterSearch.trim()}”` : ""}</span>
                       <button onClick={() => { setRosterFilter(null); setSizeFilter(""); setTeamFilter(""); setBoxFilter(""); setDoneFilter(""); setRosterSearch(""); }} style={{ ...btnGhost, padding: "3px 10px", fontSize: 13 }}>Show all</button>
                     </span>
                   )}
@@ -4975,7 +4976,7 @@ export default function App() {
                     </thead>
                     <tbody>
                       {shownRows.map(r => <RosterRow key={r._id} r={r} cols={rosterColsStable} hasBins={!!binMap} bin={binMap ? binOf(r) : null} canSupervise={canSupervise} onMark={onMarkRow} />)}
-                      {shownRows.length === 0 && (
+                      {shownRows.length === 0 && !(rosterFilter === "flag" && offRosterFlags > 0) && (
                         <tr><td colSpan={rosterColsStable.length + (binMap ? 3 : 2)} style={{ ...tdSt, textAlign: "center", color: "#94a3b8", padding: "28px 12px", fontSize: 17 }}>
                           No jersey on this order matches{rosterSearch.trim() ? ` “${rosterSearch.trim()}”` : " these filters"}. Press Show all to see the whole roster.
                         </td></tr>
@@ -4984,6 +4985,24 @@ export default function App() {
                   </table>
                 )
               }
+              {/* Flags with no roster row (not on the roster, duplicate, no size tag) are in the
+                  header's Flag count too, so the Flag filter lists them under the table (the owner,
+                  20 Nov 2026: "4 Flag" showed 3 jerseys). */}
+              {rosterFilter === "flag" && offRosterFlags > 0 && (
+                <div style={{ padding: "12px 14px" }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "#fca5a5", letterSpacing: 0.5, marginBottom: 6 }}>NOT ON THE ROSTER · DUPLICATE · NO SIZE TAG ({offRosterFlags})</div>
+                  {offRosterList.map(l => (
+                    <div key={l.id} style={{ display: "flex", gap: 14, alignItems: "baseline", padding: "8px 4px", borderBottom: "1px solid #21262d", fontSize: 18 }}>
+                      <span style={{ color: "#f87171" }}>🛑</span>
+                      <span style={{ fontWeight: 800, color: "#fff", minWidth: 60 }}>#{l.match?.number || "?"}</span>
+                      {l.match?.name && <span style={{ color: "#e2e8f0" }}>{l.match.name}</span>}
+                      {l.match?.size && <span style={{ color: "#fbbf24", fontWeight: 700 }}>{l.match.size}</span>}
+                      <span style={{ color: "#fca5a5" }}>{l.reason}</span>
+                      <span style={{ marginLeft: "auto", color: "#64748b", fontSize: 14 }}>{String(l.timestamp || "").slice(-8)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               </div>
             </div>
           )}
