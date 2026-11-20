@@ -153,9 +153,9 @@ describe("operator inspection regime", () => {
     expect(c.required.map(x => x.id)).toEqual(["namenum", "size", "logos"]);
     expect(c.remind.map(x => x.id)).toEqual(["fabric", "holes", "thread"]);
     r.defect("fabric");                               // Dirt or mark
-    expect(r.current()).toMatchObject({ phase: "quick", clean: 0, focus: { fabric: 5 } });
+    expect(r.current()).toMatchObject({ phase: "quick", clean: 3, focus: { fabric: 5 } });   // the count is not reset
     expect(checksFor(r.current(), checks).required.map(x => x.id)).toEqual(["namenum", "size", "logos", "fabric"]);
-    expect(inspectLabel(r.current(), checks)).toBe("Quick look · 0/10 · +Fabric damage");
+    expect(inspectLabel(r.current(), checks)).toBe("Quick look · 3/10 · +Fabric damage");
     r.jerseyDone(); r.jerseyDone(); r.defect("thread");
     expect(r.current().focus).toEqual({ fabric: 3, thread: 5 });
     for (let i = 0; i < 3; i++) r.jerseyDone();

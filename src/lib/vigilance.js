@@ -166,8 +166,9 @@ export function createInspection({ full = INSPECT_FULL, every = INSPECT_EVERY, l
       defects++;
       if (check) {
         focus = { ...focus, [check]: full };
-        if (phase === "sample") phase = "quick";
-        if (phase === "quick") clean = 0;
+        // The quick look's count carries on (the owner, 20 Nov 2026: 5/10 stays 5/10);
+        // a spot check that found it is done, and a new run of 10 starts.
+        if (phase === "sample") { phase = "quick"; clean = 0; }
         log?.(`[inspect] defect found — check ${check} on the next ${full} jerseys`);
         return;
       }
