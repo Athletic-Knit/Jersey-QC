@@ -4022,9 +4022,9 @@ export default function App() {
     confirm() {
       if (!overlay?.match) return;
       const scan  = overlay.scan || {};
-      const typed = !!overlay.typed;   // a number typed by hand: kept as entered by hand, for the supervisor to sign off
-      const entry = { id: scan.id || Date.now(), detected: scan.detected, thumb: scan.smallThumb, match: overlay.match, status: typed ? S_MANUAL : S_PASS, reason: typed ? "Entered by operator — the camera could not read it" : overlay.note || "", ...stamp() };
-      setRoster(prev => prev.map(r => r._id === overlay.match._id ? { ...r, scanned: typed ? "manual" : "pass" } : r));
+      // A number typed by hand passes like a scan (the owner, 20 Nov 2026: no supervisor sign-off); its reason says it was typed.
+      const entry = { id: scan.id || Date.now(), detected: scan.detected, thumb: scan.smallThumb, match: overlay.match, status: S_PASS, reason: overlay.note || "", ...stamp() };
+      setRoster(prev => prev.map(r => r._id === overlay.match._id ? { ...r, scanned: "pass" } : r));
       setLog(prev => [entry, ...prev]);
       setLastResult(entry); setLastConfirmed(entry);
       inspectRef.current.jerseyDone(); syncInspect();
