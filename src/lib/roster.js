@@ -65,6 +65,13 @@ export function detectDelimiter(line) {
 
 // "Order 55555", "Order no: 55555", "PO# 55555" in a title row above the header.
 const ORDER_IN_TEXT = /\b(?:order|po|job|work order)\s*(?:no\.?|number|id|#)?\s*[:#-]?\s*([A-Za-z0-9][\w-]*)/i;
+// Orders that ship together (the owner, 20 Nov 2026: "it says on the order form"):
+// "Ship with 264248", "Ships with: 264248, 264249", "Ship w/ #264248 & 264249" in a
+// title row, or a "ship with" column. Their boxes may be filled together.
+const SHIP_WITH_IN_TEXT = /\bship(?:s|ping)?\s*(?:with|w\/)\s*(?:order)?s?\s*[:#-]?\s*((?:#?\s*\d{3,}[\s,;&+/]*(?:and\s+)?)+)/i;
+const SHIP_WITH_HEADER = /^ship(?:s|ping)?\s*(?:with|w\/)/i;
+// "264248, 264249 & #264250" → ["264248", "264249", "264250"] (numbers of three digits or more).
+export const orderList = text => [...new Set(String(text ?? "").match(/\d{3,}/g) || [])];
 
 // rows: array of arrays of cell strings. Finds the header row (first row that
 // looks like one, within the first 15) so title rows above it are skipped.
@@ -78,9 +85,13 @@ export function rowsToRoster(rows) {
   for (let i = 0; i < limit; i++) if (looksLikeHeader(rows[i])) { hIdx = i; break; }
   if (hIdx < 0) return [];
   const headers = rows[hIdx].map(canonicalHeader);
-  let orderNumber = "";
-  for (let i = 0; i < hIdx && !orderNumber; i++) {
-    const m = (rows[i] || []).map(c => String(c ?? "")).join(" ").match(ORDER_IN_TEXT);
+  const shipCol = rows[hIdx].map(h => SHIP_WITH_HEADER.test(stripBOM(String(h ?? "")).trim()));
+  let orderNumber = "", shipWith = [];
+  for (let i = 0; i < hIdx; i++) {
+    let text = (rows[i] || []).map(c => String(c ?? "")).join(" ");
+    const sw = text.match(SHIP_WITH_IN_TEXT);
+    if (sw) { shipWith.push(...orderList(sw[1])); text = text.replace(sw[0], " "); }   // "Ship with order 264248" is not this order's number
+    const m = !orderNumber && text.match(ORDER_IN_TEXT);
     if (m && !/^(no|number|id)$/i.test(m[1])) orderNumber = m[1];
   }
   // A line with no name and no number is a blank jersey (no decoration). It is
@@ -93,6 +104,7 @@ export function rowsToRoster(rows) {
   rows.slice(hIdx + 1).forEach(cells => {
     const row = {}; let qty = null;
     headers.forEach((h, i) => {
+      if (shipCol[i]) { shipWith.push(...orderList(cells?.[i])); return; }
       if (!h || APP_COLUMNS.includes(h)) return;
       const v = String(cells?.[i] ?? "").trim();
       if (h === "order") { if (v && !orderNumber) orderNumber = v; return; }
@@ -107,6 +119,7 @@ export function rowsToRoster(rows) {
   });
   const result = normaliseRosterRows(out);
   Object.defineProperty(result, "orderNumber", { value: orderNumber, enumerable: false });
+  Object.defineProperty(result, "shipWith", { value: [...new Set(shipWith)].filter(n => n !== orderNumber), enumerable: false });
   return result;
 }
 
@@ -139,6 +152,7 @@ export function blankGroups(roster) {
 
 // The order number a parsed roster carried, or "".
 export function orderNumberOf(rows) { return (rows && rows.orderNumber) || ""; }
+export function shipWithOf(rows) { return (rows && rows.shipWith) || []; }
 
 export function parseCSV(text) {
   const clean = stripBOM(String(text ?? ""));

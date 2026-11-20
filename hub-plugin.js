@@ -26,6 +26,10 @@
 //   POST   /api/hub/unfinished/:id/release   takes it off that station again (also one a station has open)
 //   POST   /api/hub/unfinished/:id/checkoff  { ids, all, by, as } — the supervisor settles jerseys still out (ids: a row's id, or "x<id>" for an extra jersey): as "pass" (default) they count as passed, as "short" the order ships without them; an extra jersey is closed either way; in the ledger too → { entry }
 //   DELETE /api/hub/unfinished/:id      the station finished the order the normal way
+//   GET    /api/hub/openboxes?orders=264247,264248   { boxes } — boxes left open at Finish order for an order that ships with these (the owner, 20 Nov 2026)
+//   POST   /api/hub/openboxes           { boxes: [{ orders, by, key, label, bin, items }], station, order } — a station finishes an order and leaves these boxes open → { ids }
+//   POST   /api/hub/openboxes/:id/take  { station, order } — the next order takes the box (it is then that order's); 404 when another station took it first → { box }
+//   DELETE /api/hub/openboxes/:id       the supervisor (or a station) gives the box up
 //   GET    /api/hub/boxes               { model, answers } — the box model (src/lib/boxmodel.js) fitted to every answer so far
 //   POST   /api/hub/boxes               { counts, box, station, order, bin, suggested } — a bin was closed and went in this box; → { model, answers }
 //   GET    /api/hub/print?station=…     { printer, printers, labelSize, flagPrinter, flagLabelSize } — the label printer for that station (JERSEY_PRINTER_<STATION>), else the hub's (JERSEY_PRINTER, else the first Zebra queue); the flag-ticket printer likewise (JERSEY_FLAG_PRINTER_<STATION>, JERSEY_FLAG_PRINTER), else the label printer
@@ -232,7 +236,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
         number: j.number, name: j.name, size: j.size, team: j.team, reason: word, resolution: word + (by ? ` (${by})` : ""), operator: by };
     });
   };
-  const summary = r => ({ id: r.id, orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
+  const summary = r => ({ id: r.id, shipWith: r.shipWith || [], orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
 
   async function handle(req, res) {
     const parts = new URL(req.url, "http://hub").pathname.split("/").filter(Boolean);
@@ -364,7 +368,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           if (!Array.isArray(body.rows) || body.rows.length === 0) return json(res, 400, { error: "rows required" });
           const newId = now_().toString(36) + Math.random().toString(36).slice(2, 6);
           // forStation: a station id ("st-line1") when the supervisor sends it to one station; "" = any station may take it.
-          state.rosters[newId] = { id: newId, orderNumber: String(body.orderNumber ?? ""), notes: String(body.notes ?? ""), jerseyType: String(body.jerseyType ?? ""), binBy: String(body.binBy ?? ""), fileName: String(body.fileName ?? ""), rows: body.rows, by: String(body.by ?? ""), forStation: String(body.forStation ?? ""), createdAt: now_() };
+          state.rosters[newId] = { id: newId, shipWith: (Array.isArray(body.shipWith) ? body.shipWith : []).map(String).filter(Boolean).slice(0, 20), orderNumber: String(body.orderNumber ?? ""), notes: String(body.notes ?? ""), jerseyType: String(body.jerseyType ?? ""), binBy: String(body.binBy ?? ""), fileName: String(body.fileName ?? ""), rows: body.rows, by: String(body.by ?? ""), forStation: String(body.forStation ?? ""), createdAt: now_() };
           save();
           return json(res, 200, { id: newId });
         }
@@ -512,6 +516,43 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           }
           return json(res, 200, { entry: u });
         }
+      }
+      // Boxes left open for an order that ships with this one (the owner, 20 Nov 2026: a
+      // half-full box waits for the ship-with order, of the same team or customer, and is
+      // closed when it is full). The next order takes them at its start: one station each.
+      if (kind === "openboxes") {
+        const pool = (state.openBoxes ||= {});
+        const time = new Date(now_()).toLocaleTimeString();
+        for (const [k, b] of Object.entries(pool)) if (now_() - (b.at || 0) > 90 * 86400000) delete pool[k];   // 90 days, like the ledger
+        if (req.method === "GET" && !id) {
+          const want = new Set(String(new URL(req.url, "http://hub").searchParams.get("orders") || "").split(",").map(s => s.trim()).filter(Boolean));
+          const boxes = Object.values(pool).filter(b => !want.size || (b.orders || []).some(o => want.has(String(o)))).sort((a, b) => (a.at || 0) - (b.at || 0));
+          return json(res, 200, { boxes });
+        }
+        if (req.method === "POST" && !id) {
+          const body = await readBody(req);
+          const list = Array.isArray(body.boxes) ? body.boxes.slice(0, 200) : [];
+          if (!list.length) return json(res, 400, { error: "boxes required" });
+          const ids = list.map((b, i) => {
+            const bid = now_().toString(36) + i.toString(36) + Math.random().toString(36).slice(2, 5);
+            pool[bid] = { id: bid, orders: [...new Set((b.orders || []).map(String).filter(Boolean))].slice(0, 20), by: String(b.by ?? "team"), key: String(b.key ?? ""), label: String(b.label ?? ""), bin: String(b.bin ?? ""),
+              items: (Array.isArray(b.items) ? b.items : []).slice(0, 500).map(x => ({ order: String(x?.order ?? ""), number: String(x?.number ?? ""), name: String(x?.name ?? ""), size: String(x?.size ?? ""), team: String(x?.team ?? "") })),
+              station: String(body.station ?? ""), from: String(body.order ?? ""), at: now_() };
+            return bid;
+          });
+          save();
+          console.log(`[hub] ${time} ${body.station || "?"}: order ${body.order || "?"} finished with ${ids.length} box${ids.length === 1 ? "" : "es"} left open for the order it ships with`);
+          return json(res, 200, { ids });
+        }
+        const b = id ? pool[id] : null;
+        if (id && !b) return json(res, 404, { error: "no such open box (another station may have taken it)" });
+        if (req.method === "POST" && parts[2] === "take") {
+          const body = await readBody(req);
+          delete pool[id]; save();
+          console.log(`[hub] ${time} ${body.station || "?"}: order ${body.order || "?"} took open box ${b.bin} (${b.label}, ${b.items.length} in it, from order ${b.from})`);
+          return json(res, 200, { box: b });
+        }
+        if (req.method === "DELETE" && id) { delete pool[id]; save(); return json(res, 200, { ok: true }); }
       }
       if (kind === "boxes" && !id) {
         if (req.method === "GET") return json(res, 200, { model: boxFit(), answers: (state.boxAnswers || []).length });

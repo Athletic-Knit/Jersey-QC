@@ -67,6 +67,10 @@ export const hub = {
   printStatus:   station       => call(`/api/hub/print${station ? "?station=" + encodeURIComponent(station) : ""}`),        // { printer, printers } — the label printer for this station
   printLabels:   (labels, o = {}) => (printsHeld ? Promise.reject(Object.assign(new Error(printsHeld), { status: 423 })) : call("/api/hub/print", { method: "POST", body: JSON.stringify({ labels, ...o }) })),    // o: { kind: "jersey" | "flag" | "bin", station }; throws 503 "no label printer"
   replayRuns:    q              => call(`/api/replay?q=${encodeURIComponent(q)}`),                                        // development and testing only: the runs of a floor order, to replay (replay-plugin.js)
+  openBoxes:     orders         => call(`/api/hub/openboxes?orders=${encodeURIComponent([].concat(orders || []).join(","))}`),   // boxes left open for orders that ship together → { boxes }
+  leaveBoxesOpen: body          => call("/api/hub/openboxes", { method: "POST", body: JSON.stringify(body) }),          // { boxes, station, order } → { ids }
+  takeOpenBox:   (id, body)     => call(`/api/hub/openboxes/${id}/take`, { method: "POST", body: JSON.stringify(body) }),   // → { box }; 404 when already taken
+  dropOpenBox:   id             => call(`/api/hub/openboxes/${id}`, { method: "DELETE" }),
   boxModel:      ()             => call("/api/hub/boxes"),                                                                // { model, answers } — the box model fitted to the floor's answers
   boxAnswer:     answer         => call("/api/hub/boxes", { method: "POST", body: JSON.stringify(answer) }),              // { counts, box, station, order, bin, suggested } → { model, answers }
   removeRoster:  id             => call(`/api/hub/rosters/${id}`, { method: "DELETE" }),
