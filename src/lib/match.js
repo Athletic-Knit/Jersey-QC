@@ -239,8 +239,11 @@ export function findMatches(roster, name, number, read = {}) {
 }
 
 function agreesWithRead(row, name, number, read) {
-  if (read.typed) return true;
   const nName = norm(name), nNum = normNum(number);
+  // Typed by the operator: the name may be part of it, but a typed number is the
+  // number. Typed 400 with only #40 open is a question, not #40 passed (seen on
+  // the test server 20 Nov 2026: 400 and 122 passed #40 and #12 by hand).
+  if (read.typed) return !(nNum && normNum(row.number) && normNum(row.number) !== nNum);
   if (normNum(row.number) && normNum(row.number) !== nNum) return false;
   if (norm(row.name) && !(nName && read.nameComplete !== false && nameMatches(nName, row.name))) return false;
   return true;

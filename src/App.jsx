@@ -1546,9 +1546,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       // roster, which asks the size first so the ticket carries it. Any other defect is
       // flagged from the screen that follows, or with "Flag it" on the last pass.
       // One Flag button (the owner, 19 Nov 2026): it opens No size tag, Duplicate and Not on
-      // the roster. No Enter by hand here: it is beside the scan button.
+      // the roster. No Enter by hand here: it is beside the scan button. A list after a
+      // number was typed has it too (the owner, 20 Nov 2026), and its flags take the typed
+      // number, not the camera's read.
       const flag = { id: "listflag", label: "🚩 Flag", run: actions.listFlag };
-      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back, none] : [retry, flag])];
+      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back, none, flag] : [retry, flag])];
     }
     if (mode === "listFlag")   return [{ id: "nosize", label: "🏷 No size tag", run: actions.noSizeTag }, { id: "dup", label: "🔁 Duplicate", run: () => actions.offRosterStart("dup") }, { id: "offroster", label: "🚩 Not on the roster", run: () => actions.offRosterStart("off") }, { id: "back", label: "← Back", run: actions.back }];
     if (mode === "offSize")    return [
@@ -2329,6 +2331,13 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
 // prints (what is in it, ten jerseys a label), the team or size moves to a
 // new bin number and that bin's label prints. Closed bins stay listed, with
 // their list to print again.
+// Who a flag from a list is about (No size tag, Duplicate, Not on the roster): the
+// number the operator typed when a number was typed, else the camera's read.
+function flaggedAs(o) {
+  const d = o?.scan?.detected || {}, t = o?.typed;
+  return { number: String((t ? t.number : d.number) || "").trim(), name: String((t ? t.name : d.name) || "").trim(), team: String(t?.team || "").trim() };
+}
+
 const BOX_CHOICES = BOXES;   // a box on the floor is one box: small, medium or large
 function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, damaged = [], onDamagedList, onFull, onReprint, onLabels, onPacking, onClose }) {
   const [asking, setAsking] = useState(null);   // the bin whose box is being asked
@@ -4032,12 +4041,13 @@ export default function App() {
     // number (and name) read, the team when every row on the list agrees, no
     // row marked — and goes to the stitcher for a tag.
     noSizeTag() {
-      const o = overlay; if (!o?.scan) return;
-      const d = o.scan.detected || {};
+      const o = overlay; if (!o) return;   // a number typed from By hand has no camera scan
+      const d = o.scan?.detected || {};
+      const who = flaggedAs(o);
       const teams = [...new Set((o.candidates || []).map(c => teamKey(c.team)).filter(Boolean))];
-      const row = { number: String(d.number || "").trim(), name: String(d.name || "").trim(), team: teams.length === 1 ? (o.candidates.find(c => c.team)?.team || "") : "", size: "", noRow: true };
+      const row = { number: who.number, name: who.name, team: o.typed ? who.team : teams.length === 1 ? (o.candidates.find(c => c.team)?.team || "") : "", size: "", noRow: true };
       inspectRef.current.defect(); syncInspect();
-      const entry = { id: o.scan.id || Date.now(), detected: d, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: row, status: S_FLAGGED, reason: NO_SIZE_TAG.label, reasonId: NO_SIZE_TAG.id, ...stamp() };
+      const entry = { id: o.scan?.id || Date.now(), detected: d, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: row, status: S_FLAGGED, reason: NO_SIZE_TAG.label, reasonId: NO_SIZE_TAG.id, ...stamp() };
       setLog(prev => [entry, ...prev]); setLastResult(entry);
       setOverlay({ mode: "supervisor", scan: o.scan, match: row, reason: NO_SIZE_TAG.label, route: NO_SIZE_TAG.route, entryId: entry.id, photoFirst: false, damagePhotos: [] });
       playTone("flag");
@@ -4045,29 +4055,30 @@ export default function App() {
     // "Not on the roster" on the pick list: an extra jersey. The size is asked
     // first (the roster has no row to take it from) so the ticket carries it.
     listFlag() {
-      const o = overlay; if (!o?.scan) return;
-      setOverlay({ mode: "listFlag", scan: o.scan, candidates: o.candidates, returnTo: o });
+      const o = overlay; if (!o) return;   // a number typed from By hand has no camera scan
+      setOverlay({ mode: "listFlag", scan: o.scan, candidates: o.candidates, typed: o.typed, returnTo: o });
     },
     offRosterStart(kind = "off") {
-      const o = overlay; if (!o?.scan) return;
-      setOverlay({ mode: "offSize", kind, scan: o.scan, candidates: o.candidates, sizes: sizeChoiceGroups(roster), goalie: false, returnTo: o });
+      const o = overlay; if (!o) return;   // a number typed from By hand has no camera scan
+      setOverlay({ mode: "offSize", kind, scan: o.scan, candidates: o.candidates, typed: o.typed, sizes: sizeChoiceGroups(roster), goalie: false, returnTo: o });
     },
     // The goalie box on the size screen: off until ticked (the owner, 19 Nov 2026).
     toggleGoalie() { setOverlay(o => (o?.mode === "offSize" ? { ...o, goalie: !o.goalie } : o)); },
     offRosterSize(size) {
-      const o = overlay; if (!o?.scan) return;
-      const d = o.scan.detected || {};
+      const o = overlay; if (!o) return;   // a number typed from By hand has no camera scan
+      const d = o.scan?.detected || {};
       const sizeText = [String(size || ""), o.goalie ? "Goalie" : ""].filter(Boolean).join(" ");   // the size as it reads on the ticket
       const sizeBack = { ...o, threw: "" };   // where Back on the flagged screen returns
+      const who = flaggedAs(o);
       if (o.kind === "dup") {   // one more of a number and size that has passed: flagged with no row, the size on the ticket
-        const row = { number: String(d.number || "").trim(), name: String(d.name || "").trim(), team: "", size: sizeText, goalie: !!o.goalie, noRow: true };
+        const row = { number: who.number, name: who.name, team: who.team, size: sizeText, goalie: !!o.goalie, noRow: true };
         const reason = `Duplicate — #${row.number || "?"}${row.size ? " " + row.size : ""}`;
-        const entry = { id: o.scan.id || Date.now(), detected: d, thumb: o.scan.smallThumb, photo: o.scan.photo || null, match: row, status: S_FLAGGED, reason, ...stamp() };
+        const entry = { id: o.scan?.id || Date.now(), detected: d, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: row, status: S_FLAGGED, reason, ...stamp() };
         setLog(prev => [entry, ...prev]); setLastResult(entry);
         setOverlay({ mode: "supervisor", scan: o.scan, match: row, reason: "Duplicate.", route: "Supervisor → check the order", entryId: entry.id, photoFirst: false, damagePhotos: [], sizeBack });
         playTone("flag"); return;
       }
-      commitTyped(o, { number: String(d.number || "").trim(), name: String(d.name || "").trim(), size: sizeText, team: "" }, null, true);
+      commitTyped(o, { number: who.number, name: who.name, size: sizeText, team: who.team }, null, true);
       setOverlay(cur => (cur?.mode === "supervisor" ? { ...cur, sizeBack } : cur));
     },
     // Back on the flagged screen of an extra jersey or a duplicate: the flag is taken
