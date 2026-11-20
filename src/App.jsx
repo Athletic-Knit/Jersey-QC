@@ -1492,10 +1492,14 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   const head = primary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")).filter(Boolean).join(" · ");
   const sub  = [...secondary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")), ...extraCols.map(k => c[k] ? `${cap(k)}: ${c[k]}` : "")].filter(Boolean).join(" · ");
   const size = String(c.size || "").trim();
+  // Back from repair, or found after it was marked missing (the owner, 20 Nov 2026: two #35 on the list,
+  // one not scanned and one back from repair, and nothing told them apart): a blue bar and a line.
+  const back = !disabled && c.cameBack ? c.cameBack : null;
   return (
     <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover} data-sel={selected ? "1" : undefined}
-      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px 10px 18px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...liftSt(selected && !disabled) }}>
+      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px 10px 18px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...(back ? { boxShadow: "inset 10px 0 0 #38bdf8", paddingLeft: 26 } : {}), ...liftSt(selected && !disabled) }}>
       <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+        {back && <span style={{ fontSize: 19, fontWeight: 900, color: "#7dd3fc", lineHeight: 1.1 }}>{back.was === "flag" ? `🔧 Back from repair${back.reason ? " — was: " + back.reason : ""}` : "✓ Was marked missing — found"}</span>}
         <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px, 3vw, 42px)", fontWeight: 800, lineHeight: 1, color: disabled ? "#64748b" : "#fff", overflowWrap: "anywhere" }}>{head || "—"}</span>
         {(sub || disabled) && (
           <span style={{ fontSize: 21, color: "#cbd5e1", lineHeight: 1.1, fontWeight: 700 }}>
