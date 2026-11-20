@@ -24,7 +24,7 @@
 //   POST   /api/hub/unfinished/:id/take      { station, operator } — a station opens it; another station gets 409 while it is open there → { entry }
 //   POST   /api/hub/unfinished/:id/assign    { station, by } — the supervisor gives it to a station
 //   POST   /api/hub/unfinished/:id/release   takes it off that station again (also one a station has open)
-//   POST   /api/hub/unfinished/:id/checkoff  { ids, all, by } — the supervisor checks off jerseys still out: they count as passed, in the ledger too → { entry }
+//   POST   /api/hub/unfinished/:id/checkoff  { ids, all, by, as } — the supervisor settles jerseys still out (ids: a row's id, or "x<id>" for an extra jersey): as "pass" (default) they count as passed, as "short" the order ships without them; an extra jersey is closed either way; in the ledger too → { entry }
 //   DELETE /api/hub/unfinished/:id      the station finished the order the normal way
 //   GET    /api/hub/boxes               { model, answers } — the box model (src/lib/boxmodel.js) fitted to every answer so far
 //   POST   /api/hub/boxes               { counts, box, station, order, bin, suggested } — a bin was closed and went in this box; → { model, answers }
@@ -180,11 +180,13 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   };
   const readOrder = id => { try { return JSON.parse(fs.readFileSync(orderPath(id), "utf8")); } catch { return null; } };
   const dropOrderFile = id => { try { fs.unlinkSync(orderPath(id)); } catch { /* none */ } };
-  const OUT_STATUS = ["flag", "missing", "short", "todo"];
-  const outCount = { flag: "flagged", missing: "missing", short: "missing", todo: "toScan" };   // which count an out jersey is in
+  const OUT_STATUS = ["flag", "missing", "short", "todo", "extra"];   // extra: a jersey not on the roster, with the supervisor (20 Nov 2026)
+  const outCount = { flag: "flagged", missing: "missing", short: "missing", todo: "toScan" };   // which count an out jersey is in (an extra is in none: it is not on the roster)
+  // One out jersey's key: its row's id, or "x" and the log entry's id for an extra jersey (no row).
+  const jkey = j => (j?.rowId !== null && j?.rowId !== undefined ? String(j.rowId) : "x" + j?.xid);
   const whole = v => Math.max(0, Math.floor(Number(v)) || 0);
   const outOf = list => (Array.isArray(list) ? list : []).filter(j => j && typeof j === "object").slice(0, 5000).map(j => ({
-    rowId: j.rowId ?? null, number: String(j.number ?? ""), name: String(j.name ?? ""), size: String(j.size ?? ""), team: String(j.team ?? ""),
+    rowId: j.rowId ?? null, xid: j.xid ?? null, number: String(j.number ?? ""), name: String(j.name ?? ""), size: String(j.size ?? ""), team: String(j.team ?? ""),
     status: OUT_STATUS.includes(j.status) ? j.status : "todo", reason: String(j.reason ?? ""),
   }));
   const pruneUnfinished = () => {
@@ -200,7 +202,9 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   // A check-off goes in the ledger too, so the order sheet and the day sheet
   // show it: the rows pass on the newest day that has the order's record, and
   // today gets one pass event a jersey, "Checked off by supervisor".
-  const checkOffInLedger = (u, off, by, at) => {
+  const checkOffInLedger = (u, off, by, at, as = "pass") => {
+    off = off.filter(j => j.status !== "extra");   // an extra jersey has no row and no count in the order
+    const short = as === "short", word = short ? "Shipped short — supervisor" : "Checked off by supervisor";
     const led = (state.ledger ||= {});
     const same = o => o && o.station === u.station && String(o.order) === String(u.order) && (Number(o.run) || 0) === (u.run || 0);
     const date = Object.keys(led).sort().reverse().find(d => Object.values(led[d]?.orders || {}).some(same));
@@ -209,13 +213,14 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
       const ids = new Set(off.map(j => String(j.rowId)));
       const counts = rec.counts ? { ...rec.counts } : null;
       rec.rows = (rec.rows || []).map(r => {
-        if (!ids.has(String(r?._id)) || r.scanned === "pass" || r.scanned === "manual") return r;
+        if (!ids.has(String(r?._id)) || r.scanned === "pass" || r.scanned === "manual" || (short && r.scanned === "short")) return r;
         if (counts) {
           const f = r.scanned ? r.scanned : "remaining";   // a jersey not scanned is in remaining; a flagged, missing or short one in its own count
           if (typeof counts[f] === "number") counts[f] = Math.max(0, counts[f] - 1);
-          counts.pass = (counts.pass || 0) + 1;
+          const to = short ? "short" : "pass";
+          counts[to] = (counts[to] || 0) + 1;
         }
-        return { ...r, scanned: "pass", checkedBy: "supervisor", checkedAt: at };
+        return { ...r, scanned: short ? "short" : "pass", checkedBy: "supervisor", checkedAt: at };
       });
       if (counts) rec.counts = counts;
     }
@@ -223,8 +228,8 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
     const events = (dayLed.events ||= {});
     off.forEach(j => {
       const evId = `co-${j.rowId}-${at}`;
-      events[`${u.station}|${evId}`] = { id: evId, t: localStamp(at), status: "pass", order: u.order, run: u.run, jerseyType: u.jerseyType || "", station: u.station, rowId: j.rowId,
-        number: j.number, name: j.name, size: j.size, team: j.team, reason: "Checked off by supervisor", resolution: "Checked off by supervisor" + (by ? ` (${by})` : ""), operator: by };
+      events[`${u.station}|${evId}`] = { id: evId, t: localStamp(at), status: short ? "short" : "pass", order: u.order, run: u.run, jerseyType: u.jerseyType || "", station: u.station, rowId: j.rowId,
+        number: j.number, name: j.name, size: j.size, team: j.team, reason: word, resolution: word + (by ? ` (${by})` : ""), operator: by };
     });
   };
   const summary = r => ({ id: r.id, orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
@@ -413,9 +418,13 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           const counts = { total: whole(body.total), done: whole(body.done), flagged: whole(body.flagged), missing: whole(body.missing), toScan: whole(body.toScan) };
           // A jersey the supervisor checked off stays checked off, also when the
           // station has not heard of it yet and sends it as still out.
-          const checked = new Set((prev?.checkedOff || []).filter(j => j.rowId !== null).map(j => String(j.rowId)));
-          const all = outOf(body.out), out = all.filter(j => j.rowId === null || !checked.has(String(j.rowId)));
-          all.filter(j => !out.includes(j)).forEach(j => { const f = outCount[j.status]; counts[f] = Math.max(0, counts[f] - 1); counts.done++; });
+          const settled = new Map((prev?.checkedOff || []).map(j => [jkey(j), j]));
+          const all = outOf(body.out), out = all.filter(j => !settled.has(jkey(j)));
+          all.filter(j => !out.includes(j)).forEach(j => {
+            const f = outCount[j.status]; if (!f) return;   // an extra jersey is in no count
+            counts[f] = Math.max(0, counts[f] - 1);
+            if (settled.get(jkey(j))?.as === "short") counts.missing++; else counts.done++;
+          });
           const newId = prev?.id || at.toString(36) + Math.random().toString(36).slice(2, 6);
           // The whole order goes on the disk first: if it cannot be written the station is told,
           // and keeps the order open rather than lose it.
@@ -473,22 +482,30 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           console.log(`[hub] ${time} unfinished order ${u.order} taken off ${was || "no station"}`);
           return json(res, 200, { entry: u });
         }
-        // The supervisor checks off jerseys still out: they count as passed.
+        // The supervisor settles jerseys still out (the owner, 20 Nov 2026: an unfinished
+        // order must go somewhere): "pass" — back and good, they count as passed; "short" —
+        // the order ships without them (a repair that will not come, a jersey not found).
+        // An extra jersey (not on the roster) is closed either way: the supervisor has it.
         // When none is left out the order is closed.
         if (req.method === "POST" && parts[2] === "checkoff") {
           const body = await readBody(req);
           const ids = new Set((Array.isArray(body.ids) ? body.ids : []).map(String));
+          const as = body.as === "short" ? "short" : "pass";
           const by = String(body.by ?? "").trim(), at = now_();
-          const off = (u.out || []).filter(j => body.all ? true : ids.has(String(j.rowId)));
+          const off = (u.out || []).filter(j => body.all ? true : ids.has(jkey(j)));
           if (off.length) {
             u.out = u.out.filter(j => !off.includes(j));
-            off.forEach(j => { const f = outCount[j.status] || "toScan"; u[f] = Math.max(0, (u[f] || 0) - 1); u.done = (u.done || 0) + 1; });
-            u.checkedOff = [...(u.checkedOff || []), ...off.map(j => ({ ...j, by, at }))];
+            off.forEach(j => {
+              const f = outCount[j.status]; if (!f) return;   // an extra jersey is in no count
+              u[f] = Math.max(0, (u[f] || 0) - 1);
+              if (as === "short") u.missing = (u.missing || 0) + 1; else u.done = (u.done || 0) + 1;
+            });
+            u.checkedOff = [...(u.checkedOff || []), ...off.map(j => ({ ...j, by, at, as: j.status === "extra" ? "done" : as }))];
             u.updatedAt = at;
             if (!u.out.length) u.closed = { by, at };
-            checkOffInLedger(u, off, by, at);
+            checkOffInLedger(u, off, by, at, as);
             save();
-            console.log(`[hub] ${time} ${u.station}: ${off.length} jersey${off.length === 1 ? "" : "s"} of unfinished order ${u.order} checked off${by ? " by " + by : ""}${u.closed ? ", order closed" : ""}`);
+            console.log(`[hub] ${time} ${u.station}: ${off.length} jersey${off.length === 1 ? "" : "s"} of unfinished order ${u.order} ${as === "short" ? "shipped short" : "checked off"}${by ? " by " + by : ""}${u.closed ? ", order closed" : ""}`);
           }
           return json(res, 200, { entry: u });
         }

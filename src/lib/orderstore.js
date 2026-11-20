@@ -50,26 +50,54 @@ export function outOf(roster) {
   const done = rows.filter(r => r.scanned === "pass" || r.scanned === "manual").length;
   return { total: rows.length, done, flagged: count("flag"), missing: count("missing") + count("short"), toScan };
 }
-// The jerseys still out, for the hub's small entry (the supervisor ticks them off).
-export const outList = (roster, log = []) => (roster || []).filter(r => r.scanned !== "pass" && r.scanned !== "manual").map(r => ({
-  rowId: r._id, number: String(r.number ?? ""), name: String(r.name ?? ""), size: String(r.size ?? ""), team: String(r.team ?? ""),
-  status: r.scanned === "flag" ? "flag" : r.scanned === "missing" ? "missing" : r.scanned === "short" ? "short" : "todo",
-  reason: r.scanned === "flag" ? String(log.find(l => l.status === "flagged" && l.match?._id === r._id)?.reason || "").replace(/ — found after it passed$/, "") : "",
-}));
+// The jerseys still out, for the hub's small entry (the supervisor settles them):
+// every row not passed, and every extra jersey (flagged, not on the roster or
+// with no row) the supervisor has not dealt with yet (status "extra", `xid` =
+// its log entry; the owner, 20 Nov 2026).
+export const outList = (roster, log = []) => [
+  ...(roster || []).filter(r => r.scanned !== "pass" && r.scanned !== "manual").map(r => ({
+    rowId: r._id, number: String(r.number ?? ""), name: String(r.name ?? ""), size: String(r.size ?? ""), team: String(r.team ?? ""),
+    status: r.scanned === "flag" ? "flag" : r.scanned === "missing" ? "missing" : r.scanned === "short" ? "short" : "todo",
+    reason: r.scanned === "flag" ? String(log.find(l => l.status === "flagged" && l.match?._id === r._id)?.reason || "").replace(/ — found after it passed$/, "") : "",
+  })),
+  ...(log || []).filter(isOpenExtra).map(l => ({
+    rowId: null, xid: l.id, number: String(l.match?.number ?? ""), name: String(l.match?.name ?? ""), size: String(l.match?.size ?? ""), team: String(l.match?.team ?? ""),
+    status: "extra", reason: String(l.reason || ""),
+  })),
+];
+// A flagged jersey that has no roster row (not on the roster, a duplicate, no size tag) and is not dealt with.
+export const isOpenExtra = l => l?.status === "flagged" && !!(l.match?.offRoster || l.match?.noRow) && !l.resolution;
+// How the out jerseys read on a screen, in plain words, grouped.
+export function outGroups(out) {
+  const g = { flag: [], missing: [], extra: [], todo: [] };
+  (out || []).forEach(j => (g[j.status === "short" ? "missing" : j.status] || g.todo).push(j));
+  return g;
+}
+export const jerseyWords = j => `#${j.number || "?"}${j.name ? " " + j.name : ""}${j.size ? " " + j.size : ""}`;
 
-// The supervisor checked jerseys off on the board (hub entry `checkedOff`, and
-// `closed` when nothing is left): those rows pass here too, each with a log
-// line saying so. → the record as it now is.
+// The supervisor settled jerseys on the board (hub entry `checkedOff`, and
+// `closed` when nothing is left): a row checked off passes here too, one
+// shipped short is marked short, each with a log line saying so; an extra
+// jersey's flag is closed ("Dealt with by the supervisor"). → the record as it now is.
 export function applyCheckOff(rec, entry) {
   if (!rec?.session || !entry) return rec;
-  const ids = new Set((entry.checkedOff || []).map(c => c.rowId));
+  const rows = (entry.checkedOff || []).filter(c => c.rowId !== null && c.rowId !== undefined);
+  const extras = new Map((entry.checkedOff || []).filter(c => c.xid !== null && c.xid !== undefined).map(c => [c.xid, c]));
+  const byId = Object.fromEntries(rows.map(c => [c.rowId, c]));
   const roster = rec.session.roster || [];
   const now = Date.now(), stampOf = c => new Date(c.at || now).toLocaleString("sv-SE").replace("T", " ");
-  const fresh = roster.filter(r => ids.has(r._id) && r.scanned !== "pass" && r.scanned !== "manual");
-  if (!fresh.length && !entry.closed) return rec;
-  const byId = Object.fromEntries((entry.checkedOff || []).map(c => [c.rowId, c]));
-  const lines = fresh.map((r, i) => ({ id: now + i, match: { ...r, scanned: "pass" }, status: "pass", reason: "Checked off by supervisor", resolution: `Checked off by supervisor${byId[r._id]?.by ? " (" + byId[r._id].by + ")" : ""}`, timestamp: stampOf(byId[r._id] || {}), operator: byId[r._id]?.by || "Supervisor" }));
-  const session = { ...rec.session, roster: roster.map(r => (ids.has(r._id) && r.scanned !== "pass" && r.scanned !== "manual" ? { ...r, scanned: "pass", checkedBy: "supervisor" } : r)), log: [...lines.reverse(), ...(rec.session.log || [])] };
+  const to = c => (c?.as === "short" ? "short" : "pass");
+  const fresh = roster.filter(r => byId[r._id] && r.scanned !== "pass" && r.scanned !== "manual" && r.scanned !== to(byId[r._id]));
+  const log0 = rec.session.log || [];
+  const extraOpen = log0.some(l => extras.has(l.id) && !l.resolution);
+  if (!fresh.length && !extraOpen && !entry.closed) return rec;
+  const words = c => (to(c) === "short" ? "Shipped short — supervisor" : "Checked off by supervisor");
+  const lines = fresh.map((r, i) => { const c = byId[r._id]; return { id: now + i, match: { ...r, scanned: to(c) }, status: to(c), reason: words(c), resolution: `${words(c)}${c.by ? " (" + c.by + ")" : ""}`, timestamp: stampOf(c), operator: c.by || "Supervisor" }; });
+  const session = {
+    ...rec.session,
+    roster: roster.map(r => (fresh.includes(r) ? { ...r, scanned: to(byId[r._id]), checkedBy: "supervisor" } : r)),
+    log: [...lines.reverse(), ...log0.map(l => (extras.has(l.id) && !l.resolution ? { ...l, resolution: `Dealt with by the supervisor${extras.get(l.id).by ? " (" + extras.get(l.id).by + ")" : ""}` } : l))],
+  };
   return { ...rec, session, summary: outOf(session.roster), closed: entry.closed || rec.closed || null };
 }
 

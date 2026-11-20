@@ -78,7 +78,7 @@ export const hub = {
   parkOrder:     entry          => call("/api/hub/unfinished", { method: "POST", body: JSON.stringify(entry) }),          // { id?, station, order, run, operator, jerseyType, kind, total, done, flagged, missing, toScan, out, session } → { id, entry }; 507 when the server could not write it
   assignUnfinished:   (id, station, by) => call(`/api/hub/unfinished/${id}/assign`, { method: "POST", body: JSON.stringify({ station, by }) }),   // → { entry }
   releaseUnfinished:  id        => call(`/api/hub/unfinished/${id}/release`, { method: "POST" }),                         // → { entry }
-  checkOffUnfinished: (id, { ids = [], all = false, by = "" } = {}) => call(`/api/hub/unfinished/${id}/checkoff`, { method: "POST", body: JSON.stringify({ ids, all, by }) }),   // the jerseys still out count as passed → { entry }
+  checkOffUnfinished: (id, { ids = [], all = false, by = "", as = "pass" } = {}) => call(`/api/hub/unfinished/${id}/checkoff`, { method: "POST", body: JSON.stringify({ ids, all, by, as }) }),   // the jerseys still out count as passed → { entry }
   dropUnfinished:     id        => call(`/api/hub/unfinished/${id}`, { method: "DELETE" }),                               // the station finished it the normal way
   unfinishedOrder:    id        => call(`/api/hub/unfinished/${id}/order`),                                             // { session, entry } — the whole order, kept on the server's disk; 404 when it is not there
   takeUnfinished:     (id, station, operator) => call(`/api/hub/unfinished/${id}/take`, { method: "POST", body: JSON.stringify({ station, operator }) }),   // a station opens it; 409 { openOn } while another station has it open

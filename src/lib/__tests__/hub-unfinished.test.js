@@ -38,7 +38,7 @@ describe("parking an unfinished order", () => {
     expect(r.body.id).toBeTruthy();
     expect(r.body.entry).toEqual({
       id: r.body.id, key: "st-station1|264247|1000", order: "264247", run: 1000, station: "st-station1", stored: null, openOn: null, operator: "Pat", jerseyType: "echl", kind: "",
-      parkedAt: now(), updatedAt: now(), total: 4, done: 1, flagged: 1, missing: 1, toScan: 1, out,
+      parkedAt: now(), updatedAt: now(), total: 4, done: 1, flagged: 1, missing: 1, toScan: 1, out: out.map(j => ({ ...j, xid: null })),
       assignedTo: "", assignedBy: "", assignedAt: 0, checkedOff: [], closed: null,
     });
     const { orders } = (await call("GET", "/unfinished")).body;
@@ -154,6 +154,36 @@ describe("checking off the jerseys still out", () => {
     await call("POST", `/unfinished/${id}/checkoff`, { ids: [3] });
     const { events } = (await call("GET", "/ledger")).body;
     expect(events[0].resolution).toBe("Checked off by supervisor");
+  });
+});
+
+describe("settling what is out: back and good, shipped short, an extra jersey (the owner, 20 Nov 2026)", () => {
+  const extra = { rowId: null, xid: 777, number: "29", name: "", size: "A-M", team: "", status: "extra", reason: "Not on the roster — #29 A-M" };
+  it("shipped short: the rows count as missing, the ledger marks them short; an extra closes with them", async () => {
+    const { call } = makeHub();
+    const { id } = (await call("POST", "/unfinished", park({ out: [...out, extra] }))).body;
+    const r = (await call("POST", `/unfinished/${id}/checkoff`, { ids: ["2", "x777"], by: "Sam", as: "short" })).body.entry;
+    expect(r.out.map(j => j.rowId)).toEqual([3, 4]);
+    expect(r).toMatchObject({ flagged: 0, missing: 2, done: 1, closed: null });
+    expect(r.checkedOff.map(c => [c.rowId, c.xid, c.as])).toEqual([[2, null, "short"], [null, 777, "done"]]);
+    const day = (await call("GET", "/ledger")).body;
+    expect(day.events.find(e => e.rowId === 2)).toMatchObject({ status: "short", reason: "Shipped short — supervisor" });
+    expect(day.events.some(e => e.rowId === null)).toBe(false);   // an extra jersey is not a row of the order
+  });
+  it("a settled jersey stays settled when the station parks it again, an extra one too", async () => {
+    const { call } = makeHub();
+    const { id } = (await call("POST", "/unfinished", park({ out: [...out, extra] }))).body;
+    await call("POST", `/unfinished/${id}/checkoff`, { ids: ["3", "x777"], by: "Sam", as: "short" });
+    const again = (await call("POST", "/unfinished", park({ id, out: [...out, extra] }))).body.entry;
+    expect(again.out.map(j => j.rowId)).toEqual([2, 4]);
+    expect(again).toMatchObject({ flagged: 1, missing: 1, toScan: 1 });
+  });
+  it("with nothing left out, the order closes", async () => {
+    const { call } = makeHub();
+    const { id } = (await call("POST", "/unfinished", park({ out: [out[0], extra] }))).body;
+    const r = (await call("POST", `/unfinished/${id}/checkoff`, { all: true, by: "Sam", as: "short" })).body.entry;
+    expect(r.out).toEqual([]);
+    expect(r.closed).toMatchObject({ by: "Sam" });
   });
 });
 
