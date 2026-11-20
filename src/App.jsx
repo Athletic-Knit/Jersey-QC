@@ -10,7 +10,7 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel, checksFor } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse, holdPrints } from "./lib/hub.js";
-import { outOf, outList, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
+import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
@@ -23,6 +23,12 @@ import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, 
 const S_PASS    = "pass";
 const S_FLAGGED = "flagged";
 const S_MANUAL  = "manual";
+// A jersey that comes back (the owner, 20 Nov 2026: the loop was open): one flagged that
+// is back from repair, or one marked missing that turned up. `cameBack` on a row the
+// matcher sees: { was: "flag", reason } or { was: "missing" }.
+const backWords = b => (b?.was === "flag" ? `Back from repair${b.reason ? " — it was flagged: " + b.reason : ""}` : "Found — it was marked missing");
+// Its open flag or missing line in the log is closed when it passes.
+const closeOpenFor = (log, id, resolution) => log.map(l => (l.match?._id === id && (l.status === S_FLAGGED || l.status === "missing" || l.status === "short") && !l.resolution ? { ...l, resolution } : l));
 
 function formatKey(code) {
   if (!code) return "?";   // a key that has no setting yet (older saved settings) must never crash the screen
@@ -186,22 +192,19 @@ const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise,
       ))}
       {hasBins && <td style={{ ...tdSt, color: r.scanned === "flag" ? "#f87171" : "#60a5fa", fontWeight: 700, whiteSpace: "nowrap" }}>{r.scanned === "flag" ? "Damaged" : bin !== null ? `Box ${bin}` : "—"}</td>}
       <td style={{ ...tdSt, padding: "2px 6px" }}>
-        {/* A flagged jersey is with the supervisor: an operator can do nothing to it from here, so
-            there is no menu at all on its row (an empty menu was shown before, 17 Nov 2026). A
-            supervisor still gets Un-check. */}
-        {r.scanned === "flag" && !canSupervise ? null : (
-          <select value={["missing", "short"].includes(r.scanned) ? "missing" : ""}
-            onChange={e => onMark(r, e.target.value)}
-            style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
-            <option value="">—</option>
-            {(!r.scanned || ["missing", "short"].includes(r.scanned))
-              ? <option value="missing">Missing</option>
-              : <>
-                  {(r.scanned === "pass" || r.scanned === "manual") && <option value="flag">🚩 Flag / damage</option>}
-                  {(r.scanned !== "flag" || canSupervise) && <option value="unscan">Un-check</option>}
-                </>}
-          </select>
-        )}
+        {/* A flagged jersey that is back from repair, or a missing one that turned up, passes from
+            here when the camera cannot read it (the owner, 20 Nov 2026). A supervisor still gets
+            Un-check on a flagged row. */}
+        <select value={["missing", "short"].includes(r.scanned) ? "missing" : ""}
+          onChange={e => onMark(r, e.target.value)}
+          style={{ background: "#1e293b", color: "#cbd5e1", border: "1px solid #3f4b5c", borderRadius: 6, fontSize: 14, padding: "5px 8px" }}>
+          <option value="">—</option>
+          {(!r.scanned || ["missing", "short"].includes(r.scanned)) && <option value="missing">Missing</option>}
+          {["missing", "short"].includes(r.scanned) && <option value="back">✓ Found — pass it</option>}
+          {r.scanned === "flag" && <option value="back">🔧 Back from repair — pass it</option>}
+          {(r.scanned === "pass" || r.scanned === "manual") && <option value="flag">🚩 Flag / damage</option>}
+          {(r.scanned === "pass" || r.scanned === "manual" || (r.scanned === "flag" && canSupervise)) && <option value="unscan">Un-check</option>}
+        </select>
       </td>
     </tr>
   );
@@ -501,10 +504,16 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
               style={{ ...btnGhost, textAlign: "left", padding: "10px 14px", borderColor: givenHere ? "#60a5fa" : "#f59e0b", color: "#e2e8f0", opacity: busyElsewhere ? 0.5 : 1, cursor: busyElsewhere ? "not-allowed" : "pointer" }}>
               <div style={{ fontSize: 20, fontWeight: 900 }}>Order {e.order} <span style={{ fontWeight: 700, color: "#4ade80" }}>· {e.done} of {e.total} done</span></div>
               <div style={{ fontSize: 16, color: "#cbd5e1", marginTop: 2 }}>
-                Not done:{" "}
-                {[e.flagged ? <span key="f" style={{ color: "#f87171" }}>{e.flagged} flagged</span> : null,
-                  e.missing ? <span key="m" style={{ color: "#fbbf24" }}>{e.missing} missing</span> : null,
-                  e.toScan ? <span key="t">{e.toScan} not scanned yet</span> : null].filter(Boolean).reduce((a, x) => a.length ? [...a, " · ", x] : [x], [])}
+                {(() => {
+                  const g = e.out ? outGroups(e.out) : null;
+                  const n = { flag: g ? g.flag.length : e.flagged, missing: g ? g.missing.length : e.missing, extra: g ? g.extra.length : 0, todo: g ? g.todo.length : e.toScan };
+                  const parts = [n.flag ? <span key="f" style={{ color: "#f87171" }}>{n.flag} waiting on repair</span> : null,
+                    n.missing ? <span key="m" style={{ color: "#fbbf24" }}>{n.missing} missing</span> : null,
+                    n.extra ? <span key="x" style={{ color: "#f9a8d4" }}>{n.extra} extra (with the supervisor)</span> : null,
+                    n.todo ? <span key="t">{n.todo} not scanned yet</span> : null].filter(Boolean);
+                  const named = g ? [...g.flag, ...g.missing].slice(0, 4).map(j => jerseyWords(j) + (j.status === "flag" && j.reason ? ` (${j.reason})` : j.status !== "flag" ? " (missing)" : "")) : [];
+                  return <>Still out: {parts.reduce((a, x) => a.length ? [...a, " · ", x] : [x], [])}{named.length ? <div style={{ fontSize: 14, color: "#94a3b8" }}>{named.join(", ")}{g.flag.length + g.missing.length > 4 ? " …" : ""}</div> : null}</>;
+                })()}
               </div>
               <div style={{ fontSize: 14, color: "#94a3b8", marginTop: 2 }}>
                 Put aside on {stationLabel(e.station)} by {e.operator || "—"}, {day(e.parkedAt)}
@@ -986,18 +995,23 @@ const GONE_MS = 2 * 3600 * 1000;
 function UnfinishedPile({ by, onClose }) {
   const [list, setList] = useState(null), [q, setQ] = useState(""), [err, setErr] = useState("");
   const [open, setOpen] = useState(null);           // the entry being checked off
+  const [seenAt, setSeenAt] = useState(0);          // when the list was last loaded (how long each order has waited)
   const [ticked, setTicked] = useState(new Set());
   const [confirm, setConfirm] = useState(false);
-  const load = useCallback(() => hub.unfinished(q.trim() ? { q: q.trim() } : {}).then(r => { setList(r.orders || []); setErr(""); }).catch(e => setErr(`The hub did not answer: ${e.message}`)), [q]);
+  const load = useCallback(() => hub.unfinished(q.trim() ? { q: q.trim() } : {}).then(r => { setList(r.orders || []); setSeenAt(Date.now()); setErr(""); }).catch(e => setErr(`The hub did not answer: ${e.message}`)), [q]);
   useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, [load]);
   useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
   const act = p => p.then(load).catch(e => setErr(e.message));
   const entry = (list || []).find(e => e.id === open);
-  const statusWord = { flag: "flagged", missing: "missing", short: "short", todo: "not scanned" };
+  const statusWord = { flag: "at repair", missing: "missing", short: "short", todo: "not scanned", extra: "extra, not on the order" };
+  const jkey = j => (j.rowId !== null && j.rowId !== undefined ? String(j.rowId) : "x" + j.xid);   // a row, or an extra jersey's log entry
+  // confirm: "pass" (back and good) or "short" (the order ships without them)
   const checkOff = () => {
+    const as = confirm === "short" ? "short" : "pass";
     const all = ticked.size === entry.out.length;
-    act(hub.checkOffUnfinished(entry.id, all ? { all: true, by } : { ids: [...ticked], by }).then(() => { setConfirm(false); setTicked(new Set()); if (all) setOpen(null); }));
+    act(hub.checkOffUnfinished(entry.id, all ? { all: true, by, as } : { ids: [...ticked], by, as }).then(() => { setConfirm(false); setTicked(new Set()); if (all) setOpen(null); }));
   };
+  const waited = e => (e.parkedAt && seenAt ? Math.max(0, Math.floor((seenAt - e.parkedAt) / 86400000)) : 0);   // days since it was put aside, as of the last load
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #f59e0b", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
@@ -1016,7 +1030,7 @@ function UnfinishedPile({ by, onClose }) {
                 <div style={{ fontSize: 22, fontWeight: 900 }}>Order {e.order}</div>
                 <div style={{ fontSize: 15, color: "#cbd5e1", flex: 1, minWidth: 220 }}>
                   {e.done}/{e.total} done{e.flagged ? <> · <span style={{ color: "#f87171" }}>{e.flagged} flagged</span></> : null}{e.missing ? <> · <span style={{ color: "#fbbf24" }}>{e.missing} missing</span></> : null}{e.toScan ? <> · {e.toScan} not scanned</> : null}
-                  <div style={{ fontSize: 13, color: "#94a3b8" }}>put aside on {stationLabel(e.station)} by {e.operator || "—"} · {new Date(e.parkedAt).toLocaleDateString()}{e.assignedTo ? <span style={{ color: "#60a5fa", fontWeight: 700 }}> · assigned to {stationLabel(e.assignedTo)}</span> : null}{e.openOn ? <span style={{ color: "#4ade80", fontWeight: 700 }}> · open on {stationLabel(e.openOn.station)} now <button onClick={() => act(hub.releaseUnfinished(e.id))} title="Free it, so another station can open it" style={{ ...btnGhost, fontSize: 12, padding: "1px 8px", marginLeft: 4 }}>Free it</button></span> : null}{e.checkedOff?.length ? ` · ${e.checkedOff.length} checked off` : ""}</div>
+                  <div style={{ fontSize: 13, color: "#94a3b8" }}><span style={{ fontWeight: 800, color: waited(e) >= 5 ? "#f87171" : waited(e) >= 2 ? "#fbbf24" : "#94a3b8" }}>{waited(e) ? `waiting ${waited(e)} day${waited(e) === 1 ? "" : "s"}` : "put aside today"}</span> · put aside on {stationLabel(e.station)} by {e.operator || "—"} · {new Date(e.parkedAt).toLocaleDateString()}{e.assignedTo ? <span style={{ color: "#60a5fa", fontWeight: 700 }}> · assigned to {stationLabel(e.assignedTo)}</span> : null}{e.openOn ? <span style={{ color: "#4ade80", fontWeight: 700 }}> · open on {stationLabel(e.openOn.station)} now <button onClick={() => act(hub.releaseUnfinished(e.id))} title="Free it, so another station can open it" style={{ ...btnGhost, fontSize: 12, padding: "1px 8px", marginLeft: 4 }}>Free it</button></span> : null}{e.checkedOff?.length ? ` · ${e.checkedOff.length} checked off` : ""}</div>
                 </div>
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {STATIONS.map(s => (
@@ -1025,30 +1039,31 @@ function UnfinishedPile({ by, onClose }) {
                       → {s.label}
                     </button>
                   ))}
-                  <button onClick={() => { setOpen(o => (o === e.id ? null : e.id)); setTicked(new Set()); setConfirm(false); }} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px", borderColor: "#22c55e", color: "#86efac" }}>{open === e.id ? "▲ Close" : "✓ Check off…"}</button>
+                  <button onClick={() => { setOpen(o => (o === e.id ? null : e.id)); setTicked(new Set()); setConfirm(false); }} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px", borderColor: "#22c55e", color: "#86efac" }}>{open === e.id ? "▲ Close" : "✓ Settle…"}</button>
                 </span>
               </div>
               {open === e.id && entry && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 15, color: "#cbd5e1", marginBottom: 8 }}>Tick the jerseys that are back and good. They count as passed, marked "checked off by supervisor". When none is left the order is closed.</div>
+                  <div style={{ fontSize: 15, color: "#cbd5e1", marginBottom: 8 }}>Tick jerseys, then: <strong>Back and good</strong> — they count as passed ("checked off by supervisor"). <strong>Ship short</strong> — the order goes without them. An extra jersey (not on the order) is closed either way. When none is left the order is closed.</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 6 }}>
                     {entry.out.map(j => (
-                      <label key={j.rowId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: ticked.has(j.rowId) ? "rgba(34,197,94,0.15)" : "#0d1117", border: `1px solid ${ticked.has(j.rowId) ? "#22c55e" : "#21262d"}`, cursor: "pointer" }}>
-                        <input type="checkbox" checked={ticked.has(j.rowId)} onChange={() => setTicked(t => { const n = new Set(t); if (n.has(j.rowId)) n.delete(j.rowId); else n.add(j.rowId); return n; })} style={{ width: 20, height: 20 }} />
+                      <label key={jkey(j)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: ticked.has(jkey(j)) ? "rgba(34,197,94,0.15)" : "#0d1117", border: `1px solid ${ticked.has(jkey(j)) ? "#22c55e" : "#21262d"}`, cursor: "pointer" }}>
+                        <input type="checkbox" checked={ticked.has(jkey(j))} onChange={() => setTicked(t => { const n = new Set(t); if (n.has(jkey(j))) n.delete(jkey(j)); else n.add(jkey(j)); return n; })} style={{ width: 20, height: 20 }} />
                         <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{j.number || "—"}</strong>
                         {j.name && <span>{j.name}</span>}
                         {j.size && <span style={{ color: "#4ade80", fontWeight: 700 }}>{j.size}</span>}
                         {j.team && <span style={{ color: "#94a3b8" }}>{j.team}</span>}
-                        <span style={{ marginLeft: "auto", fontSize: 12, color: j.status === "flag" ? "#f87171" : j.status === "todo" ? "#94a3b8" : "#fbbf24" }}>{statusWord[j.status] || j.status}{j.reason ? `: ${j.reason}` : ""}</span>
+                        <span style={{ marginLeft: "auto", fontSize: 12, color: j.status === "flag" ? "#f87171" : j.status === "todo" ? "#94a3b8" : j.status === "extra" ? "#f9a8d4" : "#fbbf24" }}>{statusWord[j.status] || j.status}{j.reason ? `: ${j.reason}` : ""}</span>
                       </label>
                     ))}
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <button onClick={() => setTicked(t => (t.size === entry.out.length ? new Set() : new Set(entry.out.map(j => j.rowId))))} style={{ ...btnGhost, fontSize: 15 }}>{ticked.size === entry.out.length ? "Untick all" : "Tick all"}</button>
-                    {!confirm && <button disabled={!ticked.size} onClick={() => setConfirm(true)} style={{ ...btnPri, fontSize: 16, padding: "10px 18px", background: "#22c55e", color: "#0d1117", opacity: ticked.size ? 1 : 0.4 }}>✓ Check off {ticked.size}</button>}
+                    <button onClick={() => setTicked(t => (t.size === entry.out.length ? new Set() : new Set(entry.out.map(jkey))))} style={{ ...btnGhost, fontSize: 15 }}>{ticked.size === entry.out.length ? "Untick all" : "Tick all"}</button>
+                    {!confirm && <button disabled={!ticked.size} onClick={() => setConfirm("pass")} style={{ ...btnPri, fontSize: 16, padding: "10px 18px", background: "#22c55e", color: "#0d1117", opacity: ticked.size ? 1 : 0.4 }}>✓ Back and good · {ticked.size}</button>}
+                    {!confirm && <button disabled={!ticked.size} onClick={() => setConfirm("short")} style={{ ...btnGhost, fontSize: 16, padding: "10px 18px", borderColor: "#f59e0b", color: "#fcd34d", opacity: ticked.size ? 1 : 0.4 }}>📦 Ship short · {ticked.size}</button>}
                     {confirm && (
                       <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 16, fontWeight: 800 }}>Check off {ticked.size} of {entry.out.length}{ticked.size === entry.out.length ? " and close the order" : ""}?</span>
+                        <span style={{ fontSize: 16, fontWeight: 800 }}>{confirm === "short" ? "Ship the order without" : "Check off"} {ticked.size} of {entry.out.length}{ticked.size === entry.out.length ? " and close the order" : ""}?</span>
                         <button onClick={checkOff} style={{ ...btnPri, fontSize: 16, padding: "10px 18px", background: "#22c55e", color: "#0d1117" }}>✓ Yes</button>
                         <button onClick={() => setConfirm(false)} style={{ ...btnGhost, fontSize: 15 }}>Cancel</button>
                       </span>
@@ -1588,6 +1603,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }, { ...notRight, run: actions.reopenLast }];
     if (mode === "manual")     return [];
     if (mode === "clean")      return [{ id: "cleaned", label: "✓ It is clean now", primary: true, run: actions.cleaned }, { id: "stays", label: "🚩 It will not come out", run: actions.cleanFailed }, { id: "back", label: "← Back", run: actions.back }];
+    if (mode === "duplicate" && state.match?.scanned === "flag") return [{ id: "back", label: "🔧 Back from repair — pass it", primary: true, run: () => actions.passBack(state.match._id) }, { id: "skip", label: "Skip", run: actions.skipDuplicate }, retry];   // a flagged jersey scanned again: it may be back from repair (the owner, 20 Nov 2026)
     if (mode === "duplicate")  return [{ id: "skip", label: "✓ Skip", primary: true, run: actions.skipDuplicate }, retry, { id: "dup", label: "🚩 Duplicate", run: actions.flagDuplicate }];
     if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") {
@@ -1605,7 +1621,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     }
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter]);
+  }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter, state.match]);
 
   const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
   const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
@@ -1735,6 +1751,11 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           {state.note && <div style={{ marginTop: 12, fontSize: 20, color: "#fcd34d" }}>✎ {state.note}</div>}
           {mode === "confirm" && (
             <>
+              {match?.cameBack && (
+                <div style={{ marginTop: 12, padding: "10px 26px", borderRadius: 14, background: "#0d1117", border: "4px solid #38bdf8", color: "#7dd3fc", fontWeight: 900, fontSize: "clamp(22px, 3vw, 32px)", textAlign: "center", maxWidth: "94%" }}>
+                  {match.cameBack.was === "flag" ? "🔧" : "✓"} {backWords(match.cameBack)}{match.cameBack.was === "flag" ? ". Check it is fixed." : "."}
+                </div>
+              )}
               {numberDoubt && (
                 <div style={{ marginTop: 12, padding: "10px 26px", borderRadius: 14, background: "#0d1117", border: "4px solid #f59e0b", color: "#fcd34d", fontWeight: 900, fontSize: "clamp(22px, 3vw, 32px)", textAlign: "center", maxWidth: "94%" }}>
                   ⚠ Camera could not see the whole number — check it is #{match.number}
@@ -2416,6 +2437,60 @@ function ReplayFinder({ onPick, onClose, stationLabel }) {
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Still out, on a picked-up order (the owner, 20 Nov 2026: the loop was open) ──
+// What the order is still waiting for, in plain words: jerseys back from repair,
+// missing ones, extra ones with the supervisor, and how many are not scanned yet.
+// A jersey that comes back is scanned (it goes green, saying so) or passed here.
+function StillOutModal({ orderNumber, groups, rowOf, binOf, onPass, onClose }) {
+  const [sure, setSure] = useState(null);   // the row whose Pass it was tapped once
+  useEffect(() => {
+    const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [onClose]);
+  const boxOf = j => { const r = rowOf(j.rowId); return r && binOf ? binOf(r) : null; };
+  const row = (j, colour, passLabel) => (
+    <div key={j.rowId ?? "x" + j.xid} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10, background: "#0d1117", border: `1px solid ${colour}55` }}>
+      <div style={{ fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, minWidth: 64 }}>#{j.number || "?"}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 18, fontWeight: 800 }}>{j.name || "—"} <span style={{ color: "#fbbf24" }}>{j.size}</span> <span style={{ color: "#94a3b8", fontWeight: 400 }}>{j.team}</span></div>
+        <div style={{ fontSize: 15, color: "#cbd5e1" }}>{j.status === "flag" ? `Was flagged: ${j.reason || "—"}` : j.status === "extra" ? j.reason : "Marked missing"}{boxOf(j) ? <span style={{ color: "#60a5fa", fontWeight: 800 }}> · goes in Box {boxOf(j)}</span> : null}</div>
+      </div>
+      {passLabel && (sure === j.rowId
+        ? <span style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => onPass(j.rowId)} style={{ ...btnPri, padding: "10px 16px", fontSize: 16, background: "#22c55e", color: "#0d1117" }}>✓ Yes, pass #{j.number}</button>
+            <button onClick={() => setSure(null)} style={{ ...btnGhost, fontSize: 15 }}>No</button>
+          </span>
+        : <button onClick={() => setSure(j.rowId)} style={{ ...btnGhost, padding: "10px 16px", fontSize: 16, fontWeight: 800, borderColor: "#22c55e", color: "#86efac" }}>{passLabel}</button>)}
+    </div>
+  );
+  const section = (title, list, colour, passLabel, note) => (list.length ? (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontSize: 18, fontWeight: 900, color: colour, marginBottom: 6 }}>{title} · {list.length}</div>
+      {note && <div style={{ fontSize: 15, color: "#94a3b8", marginBottom: 6 }}>{note}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{list.map(j => row(j, colour, passLabel))}</div>
+    </div>
+  ) : null);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #38bdf8", padding: 28, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={STICKY_HEAD}>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#7dd3fc", flex: 1 }}>🔧 Still out on order {orderNumber}</div>
+          <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
+        </div>
+        <div style={{ fontSize: 17, color: "#cbd5e1", marginTop: 10, lineHeight: 1.45 }}>
+          When a jersey comes back, <strong>scan it</strong>: it goes green and into its box. If the camera cannot read it, tap <strong>Pass it</strong> here.
+        </div>
+        {section("Back from repair", groups.flag, "#f87171", "✓ It's back — pass it")}
+        {section("Missing", groups.missing, "#fbbf24", "✓ Found — pass it")}
+        {section("Extra, not on this order", groups.extra, "#f9a8d4", null, "With the supervisor: they decide on the board.")}
+        {groups.todo.length > 0 && <div style={{ marginTop: 16, fontSize: 17, color: "#cbd5e1" }}><strong>Not scanned yet · {groups.todo.length}</strong> — scan them as usual.</div>}
+        <div style={{ marginTop: 18, fontSize: 15, color: "#94a3b8", lineHeight: 1.45 }}>A jersey that will not come back: the supervisor marks it <strong>Ship short</strong> on the board (Unfinished orders). When nothing is out, finish the order.</div>
       </div>
     </div>
   );
@@ -3149,6 +3224,7 @@ export default function App() {
   const [searchKeys,         setSearchKeys]         = useState(false);    // the on-screen keys under the bar, while the cursor is in the search box
   const searchRef = useRef(null);
   const [showIssues,         setShowIssues]         = useState(false);   // the Missing · Duplicate · Flagged lists
+  const [showStillOut,       setShowStillOut]       = useState(false);   // a picked-up order: what is still out and how it comes back
   const [showPacking,        setShowPacking]        = useState(false);   // the packing view: team by team   // the Missing · Duplicate · Flagged lists
   const [showHistory,        setShowHistory]        = useState(false);   // every jersey scanned this order, latest first   // "pass" | "flag" | "manual" | null — set by clicking a header pill
   const filterRoster = useCallback(kind => { setRosterFilter(f => (f === kind ? null : kind)); setView("roster"); }, []);
@@ -3263,7 +3339,13 @@ export default function App() {
   // What the matcher sees. On an order picked up again a flagged jersey that comes back from
   // repair is open again, so it can go green (the owner, 19 Nov 2026); otherwise it is with the
   // supervisor and scanning it shows the flag.
-  const scanRoster = useMemo(() => (pickedUp ? roster.map(r => (r.scanned === "flag" ? { ...r, scanned: false } : r)) : roster), [roster, pickedUp]);
+  // A missing jersey that turns up is always open to the matcher; a flagged one on a picked-up
+  // order (back from repair). Both carry `cameBack`, so the green screen says so.
+  const scanRoster = useMemo(() => {
+    const why = id => String(log.find(l => l.status === S_FLAGGED && l.match?._id === id && !l.resolution)?.reason || "").replace(/ — found after it passed$/, "");
+    return roster.map(r => (r.scanned === "flag" && pickedUp ? { ...r, scanned: false, cameBack: { was: "flag", reason: why(r._id) } }
+      : r.scanned === "missing" || r.scanned === "short" ? { ...r, cameBack: { was: "missing" } } : r));
+  }, [roster, pickedUp, log]);
   // The three lists behind the "Missing · Duplicate · Flagged" button. A duplicate is a flag
   // whose reason says so; flagged is every roster row out for a flag (its newest reason) and
   // every open flag with no row (not on the roster, no size tag), duplicates apart.
@@ -3354,7 +3436,9 @@ export default function App() {
   const armRef     = useRef(() => {});   // re-arm hands-free from inside a scan (set once armAutoScan exists)
   const passCount      = roster.filter(r => r.scanned === "pass").length;
   const offRosterList  = log.filter(l => l.status === S_FLAGGED && (l.match?.offRoster || l.match?.noRow) && !l.resolution);
-  const offRosterFlags = offRosterList.length;   // jerseys that are not on the roster, or flagged with no row (no size tag), have no row to count
+  const offRosterFlags = offRosterList.length;
+  // What a picked-up order is still waiting for, grouped (the Still out button and list).
+  const stillOut = useMemo(() => { const g = outGroups(outList(roster, log)); return { ...g, total: g.flag.length + g.missing.length + g.extra.length }; }, [roster, log]);   // jerseys that are not on the roster, or flagged with no row (no size tag), have no row to count
   const flagCount      = roster.filter(r => r.scanned === "flag").length + offRosterFlags;
   const manualCount    = roster.filter(r => r.scanned === "manual").length;
   const teamNames      = useMemo(() => [...new Set(roster.map(r => r.team).filter(Boolean))], [roster]);
@@ -3725,7 +3809,7 @@ export default function App() {
       // Send a smaller frame than the camera gives: same read, faster answer.
       const sendB64 = await frameForUpload(url, SEND_MAX_PX).catch(() => b64);
       const t0 = Date.now();
-      const r = await readJersey({ base64: sendB64, model: MODEL, effort: EFFORT, thinking: THINKING, orderNumbers: roster.filter(x => !isDone(x)).map(x => x.number) });
+      const r = await readJersey({ base64: sendB64, model: MODEL, effort: EFFORT, thinking: THINKING, orderNumbers: scanRoster.filter(x => !isDone(x)).map(x => x.number) });
       console.log(`Read in ${Date.now() - t0} ms: #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"}${r.laid_flat ? "" : " [not flat]"} (${r.jersey_colour || "?"}${r.trim_colour ? "/" + r.trim_colour : ""}; sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
       return r;
     };
@@ -4024,12 +4108,28 @@ export default function App() {
       if (!overlay?.match) return;
       const scan  = overlay.scan || {};
       // A number typed by hand passes like a scan (the owner, 20 Nov 2026: no supervisor sign-off); its reason says it was typed.
-      const entry = { id: scan.id || Date.now(), detected: scan.detected, thumb: scan.smallThumb, match: overlay.match, status: S_PASS, reason: overlay.note || "", ...stamp() };
-      setRoster(prev => prev.map(r => r._id === overlay.match._id ? { ...r, scanned: "pass" } : r));
-      setLog(prev => [entry, ...prev]);
+      const { cameBack: back, ...row } = overlay.match;   // back from repair, or found: its open flag or missing line closes
+      const entry = { id: scan.id || Date.now(), detected: scan.detected, thumb: scan.smallThumb, match: row, status: S_PASS, reason: [back ? backWords(back) : "", overlay.note || ""].filter(Boolean).join(" · "), ...stamp() };
+      setRoster(prev => prev.map(r => r._id === row._id ? { ...r, scanned: "pass" } : r));
+      setLog(prev => [entry, ...(back ? closeOpenFor(prev, row._id, back.was === "flag" ? "Back from repair — passed" : "Found — passed") : prev)]);
       setLastResult(entry); setLastConfirmed(entry);
       inspectRef.current.jerseyDone(); syncInspect();
-      setOverlay({ mode: "done", scan, match: overlay.match });
+      setOverlay({ mode: "done", scan, match: row });
+      playTone("pass");
+    },
+    // Pass a jersey that came back without the camera (the Still out list, the roster's
+    // Mark menu, the ALREADY DONE screen of a flagged one): a plain pass, said so in the log.
+    passBack(id) {
+      const row = roster.find(r => r._id === id); if (!row || !["flag", "missing", "short"].includes(row.scanned)) return;
+      const why = String(log.find(l => l.status === S_FLAGGED && l.match?._id === id && !l.resolution)?.reason || "").replace(/ — found after it passed$/, "");
+      const back = row.scanned === "flag" ? { was: "flag", reason: why } : { was: "missing" };
+      const passed = { ...row, scanned: "pass" };
+      const entry = { id: Date.now(), detected: null, thumb: null, match: passed, status: S_PASS, reason: `${backWords(back)} — passed by hand`, ...stamp() };
+      setRoster(prev => prev.map(r => r._id === id ? { ...r, scanned: "pass" } : r));
+      setLog(prev => [entry, ...closeOpenFor(prev, id, back.was === "flag" ? "Back from repair — passed by hand" : "Found — passed by hand")]);
+      setLastResult(entry); setLastConfirmed(entry);
+      inspectRef.current.jerseyDone(); syncInspect();
+      setOverlay({ mode: "done", scan: {}, match: passed });
       playTone("pass");
     },
     retry()  {
@@ -4235,7 +4335,7 @@ export default function App() {
       setOverlay({ mode: "manual", scan: o.scan, match: null, teams: teamNames, returnTo: null, initial: o.typed });
     },
     };
-  }, [overlay, stamp, armAutoScan, pedalNext, roster, scanRoster, teamNames, noteMistake, lastConfirmed, syncInspect, captureFrame, settings.flagTickets]);
+  }, [overlay, stamp, armAutoScan, pedalNext, roster, scanRoster, teamNames, noteMistake, lastConfirmed, syncInspect, captureFrame, settings.flagTickets, log]);
 
   // ── Flag resolution (from the result card) ────────────────────────────────
   const resolveFlag = useCallback((logId, decision, note) => {
@@ -4320,7 +4420,12 @@ export default function App() {
     setLastResult(r => (r?.match?._id === id ? null : r)); setLastConfirmed(c => (c?.match?._id === id ? null : c));
   }, [roster, operatorName, stamp, noteMistake]);
   // What a row's Mark menu does, kept current for the one stable handler the rows share.
-  useEffect(() => { markHandler.current = (r, v) => { if (v === "unscan") unscan(r._id); else if (v === "flag") flagRow(r); else markRow(r._id, v || false); }; });
+  useEffect(() => { markHandler.current = (r, v) => {
+    if (v === "unscan") unscan(r._id);
+    else if (v === "flag") flagRow(r);
+    else if (v === "back") { if (window.confirm(`Pass #${r.number}${r.name ? " · " + r.name : ""}${r.size ? " · " + r.size : ""}? ${r.scanned === "flag" ? "It is back from repair and fixed." : "It was missing and is here now."}${binMap ? " It goes in Box " + binOf(r) + "." : ""}`)) actions.passBack(r._id); }
+    else markRow(r._id, v || false);
+  }; });
 
   // Input trial: while Settings → Input trial names a setup, every decision on
   // a result screen (and every scan trigger) is kept in this browser, across
@@ -4566,9 +4671,13 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-                {offRosterFlags > 0 && <div style={{ fontSize: 17, color: "#fca5a5", marginBottom: 10 }}>Also flagged: {offRosterFlags} {offRosterFlags === 1 ? "jersey that is" : "jerseys that are"} not on this order (extra or duplicate).</div>}
+                {(() => {
+                  const g = outGroups(outList(roster, log));
+                  const line = (label, list, colour) => (list.length ? <div style={{ fontSize: 17, color: colour, marginBottom: 6, lineHeight: 1.4 }}><strong>{label}:</strong> {list.slice(0, 8).map(j => jerseyWords(j) + (j.status === "flag" && j.reason ? ` (${j.reason})` : "")).join(", ")}{list.length > 8 ? ` and ${list.length - 8} more` : ""}</div> : null);
+                  return <div style={{ marginBottom: 10 }}>{line("Waiting on repair", g.flag, "#fca5a5")}{line("Missing", g.missing, "#fcd34d")}{line("Extra, with the supervisor", g.extra, "#f9a8d4")}</div>;
+                })()}
                 <div style={{ fontSize: 17, color: "#cbd5e1", lineHeight: 1.45 }}>
-                  The order is saved on the server, with everything done so far. To carry on, at any station: <strong>Unfinished orders</strong> on the order screen, then tap this order.
+                  The order is saved on the server, with everything done so far. When the jerseys come back, at any station: <strong>Unfinished orders</strong> on the order screen, tap this order, and scan them. A jersey that will not come back, the supervisor marks <strong>Ship short</strong> on the board.
                 </div>
               </div>
             ); })()}
@@ -4580,6 +4689,8 @@ export default function App() {
           </div>
         </div>
       )}
+      {showStillOut && <StillOutModal orderNumber={orderNumber} groups={stillOut} rowOf={id => roster.find(r => r._id === id)} binOf={binMap ? binOf : null}
+        onPass={id => { setShowStillOut(false); actions.passBack(id); }} onClose={() => closeDialog(() => setShowStillOut(false))} />}
       {showIssues && <IssuesModal missing={issues.missing} dups={issues.dups} flagged={issues.flagged} binOf={binOf} onClose={() => closeDialog(() => setShowIssues(false))} />}
       {showHistory && (
         <HistoryModal log={log} roster={roster} binOf={binOf} onClose={() => closeDialog(() => setShowHistory(false))}
@@ -4815,6 +4926,7 @@ export default function App() {
               {/* Bottom-left, under the last pass: the order's history, where the hand already is. */}
               {sessionStarted && (
                 <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>{/* one line, short labels, never under the roster (the owner, 19 Nov 2026) */}
+                  {pickedUp && stillOut.total > 0 && <button onClick={() => setShowStillOut(true)} title="The jerseys this order is waiting for: back from repair, missing, extra. Scan one when it comes back, or pass it here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", borderColor: "#38bdf8", color: "#7dd3fc" }}>🔧 Still out · {stillOut.total}</button>}
                   <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
                   {binMap && <button onClick={() => setShowPacking(true)} title="Packing and Box full: team by team, what goes in each box, which teams are complete, what is missing; close a full box from here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#22c55e", color: "#86efac" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Packing"}</button>}
                   <button onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: issues.missing.length + issues.dups.length + issues.flagged.length ? "#f59e0b" : "#334155" }}>
