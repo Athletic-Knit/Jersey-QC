@@ -92,6 +92,8 @@ const KEY_ROWS = {
   search: [["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"], ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], ["A", "S", "D", "F", "G", "H", "J", "K", "L", "-"], ["Z", "X", "C", "V", "B", "N", "M", "⌫"], ["⌧", "␣", "⏎"]],
 };
 const KEY_NAMES = { "␣": "Space", "⌧": "Clear" };
+// Digits typed on the keypad as six-digit order numbers: "264248264249" → "264248, 264249".
+const sixes = digits => (String(digits).match(/\d{1,6}/g) || []).join(", ");
 function ScreenKeys({ layout = "digits", onKey, onEnter, enterLabel = "OK" }) {
   const rows = KEY_ROWS[layout] || KEY_ROWS.digits;
   const wide = layout === "digits";
@@ -716,7 +718,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           <label style={labelSt}>Ships with <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— the other order numbers on the order form; empty when it ships alone</span></label>
           <input ref={shipRef} value={shipText} onChange={e => setShipText(e.target.value)} placeholder="e.g. 264248, 264249" style={inputSt}
             onFocus={() => setShipKeys(true)} onBlur={() => setShipKeys(false)} />
-          {shipKeys && <ScreenKeys layout="search" onKey={k => setShipText(v => typeKey(v, k))} onEnter={() => shipRef.current?.blur()} enterLabel="Done" />}
+          {/* A number keypad only (the owner, 20 Nov 2026); order numbers are six digits, so a comma goes in by itself after every six. */}
+          {shipKeys && <ScreenKeys layout="digits" onKey={k => setShipText(v => sixes(typeKey(v.replace(/\D/g, ""), k)))} onEnter={() => shipRef.current?.blur()} enterLabel="Done" />}
         </div>
         <div style={{ marginBottom: 12 }}>
           {/* No order-notes box here (the owner, 17 Nov 2026): the notes come with the supervisor's roster, when there are any. */}

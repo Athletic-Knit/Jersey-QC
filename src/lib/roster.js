@@ -71,7 +71,9 @@ const ORDER_IN_TEXT = /\b(?:order|po|job|work order)\s*(?:no\.?|number|id|#)?\s*
 const SHIP_WITH_IN_TEXT = /\bship(?:s|ping)?\s*(?:with|w\/)\s*(?:order)?s?\s*[:#-]?\s*((?:#?\s*\d{3,}[\s,;&+/]*(?:and\s+)?)+)/i;
 const SHIP_WITH_HEADER = /^ship(?:s|ping)?\s*(?:with|w\/)/i;
 // "264248, 264249 & #264250" → ["264248", "264249", "264250"] (numbers of three digits or more).
-export const orderList = text => [...new Set(String(text ?? "").match(/\d{3,}/g) || [])];
+// Order numbers are six digits (the owner, 20 Nov 2026): a run of 12, 18 … digits typed with
+// nothing between is that many orders.
+export const orderList = text => [...new Set((String(text ?? "").match(/\d{3,}/g) || []).flatMap(n => (n.length > 6 && n.length % 6 === 0 ? n.match(/\d{6}/g) : [n])))];
 
 // rows: array of arrays of cell strings. Finds the header row (first row that
 // looks like one, within the first 15) so title rows above it are skipped.

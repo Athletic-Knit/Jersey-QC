@@ -74,3 +74,11 @@ describe("a box that holds two orders", () => {
     expect(labels.filter(l => !l.title).flatMap(l => l.items)).toEqual(["1-ADAMS-AL", "2-BAKER-AM", "6-FOX-AL"]);
   });
 });
+
+describe("six-digit order numbers typed with nothing between", () => {
+  it("are split in sixes", () => {
+    expect(orderList("264248264249")).toEqual(["264248", "264249"]);
+    expect(orderList("264248, 264249")).toEqual(["264248", "264249"]);
+    expect(orderList("1234567")).toEqual(["1234567"]);   // not a multiple of six: left as it is
+  });
+});
