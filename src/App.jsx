@@ -1039,7 +1039,7 @@ function UnfinishedPile({ by, onClose }) {
                       → {s.label}
                     </button>
                   ))}
-                  <button onClick={() => { setOpen(o => (o === e.id ? null : e.id)); setTicked(new Set()); setConfirm(false); }} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px", borderColor: "#22c55e", color: "#86efac" }}>{open === e.id ? "▲ Close" : "✓ Settle…"}</button>
+                  <button disabled={!!e.openOn && open !== e.id} onClick={() => { setOpen(o => (o === e.id ? null : e.id)); setTicked(new Set()); setConfirm(false); }} title={e.openOn ? `Open on ${stationLabel(e.openOn.station)} now: Free it first (the station may be passing these jerseys)` : "Settle the jerseys still out: back and good, or ship short"} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px", borderColor: "#22c55e", color: "#86efac", opacity: e.openOn && open !== e.id ? 0.4 : 1 }}>{open === e.id ? "▲ Close" : "✓ Settle…"}</button>
                 </span>
               </div>
               {open === e.id && entry && (
@@ -1752,8 +1752,8 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           {mode === "confirm" && (
             <>
               {match?.cameBack && (
-                <div style={{ marginTop: 12, padding: "10px 26px", borderRadius: 14, background: "#0d1117", border: "4px solid #38bdf8", color: "#7dd3fc", fontWeight: 900, fontSize: "clamp(22px, 3vw, 32px)", textAlign: "center", maxWidth: "94%" }}>
-                  {match.cameBack.was === "flag" ? "🔧" : "✓"} {backWords(match.cameBack)}{match.cameBack.was === "flag" ? ". Check it is fixed." : "."}
+                <div style={{ marginTop: 12, padding: "10px 26px", borderRadius: 14, background: "#0d1117", border: "4px solid #38bdf8", color: "#7dd3fc", fontWeight: 900, fontSize: "clamp(18px, 2.4vw, 28px)", textAlign: "center", maxWidth: "94%" }}>
+                  {match.cameBack.was === "flag" ? `🔧 Back from repair${match.cameBack.reason ? " (" + match.cameBack.reason + ")" : ""} — check it is fixed` : "✓ Found — it was marked missing"}
                 </div>
               )}
               {numberDoubt && (

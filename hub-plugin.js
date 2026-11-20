@@ -488,6 +488,9 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
         // An extra jersey (not on the roster) is closed either way: the supervisor has it.
         // When none is left out the order is closed.
         if (req.method === "POST" && parts[2] === "checkoff") {
+          // Not while a station has it open: the station may be passing those very jerseys (seen in a test,
+          // 20 Nov 2026: two jerseys passed at the station were shipped short on the board). Free it first.
+          if (u.openOn) return json(res, 409, { error: "open on a station", openOn: u.openOn });
           const body = await readBody(req);
           const ids = new Set((Array.isArray(body.ids) ? body.ids : []).map(String));
           const as = body.as === "short" ? "short" : "pass";

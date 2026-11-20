@@ -178,6 +178,16 @@ describe("settling what is out: back and good, shipped short, an extra jersey (t
     expect(again.out.map(j => j.rowId)).toEqual([2, 4]);
     expect(again).toMatchObject({ flagged: 1, missing: 1, toScan: 1 });
   });
+  it("not while a station has the order open: 409, nothing settled", async () => {
+    const { call } = makeHub();
+    const { id } = (await call("POST", "/unfinished", park())).body;
+    await call("POST", `/unfinished/${id}/take`, { station: "st-station2" });
+    const r = await call("POST", `/unfinished/${id}/checkoff`, { all: true, as: "short" });
+    expect(r.status).toBe(409);
+    expect((await call("GET", "/unfinished")).body.orders[0].out.length).toBe(3);
+    await call("POST", `/unfinished/${id}/release`);
+    expect((await call("POST", `/unfinished/${id}/checkoff`, { all: true, as: "short" })).status).toBe(200);
+  });
   it("with nothing left out, the order closes", async () => {
     const { call } = makeHub();
     const { id } = (await call("POST", "/unfinished", park({ out: [out[0], extra] }))).body;
