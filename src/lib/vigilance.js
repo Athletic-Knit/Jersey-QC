@@ -151,36 +151,67 @@ export const INSPECT_EVERY = 10;   // clean jerseys between spot checks
 
 export function createInspection({ full = INSPECT_FULL, every = INSPECT_EVERY, log } = {}) {
   let phase = "full", remaining = full, clean = 0, defects = 0;
+  // Checks added to a quick look by a flag: { checkId: jerseys left }. A flag
+  // whose reason has a related check (Dirt → fabric damage, Holes → holes,
+  // Twill peeling / Stitching → thread damage) keeps the quick look and adds
+  // that check for the next FULL jerseys instead of restarting Inspect fully
+  // (the owner, 20 Nov 2026).
+  let focus = {};
   const api = {
     // What the operator should do with the jersey on the screen now.
-    current() { return { phase, remaining, clean, full, every }; },
+    current() { return { phase, remaining, clean, full, every, focus: { ...focus } }; },
     get full() { return phase !== "quick"; },
-    defect() {
-      defects++; phase = "full"; remaining = full; clean = 0;
+    // `check`: the related check of the reason, or nothing for a full restart.
+    defect(check) {
+      defects++;
+      if (check) {
+        focus = { ...focus, [check]: full };
+        if (phase === "sample") phase = "quick";
+        if (phase === "quick") clean = 0;
+        log?.(`[inspect] defect found — check ${check} on the next ${full} jerseys`);
+        return;
+      }
+      phase = "full"; remaining = full; clean = 0;
       log?.(`[inspect] defect found — inspect the next ${full} jerseys fully`);
     },
     // A jersey passed (confirmed, or entered by hand).
     jerseyDone() {
+      const f = {};
+      for (const [k, n] of Object.entries(focus)) if (n > 1) f[k] = n - 1;
+      focus = f;
       if (phase === "full")        { remaining--; if (remaining <= 0) { phase = "quick"; remaining = 0; clean = 0; log?.("[inspect] 5 clean — quick look from here"); } }
       else if (phase === "quick")  { clean++; if (clean >= every) { phase = "sample"; log?.(`[inspect] ${every} clean — inspect the next one fully`); } }
       else                         { phase = "quick"; clean = 0; }   // the spot check was clean
     },
-    reset() { phase = "full"; remaining = full; clean = 0; },
-    state() { return { phase, remaining, clean, defects }; },
+    reset() { phase = "full"; remaining = full; clean = 0; focus = {}; },
+    state() { return { phase, remaining, clean, defects, focus: { ...focus } }; },
     load(s) {
       if (!s || typeof s !== "object") return;
       phase = ["full", "quick", "sample"].includes(s.phase) ? s.phase : "full";
       remaining = Number(s.remaining) || 0; clean = Number(s.clean) || 0; defects = Number(s.defects) || 0;
+      focus = {};
+      if (s.focus && typeof s.focus === "object") for (const [k, n] of Object.entries(s.focus)) if (Number(n) > 0) focus[k] = Number(n);
       if (phase === "full" && remaining <= 0) remaining = full;
     },
   };
   return api;
 }
 
+// The checks the operator must tick on a green screen: every one on Inspect
+// fully, the quick ones plus any a flag added on a quick look. `checks` is
+// CHECKS from config.js. `remind` is shown but not ticked.
+export function checksFor(cur, checks) {
+  if (!cur) return { required: [], remind: [] };
+  if (cur.phase !== "quick") return { required: checks, remind: [] };
+  const on = c => c.quick || (cur.focus && cur.focus[c.id] > 0);
+  return { required: checks.filter(on), remind: checks.filter(c => !on(c)) };
+}
+
 // The words on the header pill and the green screen.
-export function inspectLabel(cur) {
+export function inspectLabel(cur, checks = []) {
   if (!cur) return "";
   if (cur.phase === "full")   return `Inspect fully · ${cur.remaining} to go`;
   if (cur.phase === "sample") return "Inspect fully · spot check";
-  return `Quick look · ${cur.clean}/${cur.every}`;
+  const extra = Object.entries(cur.focus || {}).filter(([, n]) => n > 0);
+  return `Quick look · ${cur.clean}/${cur.every}` + (extra.length ? ` · +${extra.map(([k]) => checks.find(c => c.id === k)?.label || k).join(", ")}` : "");
 }

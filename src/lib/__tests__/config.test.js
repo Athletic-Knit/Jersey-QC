@@ -33,7 +33,7 @@ describe("jersey types and their reason menus", () => {
   it("the wording of the menu", () => {
     expect(Object.fromEntries(REASONS.map(r => [r.id, r.label]))).toEqual({
       wrong_decoration: "Name or number", logo: "Logo or crest", twill: "Twill peeling", print: "Sublimation error",
-      stitching: "Stitching or seam", fabric: "Hole or snag", label: "Size label", mark: "Dirt or mark", other: "Others",
+      stitching: "Stitching or seam", fabric: "Holes", label: "Size label", mark: "Dirt or mark", other: "Others",
     });
   });
   it("every menu keeps the in-place option and ends with 'Others', which flags at once: nothing to type (the owner, 17 Nov 2026)", () => {

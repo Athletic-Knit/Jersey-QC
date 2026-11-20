@@ -13,7 +13,22 @@ export const SEND_MAX_PX = Number(import.meta.env.VITE_SEND_MAX_PX) || 800;
 export const OPERATORS = String(import.meta.env.VITE_OPERATORS || "Person 1,Person 2,Person 3").split(",").map(s => s.trim()).filter(Boolean);
 
 // Shown on every green screen. Zero taps when the jersey is good.
-export const CHECKLIST = ["name & number", "size tag", "logos", "seams", "spots & threads"];
+// Shown on every green screen, and each one is ticked off by the operator before
+// Confirm works (the owner, 20 Nov 2026). Inspect fully ticks all six; a quick
+// look ticks the first three (`quick`) and is reminded of the other three.
+export const CHECKS = [
+  { id: "namenum", label: "Name & Number", quick: true },
+  { id: "size",    label: "Size tag",      quick: true },
+  { id: "logos",   label: "Logos",         quick: true },
+  { id: "fabric",  label: "Fabric damage" },
+  { id: "holes",   label: "Holes" },
+  { id: "thread",  label: "Thread damage" },
+];
+export const CHECKLIST = CHECKS.map(c => c.label);   // the words alone, for anything that only lists them
+// A flag for one of these reasons does not restart Inspect fully: the next
+// INSPECT_FULL jerseys stay on a quick look and tick the related check as well
+// (the owner, 20 Nov 2026). Any other flag restarts Inspect fully.
+export const REASON_CHECK = { mark: "fabric", mark_stays: "fabric", fabric: "holes", twill: "thread", stitching: "thread" };
 
 // One tap on the "not right" menu. `route` is where the jersey goes; in Phase 1
 // everything except "mark" shows the same red "Go to supervisor".
@@ -29,7 +44,7 @@ export const REASONS = [
   { id: "twill",     label: "Twill peeling",     route: "Supervisor → pink slip → decoration", cat: "Decoration", only: "stitched" },
   { id: "print",     label: "Sublimation error", route: "Supervisor → full remake",            cat: "Artwork",    only: "sublimated" },   // the floor's word for a print or colour fault (it read "Print or colour" for a day, 17 Nov 2026)
   { id: "stitching", label: "Stitching or seam", route: "Supervisor → stitcher",               cat: "Sewing" },
-  { id: "fabric",    label: "Hole or snag",      route: "Supervisor → full remake",            cat: "Fabric" },
+  { id: "fabric",    label: "Holes",             route: "Supervisor → full remake",            cat: "Fabric" },
   { id: "label",     label: "Size label",        route: "Supervisor → stitcher",               cat: "Label" },
   { id: "mark",      label: "Dirt or mark",      route: "Clean in place", inPlace: true,       cat: "Cleaning" },   // cleaned at the station, not flagged: the "Clean it now" screen
   { id: "other",     label: "Others",            route: "Supervisor decides",                  cat: "Other" },      // flags at once, nothing to type (the owner, 17 Nov 2026; it was "Something else" with a text box)
@@ -140,6 +155,7 @@ const OLD_REASONS = [
   ["Something else — type it", "Supervisor decides", "Other"],
   ["Print or colour", "Supervisor → full remake", "Artwork"],     // the sublimated menu's wording for one day, 17 Nov 2026
   ["Something else", "Supervisor decides", "Other"],              // the last item of the menu that day, with a text box
+  ["Hole or snag", "Supervisor → full remake", "Fabric"],         // renamed "Holes" 20 Nov 2026
 ].map(([label, route, cat]) => ({ label, route, cat }));
 const ALL_REASONS = [...REASONS, MARK_STAYS, NO_SIZE_TAG, ...OLD_REASONS];
 // The defect category of a flag, from its reason's label, for the reports'

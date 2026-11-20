@@ -8,7 +8,7 @@ import { createAwayWatch } from "./lib/attention.js";
 import { playTone } from "./lib/audio.js";
 import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
-import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel } from "./lib/vigilance.js";
+import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel, checksFor } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse, holdPrints } from "./lib/hub.js";
 import { outOf, outList, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
@@ -17,7 +17,7 @@ import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } fro
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel } from "./lib/printjobs.js";
 const SECOND_LOOK = false;
 import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKLIST, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG } from "./config.js";
 
 
 const S_PASS    = "pass";
@@ -1497,6 +1497,16 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const seen = state.scan?.detected;
   const numberDoubt = mode === "confirm" && !!seen && String(state.match?.number ?? "") !== ""
     && seen.number_complete === false;   // only when the camera says the number itself is covered or cut off: not for a jersey that is merely not flat or a number off centre, or the line would show too often to be read
+  // The checks to tick before Confirm works (the owner, 20 Nov 2026): all six
+  // on Inspect fully, three on a quick look (plus any a flag added), the rest
+  // shown as a reminder. Tap a check to tick it; the Select key ticks the next
+  // one while any is left, then confirms.
+  const { required: mustCheck, remind: alsoLook } = useMemo(() => checksFor(mode === "confirm" ? inspect : null, CHECKS), [mode, inspect]);
+  const [ticked, setTicked] = useState(() => new Set());
+  const toTick = mustCheck.filter(c => !ticked.has(c.id));
+  const allTicked = toTick.length === 0;
+  const toggleTick = useCallback(id => setTicked(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; }), []);
+  const tickNext = useCallback(() => { if (toTick[0]) toggleTick(toTick[0].id); }, [toTick, toggleTick]);
   const isList  = mode === "pick" || mode === "close";
   const isSizePick = mode === "offSize" || mode === "listFlag";   // Flag on the list: what is wrong, then (duplicate, not on the roster) what size is it?
   const isRed   = mode === "flag" || mode === "duplicate" || mode === "supervisor";
@@ -1549,7 +1559,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     const retry    = { id: "retry",    label: "↻ Retry scan",    run: actions.retry };
     const notRight = { id: "notright", label: "🚩 Flag",          run: sorter ? actions.listFlag : actions.reasons };   // a sorter flags No size tag, Duplicate, Not on the roster only
     const byHand   = { id: "manual",   label: "⌨ Enter by hand", run: actions.manual };
-    if (mode === "confirm")    return [{ id: "confirm", label: "✓ Confirm", primary: true, run: actions.confirm }, { ...retry, mouseOnly: true }, notRight];   // Retry on a green is a mouse click only (see showNudge)
+    if (mode === "confirm")    return [{ id: allTicked ? "confirm" : "tick", label: allTicked ? "✓ Confirm" : `✓ Confirm · ${toTick.length} to check`, primary: true, locked: !allTicked, run: allTicked ? actions.confirm : tickNext }, { ...retry, mouseOnly: true }, notRight];   // Retry on a green is a mouse click only (see showNudge)
     if (isList) {
       const t = state.typed;
       const none = t
@@ -1595,7 +1605,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     }
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter]);
+  }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter]);
 
   const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
   const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
@@ -1666,7 +1676,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     const sel = i === selectedIdx;
     return (
       <button key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
-        style={{ padding: "13px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.22)"}`, background: o.primary ? accent : "transparent", color: o.primary ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 20, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
+        style={{ padding: "13px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.22)"}`, background: o.primary ? (o.locked ? "#14532d" : accent) : "transparent", color: o.primary && !o.locked ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 20, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
         <span>{o.label} {o.id === "retry" && mode !== "confirm" ? <Kbd light>{formatKey(retryKey)}</Kbd> : o.id === "manual" ? <Kbd light>{formatKey(byHandKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
         {o.hint && <span style={{ fontSize: 15, fontWeight: 400, opacity: 0.8 }}>{o.hint}</span>}
       </button>
@@ -1730,18 +1740,29 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
                   ⚠ Camera could not see the whole number — check it is #{match.number}
                 </div>
               )}
-              {inspect && inspect.phase !== "quick" && (
-                <div style={{ marginTop: 12, padding: "8px 24px", borderRadius: 14, background: "#f59e0b", color: "#0d1117", fontWeight: 900, fontSize: "clamp(20px, 2.6vw, 26px)", letterSpacing: 0.5 }}>
-                  🔍 {inspectLabel(inspect)}
+              {inspect && (
+                <div style={{ marginTop: 12, padding: "8px 24px", borderRadius: 14, background: inspect.phase === "quick" ? "#334155" : "#f59e0b", color: inspect.phase === "quick" ? "#fff" : "#0d1117", fontWeight: 900, fontSize: "clamp(20px, 2.6vw, 26px)", letterSpacing: 0.5 }}>
+                  🔍 {inspectLabel(inspect, CHECKS)}
                 </div>
               )}
-              {inspect && inspect.phase !== "quick" && (
-              <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>
-                <span style={{ fontSize: 18, color: "#86efac", fontWeight: 700, marginRight: 6 }}>Check</span>
-                {CHECKLIST.map(c => (
-                  <span key={c} style={{ padding: "5px 13px", borderRadius: 999, border: "2px solid rgba(134,239,172,0.55)", background: "rgba(34,197,94,0.16)", color: "#fff", fontWeight: 700, fontSize: "clamp(17px, 2vw, 21px)", whiteSpace: "nowrap" }}>{c}</span>
-                ))}
+              {mustCheck.length > 0 && (
+              <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>
+                <span style={{ fontSize: 18, color: "#86efac", fontWeight: 700, marginRight: 6 }}>Tick each</span>
+                {mustCheck.map(c => {
+                  const on = ticked.has(c.id), next = !on && toTick[0]?.id === c.id;
+                  return (
+                    <button key={c.id} onClick={() => toggleTick(c.id)} aria-pressed={on}
+                      style={{ padding: "7px 16px", borderRadius: 999, cursor: "pointer", border: `3px solid ${on ? "#22c55e" : next ? "#fcd34d" : "rgba(134,239,172,0.55)"}`, background: on ? "#22c55e" : "rgba(34,197,94,0.10)", color: on ? "#0d1117" : "#fff", fontWeight: 800, fontSize: "clamp(18px, 2.1vw, 23px)", whiteSpace: "nowrap", fontFamily: "inherit" }}>
+                      {on ? "☑" : "☐"} {c.label}{inspect?.phase === "quick" && !c.quick ? " ⚠" : ""}
+                    </button>
+                  );
+                })}
               </div>
+              )}
+              {alsoLook.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: "clamp(16px, 1.8vw, 20px)", color: "#a7f3d0", opacity: 0.85, textAlign: "center", padding: "0 20px" }}>
+                  Also look for: {alsoLook.map(c => c.label).join(" · ")}
+                </div>
               )}
               {notes && (
                 <div style={{ marginTop: 12, padding: "8px 18px", borderRadius: 12, background: "rgba(245,158,11,0.16)", border: "2px solid rgba(245,158,11,0.55)", color: "#fde68a", fontWeight: 700, fontSize: "clamp(18px, 2vw, 24px)", textAlign: "center", maxWidth: 900 }}>
@@ -4042,7 +4063,7 @@ export default function App() {
     back()   { setOverlay(o => o.returnTo || null); },
     chooseReason(r) {
       const o = overlay; if (!o) return;
-      if (!r.custom) { inspectRef.current.defect(); syncInspect(); }
+      if (!r.custom) { inspectRef.current.defect(REASON_CHECK[r.id]); syncInspect(); }
       // Dirt or a mark is cleaned at the station, not flagged: say so, and ask.
       // (Before 17 Nov 2026 the menu just closed, and nobody could tell what had happened.)
       if (r.inPlace) { setOverlay({ mode: "clean", scan: o.scan, match: o.match || null, returnTo: o.returnTo || null, reopened: !!o.reopened, late: o.late }); return; }
@@ -4611,7 +4632,7 @@ export default function App() {
           <Pill color="#ef4444" active={rosterFilter === "flag"} onClick={() => filterRoster("flag")} title="Show the flagged jerseys">{flagCount} Flag</Pill>
           {sorting && <span title="Signed in as a sorter: sorting only, no inspection"><Pill color="#a78bfa">Sorting</Pill></span>}
           {!sorting && checksLeft > 0 && <span title="After a mistake the next jerseys are read twice and must agree before a green"><Pill color="#60a5fa">Checking · {checksLeft}</Pill></span>}
-          {!sorting && sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect)}</Pill></span>}
+          {!sorting && sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect, CHECKS)}</Pill></span>}
           {manualCount > 0 && <Pill color="#f59e0b" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the jerseys entered by hand">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
           {saveOk === false && <Pill color="#f87171" title="This PC's storage is full or blocked: the order is not being saved, so a reload or a crash would lose the work since. Tell the supervisor; do not close or reload this page.">⚠ NOT SAVING — tell the supervisor</Pill>}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createVigilance, readsAgree, reconcile, describeRead, turnMatters, settleTurned, CHECKS_AFTER_MISTAKE, createInspection, inspectLabel, INSPECT_FULL, INSPECT_EVERY } from "../vigilance.js";
+import { createVigilance, readsAgree, reconcile, describeRead, turnMatters, settleTurned, CHECKS_AFTER_MISTAKE, createInspection, inspectLabel, checksFor, INSPECT_FULL, INSPECT_EVERY } from "../vigilance.js";
 import { findMatches } from "../match.js";
 
 const row = (i, name, number, extra = {}) => ({ _id: i, name, number, team: "", size: "A-L", scanned: false, ...extra });
@@ -143,6 +143,29 @@ describe("operator inspection regime", () => {
     expect(r.current().phase).toBe("sample");
     r.defect();                                       // the spot check found one
     expect(r.current().phase).toBe("full"); expect(r.state().defects).toBe(3);
+  });
+  it("a flag with a related check keeps the quick look and adds that check for the next 5", () => {
+    const checks = [{ id: "namenum", label: "Name & Number", quick: true }, { id: "size", label: "Size tag", quick: true }, { id: "logos", label: "Logos", quick: true }, { id: "fabric", label: "Fabric damage" }, { id: "holes", label: "Holes" }, { id: "thread", label: "Thread damage" }];
+    const r = createInspection();
+    expect(checksFor(r.current(), checks).required).toHaveLength(6);
+    for (let i = 0; i < 8; i++) r.jerseyDone();       // quick look, 3 clean
+    let c = checksFor(r.current(), checks);
+    expect(c.required.map(x => x.id)).toEqual(["namenum", "size", "logos"]);
+    expect(c.remind.map(x => x.id)).toEqual(["fabric", "holes", "thread"]);
+    r.defect("fabric");                               // Dirt or mark
+    expect(r.current()).toMatchObject({ phase: "quick", clean: 0, focus: { fabric: 5 } });
+    expect(checksFor(r.current(), checks).required.map(x => x.id)).toEqual(["namenum", "size", "logos", "fabric"]);
+    expect(inspectLabel(r.current(), checks)).toBe("Quick look · 0/10 · +Fabric damage");
+    r.jerseyDone(); r.jerseyDone(); r.defect("thread");
+    expect(r.current().focus).toEqual({ fabric: 3, thread: 5 });
+    for (let i = 0; i < 3; i++) r.jerseyDone();
+    expect(r.current().focus).toEqual({ thread: 2 });
+    const w = createInspection(); w.load(r.state());
+    expect(w.current()).toEqual(r.current());
+    for (let i = 0; i < 2; i++) r.jerseyDone();
+    expect(r.current().focus).toEqual({});
+    r.defect();                                       // any other flag: Inspect fully again
+    expect(r.current()).toMatchObject({ phase: "full", remaining: 5 });
   });
   it("survives a save and load, and an old session without it starts full", () => {
     const r = createInspection(); for (let i = 0; i < 7; i++) r.jerseyDone();
