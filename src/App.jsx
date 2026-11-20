@@ -1559,7 +1559,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     const retry    = { id: "retry",    label: "↻ Retry scan",    run: actions.retry };
     const notRight = { id: "notright", label: "🚩 Flag",          run: sorter ? actions.listFlag : actions.reasons };   // a sorter flags No size tag, Duplicate, Not on the roster only
     const byHand   = { id: "manual",   label: "⌨ Enter by hand", run: actions.manual };
-    if (mode === "confirm")    return [{ id: allTicked ? "confirm" : "tick", label: allTicked ? "✓ Confirm" : `✓ Confirm · ${toTick.length} to check`, primary: true, locked: !allTicked, run: allTicked ? actions.confirm : tickNext }, { ...retry, mouseOnly: true }, notRight];   // Retry on a green is a mouse click only (see showNudge)
+    if (mode === "confirm")    return [{ id: allTicked ? "confirm" : "tick", label: allTicked ? "✓ Confirm" : `✓ Confirm · ${toTick.length} to check`, primary: true, locked: !allTicked, run: allTicked ? actions.confirm : tickNext }, ...(state.typed ? [{ id: "back", label: "← Back", run: actions.editTyped }] : [{ ...retry, mouseOnly: true }]), notRight];   // typed by hand: Back to the form, as typed   // Retry on a green is a mouse click only (see showNudge)
     if (isList) {
       const t = state.typed;
       const none = t
@@ -4004,14 +4004,10 @@ export default function App() {
       if (shown?.mode === "confirm" && exactRow?._id !== shown.id) noteMistake("greenOverridden");
       else if ((shown?.mode === "pick" || shown?.mode === "close") && !(exactRow && shown.ids?.includes(exactRow._id)) && !fromList) noteMistake("notOnList");   // an extra jersey flagged from the list is not the app missing a row
       else if (shown?.mode === "flag" && exactRow) noteMistake("couldNotRead");
+      // On the roster: the same green screen a scan gets (checklist, Confirm, Flag;
+      // the owner, 20 Nov 2026). Confirm records it as entered by hand.
       if (exactRow) {
-        const reason = "Entered by operator — the camera could not read it";
-        setRoster(prev => prev.map(r => r._id === exactRow._id ? { ...r, scanned: "manual" } : r));
-        const entry = { id: o.scan?.id || Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, match: exactRow, status: S_MANUAL, reason, ...stamp() };
-        setLog(prev => [entry, ...prev]); setLastResult(entry); setLastConfirmed(entry);
-        inspectRef.current.jerseyDone(); syncInspect();
-        setOverlay({ mode: "manualDone", scan: o.scan, match: exactRow, reason, typed: { number, name, team }, entryId: entry.id });
-        playTone("pass");
+        setOverlay({ mode: "confirm", scan: o.scan, match: exactRow, typed: { number, name, team }, note: "Entered by hand" });
         return;
       }
       const typedRow = { number, name, team, size, offRoster: true };   // no _id: never a roster row
@@ -4026,8 +4022,9 @@ export default function App() {
     confirm() {
       if (!overlay?.match) return;
       const scan  = overlay.scan || {};
-      const entry = { id: scan.id || Date.now(), detected: scan.detected, thumb: scan.smallThumb, match: overlay.match, status: S_PASS, reason: overlay.note || "", ...stamp() };
-      setRoster(prev => prev.map(r => r._id === overlay.match._id ? { ...r, scanned: "pass" } : r));
+      const typed = !!overlay.typed;   // a number typed by hand: kept as entered by hand, for the supervisor to sign off
+      const entry = { id: scan.id || Date.now(), detected: scan.detected, thumb: scan.smallThumb, match: overlay.match, status: typed ? S_MANUAL : S_PASS, reason: typed ? "Entered by operator — the camera could not read it" : overlay.note || "", ...stamp() };
+      setRoster(prev => prev.map(r => r._id === overlay.match._id ? { ...r, scanned: typed ? "manual" : "pass" } : r));
       setLog(prev => [entry, ...prev]);
       setLastResult(entry); setLastConfirmed(entry);
       inspectRef.current.jerseyDone(); syncInspect();
