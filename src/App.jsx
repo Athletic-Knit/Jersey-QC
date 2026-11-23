@@ -23,7 +23,8 @@
 //                                    FinishOrderModal, RosterCompleteModal
 //   App                              state, scan flow (doRunScan), result actions,
 //                                    order start and finish, the station layout
-import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
+import { flushSync } from "react-dom";
 import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum, norm, nameMatches } from "./lib/text.js";
@@ -1563,30 +1564,33 @@ const liftSt = on => ({ transform: on ? "scale(1.012)" : "none", transition: "tr
 // on a by-team order the same number comes up on several teams and sizes, and
 // the size tag is all the operator checks (the owner, 19 Nov 2026). The team
 // and the rest go small under the number.
-function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, accent, onClick, onHover }) {
+// `big`: a one-column list (three rows or fewer) draws its text a fifth
+// bigger — the tiles are narrower there and the room is to spare (23 Nov 2026).
+function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, accent, big = false, onClick, onHover }) {
   const head = primary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")).filter(Boolean).join(" · ");
   const sub  = [...secondary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")), ...extraCols.map(k => c[k] ? `${cap(k)}: ${c[k]}` : "")].filter(Boolean).join(" · ");
   const size = String(c.size || "").trim();
+  const px = n => Math.round(n * (big ? 1.2 : 1));
   // Back from repair, or found after it was marked missing (the owner, 20 Nov 2026: two #35 on the list,
   // one not scanned and one back from repair, and nothing told them apart): a blue bar and a line.
   const back = !disabled && c.cameBack ? c.cameBack : null;
   return (
     <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover} data-sel={selected ? "1" : undefined}
-      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px 10px 18px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...(back ? { boxShadow: "inset 10px 0 0 #38bdf8", paddingLeft: 26 } : {}), ...liftSt(selected && !disabled) }}>
+      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: big ? "12px 16px 12px 20px" : "10px 14px 10px 18px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...(back ? { boxShadow: "inset 10px 0 0 #38bdf8", paddingLeft: 26 } : {}), ...liftSt(selected && !disabled) }}>
       <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-        {back && <span style={{ fontSize: 19, fontWeight: 900, color: "#7dd3fc", lineHeight: 1.1 }}>{back.was === "flag" ? `🔧 Back from repair${back.reason ? " — was: " + back.reason : ""}` : "✓ Was marked missing — found"}</span>}
-        <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px, 3vw, 42px)", fontWeight: 800, lineHeight: 1, color: disabled ? "#64748b" : "#fff", overflowWrap: "anywhere" }}>{head || "—"}</span>
+        {back && <span style={{ fontSize: px(19), fontWeight: 900, color: "#7dd3fc", lineHeight: 1.1 }}>{back.was === "flag" ? `🔧 Back from repair${back.reason ? " — was: " + back.reason : ""}` : "✓ Was marked missing — found"}</span>}
+        <span data-head={big ? "1" : undefined} style={{ fontFamily: FONT_DISPLAY, fontSize: big ? "clamp(34px, 3.6vw, 50px)" : "clamp(28px, 3vw, 42px)", fontWeight: 800, lineHeight: 1, color: disabled ? "#64748b" : "#fff", overflowWrap: "anywhere", ...(big ? { whiteSpace: "nowrap", overflow: "hidden" } : {}) }}>{head || "—"}</span>{/* big: one line, so the list's measurement can tell when the name no longer fits (ScanOverlay drops `big` then) */}
         {(sub || disabled) && (
-          <span style={{ fontSize: 21, color: "#cbd5e1", lineHeight: 1.1, fontWeight: 700 }}>
+          <span style={{ fontSize: px(21), color: "#cbd5e1", lineHeight: 1.1, fontWeight: 700 }}>
             {sub}
             {disabled && (c.scanned === "flag"
-              ? <span style={{ fontSize: 17, color: "#f87171", marginLeft: sub ? 12 : 0 }}>🚩 Flagged</span>
-              : <span style={{ fontSize: 17, color: "#22c55e", marginLeft: sub ? 12 : 0 }}>✓ Already passed</span>)}
+              ? <span style={{ fontSize: px(17), color: "#f87171", marginLeft: sub ? 12 : 0 }}>🚩 Flagged</span>
+              : <span style={{ fontSize: px(17), color: "#22c55e", marginLeft: sub ? 12 : 0 }}>✓ Already passed</span>)}
           </span>
         )}
       </div>
       {size && (
-        <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(34px, 3.6vw, 52px)", fontWeight: 900, lineHeight: 1, letterSpacing: 1, whiteSpace: "nowrap", padding: "6px 14px", borderRadius: 12, border: `3px solid ${disabled ? "rgba(255,255,255,0.1)" : "rgba(245,158,11,0.75)"}`, background: disabled ? "transparent" : "rgba(245,158,11,0.14)", color: disabled ? "#64748b" : "#fff", flexShrink: 0 }}>{size}</span>
+        <span style={{ fontFamily: FONT_DISPLAY, fontSize: big ? "clamp(41px, 4.3vw, 62px)" : "clamp(34px, 3.6vw, 52px)", fontWeight: 900, lineHeight: 1, letterSpacing: 1, whiteSpace: "nowrap", padding: "6px 14px", borderRadius: 12, border: `3px solid ${disabled ? "rgba(255,255,255,0.1)" : "rgba(245,158,11,0.75)"}`, background: disabled ? "transparent" : "rgba(245,158,11,0.14)", color: disabled ? "#64748b" : "#fff", flexShrink: 0 }}>{size}</span>
       )}
       {!disabled && <span style={hintSt(selected, accent, 0)} aria-hidden="true">←</span>}
     </div>
@@ -1612,11 +1616,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const seen = state.scan?.detected;
   const numberDoubt = mode === "confirm" && !!seen && String(state.match?.number ?? "") !== ""
     && seen.number_complete === false;   // only when the camera says the number itself is covered or cut off: not for a jersey that is merely not flat or a number off centre, or the line would show too often to be read
-  // The checks to tick before Confirm works (the owner, 20 Nov 2026): all six
-  // on Inspect fully, three on a quick look (plus any a flag added), the rest
-  // shown as a reminder. Tap a check to tick it; the Select key ticks the next
-  // one while any is left, then confirms.
-  const { required: mustCheck, remind: alsoLook } = useMemo(() => checksFor(mode === "confirm" ? inspect : null, CHECKS), [mode, inspect]);
+  // The checks to tick before Confirm works (the owner, 20 Nov 2026): all of
+  // them on Inspect fully; on a quick look only the ones a flag added, while
+  // Decoration and Size tag are shown big to look at and the rest small, with
+  // nothing to tick (the owner, 23 Nov 2026). Tap a check to tick it; the
+  // Select key ticks the next one while any is left, then confirms.
+  const { required: mustCheck, look: lookAt, remind: alsoLook } = useMemo(() => checksFor(mode === "confirm" ? inspect : null, CHECKS), [mode, inspect]);
   const [ticked, setTicked] = useState(() => new Set());
   const toTick = mustCheck.filter(c => !ticked.has(c.id));
   const allTicked = toTick.length === 0;
@@ -1635,6 +1640,24 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const match      = state.match || state.scan?.match || null;
   const candidates = useMemo(() => sortCandidates(state.candidates || [], listSort), [state.candidates, listSort]);   // by size unless the station says otherwise (Settings → Pick list)
   const detected   = state.scan?.detected;
+  // A one-column list (three rows or fewer) is drawn with bigger text, but only
+  // while that leaves nothing to scroll (the owner, 23 Nov 2026) and every name
+  // still fits on its line (a name broken in two, "MACDONA / LD", is harder to
+  // read, not easier): each new list is tried big, measured once it is drawn,
+  // and drawn again at the usual size when it ran past the bottom of its panel
+  // or a name ran past its tile. `tooBig` remembers which list did (a new list
+  // is tried big again); the second draw happens before the first is painted
+  // (flushSync from a microtask), so nothing flickers.
+  const listRef = useRef(null);
+  const [tooBig, setTooBig] = useState(null);   // the `candidates` that did not fit big
+  const oneColBig = candidates.length <= 3 && tooBig !== candidates;
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!oneColBig || !el) return;
+    const scrolls = el.scrollHeight > el.clientHeight + 1;
+    const cut = [...el.querySelectorAll("[data-head]")].some(h => h.scrollWidth > h.clientWidth + 1);
+    if (scrolls || cut) queueMicrotask(() => flushSync(() => setTooBig(candidates)));
+  }, [oneColBig, candidates]);
 
   // Damage photo on the supervisor screen: the scan photo only ever shows the
   // back, so the operator holds the problem under the camera, 3-2-1 ticks, and
@@ -1878,6 +1901,14 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
                 })}
               </div>
               )}
+              {lookAt.length > 0 && (
+              <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>{/* a quick look: the common faults, big, to look at, nothing to tick (the owner, 23 Nov 2026) */}
+                <span style={{ fontSize: 18, color: "#86efac", fontWeight: 700, marginRight: 6 }}>Look at</span>
+                {lookAt.map(c => (
+                  <span key={c.id} style={{ padding: "8px 22px", borderRadius: 999, border: "3px solid #fcd34d", background: "rgba(252,211,77,0.16)", color: "#fff", fontWeight: 900, fontSize: "clamp(22px, 2.6vw, 30px)", whiteSpace: "nowrap" }}>{c.label}</span>
+                ))}
+              </div>
+              )}
               {alsoLook.length > 0 && (
                 <div style={{ marginTop: 8, fontSize: "clamp(16px, 1.8vw, 20px)", color: "#a7f3d0", opacity: 0.85, textAlign: "center", padding: "0 20px" }}>
                   Also look for: {alsoLook.map(c => c.label).join(" · ")}
@@ -1915,7 +1946,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             </>}
             {primary !== HEADLINE_FIELDS && <span style={{ marginLeft: 12, color: accent }}>· differs by {primary.map(cap).join(" and ")}</span>}
           </div>
-          <div style={{ width: "100%", maxWidth: candidates.length > 3 ? 1600 : 1000, padding: "0 24px", boxSizing: "border-box", flex: "0 1 auto", minHeight: 0, overflowY: "auto" }}>{/* the list takes all the room left on the screen (a 27 in panel shows far more than half), and scrolls only past that */}
+          <div ref={listRef} style={{ width: candidates.length > 3 ? "100%" : "calc(50% + 20px)", maxWidth: candidates.length > 3 ? 1600 : 820, padding: "0 24px", boxSizing: "border-box", flex: "0 1 auto", minHeight: 0, overflowY: "auto" }}>{/* the list takes all the room left on the screen (a 27 in panel shows far more than half), and scrolls only past that. One column (three rows or fewer) is exactly as wide as one column of the two-column list (half the panel less the gap: 50% + 20px of padding), centred, and its tiles' text is bigger (the owner, 23 Nov 2026: the one-column tiles were nearly twice as wide; three rows still fit without scrolling) */}
             {candidates.length === 0 && (
               <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 22, padding: 16 }}>{/* a typed number on no row: "#88 is not on the roster — check the number" (M18) */}{state.typed && state.reason ? state.reason : "No rows to choose from."}</div>
             )}
@@ -1924,7 +1955,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             )}
             <div style={twoColumns(candidates.length)}>
               {options.map((o, i) => o.candidate && (
-                <CandidateRow key={o.id} c={o.candidate} primary={primary} secondary={secondary} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent}
+                <CandidateRow key={o.id} c={o.candidate} primary={primary} secondary={secondary} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent} big={oneColBig}
                   onClick={() => fire(o)} onHover={() => hover(i)} confirmKey={confirmKey} />
               ))}
             </div>
@@ -4436,7 +4467,7 @@ export default function App() {
       const who = flaggedAs(o);
       const teams = [...new Set((o.candidates || []).map(c => teamKey(c.team)).filter(Boolean))];
       const row = { number: who.number, name: who.name, team: o.typed ? who.team : teams.length === 1 ? (o.candidates.find(c => c.team)?.team || "") : "", size: "", noRow: true };
-      inspectRef.current.defect(); syncInspect();
+      inspectRef.current.defect(REASON_CHECK[NO_SIZE_TAG.id]); syncInspect();   // Size tag is ticked on the next 5 jerseys (REASON_CHECK)
       const entry = { id: o.scan?.id || Date.now(), detected: d, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: row, status: S_FLAGGED, reason: NO_SIZE_TAG.label, reasonId: NO_SIZE_TAG.id, ...stamp() };
       setLog(prev => [entry, ...prev]); setLastResult(entry);
       setOverlay({ mode: "supervisor", scan: o.scan, match: row, reason: NO_SIZE_TAG.label, route: NO_SIZE_TAG.route, entryId: entry.id, photoFirst: false, damagePhotos: [] });

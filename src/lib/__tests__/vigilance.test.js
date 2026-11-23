@@ -149,16 +149,20 @@ describe("operator inspection regime", () => {
     expect(r.current().phase).toBe("full"); expect(r.state().defects).toBe(3);
   });
   it("a flag with a related check keeps the quick look and adds that check for the next 5", () => {
-    const checks = [{ id: "namenum", label: "Name & Number", quick: true }, { id: "size", label: "Size tag", quick: true }, { id: "logos", label: "Logos", quick: true }, { id: "fabric", label: "Fabric damage" }, { id: "holes", label: "Holes" }, { id: "thread", label: "Thread damage" }];
+    const checks = [{ id: "decoration", label: "Decoration", quick: true }, { id: "size", label: "Size tag", quick: true }, { id: "fabric", label: "Fabric damage" }, { id: "holes", label: "Holes" }, { id: "thread", label: "Thread damage" }];
     const r = createInspection();
-    expect(checksFor(r.current(), checks).required).toHaveLength(6);
+    expect(checksFor(r.current(), checks)).toEqual({ required: checks, look: [], remind: [] });   // Inspect fully: every check is ticked
     for (let i = 0; i < 8; i++) r.jerseyDone();       // quick look, 3 clean
     let c = checksFor(r.current(), checks);
-    expect(c.required.map(x => x.id)).toEqual(["namenum", "size", "logos"]);
+    expect(c.required).toEqual([]);                   // a quick look ticks nothing (the owner, 23 Nov 2026)
+    expect(c.look.map(x => x.id)).toEqual(["decoration", "size"]);
     expect(c.remind.map(x => x.id)).toEqual(["fabric", "holes", "thread"]);
     r.defect("fabric");                               // Dirt or mark
     expect(r.current()).toMatchObject({ phase: "quick", clean: 3, focus: { fabric: 5 } });   // the count is not reset
-    expect(checksFor(r.current(), checks).required.map(x => x.id)).toEqual(["namenum", "size", "logos", "fabric"]);
+    c = checksFor(r.current(), checks);
+    expect(c.required.map(x => x.id)).toEqual(["fabric"]);   // only the check the flag added is ticked
+    expect(c.look.map(x => x.id)).toEqual(["decoration", "size"]);
+    expect(c.remind.map(x => x.id)).toEqual(["holes", "thread"]);
     expect(inspectLabel(r.current(), checks)).toBe("Quick look · 3/10 · +Fabric damage");
     r.jerseyDone(); r.jerseyDone(); r.defect("thread");
     expect(r.current().focus).toEqual({ fabric: 3, thread: 5 });

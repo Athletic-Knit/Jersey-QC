@@ -69,12 +69,11 @@ After a **flag**, hands-free waits: the flagged jersey is usually still under th
 
 The screen shows the number, name and team on the left, and the **SIZE** and **BOX** on the right.
 
-1. Check the jersey. Each check is a button you tick:
-   - **Inspect fully** (the first 5 jerseys of an order, and the 5 after most flags; also a spot check after every 10): Name & Number, Size tag, Logos, Fabric damage, Holes, Thread damage.
-   - **Quick look** (the rest): Name & Number, Size tag, Logos. The other three are shown as "Also look for".
-   The pill in the header says which one you are on.
-2. Press the pedal once per check: it ticks the next one (yellow outline). Or tap any check.
-3. When every check is ticked, **✓ Confirm** unlocks. Press the pedal (or tap Confirm).
+1. Check the jersey. The pill in the header says which look you are on:
+   - **Inspect fully** (the first 5 jerseys of an order, the 5 after a flag for "Others", and a spot check after every 10): every check is a button you tick: Decoration, Size tag, Fabric damage, Holes, Thread damage.
+   - **Quick look** (the rest): nothing to tick. "Look at: Decoration · Size tag" shows big, the other three small. After a flag, the check that goes with it (a wrong name or number → Decoration, a missing size label → Size tag, a hole → Holes …) is a tick button on the next 5 jerseys.
+2. Press the pedal once per tick button: it ticks the next one (yellow outline). Or tap any check.
+3. When every tick button is ticked (on a quick look there is usually none), **✓ Confirm** unlocks. Press the pedal (or tap Confirm).
 4. Put the jersey in the box shown.
 
 If the jersey is not right, press **🚩 Flag** (see "Flag a jersey").

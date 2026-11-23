@@ -205,14 +205,17 @@ export function createInspection({ full = INSPECT_FULL, every = INSPECT_EVERY, l
   return api;
 }
 
-// The checks the operator must tick on a green screen: every one on Inspect
-// fully, the quick ones plus any a flag added on a quick look. `checks` is
-// CHECKS from config.js. `remind` is shown but not ticked.
+// The checks of a green screen, in three kinds. `required`: ticked before
+// Confirm works — every one on Inspect fully, and on a quick look only the
+// ones a flag added (`focus`). `look`: shown big, not ticked — on a quick look
+// the `quick` checks (Decoration, Size tag), the common faults (the owner,
+// 23 Nov 2026: "just mentioning them is fine"). `remind`: shown small, not
+// ticked — the rest. `checks` is CHECKS from config.js.
 export function checksFor(cur, checks) {
-  if (!cur) return { required: [], remind: [] };
-  if (cur.phase !== "quick") return { required: checks, remind: [] };
-  const on = c => c.quick || (cur.focus && cur.focus[c.id] > 0);
-  return { required: checks.filter(on), remind: checks.filter(c => !on(c)) };
+  if (!cur) return { required: [], look: [], remind: [] };
+  if (cur.phase !== "quick") return { required: checks, look: [], remind: [] };
+  const added = c => !!(cur.focus && cur.focus[c.id] > 0);
+  return { required: checks.filter(added), look: checks.filter(c => !added(c) && c.quick), remind: checks.filter(c => !added(c) && !c.quick) };
 }
 
 // The words on the header pill and the green screen.

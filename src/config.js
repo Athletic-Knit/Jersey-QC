@@ -12,23 +12,33 @@ export const SEND_MAX_PX = Number(import.meta.env.VITE_SEND_MAX_PX) || 800;
 // The names offered at sign-in (a dropdown, plus "Other" for anyone else): VITE_OPERATORS="Shiv,Priya,Arshil".
 export const OPERATORS = String(import.meta.env.VITE_OPERATORS || "Person 1,Person 2,Person 3").split(",").map(s => s.trim()).filter(Boolean);
 
-// Shown on every green screen. Zero taps when the jersey is good.
-// Shown on every green screen, and each one is ticked off by the operator before
-// Confirm works (the owner, 20 Nov 2026). Inspect fully ticks all six; a quick
-// look ticks the first three (`quick`) and is reminded of the other three.
+// Shown on every green screen. On Inspect fully (the first 5 jerseys of an
+// order, the 5 after a flag with no related check, a spot check) every one is
+// ticked off by the operator before Confirm works (the owner, 20 Nov 2026).
+// On a quick look nothing is ticked (the owner, 23 Nov 2026: "just mentioning
+// them is fine"): the two `quick` checks, Decoration and Size tag, the common
+// faults, are shown big as what to look at, the others small, and Confirm is
+// one press; only a check a flag added (REASON_CHECK) must be ticked, for the
+// next 5 jerseys. "Decoration" is one check for the name, the number, the
+// logos and the crest (it was two, "Name & Number" and "Logos", until 23 Nov 2026).
 export const CHECKS = [
-  { id: "namenum", label: "Name & Number", quick: true },
-  { id: "size",    label: "Size tag",      quick: true },
-  { id: "logos",   label: "Logos",         quick: true },
-  { id: "fabric",  label: "Fabric damage" },
-  { id: "holes",   label: "Holes" },
-  { id: "thread",  label: "Thread damage" },
+  { id: "decoration", label: "Decoration",    quick: true },
+  { id: "size",       label: "Size tag",      quick: true },
+  { id: "fabric",     label: "Fabric damage" },
+  { id: "holes",      label: "Holes" },
+  { id: "thread",     label: "Thread damage" },
 ];
 export const CHECKLIST = CHECKS.map(c => c.label);   // the words alone, for anything that only lists them
-// A flag for one of these reasons does not restart Inspect fully: the next
-// INSPECT_FULL jerseys stay on a quick look and tick the related check as well
-// (the owner, 20 Nov 2026). Any other flag restarts Inspect fully.
-export const REASON_CHECK = { mark: "fabric", mark_stays: "fabric", fabric: "holes", twill: "thread", stitching: "thread" };
+// The check a flag adds: the next INSPECT_FULL jerseys stay on a quick look
+// and that check must be ticked on each of them (the owner, 20 Nov 2026 for
+// the damage reasons; 23 Nov 2026 for every reason: "when we flag something it
+// should ask for that flag to be checked off for the next 5 jerseys"). A
+// reason with no check here (Others, a typed reason) restarts Inspect fully.
+export const REASON_CHECK = {
+  wrong_decoration: "decoration", logo: "decoration", print: "decoration",   // the name, the number, a logo or crest, sublimated graphics: all decoration
+  label: "size", no_size_tag: "size",
+  mark: "fabric", mark_stays: "fabric", fabric: "holes", twill: "thread", stitching: "thread",
+};
 
 // One tap on the "not right" menu. `route` is where the jersey goes (the board
 // weighs it, routeOfReason); every reason but "mark" flags the jersey (the
