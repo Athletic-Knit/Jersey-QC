@@ -1,3 +1,6 @@
+// Where the operator's screen was (src/lib/attention.js): away spells from a
+// fake page whose hide, blur and focus fire by hand, and the order's Attention
+// sheet built from the idle and away spells.
 import { describe, it, expect } from "vitest";
 import { createAwayWatch, awaySummary, buildAttentionSheet, awayLabel } from "../attention.js";
 

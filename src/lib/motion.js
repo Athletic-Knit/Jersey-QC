@@ -15,6 +15,8 @@
 // calling the model. A near-featureless picture is taken as the table without
 // asking.
 
+// The camera frame shrunk to w × h grey pixels, drawn on `canvas`; null while
+// the video has no picture. Small enough to compare every frame cheaply.
 export function sampleFrame(video, canvas, w = 32, h = 18) {
   if (!video || !video.videoWidth) return null;
   canvas.width = w; canvas.height = h;

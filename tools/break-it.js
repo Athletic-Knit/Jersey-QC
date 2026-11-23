@@ -5,6 +5,11 @@
 // Then:  __breakIt()  — results land in window.__breakItResults while it runs.
 // Every step tries one way the app used to break (or never handled) and checks
 // what the screen does now. The station keeps running; nothing here reloads.
+// Written for the station as it was before 17-20 Nov 2026: it scans with KeyB
+// (the scan key is Enter now: set it to B in Settings first), finds the result
+// screen as a fixed full-screen layer (it is drawn in the right half now), and
+// its by-hand step waits for the "ENTERED BY HAND" screen, which is gone (a
+// typed jersey goes to the green screen). Expect those steps to fail.
 
 window.__breakIt = async function () {
   const R = (window.__breakItResults = { steps: [], started: Date.now(), done: false });

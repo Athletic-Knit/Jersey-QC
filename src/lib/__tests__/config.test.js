@@ -1,3 +1,7 @@
+// The floor's configuration (src/config.js): the stations and their PINs, the
+// jersey types and the reasons menu each gets (one short list, Others flags at
+// once, the owner, 17 Nov 2026), and where a flag goes and what it weighs on
+// the supervisor board.
 import { describe, it, expect } from "vitest";
 import { JERSEY_TYPES, reasonsFor, jerseyTypeLabel, REASONS, MARK_STAYS, reasonCategory, routeOfReason, severityOf, STATIONS, stationOf, ROLES } from "../../config.js";
 

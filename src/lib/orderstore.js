@@ -14,6 +14,8 @@
 const DB = "jerseyqc", STORE = "unfinished", VERSION = 1;
 
 let opening = null;
+// The browser's order store, opened once and shared; only the move to the
+// server and the pick-up of an old entry still read it.
 function db() {
   if (opening) return opening;
   opening = new Promise((resolve, reject) => {
@@ -25,6 +27,7 @@ function db() {
   }).catch(e => { opening = null; throw e; });
   return opening;
 }
+// One IndexedDB transaction: `fn` makes the request, the promise settles when the transaction does.
 const run = (mode, fn) => db().then(d => new Promise((resolve, reject) => {
   const tx = d.transaction(STORE, mode), store = tx.objectStore(STORE);
   const req = fn(store);
@@ -33,6 +36,7 @@ const run = (mode, fn) => db().then(d => new Promise((resolve, reject) => {
   tx.onabort = () => reject(tx.error || new Error("order store aborted"));
 }));
 
+// One run of an order on one station, as the hub's ledger keys it.
 export const orderKey = (station, order, run) => `${station}|${order}|${run || 0}`;
 // Who an order is for: one started by a sorter is a sorting order and only a sorter
 // continues it; anything else is an inspection (the owner, 19 Nov 2026). From a saved
@@ -73,6 +77,7 @@ export function outGroups(out) {
   (out || []).forEach(j => (g[j.status === "short" ? "missing" : j.status] || g.todo).push(j));
   return g;
 }
+// One jersey in plain words: "#7 JONES A-L".
 export const jerseyWords = j => `#${j.number || "?"}${j.name ? " " + j.name : ""}${j.size ? " " + j.size : ""}`;
 
 // The supervisor settled jerseys on the board (hub entry `checkedOff`, and
@@ -121,6 +126,9 @@ export async function moveLocalToServer(park) {
   return moved;
 }
 
+// The store's records: save one (stamped `savedAt`), read one, drop one, list them newest first.
+// Only dropOrder and listOrders are still called; putOrder, getOrder and orderKey are not
+// (nothing new is written on the PC).
 export const putOrder  = rec => run("readwrite", s => s.put({ ...rec, savedAt: Date.now() }));
 export const getOrder  = key => run("readonly",  s => s.get(key));
 export const dropOrder = key => run("readwrite", s => s.delete(key));

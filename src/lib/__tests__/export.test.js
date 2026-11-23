@@ -1,3 +1,6 @@
+// The order's exports and the day sheet (src/lib/export.js): CSV cells and
+// formula injection, file names and local dates, the roster sheet, and the
+// day sheet's counts (an un-check takes back a pass only when it undid one).
 import { describe, it, expect } from "vitest";
 import { csvCell, safeFilename, buildLogCSV, buildRosterSheet, localDateStamp, buildDaySheets, undidPass } from "../export.js";
 

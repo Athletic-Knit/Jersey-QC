@@ -1,3 +1,7 @@
+// The hands-free gate (src/lib/motion.js), on tiny synthetic frames: one
+// jersey placed at a time, a stack lifted jersey by jersey, the jersey just
+// scanned not scanning again, the learned empty table, and the grace period
+// after the gate is armed.
 import { describe, it, expect } from "vitest";
 import { frameDiff, texture, createMotionGate } from "../motion.js";
 

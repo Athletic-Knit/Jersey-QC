@@ -11,6 +11,7 @@
 import fs from "node:fs";
 
 const cache = new Map();   // file → { mtimeMs, state } (the floor's file is a few MB; read again only when it changed)
+// A hub data file's state, read only; null when it is missing or does not parse.
 export function readHubFile(file) {
   try {
     const st = fs.statSync(file);
@@ -70,6 +71,8 @@ export function replayRuns(sources, q) {
     });
 }
 
+// The Vite plugin: GET /api/replay?q= over `files` (the floor's data file
+// first, then this server's own). Loaded by vite.config.stage.js only.
 export default function replayPlugin({ files = [] } = {}) {
   return {
     name: "jerseyqc-replay",

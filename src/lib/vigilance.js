@@ -27,6 +27,8 @@ export const MISTAKES = {
   unchecked:       "a passed jersey was un-checked",
 };
 
+// The self-check's state for one station: noteMistake() starts (or restarts)
+// the count, and each scan shown counts it down (scanDone). `log` hears what happens.
 export function createVigilance({ checks = CHECKS_AFTER_MISTAKE, log } = {}) {
   let remaining = 0, mistakes = 0, last = null;
   return {
@@ -104,6 +106,9 @@ export function nameAnchors(read, roster) {
   return rows.length === 1 && normNum(rows[0].number) === normNum(read.number);
 }
 
+// Is it worth turning the frame upright and reading again? Only when the read
+// says the jersey is turned, the name does not pin it, and the number upside
+// down (6/9, 18/81) is another open row on the roster.
 export function turnMatters(read, roster) {
   if (!read || !read.orientation || read.orientation === "upright") return false;
   const n = normNum(read.number); if (!n) return false;
@@ -130,6 +135,7 @@ export function settleTurned(first, m1, upright, m2) {
   return rc;
 }
 
+// A read in a few words for the log and the reasons ("#23 SMITH", "no jersey").
 export function describeRead(d) {
   if (!d || d.jersey_present === false) return "no jersey";
   const n = String(d.number ?? "").trim(), s = String(d.name ?? "").trim();
@@ -144,11 +150,12 @@ export function describeRead(d) {
 // An order opens with a full inspection of its first FULL jerseys.
 //
 // A "defect" is a problem the operator found on the jersey itself: a reason
-// chosen on the reasons screen, typed in, or found after the jersey passed.
+// chosen on the reasons screen (Others included), or found after the jersey passed.
 // A jersey the camera could not read, a duplicate, or a missing mark is not.
 export const INSPECT_FULL  = 5;    // jerseys inspected fully after a defect
 export const INSPECT_EVERY = 10;   // clean jerseys between spot checks
 
+// The inspection regime's state for one order (saved in the session as `inspect`).
 export function createInspection({ full = INSPECT_FULL, every = INSPECT_EVERY, log } = {}) {
   let phase = "full", remaining = full, clean = 0, defects = 0;
   // Checks added to a quick look by a flag: { checkId: jerseys left }. A flag

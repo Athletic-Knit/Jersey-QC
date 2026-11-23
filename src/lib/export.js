@@ -1,4 +1,9 @@
 // ── Exports: Excel roster sheet and CSV scan log ──────────────────────────────
+// Also the order's other sheets (Summary, Boxes, Attention), the supervisor's
+// day sheet and the "Compare days" workbook. The sheets are built as plain
+// arrays of rows (tested); only the export* functions touch the browser and
+// SheetJS. This file never imports config.js: the caller passes `categoryOf`
+// (a flag reason's defect category).
 
 // Excel opens a UTF-8 CSV with accents intact only when it starts with a BOM.
 const BOM = String.fromCharCode(0xfeff);
@@ -16,10 +21,13 @@ export function safeFilename(s) {
   return String(s ?? "").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "order";
 }
 
+// Dates in the PC's own time zone ("2026-11-23", "2026-11-23 14:05:09"), not UTC:
+// a file made at 7 pm must carry today's date.
 const p2 = n => String(n).padStart(2, "0");
 export function localDateStamp(d = new Date()) { return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; }
 export function localTimeStamp(d = new Date()) { return `${localDateStamp(d)} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`; }
 
+// A roster row's status as the sheet shows it ("manual" is a by-hand entry kept from older orders).
 export const STATUS_LABEL = { pass: "PASS", flag: "FLAGGED", manual: "MANUAL", missing: "MISSING", short: "SHORT-SHIPPED" };
 export function rosterStatusLabel(r) { return STATUS_LABEL[r.scanned] || "NOT SCANNED"; }
 
@@ -30,6 +38,8 @@ function latestByRow(log) {
   return m;
 }
 
+// The "QC Results" sheet: the order's header lines, then every roster row with
+// its status, its columns, its box and its newest log entry.
 export function buildRosterSheet(roster, log, meta, columns, binOf = () => null) {
   const latest = latestByRow(log);
   const cap = c => c.charAt(0).toUpperCase() + c.slice(1);
@@ -60,6 +70,8 @@ export function buildBinsSheet(bins = [], stamp = t => localTimeStamp(new Date(t
   ];
 }
 
+// The order's workbook, downloaded: QC Results, Summary, Boxes (when the order
+// has boxes) and Attention.
 export function exportRosterXLSX(roster, log, meta, columns, binOf, XLSX = globalThis.XLSX) {
   if (!XLSX) { alert("Excel library not loaded yet, please try again."); return; }
   const ws = XLSX.utils.aoa_to_sheet(buildRosterSheet(roster, log, meta, columns, binOf));
@@ -72,6 +84,7 @@ export function exportRosterXLSX(roster, log, meta, columns, binOf, XLSX = globa
   XLSX.writeFile(wb, `roster_${safeFilename(meta.orderNumber)}_${localDateStamp()}.xlsx`);
 }
 
+// The scan log as CSV text, one line per log entry, newest first as the log holds it.
 export function buildLogCSV(log, binOf = () => null) {
   const header = ["Time", "Status", "Detected Name", "Detected Number", "Matched Name", "Matched Number", "Team", "Size", "Box", "Reason", "Resolution", "Operator"];
   const rows = log.map(l => [
@@ -84,6 +97,7 @@ export function buildLogCSV(log, binOf = () => null) {
   return [header, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");
 }
 
+// The scan log downloaded as a CSV file (with a BOM, so Excel keeps the accents).
 export function exportLogCSV(log, orderNumber, binOf) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([BOM + buildLogCSV(log, binOf)], { type: "text/csv;charset=utf-8" }));
@@ -220,6 +234,9 @@ export function buildOrderSummarySheet(roster, log, meta = {}, categoryOf = () =
 
 const hhmm = d => d ? `${p2(d.getHours())}:${p2(d.getMinutes())}` : "";
 
+// The day sheet's tabs from one day of the hub's ledger: Summary (a row per
+// station), Orders (a row per run of an order), Operators, Defects, Flags and
+// every scan.
 export function buildDaySheets(ledger, stationLabel = id => id, { categoryOf = () => "Other" } = {}) {
   const events = ledger.events || [], orders = ledger.orders || [];
   const byStation = {};
@@ -283,6 +300,7 @@ const PARTS = ["Before noon", "Noon to 6 pm", "After 6 pm"];
 const partOf = t => { const ms = tsMs(t); if (ms === null) return null; const h = new Date(ms).getHours(); return h < 12 ? PARTS[0] : h < 18 ? PARTS[1] : PARTS[2]; };
 const PACE_HEAD = ["Passed", "By hand", "To supervisor", "Flag rate %", "Pass rate %", "Active minutes", "Jerseys per active hour", "Median seconds per jersey"];
 const paceCells = s => [s.passed, s.byHand, s.flagged + s.offRoster, s.flagRate, s.passRate, s.activeMin, s.perHour ?? "", s.medianSec ?? ""];
+// The Compare days sheets described above, from the days the hub sent.
 export function buildCompareSheets(days, stationLabel = id => id, { categoryOf = () => "Other" } = {}) {
   const list = (days || []).filter(d => d && d.date).sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const all = list.flatMap(d => d.events || []);
@@ -308,6 +326,7 @@ export function buildCompareSheets(days, stationLabel = id => id, { categoryOf =
   return { byDay, byOperator, operatorByDay, stationByDay, parts: partsSheet, defects };
 }
 
+// The Compare days workbook, downloaded, named by its first and last date.
 export function exportCompareXLSX(days, stationLabel, XLSX = globalThis.XLSX, opts = {}) {
   if (!XLSX) { alert("Excel library not loaded yet, please try again."); return; }
   const s = buildCompareSheets(days, stationLabel, opts);
@@ -318,6 +337,7 @@ export function exportCompareXLSX(days, stationLabel, XLSX = globalThis.XLSX, op
   XLSX.writeFile(wb, `compare_${dates[0] || "days"}_to_${dates[dates.length - 1] || ""}.xlsx`);
 }
 
+// The day sheet, downloaded as one workbook.
 export function exportDaySheetXLSX(ledger, stationLabel, XLSX = globalThis.XLSX, opts = {}) {
   if (!XLSX) { alert("Excel library not loaded yet, please try again."); return; }
   const sheets = buildDaySheets(ledger, stationLabel, opts);

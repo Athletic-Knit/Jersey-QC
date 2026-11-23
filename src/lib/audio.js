@@ -7,6 +7,9 @@ function getCtx() {
   return ctx;
 }
 
+// One short sound by kind: "pass" rises, "flag" falls, "retry" is two flat
+// blips, "count" and "shutter" belong to the damage-photo countdown, anything
+// else is the short scan beep. A sound that cannot play is skipped silently.
 export function playTone(type) {
   try {
     const c = getCtx(), t = c.currentTime;

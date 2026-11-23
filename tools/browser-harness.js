@@ -4,6 +4,10 @@
 // the app is signed in and an order is open, e.g. http://localhost:5174.
 // It installs: a FAKE CAMERA (canvas streamed as a webcam), a CONTROLLABLE
 // NETWORK for the Anthropic call, helpers, and a 100-jersey self-driving run.
+// The run scans with KeyB, the scan key before 17 Nov 2026 (it is Enter now):
+// set the station's scan key to B in Settings first. It also finds the result
+// screen as a fixed full-screen layer, which it no longer is (the screen is drawn
+// in the right half of the station), so the run does not see the result screens.
 //
 //   __draw('table')                       bare table on the camera
 //   __draw('jersey', 'SMITH', 12)         a jersey; opts { dx: 18 } nudge, { hand: 'right'|'left' }

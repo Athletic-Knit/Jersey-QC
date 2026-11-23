@@ -43,6 +43,7 @@ export function buildDamageRows(events, { stationLabel = id => id, operatorName 
 
 const CDN = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
 let loading = null;
+// ExcelJS from the CDN, loaded once and shared; a failed load may be tried again.
 export function loadExcelJS() {
   if (globalThis.ExcelJS) return Promise.resolve(globalThis.ExcelJS);
   if (!loading) loading = new Promise((resolve, reject) => {

@@ -56,6 +56,7 @@ export function findReplayRow(roster, step, done = false) {
   const rows = (roster || []).filter(same);
   return rows.find(r => (done ? !!r.scanned : !r.scanned)) || rows[0] || null;
 }
+// Is `row` the row a step speaks of (same number, size and team)?
 export const sameReplayRow = (row, step) => !!findReplayRow([row], step, !!row.scanned);
 
 // A stand-in for the camera frame: the number on a plain jersey, so the

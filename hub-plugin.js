@@ -10,7 +10,6 @@
 //   GET    /api/hub/orders?q=264247         an order by its number, any day in the ledger: rows, boxes, flags — the station's Print menu
 //   GET    /api/hub/ledger?from=&to=         several days, slim (no photos, no rosters) — the board's "Compare days" workbook
 //   GET    /api/hub/ledger?date=YYYY-MM-DD   every scan event and order of that day (default today) — the day sheet;
-//                                            `days` lists every day still kept (90; photos only on the newest 14);
 //                                            `days` lists every day still kept (90; photos only on the newest 14)
 //   GET    /api/hub/rosters             rosters waiting for stations (summaries)
 //   GET    /api/hub/rosters/:id         one roster, with rows
@@ -56,6 +55,7 @@ const PRINT_PS1 = path.join(path.dirname(fileURLToPath(import.meta.url)), "tools
 // only the command line ("Command failed: powershell -NoProfile …"), which is
 // what the Print menu showed on 12 Nov 2026 and told nobody anything.
 const PS1_TIMEOUT_MS = 30000;
+// A failed print script → one plain sentence for the station (see above).
 export function ps1Problem(err, stderr, printer = "") {
   const said = String(stderr || "").split(/\r?\n/).map(l => l.trim()).find(Boolean);
   if (said) return said;
@@ -72,12 +72,15 @@ export async function listPrintersWindows() {
   const out = JSON.parse((await runPs1(["-List"])).trim() || "[]");
   return (Array.isArray(out) ? out : [out]).filter(p => p?.Name).map(p => ({ name: p.Name, driver: p.DriverName || "", port: p.PortName || "", status: p.PrinterStatus }));
 }
+// Sends ZPL raw to a Windows print queue (tools/print-raw.ps1), through a temp
+// file that is removed afterwards; throws with ps1Problem's sentence.
 export async function printRawWindows(printer, zpl) {
   const tmp = path.join(os.tmpdir(), `jerseyqc-labels-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.zpl`);
   fs.writeFileSync(tmp, zpl, "utf8");   // ^CI28: the printer reads the data as UTF-8
   try { await runPs1(["-Printer", printer, "-File", tmp], printer); }
   finally { try { fs.unlinkSync(tmp); } catch { /* already gone */ } }
 }
+// A Zebra queue, by its name or driver: the default printer when none is named.
 export const isLabelPrinter = p => /zebra|zd4|zdesigner/i.test(`${p?.name || ""} ${p?.driver || ""}`);
 
 // The ledger keeps `keepDays` of days; the photos (the weight, ~40 KB each)
@@ -102,6 +105,7 @@ export function pruneLedger(led, { keepDays = 90, photoDays = 14 } = {}) {
 // up), so the same scan re-sent by any station lands on the same entry. Events
 // from before runs existed keep the station and order in their key.
 export const eventKey = (ev, station = ev?.station) => (ev?.run ? `${ev.run}|${ev.id}` : `${station}|${ev?.order}|${ev?.id}`);
+// The day an event belongs to: the date of its own stamp, else `fallback`.
 export const eventDay = (ev, fallback) => (/^\d{4}-\d{2}-\d{2}/.test(String(ev?.t || "")) ? String(ev.t).slice(0, 10) : fallback);
 // Files one event, as a station sent it: the station that filed it first is kept
 // (the one that scanned it; a station that picked the order up re-sends it), and a
@@ -138,6 +142,8 @@ export function normaliseLedger(led) {
   return copies;
 }
 
+// The hub for one data file: its state, its routes (`handle`) and its writes.
+// The options name the file, the clock and the printers (tests pass their own).
 export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", printers: stationPrinters = {}, labelSize = "", flagPrinter = "", flagPrinters: stationFlagPrinters = {}, flagLabelSize = "", print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
   // One hub per data file (code review M20). Saving hub-plugin.js or a file it imports makes
   // Vite load this module again and create a new hub in the same process, while the old one
@@ -789,6 +795,8 @@ Connection: close
   return { handle, redirectPlainHttp, state: () => state, flush: writeNow, close, blocked: () => blocked };
 }
 
+// The Vite plugin: the hub's routes under /api/hub on the dev server that
+// vite.config.js (or vite.config.stage.js) starts.
 export default function hubPlugin(opts = {}) {
   const { handle, redirectPlainHttp, close } = createHub(opts);
   return {

@@ -1,3 +1,7 @@
+// The matcher (src/lib/match.js): green only when name and number agree on one
+// open row, the reads that must never be green (a right name with a wrong
+// number, a sleeve merge), the near misses offered when nothing is exact, and
+// rows already done kept off the list.
 import { describe, it, expect } from "vitest";
 import { findMatches, subNumberCandidates, differingFields, isPlausibleNumber } from "../match.js";
 

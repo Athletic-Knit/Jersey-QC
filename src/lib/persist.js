@@ -16,6 +16,7 @@ const quiet = fn => { try { return fn(); } catch { return undefined; } };
 // the log. localStorage holds ~5 MB, so a long order keeps photos on the newest
 // flagged entries only, and drops them all rather than lose the session.
 const PHOTO_BUDGET = 3_500_000;
+// The log with the photos (scan and damage) kept on the newest `keep` entries that have any.
 export function trimPhotos(log, keep = 20) {
   if (!Array.isArray(log)) return log;
   let seen = 0;
@@ -65,16 +66,19 @@ export function saveSession(s)  {
     catch { return false; }
   }
 }
+// The saved order (null when none or unreadable), forgetting it, and the browser's settings.
 export function loadSession()   { return quiet(() => { const v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }) ?? null; }
 export function clearSession()  { quiet(() => localStorage.removeItem(SESSION_KEY)); }
 export function saveSettings(s) { quiet(() => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))); }
+// The settings saved in this browser (null when none: the caller uses the defaults).
 export function loadSettings()  {
   return quiet(() => {
     const v = localStorage.getItem(SETTINGS_KEY);
     if (v) return JSON.parse(v);
     // A station still on v2 keeps its camera, its rotation and every key it
-    // changed itself, and takes the two new defaults: B became Enter and the
-    // stickers went off (the owner, 17 Nov 2026). Saved as v3 once.
+    // changed itself, and takes the two new defaults: a scan key left at the old
+    // default B becomes Enter, and the stickers go off (the owner, 17 Nov 2026).
+    // Saved as v3 once.
     const old = localStorage.getItem(SETTINGS_V2);
     if (!old) return null;
     const s = { ...JSON.parse(old), stickers: false };
@@ -87,11 +91,14 @@ export function loadSettings()  {
 // `station`: save for ANOTHER station's page — the one the sign-in box is about
 // to reload to — so the page comes back already signed in instead of empty.
 export function saveSignIn(s, station) { quiet(() => localStorage.setItem(station === undefined ? SIGNIN_KEY : "jerseyqc.signin.v1" + stationSuffix(station), JSON.stringify(s))); }
+// This station's sign-in (null when nobody is signed in), and Sign out.
 export function loadSignIn()    { return quiet(() => { const v = localStorage.getItem(SIGNIN_KEY); return v ? JSON.parse(v) : null; }) ?? null; }
 export function clearSignIn()   { quiet(() => localStorage.removeItem(SIGNIN_KEY)); }
 // The names used on this PC, newest first, so an operator taps theirs instead
 // of typing it. Per PC (not per station) and never cleared by Sign out.
 const NAMES_KEY = "jerseyqc_names";
+// The list, newest first; rememberName puts a name at the top (at most 8, any
+// capitals counted once); forgetName takes one off.
 export function loadRecentNames() { return quiet(() => { const v = localStorage.getItem(NAMES_KEY); const a = v ? JSON.parse(v) : []; return Array.isArray(a) ? a : []; }) ?? []; }
 export function rememberName(name) {
   const n = String(name || "").trim(); if (!n) return;
@@ -190,6 +197,7 @@ export function frameForUpload(dataUrl, maxSide = 800, quality = 0.85) {
   });
 }
 
+// A loaded image no wider than `maxW`, as a JPEG data URL (never enlarged).
 export function downscaleImage(img, maxW = 1280) {
   const s = Math.min(1, maxW / img.width);
   const c = document.createElement("canvas");

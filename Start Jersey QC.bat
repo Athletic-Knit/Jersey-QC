@@ -1,4 +1,8 @@
 @echo off
+rem Starts the Jersey QC server (port 5173) in this window, by hand, from the folder this
+rem file sits in: shows the supervisor and station links, offers to open port 5173 in the
+rem firewall, installs the packages on a first run, and only opens the supervisor page when
+rem the server is already running (the "Jersey QC server" log-on task usually starts it).
 cd /d "%~dp0"
 title Jersey QC Scanner - server (keep this window open)
 echo.
