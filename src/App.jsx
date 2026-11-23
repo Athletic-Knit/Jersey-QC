@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum } from "./lib/text.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
@@ -616,16 +616,22 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   };
 
   const canSupervise = role === "supervisor" || role === "admin";
+  // One start at a time. Enter in the order field reaches here while the button is greyed, and
+  // a second start found the ship-with boxes already taken by the first and replaced its
+  // result with none (code review M14). A ref, not state: two presses in one moment both see
+  // the old state.
+  const starting = useRef(false);
   const handleStart = async () => {
+    if (starting.current) return;
     if (!order.trim() && !picked) { setError("Enter the order number, or use a roster file that has it."); return; }
     if (!file && !picked) { setError(canSupervise ? "Upload a roster file, or pick one the supervisor sent." : "Pick the order the supervisor sent, or load a roster file."); return; }
-    setLoading(true);
+    setLoading(true); starting.current = true;
     try {
       if (picked) {
         // Take the order on the hub first: if another station got there first, say who, and stop.
         try { await hub.takeRoster(picked.id, { station: stationId(), operator: operatorName }); }
         catch (e) {
-          if (e.status === 409) { const t = e.body?.takenBy || {}; setError(`${stationLabel(t.station)} (${t.operator || "someone"}) is already working on order ${picked.orderNumber || ""}. One station works an order — ask the supervisor to release it from the board if that is wrong.`); setPicked(null); setLoading(false); loadRef.current(); return; }
+          if (e.status === 409) { const t = e.body?.takenBy || {}; setError(`${stationLabel(t.station)} (${t.operator || "someone"}) is already working on order ${picked.orderNumber || ""}. One station works an order — ask the supervisor to release it from the board if that is wrong.`); setPicked(null); setLoading(false); starting.current = false; loadRef.current(); return; }
           /* no hub answer: start anyway, the station still works from the roster it has */
         }
         const rows = normaliseRosterRows(picked.rows), num = order.trim(), shipWith = orderList(shipText).filter(n => n !== num);
@@ -634,13 +640,13 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
       }
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
-      if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); return; }
+      if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); starting.current = false; return; }
       const num = order.trim() || orderNumberOf(parsed) || file.name.replace(/\.[^.]+$/, ""), shipWith = orderList(shipText || shipWithOf(parsed).join(" ")).filter(n => n !== num);
       const carried = await takeOpenBoxes({ order: num, shipWith, rows: parsed, binBy, station: stationId() });
       onStart({ roster: parsed, orderNumber: num, notes: notes.trim(), jerseyType, binBy, rosterFile: file.name, shipWith, carried });
     } catch (err) {
       setError("Failed to parse roster: " + err.message);
-      setLoading(false);
+      setLoading(false); starting.current = false;
     }
   };
   const onEnter = e => { if (e.key === "Enter") handleStart(); };
@@ -1174,9 +1180,13 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { if (!wall) return; const t = setInterval(() => setClock(Date.now()), 15000); return () => clearInterval(t); }, [wall]);
 
+  // One send at a time: a double click sent the roster twice and every station was offered it twice (code review M14).
+  const sending = useRef(false);
   const send = async () => {
+    if (sending.current) return;
     if (!order.trim()) { setMsg("Type the order number first — stations list rosters by it."); return; }
     if (!file) { setMsg("Choose a roster file first."); return; }
+    sending.current = true;
     try {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const rows = isExcel ? await parseExcel(file) : parseCSV(await file.text());
@@ -1186,6 +1196,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       setMsg(`Sent ${file.name} — ${rows.length} jerseys for order ${order.trim()} to ${to}. It shows on the order screen there.`);
       setFile(null); setOrder(""); setNotes(""); setJerseyType(""); setBinBy("team"); setShipText(""); refresh();
     } catch (e) { setMsg("Could not send: " + e.message); }
+    finally { sending.current = false; }
   };
 
   const age = s => Math.round((data.now - s.updatedAt) / 1000);
@@ -1855,7 +1866,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           </div>
           <div style={{ width: "100%", maxWidth: candidates.length > 3 ? 1600 : 1000, padding: "0 24px", boxSizing: "border-box", flex: "0 1 auto", minHeight: 0, overflowY: "auto" }}>{/* the list takes all the room left on the screen (a 27 in panel shows far more than half), and scrolls only past that */}
             {candidates.length === 0 && (
-              <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 22, padding: 16 }}>No rows to choose from.</div>
+              <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 22, padding: 16 }}>{/* a typed number on no row: "#88 is not on the roster — check the number" (M18) */}{state.typed && state.reason ? state.reason : "No rows to choose from."}</div>
             )}
             {candidates.length > 0 && candidates.every(isDone) && (
               <div style={{ textAlign: "center", color: "#fcd34d", fontSize: 20, padding: "8px 0 12px" }}>All of these already passed.</div>
@@ -2940,9 +2951,11 @@ function BlanksModal({ groups, boxOf, last, sticker, scanKey, onCount, onFlag, o
 // order. Until then the order is still open on the station (a reload offers
 // it again), so nothing is lost if the printer was out of labels. No key does
 // anything here: the pedal must not start a new order.
-function FinishedModal({ orderNumber, status, onReprint, onPrint, onNew, onBack }) {
+// `unsent`: New order could not reach the server (M16): the order is kept, and starting a new
+// one anyway (losing this one from the station) is a separate button, clicked, never a key.
+function FinishedModal({ orderNumber, status, onReprint, onPrint, onNew, onBack, onNewAnyway, unsent = "", sendingLast = false }) {
   const colour = { printing: "#94a3b8", done: "#4ade80", error: "#f87171", none: "#fbbf24" }[status?.status] || "#94a3b8";
-  const busy = status?.status === "printing";
+  const busy = status?.status === "printing" || sendingLast;
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #22c55e", padding: 44, maxWidth: 680, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
@@ -2954,9 +2967,15 @@ function FinishedModal({ orderNumber, status, onReprint, onPrint, onNew, onBack 
           <button onClick={onPrint} style={{ ...btnGhost, fontSize: 18, padding: "14px 22px" }}>🖨 Print something else…</button>
         </div>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <button onClick={onNew} disabled={busy} style={{ ...btnPri, fontSize: 21, padding: "16px 40px", background: "#22c55e", color: "#0d1117", opacity: busy ? 0.5 : 1 }}>New order →</button>
+          <button onClick={onNew} disabled={busy} style={{ ...btnPri, fontSize: 21, padding: "16px 40px", background: "#22c55e", color: "#0d1117", opacity: busy ? 0.5 : 1 }}>{sendingLast ? "Saving on the server…" : "New order →"}</button>
           <button onClick={onBack} disabled={busy} title="The order is not closed yet: go back to it" style={{ ...btnGhost, fontSize: 16, padding: "14px 20px", opacity: busy ? 0.5 : 1 }}>← Back to this order</button>
         </div>
+        {unsent && (
+          <div style={{ marginTop: 18, padding: "12px 16px", borderRadius: 10, border: "2px solid #ef4444", background: "rgba(239,68,68,0.1)", textAlign: "left" }}>
+            <div style={{ fontSize: 17, color: "#fca5a5", fontWeight: 700, marginBottom: 10 }}>⚠ {unsent}</div>
+            <button onClick={onNewAnyway} onKeyDown={e => e.preventDefault()} title="Only when the server cannot be reached and the order is safe elsewhere" style={{ ...btnGhost, fontSize: 15, padding: "8px 14px", borderColor: "#ef4444", color: "#fca5a5" }}>Start a new order anyway — this order is deleted from this station</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3608,10 +3627,12 @@ export default function App() {
   // Report to the hub (if one is running) so a supervisor can see this station —
   // from sign-in on, so a station waiting for its first order is already on the
   // board and can be sent one. Supervisors on their own screen do not report.
+  // What this station tells the hub, sent now. The 5-second report below uses it, and so does
+  // New order, which waits for it to arrive before it clears the order (code review M16).
+  const reportNow = useCallback(() => hub.report(stationId(), snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", orderRun: sessionStarted ? orderRun : 0, notes, jerseyType, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap, closedBins: sessionStarted ? closedBins : [], binSummary: sessionStarted ? binSummary : [], idleSpells, awaySpells, finishedAt: sessionStarted ? finishedAt : null })), [sessionStarted, operatorName, role, orderNumber, orderRun, notes, jerseyType, rosterFile, roster, log, lastConfirmed, binMap, closedBins, binSummary, idleSpells, awaySpells, finishedAt]);
   useEffect(() => {
     if (!signedIn || (role === "supervisor" && !sessionStarted)) return;
-    const id = stationId();
-    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", orderRun: sessionStarted ? orderRun : 0, notes, jerseyType, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap, closedBins: sessionStarted ? closedBins : [], binSummary: sessionStarted ? binSummary : [], idleSpells, awaySpells, finishedAt: sessionStarted ? finishedAt : null }))
+    const send = () => reportNow()
       .then(r => {
         setHubOk(true);
         // The supervisor named this order from the board: take the number; the next report confirms it.
@@ -3621,7 +3642,7 @@ export default function App() {
     send();
     const t = setInterval(send, 5000);
     return () => clearInterval(t);
-  }, [signedIn, sessionStarted, operatorName, role, orderNumber, orderRun, notes, jerseyType, rosterFile, roster, log, lastConfirmed, binMap, closedBins, binSummary, idleSpells, awaySpells, finishedAt]);
+  }, [signedIn, sessionStarted, role, orderNumber, reportNow]);
 
   // Open the complete modal once every row is accounted for (after at least one scan).
   useEffect(() => {
@@ -3773,25 +3794,50 @@ export default function App() {
     setFinishedAt(Date.now());
     const kept = new Set(keep.map(String));
     let note = "";
-    if (kept.size) {
+    // A ship-with order sends its whole set of open boxes at every Finish, also none, so a second
+    // Finish replaces what the first left on the hub instead of adding to it (code review M15).
+    if (kept.size || shipWith.length) {
       const boxes = openBins.filter(b => kept.has(String(b.bin))).map(b => {
         const prev = carried.filter(c => c.bin === b.bin), own = binContents(roster, binMap, closedBins, b.bin);
         return { orders: [...new Set([...prev.flatMap(c => c.orders || []), String(orderNumber), ...shipWith].map(String).filter(Boolean))], by: binFieldOf(binMap),
           key: Object.entries(binMap || {}).find(([k, v]) => k !== "__by" && v === b.bin)?.[0] || "", label: b.label, bin: b.bin,
           items: [...prev.flatMap(c => c.items || []), ...own.map(r => ({ order: String(orderNumber), number: r.number, name: r.name, size: r.size, team: r.team }))] };
       });
-      try { await hub.leaveBoxesOpen({ boxes, station: stationId(), order: String(orderNumber) }); note = `${boxes.length} ${boxes.length === 1 ? "box is" : "boxes are"} left open for order ${shipWith.join(", ")} (${boxes.map(b => "Box " + b.bin).join(", ")}).`; }
-      catch (e) { kept.clear(); note = `The boxes could NOT be left open on the server (${e.message}): their lists print now, like a full box.`; }
+      // run: finished again, the same boxes are replaced on the hub, not added twice (M15).
+      try {
+        const r = await hub.leaveBoxesOpen({ boxes, station: stationId(), order: String(orderNumber), run: orderRun });
+        const taken = r?.taken || [];   // taken by the next order since the last Finish: in that order's hands now
+        if (kept.size) note = `${boxes.length} ${boxes.length === 1 ? "box is" : "boxes are"} left open for order ${shipWith.join(", ")} (${boxes.map(b => "Box " + b.bin).join(", ")}).`;
+        if (taken.length) note += ` ${taken.map(t => `Box ${t.bin} was already taken by order ${t.order || "?"}`).join("; ")}: it is in that order's hands, nothing to do for it here.`;
+      }
+      catch (e) {
+        if (kept.size) { kept.clear(); note = `The boxes could NOT be left open on the server (${e.message}): their lists print now, like a full box.`; }
+        else note = `The server could not be told that no box is left open (${e.message}): boxes an earlier Finish of this order left open may still be offered to the next order.`;
+      }
     }
     keptOpen.current = kept;
     printFinishLists(note);
-  }, [printFinishLists, openBins, carried, roster, binMap, closedBins, orderNumber, shipWith]);
-  const newOrder     = useCallback(() => {
+  }, [printFinishLists, openBins, carried, roster, binMap, closedBins, orderNumber, orderRun, shipWith]);
+  // New order clears the order from this station, so it first sends one last report and waits
+  // for the hub to answer: with the hub away the station held the only full copy and New order
+  // deleted it (code review M16; Finish later already waited the same way). The hub away, the
+  // done screen says so and keeps the order; "Start a new order anyway" is a click, never a key.
+  const [unsent, setUnsent] = useState("");
+  const [sendingLast, setSendingLast] = useState(false);
+  const newOrder     = useCallback(async (anyway = false) => {
+    if (anyway !== true) {
+      setSendingLast(true);
+      // At most 10 s: a server that takes the call and never answers must not leave the screen stuck.
+      try { await Promise.race([reportNow(), new Promise((_, no) => setTimeout(() => no(new Error("no answer in 10 s")), 10000))]); }
+      catch (e) { setSendingLast(false); document.activeElement?.blur?.(); setUnsent(`The server did not answer (${e.message}), so it may not have this order's last scans. New order would delete the order from this station. Check the network and press New order again.`); return; }
+      setSendingLast(false);
+    }
+    setUnsent("");
     setFinished(null); setShowPrint(false);
     if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});   // the hub keeps the order's record and sheets in its ledger
     if (pickedUp) { dropOrder(pickedUp.key).catch(() => {}); if (pickedUp.hubId) hub.dropUnfinished(pickedUp.hubId).catch(() => {}); }   // finished: out of the unfinished pile, and its file off the server's disk
     resetOrder();
-  }, [resetOrder, hubRosterId, pickedUp]);
+  }, [resetOrder, hubRosterId, pickedUp, reportNow]);
   // ── Finish later (23, 24): the order, whole, goes to the server's disk; any station picks it up ──
   const [showPark, setShowPark] = useState(false);
   const [parkErr,  setParkErr]  = useState("");
@@ -4225,9 +4271,14 @@ export default function App() {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); return; }
-      applyRoster(parsed, file.name, { keepLog: true });
+      // The new rows get ids past every id the order has used (roster and log), as Add roster does:
+      // row ids are positions in the file, so the old log's passes and flags attached to whichever
+      // new row landed in the same position (code review M13). The order keeps the way it is sorted
+      // into boxes (by size stayed by size; it used to go back to by team).
+      const offset = nextRowId(roster, log);
+      applyRoster(parsed.map((r, i) => ({ ...r, _id: offset + i })), file.name, { keepLog: true, binBy: binMap ? binFieldOf(binMap) : "team" });
     } catch (err) { setError("Failed to parse roster: " + err.message); }
-  }, [applyRoster, log.length]);
+  }, [applyRoster, log, roster, binMap]);
 
   // ── Add a roster mid-session (another team sheet, a late file) ────────────
   // Appends rows; scans so far, bins and the log all stay as they are.
@@ -4238,7 +4289,7 @@ export default function App() {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found in the added file. It needs a header row with name and/or number columns."); return; }
-      const offset = roster.reduce((m, r) => Math.max(m, r._id), -1) + 1;
+      const offset = nextRowId(roster, log);   // past the log's ids too: a replaced roster's old rows are only in the log
       const next   = [...roster, ...parsed.map((r, i) => ({ ...r, _id: offset + i, scanned: false }))];
       setRoster(next);
       setRosterFile(f => f ? `${f} + ${file.name}` : file.name);
@@ -4249,7 +4300,7 @@ export default function App() {
         setBinMap(bins); if (newBins) setShowBinSetup(true);
       }
     } catch (err) { setError("Failed to parse roster: " + err.message); }
-  }, [roster, binMap, closedBins]);
+  }, [roster, log, binMap, closedBins]);
 
   // ── Overlay actions ───────────────────────────────────────────────────────
   const stamp = useCallback(() => ({ timestamp: localTimeStamp(), operator: operatorName }), [operatorName]);
@@ -4511,7 +4562,13 @@ export default function App() {
           note: "Typed by operator — the camera could not read it" });
         return;
       }
-      commitTyped(o, typed, null);
+      // Nothing on the roster is like it: a check step before the flag. A typo (#400 for #40) went
+      // straight to FLAGGED and printed a ticket, with no way back (code review M18). The typed
+      // list's own screen is the step: "← Back" (first, so the pedal goes back to the form as typed),
+      // "#N — not on the roster" to flag it as an extra jersey, and Flag.
+      setOverlay({ mode: "pick", scan: o.scan, candidates: [], typed,
+        reason: `#${number || "?"}${name ? " " + name : ""} is not on the roster — check the number`,
+        note: "Typed by operator" });
     },
     continueManual() { setOverlay(null); armAutoScan(); },
     // Back from a list the operator typed for: the form again, as it was typed.
@@ -4908,7 +4965,7 @@ export default function App() {
           onFull={binFull} onReprint={reprintBinList} onLabels={() => { setShowBins(false); setBoxAuto(false); setShowBinSetup(true); }} onPacking={() => { setShowBins(false); setShowPacking(true); }} onClose={() => closeDialog(() => setShowBins(false))} />
       )}
       {finished && (
-        <FinishedModal orderNumber={orderNumber} status={finished} onReprint={() => printFinishLists()} onPrint={() => setShowPrint(true)} onNew={newOrder} onBack={() => closeDialog(() => { setFinished(null); setFinishedAt(null); })} />
+        <FinishedModal orderNumber={orderNumber} status={finished} onReprint={() => printFinishLists()} onPrint={() => setShowPrint(true)} onNew={() => newOrder()} onNewAnyway={() => newOrder(true)} unsent={unsent} sendingLast={sendingLast} onBack={() => closeDialog(() => { setFinished(null); setFinishedAt(null); setUnsent(""); })} />
       )}
       {showBlanks && blanks.length > 0 && !overlay && (
         <BlanksModal groups={blanks} boxOf={binOf} scanKey={scanKey} last={lastConfirmed && isBlank(lastConfirmed.match) ? lastConfirmed : null}

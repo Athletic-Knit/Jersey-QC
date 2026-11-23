@@ -28,7 +28,7 @@
 //   POST   /api/hub/unfinished/:id/checkoff  { ids, all, by, as } — the supervisor settles jerseys still out (ids: a row's id, or "x<id>" for an extra jersey): as "pass" (default) they count as passed, as "short" the order ships without them; an extra jersey is closed either way; in the ledger too → { entry }
 //   DELETE /api/hub/unfinished/:id      the station finished the order the normal way
 //   GET    /api/hub/openboxes?orders=264247,264248   { boxes } — boxes left open at Finish order for an order that ships with these (the owner, 20 Nov 2026)
-//   POST   /api/hub/openboxes           { boxes: [{ orders, by, key, label, bin, items }], station, order } — a station finishes an order and leaves these boxes open → { ids }
+//   POST   /api/hub/openboxes           { boxes: [{ orders, by, key, label, bin, items }], station, order, run } — a station finishes an order and leaves these boxes open (the same order, run and box again replaces its entry) → { ids }
 //   POST   /api/hub/openboxes/:id/take  { station, order } — the next order takes the box (it is then that order's); 404 when another station took it first → { box }
 //   DELETE /api/hub/openboxes/:id       the supervisor (or a station) gives the box up
 //   GET    /api/hub/boxes               { model, answers } — the box model (src/lib/boxmodel.js) fitted to every answer so far
@@ -607,31 +607,47 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
         for (const [k, b] of Object.entries(pool)) if (now_() - (b.at || 0) > 90 * 86400000) delete pool[k];   // 90 days, like the ledger
         if (req.method === "GET" && !id) {
           const want = new Set(String(new URL(req.url, "http://hub").searchParams.get("orders") || "").split(",").map(s => s.trim()).filter(Boolean));
-          const boxes = Object.values(pool).filter(b => !want.size || (b.orders || []).some(o => want.has(String(o)))).sort((a, b) => (a.at || 0) - (b.at || 0));
+          const boxes = Object.values(pool).filter(b => !b.takenBy && (!want.size || (b.orders || []).some(o => want.has(String(o))))).sort((a, b) => (a.at || 0) - (b.at || 0));   // a box taken by the next order is kept only as a mark (below), never offered
           return json(res, 200, { boxes });
         }
         if (req.method === "POST" && !id) {
           const body = await readBody(req);
           const list = Array.isArray(body.boxes) ? body.boxes.slice(0, 200) : [];
-          if (!list.length) return json(res, 400, { error: "boxes required" });
+          const station = String(body.station ?? ""), from = String(body.order ?? ""), run = Number(body.run) || 0;
+          if (!list.length && !run) return json(res, 400, { error: "boxes required" });
+          // Each Finish order of a ship-with order sends the WHOLE set of boxes it leaves open, also
+          // none: the set replaces what an earlier Finish of the same station, order and run left
+          // ("Back to this order", or a reload, then Finish once more). A box left open before and
+          // closed now goes; a box still open keeps its entry and id. A box the next order has taken
+          // since is not made again: it is in that order's hands, and the station is told (code
+          // review M15: every Finish used to add another copy of every box).
+          const mine = run ? Object.values(pool).filter(x => x.station === station && x.from === from && (x.run || 0) === run) : [];
+          const wanted = new Set(list.map(b => String(b.bin ?? "")));
+          mine.filter(x => !x.takenBy && !wanted.has(x.bin)).forEach(x => delete pool[x.id]);
+          const taken = [];
           const ids = list.map((b, i) => {
-            const bid = now_().toString(36) + i.toString(36) + Math.random().toString(36).slice(2, 5);
-            pool[bid] = { id: bid, orders: [...new Set((b.orders || []).map(String).filter(Boolean))].slice(0, 20), by: String(b.by ?? "team"), key: String(b.key ?? ""), label: String(b.label ?? ""), bin: String(b.bin ?? ""),
+            const same = mine.find(x => x.bin === String(b.bin ?? ""));
+            if (same?.takenBy) { taken.push({ bin: same.bin, order: same.takenBy.order, station: same.takenBy.station }); return null; }
+            const bid = same?.id || now_().toString(36) + i.toString(36) + Math.random().toString(36).slice(2, 5);
+            pool[bid] = { run, id: bid, orders: [...new Set((b.orders || []).map(String).filter(Boolean))].slice(0, 20), by: String(b.by ?? "team"), key: String(b.key ?? ""), label: String(b.label ?? ""), bin: String(b.bin ?? ""),
               items: (Array.isArray(b.items) ? b.items : []).slice(0, 500).map(x => ({ order: String(x?.order ?? ""), number: String(x?.number ?? ""), name: String(x?.name ?? ""), size: String(x?.size ?? ""), team: String(x?.team ?? "") })),
               station: String(body.station ?? ""), from: String(body.order ?? ""), at: now_() };
             return bid;
-          });
+          }).filter(Boolean);
           save();
           console.log(`[hub] ${time} ${body.station || "?"}: order ${body.order || "?"} finished with ${ids.length} box${ids.length === 1 ? "" : "es"} left open for the order it ships with`);
-          return json(res, 200, { ids });
+          return json(res, 200, { ids, taken });
         }
         const b = id ? pool[id] : null;
-        if (id && !b) return json(res, 404, { error: "no such open box (another station may have taken it)" });
+        if (id && (!b || (b.takenBy && req.method !== "DELETE"))) return json(res, 404, { error: "no such open box (another station may have taken it)" });
         if (req.method === "POST" && parts[2] === "take") {
           const body = await readBody(req);
-          delete pool[id]; save();
-          console.log(`[hub] ${time} ${body.station || "?"}: order ${body.order || "?"} took open box ${b.bin} (${b.label}, ${b.items.length} in it, from order ${b.from})`);
-          return json(res, 200, { box: b });
+          // Kept as a mark (not offered again) until the 90 days are up, so a Finish of the order
+          // that left it does not make it again (M15).
+          const box = { ...b };   // what the taking station gets: everything in it
+          b.takenBy = { station: String(body.station ?? ""), order: String(body.order ?? ""), at: now_() }; b.items = []; save();
+          console.log(`[hub] ${time} ${body.station || "?"}: order ${body.order || "?"} took open box ${box.bin} (${box.label}, ${box.items.length} in it, from order ${box.from})`);
+          return json(res, 200, { box });
         }
         if (req.method === "DELETE" && id) { delete pool[id]; save(); return json(res, 200, { ok: true }); }
       }

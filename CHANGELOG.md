@@ -117,3 +117,37 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - The sign-out call can race the page reload, as the old delete did.
 - **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (one blocker, fixed).
 - **Commit:** 6603876
+
+## 2026-11-23 · Phase 3 · An order's life at a station (review M13–M18)
+- **Findings:**
+  - **M13:** Replace roster numbered the new rows from 0, so the old log's passes and flags attached to whichever new row landed in the same place. It also re-sorted a by-size order by team.
+  - **M14:** Start order could run twice (Enter in the order field), and the second run lost the ship-with boxes. The supervisor's Send could send a roster twice.
+  - **M15:** finishing a ship-with order again left its open boxes on the hub twice.
+  - **M16:** New order deleted the order even when the hub had never received it.
+  - **M17:** two roster columns for one field overwrote each other: Number plus a Home/Away "Jersey" column turned every number into "Home".
+  - **M18:** a typed number not on the roster went straight to FLAGGED and printed a ticket, with no way back.
+- **Rule:** review fixes.
+- **What changed and why:**
+  - **Replace roster** and **Add roster** number new rows past every id the order has used (`nextRowId` in roster.js). Replace keeps the order's box sorting.
+  - **Start order** and **Send** run once at a time (the `starting` and `sending` refs).
+  - **Finish order** of a ship-with order sends its whole set of open boxes, also none. The hub replaces what an earlier Finish of the same station, order and run left. A box the next order took stays as a mark (`takenBy`), is never offered or made again, and the station's note names the order that has it.
+  - **New order** sends one last report (`reportNow`, taken out of the 5-second report) and waits up to 10 s. If the hub does not answer, the done screen keeps the order and says so. "Start a new order anyway" is a click only, and the focus leaves New order so the pedal cannot press it again.
+  - **Duplicate roster columns:** the last column still wins, but a duplicate that is empty, or (for the number) is not jersey numbers or is a 1, 2, 3 … line count, is passed over and kept under its own header. The order column keeps its first-found rule.
+  - **A typed number on no row** shows a check step first: "#88 is not on the roster — check the number", with ← Back first (the pedal goes back to the form), then "#88 — not on the roster", then Flag.
+  - **Files:** `src/App.jsx`, `src/lib/roster.js`, `hub-plugin.js`, `CLAUDE.md`, tests.
+- **Tests added:** `src/lib/__tests__/review-lifecycle.test.js` (new, 17 tests: one block per finding, the review's roster cases and the open-box cases).
+- **Checks:**
+  - Lint is clean and all 497 tests pass.
+  - The 3000-order simulation shows WRONG GREEN 0, 0 roster rows lost in parsing, and the same green, yellow and by-hand shares as before.
+  - The check step (M18) was tried on the test server (5174) as Station 3: #400 gives the existing "close to these" list with #40, #88 gives the new step, and Back goes back to the form.
+  - Starting that test order printed one box label on the development server's Zebra (`\AK-NB-164\Zebra`). Finish order and New order were not tried in the browser, as they print box lists.
+- **Review:** Opus, blockers only. It found two blockers in my first version, both fixed and re-checked by Opus:
+  - the first rule for duplicate columns ("the plainer header wins") would have read a "#" line count as the jersey number, and changed Name + Last Name and Order + PO files. It now reads the same as before on 16 layouts, except the Home/Away case it fixes.
+  - a second Finish only cleaned up when it left the same boxes open.
+- **Left open (non-blocking):**
+  - An order with no run (a very old session) can still leave duplicate boxes.
+  - "Back to this order" does not take back boxes already left open, so the next order can take one while this order still adds to it. This was already so before.
+  - A station with no hub at all needs the "anyway" click at every New order.
+  - Replace roster still rebuilds the boxes from scratch and prints the set-out labels again.
+  - A column passed over now shows as an extra column in the roster table.
+- **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (two blockers, fixed and re-checked).

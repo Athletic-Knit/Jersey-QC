@@ -88,6 +88,35 @@ export function rowsToRoster(rows) {
   if (hIdx < 0) return [];
   const headers = rows[hIdx].map(canonicalHeader);
   const shipCol = rows[hIdx].map(h => SHIP_WITH_HEADER.test(stripBOM(String(h ?? "")).trim()));
+  // Two columns that mean the same field: the last one is the field, as it always was,
+  // except that a duplicate column which is empty, or (for the number) is not jersey
+  // numbers — a "Jersey" column of Home / Away, a 1, 2, 3 … line count — is not taken
+  // for it and is kept under its own header. The last column used to win whatever it
+  // held and turned every number into "Home" (code review M17). The order column is
+  // left alone: the first order number found wins, as before.
+  const raw = rows[hIdx].map(h => stripBOM(String(h ?? "")).trim().toLowerCase());
+  const data = rows.slice(hIdx + 1);
+  const cellsOf = i => data.map(r => String(r?.[i] ?? "").trim()).filter(Boolean);
+  const isLineCount = vals => vals.length >= 2 && vals.every((v, k) => v === String(k + 1));
+  const looksLikeNumbers = vals => vals.filter(v => /^\d{1,3}$/.test(v)).length >= 0.8 * vals.length;
+  for (const canon of Object.keys(ALIASES)) {
+    if (canon === "order") continue;
+    const cols = headers.map((h, i) => (h === canon ? i : -1)).filter(i => i >= 0);
+    if (cols.length < 2) continue;
+    let fit = cols.filter(i => cellsOf(i).length);
+    if (canon === "number") {
+      const numeric = fit.filter(i => looksLikeNumbers(cellsOf(i)));
+      if (numeric.length) fit = numeric;
+      const notCount = fit.filter(i => !isLineCount(cellsOf(i)));
+      if (notCount.length) fit = notCount;
+    }
+    const keep = (fit.length ? fit : cols).at(-1);
+    cols.filter(i => i !== keep).forEach(i => {
+      let key = raw[i] !== canon ? raw[i] : `${canon} 2`, n = 2;
+      while (headers.includes(key) || ALIASES[key]) key = `${raw[i]} ${++n}`;
+      headers[i] = key;
+    });
+  }
   let orderNumber = "", shipWith = [];
   for (let i = 0; i < hIdx; i++) {
     let text = (rows[i] || []).map(c => String(c ?? "")).join(" ");
@@ -187,6 +216,13 @@ export function parseExcel(file, XLSX = globalThis.XLSX) {
     reader.readAsArrayBuffer(file);
   });
 }
+
+// The first row id no row and no log entry of the order has used. Rows added or
+// replaced mid-order are numbered from here: ids are positions in the file, and a
+// replaced roster numbered from 0 again took over the old log's passes and flags
+// (code review M13).
+export const nextRowId = (roster = [], log = []) =>
+  Math.max(-1, ...roster.map(r => Number(r?._id)).filter(Number.isFinite), ...log.map(l => Number(l?.match?._id)).filter(Number.isFinite)) + 1;
 
 // Merges "Size Range" + "Size" → "A-L"; skips the join when either half is
 // blank (so no "A-" or "-"). Adds _id. Keeps every other column for display.
