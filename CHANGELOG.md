@@ -240,3 +240,4 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - The New order smoke test checks that a report was sent, not that it went before the order was cleared.
   - The package change means the next promotion to production runs `npm ci` with the floor's server stopped, once the new promote.ps1 is on the server PC.
 - **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (no blockers).
+- **Commits:** 6ed62ca (dead code), 8ebc5f7
