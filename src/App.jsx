@@ -254,7 +254,7 @@ function CompareDays({ days = [], stationLabel, onProblem }) {
 }
 
 function ResumeModal({ session, onResume, onDiscard, role = "", onSetAside, onSignOut, error = "" }) {
-  const done = session.roster.filter(r => r.scanned && r.scanned !== false).length;
+  const done = outOf(session.roster).done;   // passed or by hand, as Finish later counts it: a missing or flagged jersey is not done (code review, low finding)
   // A sorter's order is not an inspector's, and the other way round (the owner, 19 Nov 2026).
   const kind = kindOfSession(session);
   if (role && kind !== kindOfRole(role)) return (
@@ -406,10 +406,18 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         )}
         <div style={{ marginBottom: 14 }}>
           <label style={labelSt}>Your name</label>
-          <select value={nameChoice} onChange={e => { const v = e.target.value; setNameChoice(v); setName(v === "other" ? "Other" : v); }} style={{ ...inputSt, cursor: "pointer" }}>
+          <select value={nameChoice} onChange={e => { const v = e.target.value; setNameChoice(v); setName(v === "other" ? "" : v); }} style={{ ...inputSt, cursor: "pointer" }}>
             {OPERATORS.map(n => <option key={n} value={n}>{n}</option>)}
             <option value="other">Other</option>
           </select>
+          {/* "Other": the operator's own name, typed on the screen's keys (the stations have no keyboard).
+              It used to sign them in as the literal name "Other" (code review, low finding). */}
+          {nameChoice === "other" && (
+            <>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Type your name" style={{ ...inputSt, marginTop: 8 }} />
+              <div style={{ marginTop: 6 }}><ScreenKeys layout="search" onKey={k => setName(v => typeKey(v, k))} onEnter={submit} enterLabel="Sign in" /></div>
+            </>
+          )}
         </div>
         {error && <div style={errSt}>{error}</div>}
         <button onClick={submit} style={bigBtn}>{onCancel ? "Take over →" : "Sign in →"}</button>
@@ -720,7 +728,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         )}
         <div style={{ marginBottom: 12 }}>
           <label style={labelSt}>Order number</label>
-          <input ref={orderRef} value={order} onChange={e => setOrder(e.target.value)} placeholder="From the roster file, or tap to type it" onKeyDown={onEnter} style={inputSt}
+          <input ref={orderRef} value={order} onChange={e => setOrder(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="From the roster file, or tap to type it" onKeyDown={onEnter} style={inputSt}
             onFocus={() => setOrderKeys(true)} onBlur={() => setOrderKeys(false)} />
           {orderKeys && <ScreenKeys layout="digits" onKey={k => setOrder(v => typeKey(v, k))} onEnter={() => orderRef.current?.blur()} enterLabel="Done" />}   {/* order numbers are digits: a keypad, no letters (the owner, 17 Nov 2026) */}
         </div>
@@ -1127,16 +1135,20 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   const [pickMode, setPickMode] = useState("");   // "" | "date" | "range": the date fields are showing
   const [pickFrom, setPickFrom] = useState(""), [pickTo, setPickTo] = useState("");
   useEffect(() => {
+    // `on`: an answer for a day (or range) no longer picked is dropped. A slow answer for the day picked
+    // before used to land after the new day's and replace its orders (code review, low finding).
+    let on = true;
     const load = range
       ? () => hub.ledgerRange(range.from, range.to).then(r => {
+          if (!on) return;
           const all = {};
           (r.days || []).forEach(d => (d.orders || []).forEach(o => { const k = `${o.station}|${o.order}|${o.run || 0}`; if (!all[k] || (o.lastSeen || 0) >= (all[k].lastSeen || 0)) all[k] = { ...o, date: d.date }; }));
           setOrders(Object.values(all)); if (r.known) setDays(r.known);
         }).catch(() => {})
-      : () => hub.ledger(day).then(l => { setOrders((l.orders || []).map(o => ({ ...o, date: day }))); setDays(l.days || []); }).catch(() => {});
+      : () => hub.ledger(day).then(l => { if (!on) return; setOrders((l.orders || []).map(o => ({ ...o, date: day }))); setDays(l.days || []); }).catch(() => {});
     load();
     const t = setInterval(load, 20000);
-    return () => clearInterval(t);
+    return () => { on = false; clearInterval(t); };
   }, [day, range]);
   const [fullScreen, setFullScreen] = useState(() => !!document.fullscreenElement);
   useEffect(() => { const h = () => setFullScreen(!!document.fullscreenElement); document.addEventListener("fullscreenchange", h); return () => document.removeEventListener("fullscreenchange", h); }, []);
@@ -1615,7 +1627,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     const retry    = { id: "retry",    label: "↻ Retry scan",    run: actions.retry };
     const notRight = { id: "notright", label: "🚩 Flag",          run: sorter ? actions.listFlag : actions.reasons };   // a sorter flags No size tag, Duplicate, Not on the roster only
     const byHand   = { id: "manual",   label: "⌨ Enter by hand", run: actions.manual };
-    if (mode === "confirm")    return [{ id: allTicked ? "confirm" : "tick", label: allTicked ? "✓ Confirm" : `✓ Confirm · ${toTick.length} to check`, primary: true, locked: !allTicked, run: allTicked ? actions.confirm : tickNext }, ...(state.typed ? [{ id: "back", label: "← Back", run: actions.editTyped }] : [{ ...retry, mouseOnly: true }]), notRight];   // typed by hand: Back to the form, as typed   // Retry on a green is a mouse click only (see showNudge)
+    if (mode === "confirm")    return [{ id: allTicked ? "confirm" : "tick", label: allTicked ? "✓ Confirm" : `✓ Confirm · ${toTick.length} to check`, primary: true, locked: !allTicked, run: allTicked ? actions.confirm : tickNext }, ...(state.typed ? [{ id: "back", label: "← Back", run: actions.editTyped }] : state.fromList ? [{ id: "back", label: "← Back to the list", run: actions.backToList }] : [{ ...retry, mouseOnly: true }]), notRight];   // typed by hand: Back to the form, as typed   // Retry on a green is a mouse click only (see showNudge)
     if (isList) {
       const t = state.typed;
       const none = t
@@ -1660,7 +1672,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     }
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter, state.match]);
+  }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter, state.match, state.fromList]);
 
   const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
   const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
@@ -1850,7 +1862,10 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           </div>
 
           <div style={{ fontSize: 20, color: "#d6d3d1", marginBottom: 16, textAlign: "center" }}>
+            {/* Typed by hand: what was typed, not the camera's empty read ("Read: #? · no name"; code review, low finding). */}
+            {state.typed ? `Typed: #${state.typed.number || "?"}${state.typed.name ? " · " + state.typed.name : ""}` : <>
             Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}{detected?.jersey_colour ? ` · ${detected.jersey_colour} jersey` : ""}
+            </>}
             {primary !== HEADLINE_FIELDS && <span style={{ marginLeft: 12, color: accent }}>· differs by {primary.map(cap).join(" and ")}</span>}
           </div>
           <div style={{ width: "100%", maxWidth: candidates.length > 3 ? 1600 : 1000, padding: "0 24px", boxSizing: "border-box", flex: "0 1 auto", minHeight: 0, overflowY: "auto" }}>{/* the list takes all the room left on the screen (a 27 in panel shows far more than half), and scrolls only past that */}
@@ -2241,7 +2256,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", opacity: temp.boxWeights ? 1 : 0.45 }}>
             No box heavier than
-            <input type="number" min={10} max={70} value={temp.boxWeightCap ?? 45} onChange={e => setTemp(t => ({ ...t, boxWeightCap: Math.max(10, Math.min(70, Number(e.target.value) || 45)) }))} style={{ ...selSt, width: 76 }} />
+            <input type="number" min={10} max={70} value={temp.boxWeightCap ?? 45} onChange={e => setTemp(t => ({ ...t, boxWeightCap: e.target.value }))} onBlur={e => setTemp(t => ({ ...t, boxWeightCap: Math.max(10, Math.min(70, Number(e.target.value) || 45)) }))} style={{ ...selSt, width: 76 }} />
             lb
           </label>
           <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>How many jerseys fill a box is learnt: every Box full asks what size the box was, and all stations learn from the answers.</div>
@@ -2254,7 +2269,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
         )}
 
         <div style={{ display: "flex", gap: 8, position: "sticky", bottom: -28, margin: "0 -28px -28px", padding: "14px 28px 28px", background: "#161b22", borderTop: "1px solid #21262d" }}>{/* Save and Cancel stay in view while the panel scrolls */}
-          <button disabled={problems.length > 0} onClick={() => { onSave(temp); onClose(temp); }} style={{ ...btnPri, flex: 1, opacity: problems.length ? 0.5 : 1 }}>Save</button>
+          <button disabled={problems.length > 0} onClick={() => { const t = { ...temp, boxWeightCap: Math.max(10, Math.min(70, Number(temp.boxWeightCap) || 45)) }; onSave(t); onClose(t); }} style={{ ...btnPri, flex: 1, opacity: problems.length ? 0.5 : 1 }}>Save</button>
           <button onClick={onClose} style={btnGhost}>Cancel</button>
         </div>
       </div>
@@ -3040,7 +3055,10 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
   const remaining = roster.filter(r => !r.scanned).length;
   const open = count("flag") + offRosterFlags + count("manual") + count("missing") + count("short");
   useEffect(() => {
-    const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); } if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); confirm(); } };
+    // Enter does NOT finish the order: the pedal sends Enter (since 17 Nov 2026), so one reflex press
+    // finished the order (code review, low finding). Finish is a click; Enter is swallowed so it
+    // reaches nothing behind the dialog. Esc keeps going.
+    const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); } if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); } };
     window.addEventListener("keydown", h, true);
     return () => window.removeEventListener("keydown", h, true);
   }, [confirm, onCancel]);
@@ -3119,7 +3137,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
           ))}
         </div>
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-          <button onClick={confirm} style={{ ...btnPri, fontSize: 19, padding: "14px 32px", background: remaining ? "#f59e0b" : "#22c55e", color: "#0d1117" }}>✓ Finish order <Kbd>Enter</Kbd></button>
+          <button onClick={confirm} style={{ ...btnPri, fontSize: 19, padding: "14px 32px", background: remaining ? "#f59e0b" : "#22c55e", color: "#0d1117" }}>✓ Finish order</button>
           <button onClick={onCancel} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>← Keep going <Kbd light>Esc</Kbd></button>
         </div>
         </div>
@@ -3165,6 +3183,14 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onE
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
+// A printer failure in words an operator can act on. PowerShell's own exception text (seen at the
+// stations: "Exception calling ... CategoryInfo ...") is not shown; the server log keeps it
+// (code review, low finding). The hub's own messages (no answer in 30 s, printing off) pass through.
+const printWords = msg => (/exception|categoryinfo|fullyqualifiederrorid|at line:|\+ ~/i.test(String(msg)) || String(msg).length > 160
+  ? "the printer did not take the labels: check it is on, has labels and is connected (the details are in the server log)"
+  : msg);
+const printProblem = e => e.status === 503 ? "No label printer for this station" : `Not printed: ${e.status ? printWords(e.message) : "could not reach the server"}`;
+
 export default function App() {
   const videoRef        = useRef(null);
   const canvasRef       = useRef(null);
@@ -3616,7 +3642,6 @@ export default function App() {
     for (let i = 0; i < labels.length; i += 100) chunks.push(labels.slice(i, i + 100));
     return chunks.reduce((p, c) => p.then(() => hub.printLabels(c, { kind, station: stationId() })), Promise.resolve(null));
   }, []);
-  const printProblem = e => e.status === 503 ? "No label printer for this station" : `Not printed: ${e.status ? e.message : "could not reach the server"}`;
   // What Finish order prints: the list of every bin still open with something in it.
   const finishLists = useMemo(() => !settings.binLists || !binMap ? []
     : [...openBins.filter(b => b.count > 0).flatMap(b => listOf(b.bin, b.label)),
@@ -3908,7 +3933,7 @@ export default function App() {
       // only the way a turn would, otherwise the operator is asked with both.
       // The model mixes up left and right, so a turn can land upside down:
       // keep turning by what the latest read says, up to two more times.
-      if (uprightRotation(detected.orientation) && turnMatters(detected, roster) && version === rosterVersion.current) {
+      if (uprightRotation(detected.orientation) && turnMatters(detected, scanRoster) && version === rosterVersion.current) {   // the rows the matcher sees (scanRoster), not the raw roster (code review, low finding)
         let frame = dataUrl, total = 0, d2 = detected;
         for (let i = 0; i < 3 && uprightRotation(d2.orientation); i++) {
           const turn = uprightRotation(d2.orientation); total = (total + turn) % 360;
@@ -3933,7 +3958,9 @@ export default function App() {
         check = { agreed: r.agreed, second: d2 };
         if (!r.agreed) console.log("[self-check] the two reads disagree — asking the operator");
         m = r.match;
-        if (r.agreed && again) { detected = d2; dataUrl = again.dataUrl; }
+        // Agreed: the screen and the log take the read the match came from (reconcile's `read`, the
+        // fuller one), and its picture. The second read used to be kept whichever matched (code review, low finding).
+        if (r.agreed && r.read) { detected = r.read; if (r.read === d2 && again) dataUrl = again.dataUrl; }
       }
     } catch (e) {
       apiError = e.message;
@@ -3975,7 +4002,7 @@ export default function App() {
     scanObj.shown = sc.shown;
     setOverlay({ mode: sc.mode, scan: scanObj, ...(sc.match ? { match: sc.match } : {}), ...(sc.candidates ? { candidates: sc.candidates } : {}), ...(sc.reason !== undefined ? { reason: sc.reason } : {}), ...(sc.title ? { title: sc.title } : {}) });
     if (sc.tone) playTone(sc.tone);
-  }, [roster, scanRoster, firstScanTime]);
+  }, [scanRoster, firstScanTime]);
 
   // ── Camera scan trigger ───────────────────────────────────────────────────
   // The current camera frame as { base64, dataUrl }, rotated as the settings
@@ -4146,6 +4173,11 @@ export default function App() {
 
   // ── Add a roster mid-session (another team sheet, a late file) ────────────
   // Appends rows; scans so far, bins and the log all stay as they are.
+  // The order as it is NOW: the file is read first (an Excel file takes a moment), and a jersey
+  // passed meanwhile must not be lost by adding the rows to the roster as it was before the read
+  // (code review, low finding).
+  const orderNow = useRef({});
+  useEffect(() => { orderNow.current = { roster, log, binMap, closedBins }; }, [roster, log, binMap, closedBins]);
   const handleRosterAdd = useCallback(async (e) => {
     const file = e.target.files[0]; if (!file) return;
     e.target.value = ""; setError(null);
@@ -4153,6 +4185,7 @@ export default function App() {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found in the added file. It needs a header row with name and/or number columns."); return; }
+      const { roster, log, binMap, closedBins } = orderNow.current;
       const offset = nextRowId(roster, log);   // past the log's ids too: a replaced roster's old rows are only in the log
       const next   = [...roster, ...parsed.map((r, i) => ({ ...r, _id: offset + i, scanned: false }))];
       setRoster(next);
@@ -4164,7 +4197,7 @@ export default function App() {
         setBinMap(bins); if (newBins) setShowBinSetup(true);
       }
     } catch (err) { setError("Failed to parse roster: " + err.message); }
-  }, [roster, log, binMap, closedBins]);
+  }, []);
 
   // ── Overlay actions ───────────────────────────────────────────────────────
   const stamp = useCallback(() => ({ timestamp: localTimeStamp(), operator: operatorName }), [operatorName]);
@@ -4214,7 +4247,7 @@ export default function App() {
       const scan  = overlay.scan || {};
       // A number typed by hand passes like a scan (the owner, 20 Nov 2026: no supervisor sign-off); its reason says it was typed.
       const { cameBack: back, ...row } = overlay.match;   // back from repair, or found: its open flag or missing line closes
-      const entry = { id: scan.id || Date.now(), detected: scan.detected, thumb: scan.smallThumb, match: row, status: S_PASS, reason: [back ? backWords(back) : "", overlay.note || ""].filter(Boolean).join(" · "), ...stamp() };
+      const entry = { id: scan.id || Date.now(), detected: scan.detected, ...(overlay.typed ? { typed: overlay.typed } : {}), thumb: scan.smallThumb, match: row, status: S_PASS, reason: [back ? backWords(back) : "", overlay.note || ""].filter(Boolean).join(" · "), ...stamp() };
       setRoster(prev => prev.map(r => r._id === row._id ? { ...r, scanned: "pass" } : r));
       setLog(prev => [entry, ...(back ? closeOpenFor(prev, row._id, back.was === "flag" ? "Back from repair — passed" : "Found — passed") : prev)]);
       setLastResult(entry); setLastConfirmed(entry);
@@ -4247,8 +4280,11 @@ export default function App() {
     pick(c)  {
       if (!overlay || !c || isDone(c)) return;
       if (overlay.typed) { commitTyped(overlay, overlay.typed, c); return; }
-      setOverlay({ mode: "confirm", scan: overlay.scan, match: c, note: overlay.note });
+      // `fromList`: the list it was picked from, for "← Back to the list". A wrong pick had no way
+      // back: Flag would have flagged the wrong row (code review, low finding).
+      setOverlay({ mode: "confirm", scan: overlay.scan, match: c, note: overlay.note, fromList: overlay });
     },
+    backToList() { const o = overlay; if (o?.fromList) setOverlay(o.fromList); },
     reasons() { setOverlay(o => ({ mode: "reasons", scan: o.scan, match: o.match || null, returnTo: o })); },
     // The jersey just passed turns out to have a problem: reopen it on the
     // reasons screen. The chosen reason flags it (its pass is taken back);
@@ -5229,7 +5265,7 @@ export default function App() {
                       {(l.damagePhotos || []).map((p, i) => <img key={i} src={p} alt="" title="Damage photo — click to enlarge" onClick={() => setBigPhoto(p)} style={{ width: 72, height: 54, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: "zoom-in", border: "2px solid #ef4444" }} />)}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: statusColor(l.status) }}>{cap(l.status)}</span>
-                        <div style={{ fontWeight: 700, fontSize: 18, marginTop: 2 }}>Read: #{l.detected?.number || "?"} · {l.detected?.name || "—"}</div>
+                        <div style={{ fontWeight: 700, fontSize: 18, marginTop: 2 }}>{l.typed ? `Typed: #${l.typed.number || "?"} · ${l.typed.name || "—"}` : `Read: #${l.detected?.number || "?"} · ${l.detected?.name || "—"}`}</div>
                         {l.match && (
                           <div style={{ fontSize: 15, color: "#cbd5e1", marginTop: 2 }}>
                             Matched: {l.match.name || "—"} #{l.match.number}{l.match.size ? ` · ${l.match.size}` : ""}{l.match.team ? ` · ${l.match.team}` : ""}{binOf(l.match) !== null ? ` · Box ${binOf(l.match)}` : ""}

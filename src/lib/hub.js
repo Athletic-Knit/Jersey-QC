@@ -128,6 +128,9 @@ export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, note
         id: l.ledgerId ?? l.id, t: l.timestamp, status: l.status, order: orderNumber, run: orderRun, jerseyType, operator: l.operator || operatorName, rowId: l.match?._id,
         number: l.match?.number ?? l.detected?.number ?? "", name: l.match?.name ?? l.detected?.name ?? "", size: l.match?.size ?? "", team: l.match?.team ?? "",
         offRoster: !!l.match?.offRoster, reason: l.reason || "", resolution: l.resolution || "",
+        // What the operator typed for a hand entry, beside what the camera read (`read` stays the camera's:
+        // the replay re-runs the scan from it).
+        ...(l.typed ? { typed: `#${l.typed.number || "?"}${l.typed.name ? " " + l.typed.name : ""}` } : {}),
         read: l.detected ? `#${l.detected.number || "?"}${l.detected.number_complete === false ? "?" : ""}${l.detected.name ? " " + l.detected.name : ""}${l.detected.laid_flat === false ? " [not flat]" : ""}` : "",
       };
       if (l.status === "flagged" && i < PHOTOS_PER_REPORT) { if (l.photo) ev.photo = l.photo; if (l.damagePhotos?.length) ev.damagePhotos = l.damagePhotos; }
