@@ -241,3 +241,48 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - The package change means the next promotion to production runs `npm ci` with the floor's server stopped, once the new promote.ps1 is on the server PC.
 - **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (no blockers).
 - **Commits:** 6ed62ca (dead code), 8ebc5f7
+
+## 2026-11-23 · Phase 6 · The small fixes (review, low findings)
+- **Sorted:** of the 60 low findings, about 25 were fixed here, about 10 had already been fixed in phases 1–5, and about 15 (documents) go to phase 7. About 8 design points that need the owner (one data file, the whole log every 5 s, stations hard-coded, status words) are left for a decision, together with the letters the owner said are not used (ø, ł, ß).
+- **Done in three parallel pieces, merged:** the station (App.jsx, by the Claude session), the libraries (a helper), and the hub and scripts (another helper), each on its own copy of the code.
+- **Station (8791077, and the review's blocker):**
+  - **Finish order** is a click: Enter (the pedal) no longer finishes an order. This changes the owner's 12 Nov note; to confirm with the owner.
+  - **After a pick from a list**, "← Back to the list": a wrong pick had no way back.
+  - **Other at sign-in** asks for the name on the screen's keys (it used to sign in as "Other").
+  - **The resume screen** counts done as passed or by hand.
+  - **The box weight field** can be typed in.
+  - **The board's day picker** drops answers for a day no longer picked.
+  - **Add roster** adds to the roster as it is after the file is read.
+  - **The self-check** logs the read its match came from.
+  - **The turn check** uses the rows the matcher sees.
+  - **Hand entries** keep what was typed ("Typed: #N · NAME"; `typed` on the hub event).
+  - **The order number field** takes digits only.
+  - **Printer errors** are in plain words (PowerShell's text stays in the server log).
+  - **Typed name and team:** choosing a team in the hand form no longer passes a row whose name differs from the name typed.
+- **Libraries (13df31a, and the review's note):**
+  - A typed name that is not the row's name is a question.
+  - A title row's order number needs a digit.
+  - "12.0" and "7.00" are 12 and 7.
+  - A line break inside a quoted CSV cell is a space, and a record that takes in more than two line breaks falls back to plain lines (a stray quote no longer swallows rows).
+  - The day sheet's Passed is lowered only by an undo of a pass.
+  - Ladies sizes are one box class below adult (an estimate).
+  - A past order's flags keep their resolution.
+- **Hub and scripts (126ecfb):**
+  - No printing on development or testing unless `JQC_STAGE_PRINT=1` in their `.env.local`. To tell the owner: the testing server no longer prints by default.
+  - An unreadable order file is kept aside before a park writes over it.
+  - `merge-hub-data.mjs` keeps unfinished orders, open boxes and every newer part of the file, and says what it did with `hub-orders`.
+  - `hub-stress.mjs` needs an address and refuses 5173.
+  - `serve-hidden.vbs` keeps the last run's log as `server-previous.log`.
+  - `promote.ps1` says when the push of production failed, and lists the stage config and the replay plugin among the files that reload the server.
+- **Tests added:** 24, in `review-rules`, `typed-number`, `roster`, `export`, `box-sim`, `damaged`, `merge-hub` and a new `hub-order-file`.
+- **Checks:**
+  - Lint is clean and all 530 tests pass.
+  - The 3000-order simulation shows WRONG GREEN 0, WRONG DUPLICATE 0 and 0 roster rows lost in parsing; green is 70.8%.
+  - The `.ps1` files parse; the `.vbs` was run in a scratch copy.
+  - Not tried in the browser.
+- **Review:** Opus, blockers only. One blocker, fixed: the hand form's team shortcut passed #12 JONES when SMITH 12 was typed with team Navy.
+- **Left open (non-blocking):**
+  - `merge-hub-data.mjs` cannot remove an unfinished order that an older copy still has.
+  - `serve-hidden.vbs` loses the older previous log if `server.log` is held open.
+  - `vite.config.diag.js` (the development test server, not in git) still prints on the Zebra.
+- **Written by** the Claude session (Opus 5.5) and two helpers · **reviewed by** Opus (one blocker, fixed).

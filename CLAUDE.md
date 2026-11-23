@@ -145,6 +145,24 @@ Expected columns (case-insensitive, auto-detected):
   - A row with nothing in the field the order is sorted by (blank team on a by-team order) goes in a "No team" / "No size" bin (`BLANK_KEY`), so every jersey is in a bin. A jersey flagged after its bin was closed leaves that bin (`dropFromClosed` in `chooseReason` / `reasonSubmit`).
   - Labels: every one-line `^FB` field is squeezed (narrower letters) until its text fits, so no label can wrap over itself (`line` in labels.js).
 - Reports (17 Nov 2026, `src/lib/export.js`): every flag has a defect category from its reason (`cat` on each reason and `reasonCategory` / `DEFECT_CATEGORIES` in config.js: Decoration, Artwork, Sewing, Label, Fabric, Cleaning, Order, Other; a "Wrong or missing size label" reason was added to every menu). export.js never imports config.js: the caller passes `categoryOf`. The day sheet has "Flag rate %" and "Pass rate %" (of the jerseys inspected: passed + by hand + flagged) on its station and order rows, an "Operators" sheet (a row per operator) and a "Defects" sheet (`buildDefectsSheet`). The order workbook has a "Summary" sheet (`buildOrderSummarySheet`: counts, rates, pace, defects, and every jersey that is in no box). "Compare days" on the supervisor board (`CompareDays`, `hub.ledgerRange`, `GET /api/hub/ledger?from=&to=`: slim, no photos, no rosters) downloads one workbook over a date range (`buildCompareSheets`): by day, by operator, operator by day, station by day, part of the day (before noon / noon to 6 pm / after 6 pm, standing in for shifts until the floor's shift times are known) and defects by day.
+- Small fixes (code review of 23 Nov 2026, phase 6; the older notes elsewhere in this file give way to these):
+  - **Finish order is a click.** Enter no longer confirms it: the pedal sends Enter, so one reflex press finished the order. This changes the 12 Nov note "Enter or ✓ prints"; the owner may want to confirm it.
+  - **Printing on development and testing is OFF** unless `.env.local` there has `JQC_STAGE_PRINT=1` (vite.config.stage.js). Their `.env.local` is copied from production, so test orders printed on the floor's Zebra. The development test server started from `vite.config.diag.js` (not in git) is not covered.
+  - **Hand entry:**
+    - A typed name that is not the row's name is a question, never a green: `match.js`, and the team shortcut in `manualSubmit`.
+    - A typed entry keeps what was typed: `typed` on the log entry, shown as "Typed: #N · NAME", and `typed` on the hub event beside the camera's `read`.
+  - **Roster files:**
+    - "12.0" and "7.00" from Excel are 12 and 7.
+    - A line break inside a quoted CSV cell is a space. A record that takes in more than two line breaks falls back to plain lines, so a stray quote cannot swallow rows.
+    - A title row's order number needs a digit ("Order Form" is not order "Form").
+  - **Other at sign-in** asks for the name, on the screen's keys.
+  - **After a pick from a list**, the green screen has "← Back to the list".
+  - **Packing:** ladies sizes are one box class below adult (an estimate).
+  - **The data file:** an unreadable order file is kept aside before a park writes over it. `merge-hub-data.mjs` keeps unfinished orders and open boxes.
+  - **The scripts:**
+    - `serve-hidden.vbs` keeps the last run's log as `data\server-previous.log`.
+    - `hub-stress.mjs` needs an address and refuses 5173.
+    - `promote.ps1` says when the push of production failed.
 - Consolidation (code review of 23 Nov 2026, phase 5):
   - **What a read becomes** is `src/lib/scanpolicy.js` (`screenFor`, `matchRead`, `readOptions`, `nothingRead`): a failed read is SCAN FAILED, nothing readable shows no screen, then green, ALREADY DONE, a yellow list or NOT FOUND. `doRunScan` in App.jsx and the operator simulation both call it, so the simulation tests the station's real rule, not a copy.
   - **App smoke tests:** `src/__tests__/app-smoke.test.jsx` renders the whole station in jsdom with Testing Library, with stand-ins only for the model's read, the sounds, the canvas and the hub. It covers resume, scan → green → checklist → Confirm, and Finish of a ship-with order followed by New order. A test file that needs a browser starts with `// @vitest-environment jsdom`.

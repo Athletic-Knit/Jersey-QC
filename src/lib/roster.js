@@ -196,19 +196,25 @@ export function shipWithOf(rows) { return (rows && rows.shipWith) || []; }
 // mark (12") cannot swallow the lines after it; a quote never closed means the
 // file was not quoted that way, and the plain lines are used as before.
 export function splitCSVRecords(text, delim) {
+  // A stray quote at the start of a cell ("6 in) can pair with a real one lines later and swallow
+  // every row between them (phase 6 review). A roster cell is never more than a few lines, so a
+  // record that took in more than two line breaks means the quotes were not CSV quoting: the
+  // plain lines are used instead, as before.
+  const MAX_BREAKS_IN_A_CELL = 2;
   const out = [];
-  let cur = "", inQ = false, atStart = true;
+  let cur = "", inQ = false, atStart = true, breaks = 0;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (inQ) {
       if (ch === '"') { if (text[i + 1] === '"') { cur += '""'; i++; continue; } inQ = false; cur += ch; }
-      else if (ch === "\r" && text[i + 1] === "\n") { cur += " "; i++; }
-      else if (ch === "\n" || ch === "\r") cur += " ";
+      else if (ch === "\r" && text[i + 1] === "\n") { cur += " "; i++; breaks++; }
+      else if (ch === "\n" || ch === "\r") { cur += " "; breaks++; }
       else cur += ch;
+      if (breaks > MAX_BREAKS_IN_A_CELL) return text.split(/\r?\n/);
       continue;
     }
     if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
-      out.push(cur); cur = ""; atStart = true;
+      out.push(cur); cur = ""; atStart = true; breaks = 0;
       if (ch === "\r") i++;
       continue;
     }

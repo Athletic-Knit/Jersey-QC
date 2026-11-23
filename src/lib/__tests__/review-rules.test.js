@@ -120,3 +120,23 @@ describe("NN: a name read where the roster row has no name is yellow", () => {
     expect(findMatches([row(0, "", "5")], "ZHANG", "5", { typed: true }).type).toBe("exact");
   });
 });
+
+describe("phase 6 review: a team chosen by hand never passes a row whose name differs from the name typed", () => {
+  it("the source: the team shortcut in manualSubmit needs the name to fit as well as the number", async () => {
+    const fs = await import("node:fs");
+    const src = fs.readFileSync(new URL("../../App.jsx", import.meta.url), "utf8");
+    expect(src).toMatch(/same\.length === 1 && numberFits\(same\[0\]\) && nameFits\(same\[0\]\)/);
+    expect(src).toMatch(/const nameFits = r => !norm\(name\) \|\| !norm\(r\.name\) \|\| nameMatches\(name, r\.name\);/);
+  });
+});
+
+describe("phase 6 review: a stray quote does not swallow roster rows", () => {
+  it("a cell starting with an unclosed inch mark and a real quote later: every row is kept", () => {
+    const r = parseCSV('Name,Number,Note\nSmith,5,"6 in\nJones,7,ok\nLee,9,ok\nKim,11,ok\nPark,12,"a, b"\n');
+    expect(r.map(x => x.name)).toEqual(["Smith", "Jones", "Lee", "Kim", "Park"]);
+  });
+  it("a real line break inside a quoted cell still reads as one cell", () => {
+    const r = parseCSV('Name,Number\n"Smith\nJr",5\nJones,7\n');
+    expect(r.map(x => x.name)).toEqual(["Smith Jr", "Jones"]);
+  });
+});
