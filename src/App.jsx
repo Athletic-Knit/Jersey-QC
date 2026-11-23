@@ -16,6 +16,7 @@ import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyChe
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { duplicateOptions } from "./lib/dupoptions.js";
+import { matchRead, screenFor } from "./lib/scanpolicy.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel } from "./lib/printjobs.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG } from "./config.js";
@@ -3892,11 +3893,7 @@ export default function App() {
       console.log(`Read in ${Date.now() - t0} ms: #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"}${r.laid_flat ? "" : " [not flat]"} (${r.jersey_colour || "?"}${r.trim_colour ? "/" + r.trim_colour : ""}; sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
       return r;
     };
-    const matchOf = d => (!d.name && !d.number) ? null : findMatches(scanRoster, d.name, d.number, {
-      nameComplete: d.name_complete, numberComplete: d.number_complete,
-      position: d.number_position, obstruction: d.obstruction,
-      colour: d.jersey_colour, trim: d.trim_colour, laidFlat: d.laid_flat, orientation: d.orientation,
-    });
+    const matchOf = d => matchRead(scanRoster, d);   // the read as the matcher's options: src/lib/scanpolicy.js
 
     let detected = { name: "", number: "" };
     let apiError = null;
@@ -3960,34 +3957,24 @@ export default function App() {
     // so a correction later can be told apart from the operator answering a
     // question: a green overridden is a mistake, a pick from a list is not.
     const scanObj  = { id: Date.now(), detected, thumb: dataUrl, smallThumb, photo, check, shown: null };
-    const showFlag = (reason, title) => { scanObj.shown = { mode: "flag" }; setOverlay({ mode: "flag", scan: scanObj, reason, title }); playTone("flag"); };
-
-    if (apiError) { showFlag("API error: " + apiError, "SCAN FAILED"); return; }
-    // The camera looked at an empty table. Hands-free (the jersey was lifted,
-    // nothing put down yet): remember what the table looks like so the gate
-    // waits through it, arm again, say nothing. A B press: the same, plus a
-    // quiet "No jersey in view" for a moment. Never a red screen, never a
-    // form, nothing in the log — there is no jersey to enter.
+    // Which screen this read gets: src/lib/scanpolicy.js (screenFor), shared with the operator simulation.
+    const sc = screenFor({ error: apiError, read: detected, match: m });
     // Nothing readable at all — an empty table, or fabric and hands with no
-    // name or number in view. Either way there is nothing to enter, so never a
-    // red screen: an empty table is learned for hands-free, a B press gets a
+    // name or number in view. There is nothing to enter, so never a red
+    // screen: an empty table is learned for hands-free, a pedal press gets a
     // quiet notice for a moment, and the gate re-arms. Nothing in the log.
-    if (detected.jersey_present === false || (!String(detected.number || "").trim() && !String(detected.name || "").trim())) {
-      const empty = detected.jersey_present === false;
-      console.log(`[${auto ? "hands-free" : "scan"}] ${empty ? "nothing on the table — learned it" : "no name or number in view"} — waiting for a jersey`);
-      if (empty) gateRef.current.learnTable(lastScanFrameRef.current);
-      if (!auto) { setNoJersey(empty ? "No jersey in view" : "No name or number in view"); clearTimeout(noJerseyTimer.current); noJerseyTimer.current = setTimeout(() => setNoJersey(""), 2200); }
+    if (sc.mode === null) {
+      console.log(`[${auto ? "hands-free" : "scan"}] ${sc.empty ? "nothing on the table — learned it" : "no name or number in view"} — waiting for a jersey`);
+      if (sc.empty) gateRef.current.learnTable(lastScanFrameRef.current);
+      if (!auto) { setNoJersey(sc.empty ? "No jersey in view" : "No name or number in view"); clearTimeout(noJerseyTimer.current); noJerseyTimer.current = setTimeout(() => setNoJersey(""), 2200); }
       armRef.current();
       return;
     }
-    // A jersey reached the screen: one of the owed checks is spent on it.
-    if (vigilRef.current.scanDone()) setChecksLeft(vigilRef.current.remaining);
-    if (m === null) { showFlag("No name or number could be read.", "COULD NOT READ"); return; }
-
-    if (m.type === "exact")          { scanObj.shown = { mode: "confirm", id: m.match._id }; setOverlay({ mode: "confirm", scan: scanObj, match: m.match }); }
-    else if (m.type === "duplicate") { scanObj.shown = { mode: "duplicate", id: m.match._id }; setOverlay({ mode: "duplicate", scan: scanObj, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.size ? " · " + m.match.size : ""}${m.match.scanned === "flag" ? " is flagged — with the supervisor." : " already passed this session."}` }); playTone("flag"); }
-    else if (m.type === "pick" || m.type === "close") { scanObj.shown = { mode: m.type, ids: m.candidates.map(c => c._id) }; setOverlay({ mode: m.type, scan: scanObj, candidates: m.candidates, reason: m.reason }); }
-    else showFlag(`"${detected.name || "?"}" #${detected.number || "?"} is not on this roster.${m.reason ? ` Camera: ${m.reason}.` : ""}`, "NOT FOUND");
+    // A jersey reached the screen: one of the owed checks is spent on it (not on a failed read).
+    if (!apiError && vigilRef.current.scanDone()) setChecksLeft(vigilRef.current.remaining);
+    scanObj.shown = sc.shown;
+    setOverlay({ mode: sc.mode, scan: scanObj, ...(sc.match ? { match: sc.match } : {}), ...(sc.candidates ? { candidates: sc.candidates } : {}), ...(sc.reason !== undefined ? { reason: sc.reason } : {}), ...(sc.title ? { title: sc.title } : {}) });
+    if (sc.tone) playTone(sc.tone);
   }, [roster, scanRoster, firstScanTime]);
 
   // ── Camera scan trigger ───────────────────────────────────────────────────

@@ -4,9 +4,9 @@
 // an operator who scans, picks, types, flags, un-checks and resolves, then the
 // exports, the hub snapshot, the day sheet and the saved session.
 //
-// The result screens' policy (what each read becomes) is re-stated here from
-// App.jsx: exact → green; duplicate → "already passed"; pick/close → yellow
-// list; none → NOT FOUND; nothing read → COULD NOT READ (retry).
+// The result screens' policy (what each read becomes) is the station's own,
+// imported from src/lib/scanpolicy.js (screenFor), which App.jsx calls too:
+// green; "already passed"; yellow list; NOT FOUND; nothing read → scan again.
 //
 //   SIM_ORDERS=5000 npx vitest run operator-sim     (default 1500 orders)
 //
@@ -37,6 +37,7 @@ import { snapshotOf } from "../hub.js";
 import { saveSession, loadSession, clearSession } from "../persist.js";
 import { buildDamageRows } from "../damage.js";
 import { createVigilance, reconcile } from "../vigilance.js";
+import { matchRead, screenFor } from "../scanpolicy.js";
 import { reasonsFor, JERSEY_TYPES } from "../../config.js";
 
 function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
@@ -171,7 +172,7 @@ function workOrder(r, seed, k, stats, findings) {
   // jerseys are read twice and the reads must agree. SIM_VIGIL=0 turns it off
   // to see what it buys.
   const vig = createVigilance({ checks: process.env.SIM_VIGIL === "0" ? 0 : undefined });
-  const matchOf = read => (!read.name && !read.number) ? null : findMatches(roster, read.name, read.number, { nameComplete: read.name_complete, numberComplete: read.number_complete, position: read.number_position, obstruction: read.obstruction, colour: read.jersey_colour, trim: read.trim_colour, laidFlat: read.laid_flat });
+  const matchOf = read => matchRead(roster, read);   // the station's own: src/lib/scanpolicy.js
 
   const byHand = (truth, why) => {
     seconds += T.byHand; stats.byHand++; stats.byHandWhy[why] = (stats.byHandWhy[why] || 0) + 1;
@@ -216,9 +217,11 @@ function workOrder(r, seed, k, stats, findings) {
       const related = x => normNum(x.number) === normNum(truth.number) || normNum(x.number) === normNum(read.number) || (truth.name && norm(x.name) === norm(truth.name));
       const ctx = () => `${ctxHead}: jersey #${truth.number} "${truth.name}" ${truth.team} ${truth.size}${item.again ? " (scanned AGAIN)" : ""}${item.extra ? " (STRAY)" : ""}, camera ${kind} → read #${read.number}${read.number_complete ? "" : "?"} "${read.name}"${read.name_complete ? "" : "…"}${read.laid_flat ? "" : " [not flat]"} colour "${read.jersey_colour}"; related rows ${JSON.stringify(roster.filter(related).map(x => [x.number, x.name, x.team, x.size, x.scanned || "open"]))}; history ${JSON.stringify(log.filter(l => l.match && related(l.match)).reverse().map(l => [l.status, l.match.number, l.match.size, l.reason || ""]))}`;
       if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace] #${truth.number} "${truth.name}" ${truth.team} ${truth.size}${item.again ? " AGAIN" : ""}${item.extra ? " STRAY" : ""} | ${kind} → #${read.number} "${read.name}" ${read.jersey_colour} | ${m ? m.type : "null"} ${m?.match ? `→ #${m.match.number} ${m.match.team} ${m.match.size}` : ""} ${m?.candidates ? JSON.stringify(m.candidates.map(c => [c.number, c.team, c.size, c.scanned || "open"])) : ""}`);
-      if (m === null) { seconds += T.retry; stats.retries++; continue; }                  // COULD NOT READ → scan again
+      // The screen the station shows for this read (src/lib/scanpolicy.js, the same function App.jsx calls).
+      const sc = screenFor({ read, match: m });
+      if (sc.mode === null || m === null) { seconds += T.retry; stats.retries++; continue; }   // nothing readable / COULD NOT READ → scan again
       vig.scanDone();                                                                      // a screen is shown: one owed check spent
-      if (m.type === "exact") {
+      if (sc.mode === "confirm") {
         const g = m.match;
         if (item.again && !sameJersey(g, truth) && norm(g.name) === norm(truth.name) && normNum(g.number) === normNum(truth.number)) { stats.twinRescan++; seconds += T.retry; done = true; continue; }
         // A digit under a hand or a fold: the read is a one-digit number that is on the roster, so it is green on that row
@@ -238,15 +241,15 @@ function workOrder(r, seed, k, stats, findings) {
         setRow(g._id, "pass"); add({ detected, match: g, status: "pass", thumb: "t".repeat(6_000) });
         done = true; continue;
       }
-      if (m.type === "duplicate") {
+      if (sc.mode === "duplicate") {
         const alreadyDone = !item.extra && roster.some(x => sameJersey(x, truth) && isDone(x)) && !roster.some(x => sameJersey(x, truth) && !isDone(x));
         if (!alreadyDone) { if (kind === "digit misread" || kind === "digit hidden" || item.extra) stats.misreadDup++; else { findings.push(`B WRONG DUPLICATE: ${ctx()} → "already passed" on #${m.match.number} ${m.match.name}`); stats.wrongDup++; } seconds += T.retry; continue; }
         seconds += T.duplicate; stats.dups++;
         if (!item.again) add({ detected, match: m.match, status: "flagged", reason: "Duplicate — scanned again after passing", photo: "data:image/jpeg;base64," + "x".repeat(40_000) });
         done = true; continue;
       }
-      if ((m.type === "pick" || m.type === "close") && item.again && roster.some(x => sameJersey(x, truth) && isDone(x)) && !m.candidates.some(x => sameJersey(x, truth) && !isDone(x))) { stats.dups++; seconds += T.duplicate; done = true; continue; }
-      if (m.type === "pick" || m.type === "close") {
+      if ((sc.mode === "pick" || sc.mode === "close") && item.again && roster.some(x => sameJersey(x, truth) && isDone(x)) && !m.candidates.some(x => sameJersey(x, truth) && !isDone(x))) { stats.dups++; seconds += T.duplicate; done = true; continue; }
+      if (sc.mode === "pick" || sc.mode === "close") {
         seconds += T.yellow; stats.yellows++; stats.yellowByKind[kind] = (stats.yellowByKind[kind] || 0) + 1;
         stats.listLen.push(m.candidates.length);
         const c = m.candidates.find(x => sameJersey(x, truth) && !isDone(x));

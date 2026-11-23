@@ -198,3 +198,45 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - Development's own folder (this PC) still links production's packages until `Development server.bat` is next run, which makes its own.
 - **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (two blockers, fixed and re-checked).
 - **Commit:** 9760346
+
+## 2026-11-23 · Phase 5 · Consolidation (review: "App.jsx has no tests", the experiments and dead code, one dialog state)
+- **Findings:**
+  - App.jsx (about 5,300 lines of screens and state) had no tests.
+  - The operator simulation re-stated the result-screen rules by hand.
+  - Experiments and dead branches stayed in the scan path: the input trial, SECOND_LOOK, the always-true `wide` layout, and the unreachable "entered by hand" screen.
+  - About 19 dialog flags were read in two hand-written lists.
+- **Rule:** review fixes. The input trial was taken out as `tools/INPUT-TRIAL.md` itself said to ("Removing it"), as part of the phase plan the owner approved. Nothing an operator uses changes.
+- **What changed and why:**
+  - **Removed (commit 6ed62ca, 874 lines):**
+    - the input trial: its model, page, Settings section, header pill and simulation report;
+    - SECOND_LOOK;
+    - the `wide` flag and the full-screen result it never used;
+    - the "entered by hand" screen (`manualDone`), unreachable since 20 Nov 2026.
+  - **What a read becomes** is now `src/lib/scanpolicy.js` (`screenFor`, `matchRead`, `readOptions`, `nothingRead`). `doRunScan` in App.jsx and the operator simulation both call it, so the simulation tests the station's real rule.
+    - Doing so showed that the old copy differed in one case. A blank first read with a good second (self-check) read went on in the simulation, but the station shows "No name or number in view" and the operator scans again.
+    - The simulation's numbers moved by that: green 70.9% → 70.8%, retry 3.1% → 3.3%. WRONG GREEN is still 0.
+  - **App smoke tests** (`src/__tests__/app-smoke.test.jsx`, jsdom and Testing Library): the whole station is rendered with stand-ins only for the model's read, the sounds, the canvas and the hub. Three tests:
+    - resume an order;
+    - scan → green → checklist → Confirm passes the jersey;
+    - Finish of a ship-with order leaves Box 1.1 open on the hub, and New order sends its last report first.
+  - **`vitest.config.js`** (new): tests compile JSX the modern way and no longer load the server plugins (the hub plugin opened data/hub.json on every test run).
+  - **The development folder** got its own packages (`npm ci` through `tools/stagelib.ps1`; the link to production's packages was removed, production's folder untouched: 150 package folders before and after). The test packages went in as devDependencies: jsdom 25.0.1, @testing-library/react 16.1.0.
+  - **One dialog state: not refactored.** Phase 1 (F6) already made ONE list of dialogs (`anyDialogOpen`) that the pedal, hands-free, SCAN and the result screen read, with a test that fails when a dialog state is missing from it. A single variable cannot hold the screens that stack (Print over the done screen, a photo over History) and would have touched about 60 places for no gain. The review agreed.
+  - **Files:**
+    - changed: `src/App.jsx`, `src/config.js`, `CLAUDE.md`, `package.json`, `package-lock.json`, the simulation and dialog tests;
+    - new: `src/lib/scanpolicy.js`, `vitest.config.js`, tests;
+    - deleted: `src/lib/trial.js` with its test, `tools/input-trial.html`, `tools/INPUT-TRIAL.md`.
+- **Tests added:**
+  - `src/lib/__tests__/scanpolicy.test.js` (7 tests);
+  - `src/__tests__/app-smoke.test.jsx` (3 tests).
+  - The trial's 10 tests went with it.
+- **Checks:**
+  - Lint is clean and all 506 tests pass.
+  - The 3000-order simulation shows WRONG GREEN 0 and findings 0.
+  - The test server (5174) started on the development folder's own packages, offered the saved order, and drew the station screen with no console errors.
+- **Review:** Opus, blockers only: no blockers. It confirmed that `screenFor` reproduces the old `doRunScan` exactly (order of checks, the self-check count, tones, every overlay field) and that the simulation's change is the case described above. Two of its notes were taken: the Finish smoke test checks that Box 1.1 is sent, and the test config says why it sets JSX twice.
+- **Left open (non-blocking):**
+  - `tools/break-it.js` and `tools/browser-harness.js` still look for the "ENTERED BY HAND" screen, gone since 20 Nov 2026. Their by-hand checks need to expect the green screen.
+  - The New order smoke test checks that a report was sent, not that it went before the order was cleared.
+  - The package change means the next promotion to production runs `npm ci` with the floor's server stopped, once the new promote.ps1 is on the server PC.
+- **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (no blockers).
