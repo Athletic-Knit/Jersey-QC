@@ -1,103 +1,72 @@
-# Jersey QC Scanner — Roadmap
+# Jersey QC Scanner: Roadmap
 
 ## Vision
 
-The long-term goal is to evolve this tool into a **complete finishing floor management system** — a single platform that covers every process from the moment a finished jersey comes off the line to the moment it ships out the door.
+Grow this tool into a **complete finishing-floor system**: one platform for every step from the moment a finished jersey comes off the line to the moment it ships.
 
-Built so far: QC scanning (roster matching, defect flagging), reporting and damage tracking, and packing assist (boxes, labels, lists).
+How each built piece works is in `CLAUDE.md`; the latest decisions are in `CHANGELOG.md`.
 
-Still ahead: pack-by-player, shipping prep, and cross-order coordination.
+> **Status, 23 Nov 2026.** QC scanning, reporting and packing assist are built and in use on the floor. Real orders have been run (the largest on record is a 521-jersey sort on 18 Nov 2026; the station was checked for a 500-jersey order on 11 Nov). Orders that ship together already share boxes. Still ahead: the items below.
 
----
+## Done
 
-> **Status, 17 Nov 2026.** Phases 1 to 3 are built except for the items marked open below. The one thing that has never happened is a real order run start to finish by an operator: the largest order on record is 81 jerseys. Phases 4 and 5 are not started. Details of how each piece works are in `CLAUDE.md`.
+- QC scanning: camera read by a Claude model, roster matching (exact, close, number-only, turned and folded jerseys), green / yellow / red screens, hands-free scanning, the operator's tick-off checklist, the self-check after a mistake.
+- Matching rules of the 23 Nov 2026 review: a doubtful read is always yellow; 07 and 7 are different jerseys; green needs the whole name; a team name never decides a green.
+- Flagging: one short reasons menu that follows the jersey type, "Dirt or mark" cleaned at the station, damage photos, flag tickets, the DAMAGED box.
+- Boxes by team, by size or not sorted; box labels, box lists and count labels on the Zebra; Box full; the box model that learns box sizes from the floor; shortage warnings before sealing.
+- Orders that ship together: boxes left open at Finish order are taken by the next order of the group, and the count label names both orders.
+- Unfinished orders kept on the server (Finish later), picked up at any station, jerseys back from repair, and the supervisor's Settle (back and good, or ship short).
+- Supervisor board: live station cards, rosters sent to stations, one station per order, 90 days of look-back, Wall view.
+- Reports: order workbook with summary and boxes, day sheet (operators, defects by category, pass and flag rates), damage report with photos, Compare days.
+- The Print menu: any label of the current order or a past one.
+- Sorter role (sorting only, no inspection).
+- The API key added by the server, not the page (the code side; see below for the setting).
+- Development, testing and production stages with promotion scripts, backups and each stage's own packages; the hub refuses to write over a data file it cannot read.
 
-## Phase 1 — Production test & stabilisation *(built; floor test open)*
+## Next: put the floor setup right
 
-- [x] Camera-based QC scanning with Claude Haiku OCR
-- [x] Roster matching (exact, fuzzy, number-only, turned and folded jerseys, boxes by team or size)
-- [x] Supervisor board (multi-station, rosters sent to stations, one station per order, 90 days of look-back). "Pack groups" from the first prototype do not exist in this version; see Phase 5.
-- [x] Excel/CSV export of scan results and event log
-- [x] Server-side API proxy and image optimisation. The proxy adds the API key on the server (17 Nov 2026).
-- [ ] Take the key off the page: rename `VITE_CLAUDE_API_KEY` to `CLAUDE_API_KEY` in `.env.local` (the code reads both; the old name is still handed to every browser)
-- [ ] Full production floor test (a real order, a real operator; not yet run)
-- [ ] A fixed home for the server (one always-on PC on the wired network, a built copy instead of the development server, its data out of the synced folder)
-- [ ] Bug fixes and refinements from test feedback
+- [ ] **Take the key off the page.** Rename `VITE_CLAUDE_API_KEY` to `CLAUDE_API_KEY` in each `.env.local` (the code reads both, but the old name is still sent to every browser). Check whether the server PC's file has been renamed.
+- [ ] **Move production out of OneDrive.** Run `tools/setup-production.ps1` on the server PC, then `-StopOnly` on AK-NB-164, so one server writes one data file. Look for `PRODUCTION-MOVED.txt` in the OneDrive folder to see whether it has been done.
+- [ ] **The testing server.** Confirm which PC runs it (`C:\JerseyQC-testing`, port 5175, started with `Servers\Testing server.bat`). A testing server was set up by hand on 19 Nov 2026; `CLAUDE.md` still says "not set up yet".
+- [ ] **A fixed home for the server.** An always-on PC on the wired network, a real certificate (no browser warning), and a production build instead of the development server.
+- [ ] **Sign-in and the hub.** The PINs are in the browser's code and the hub has no authentication: anyone on the network can call it. Real sign-in comes with a proper server.
+- [ ] Bug fixes and refinements from floor feedback; the decisions left open by the 23 Nov 2026 review (see `CHANGELOG.md`, "Left open").
 
----
+## Reporting
 
-## Phase 2 — Reporting & damage tracking *(built)*
+- [ ] Compare the damage report's columns with the existing Damage Scanning Spreadsheet (nobody has done it yet).
+- [ ] Real shift times: the comparison splits a day into before noon, noon to 6 pm and after 6 pm until the floor's shifts are known.
 
-### Summary reports
-- [x] Damage findings per jersey: reason, scan photo, damage photos, Excel damage report
-- [x] Missing pieces: marked at the station, counted at Finish order, listed on the order's Summary sheet ("Not in a box")
-- [x] Breakdown by defect category (decoration, artwork, sewing, label, fabric, cleaning, order, other): "Defects" sheet on the day sheet, on the order's Summary sheet, and day by day on the comparison
-- [x] Pass rate, flag rate and scan time per operator, per station and per order: day sheet ("Summary", "Orders", "Operators") and the order's Summary sheet
+## Packing
 
-### Damage tracking integration
-- [x] One scan event carries the match result, the flag reason and the damage photos; the damage report is exported from the same records
-- [ ] Confirm the damage report's columns against the existing Damage Scanning Spreadsheet (nobody has compared them)
+- [ ] **Weight.** The owner will supply a weight regression (all 9 sizes weighed) to replace the box model's estimates; later a scale connected to the station PC.
+- [ ] **A separate Packer station.** The role is on the sign-in screen, blocked as "under development".
+- [ ] New list layouts tried on paper on 13 Nov 2026 (20 names a label): waiting for the manager's decision. (The count label with the size mix is done.)
 
-### Productivity tracking
-- [x] Jerseys per hour, flag rate, time per order (station screen, board, day sheet)
-- [x] Comparing days: "Compare days" on the supervisor board, one workbook over a date range (by day, by operator, operator by day, station by day, defects by day)
-- [ ] Shifts: the comparison splits a day into before noon, noon to 6 pm and after 6 pm until the floor's real shift times are given
+## Hardware not yet tested
 
----
+- [ ] Hands-free thresholds on real fabric over a long shift (`src/lib/motion.js`).
+- [ ] A camera unplugged mid-order; two cameras on one PC.
+- [ ] One big push button in place of the pedal (the owner's plan for the Select key).
 
-## Phase 3 — Packing assist *(built; packer station open)*
+## Pack-by-player
 
-| Order type | Description | Status |
-|---|---|---|
-| Names + numbers | Player-specific jerseys | Built |
-| Numbers only | Number decoration, no name | Built |
-| No decoration | Blank jerseys | Built: counted in by team and size on the "Blanks" screen; the roster may give a quantity per line |
+An alternative packing workflow for orders that ship to individual players:
 
-### Features
-- [x] Box building: boxes named 5.1, 5.2 per team or size, Box full, contents tracked (done by the inspector while scanning)
-- [x] Label printing: jersey stickers, box labels, box lists, flag tickets, and a Print menu for reprints and past orders (Zebra ZD411)
-- [x] Box manifest: the list labels on the box and a "Boxes" sheet in the order's Excel
-- [x] Shortage alerts: the Boxes dialog and Finish order say which jerseys are in no box (not scanned, flagged, missing) before the boxes are sealed
-- [ ] A separate Packer station (the role is on the sign-in screen, blocked as "under development")
-- [ ] New label layouts tried on paper on 13 Nov (20 names a label, count label with sizes): waiting for the manager's decision
+- Group all jerseys belonging to one player across several order lines.
+- Guide the operator through one player's complete kit at a time.
+- Per-player packing slips.
 
----
+## Shipping prep and order coordination
 
-## Phase 4 — Pack-by-player
+Orders that ship together already share boxes (above). Still to come:
 
-An alternative packing workflow for orders that ship to individual players or are sorted by person rather than by team/bin:
+- **Shipments:** group orders by shipping destination; flag a shipment that waits on another order; track which boxes belong to which shipment.
+- **Shipping documents:** packing lists and bills of lading from scan data; carrier details, box count and weight pre-filled; export in the format of Athletic Knit's shipping or ERP system.
+- **Order status view:** every active order on the floor, where it is (scanning, packing, labelled, ready to ship), which are blocked, and estimated completion from scan rates.
 
-- Group all jerseys belonging to one player across multiple order lines
-- Guide operator through packing one player's complete kit at a time
-- Generate per-player packing slips
-- Useful for custom name+number orders, fan jerseys, direct-to-consumer fulfillment
+## Technical considerations
 
----
-
-## Phase 5 — Shipping prep & order coordination
-
-### Cross-order linking
-Connect multiple orders that need to ship together (extends the existing pack group concept):
-- Consolidate orders by shipping destination
-- Flag when a shipment is incomplete (waiting on another order)
-- Track which boxes belong to which shipment
-
-### Shipping documentation
-- Generate packing lists and BOLs from scan data
-- Pre-fill carrier information (address, box count, weight estimate)
-- Export in formats compatible with Athletic Knit's shipping/ERP workflow
-
-### Order status dashboard
-A supervisor-level view showing every active order across the finishing floor:
-- Where each order is in the process (scanning → packing → labeled → ready to ship)
-- Which orders are blocked or flagged
-- Estimated completion times based on scan rate data
-
----
-
-## Technical considerations for future phases
-
-- **Database**: everything is still one JSON file on the server (`data/hub.json`), Phase 3 included. It must become a real database (SQLite) before Phase 4: boxes → jerseys → players → orders → shipments. Until then the file must not sit in a folder that two PCs sync and both write (on 17 Nov 2026 that cost one PC its loaded history; the file was kept aside and nothing was lost).
-- **Label printing**: done. The server builds ZPL and sends it raw to the Zebra's Windows queue.
-- **Offline resilience**: the factory floor needs the system to keep working during network hiccups — consider a service worker or local-first data sync strategy
-- **Mobile**: packing and labelling phases may benefit from a tablet-optimised layout; the current dark theme and large-text overlays already work reasonably well on mobile
+- **Database.** Everything is one JSON file on the server (`data/hub.json`), plus one file per unfinished order. It should become a real database (for example SQLite) before pack-by-player and shipments: boxes → jerseys → players → orders → shipments.
+- **Offline.** The floor needs the system to keep working through network hiccups; today a station keeps its open order in the browser, but reads need the server and the internet.
+- **Tablets.** Packing and labelling may suit a tablet layout.
