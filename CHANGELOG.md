@@ -151,3 +151,4 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - Replace roster still rebuilds the boxes from scratch and prints the set-out labels again.
   - A column passed over now shows as an extra column in the roster table.
 - **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (two blockers, fixed and re-checked).
+- **Commit:** c8d066f
