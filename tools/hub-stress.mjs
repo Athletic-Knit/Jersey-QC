@@ -6,14 +6,32 @@
 // station, a too-large body, a stale station, the day tally. Latency of the
 // Anthropic proxy (the scan path) is measured idle and under load.
 //
-//   node tools/hub-stress.mjs [https://localhost:5173] [seconds=30]
+//   node tools/hub-stress.mjs <url> [seconds=30] [--production-yes-i-mean-it]
+//   node tools/hub-stress.mjs https://localhost:5174 30      (the development server)
+//
+// The address must be given: there is no default. Port 5173 is the floor's
+// server, and a run there writes SIM-* orders into the floor's ledger and day
+// sheet, so it is refused unless --production-yes-i-mean-it is given too (code
+// review, 23 Nov 2026: it used to default to the floor's port).
 //
 // Uses station ids st-sim1..3 and order numbers SIM-*; cleans the stations up
-// at the end. Today's ledger keeps the SIM-* orders: restore data/hub.json
+// at the end. Today's ledger keeps the SIM-* orders: restore the data file
 // from a backup afterwards if the day sheet must stay clean.
+import process from "node:process";
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-const BASE = process.argv[2] || "https://localhost:5173";
-const SECONDS = Number(process.argv[3]) || 30;
+const FORCE = "--production-yes-i-mean-it";
+const args = process.argv.slice(2).filter(a => a !== FORCE);
+const BASE = String(args[0] || "").replace(/\/+$/, "");
+if (!/^https?:\/\//i.test(BASE)) {
+  console.log("Give the hub's address: node tools/hub-stress.mjs https://localhost:5174 [seconds]  (5174 is the development server)");
+  process.exit(2);
+}
+if (new URL(BASE).port === "5173" && !process.argv.includes(FORCE)) {
+  console.log(`Refused: ${BASE} is port 5173, the floor's server. A run writes SIM-* orders into its ledger.`);
+  console.log(`Use the development server (5174) or testing (5175), or add ${FORCE} if this really is meant.`);
+  process.exit(2);
+}
+const SECONDS = Number(args[1]) || 30;
 const H = BASE + "/api/hub";
 
 const ms = () => performance.now();

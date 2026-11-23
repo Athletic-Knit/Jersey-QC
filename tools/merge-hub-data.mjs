@@ -9,17 +9,35 @@
 // kept from whichever copy has it. Files that are missing or do not parse are
 // skipped with a line saying so. The output is written to a temporary file
 // and renamed, never half-written.
+// Unfinished orders and open boxes (19-20 Nov 2026) came after this tool: they
+// are put together by id, the newest change winning, and every other part of
+// the file it does not merge itself is kept from the latest copy that has it
+// (setup-production.ps1 passes the live file last), so nothing newer is lost
+// (code review, 23 Nov 2026). The whole orders sit beside the data file in
+// <name>-orders\ (hub-orders\ for hub.json): a merge in place leaves them
+// there; written to another folder, they are copied across.
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const newer = (a, b, field) => ((Number(b?.[field]) || 0) >= (Number(a?.[field]) || 0) ? b : a);
+// When an unfinished order or an open box last changed: an open box has no
+// updatedAt, its "at" is when it was left open and takenBy.at when the next
+// order took it.
+const stamp = x => Math.max(Number(x?.updatedAt) || 0, Number(x?.at) || 0, Number(x?.takenBy?.at) || 0);
+const BY_ID = ["unfinished", "openBoxes"];
+const MERGED = ["stations", "rosters", "ledger", "boxAnswers", ...BY_ID];
 
 export function mergeHub(states) {
   const out = { stations: {}, rosters: {}, ledger: {}, boxAnswers: [] };
   for (const s of (states || []).filter(x => x && typeof x === "object")) {
-    for (const [k, v] of Object.entries(s)) if (!(k in out)) out[k] = v;          // anything this tool does not know about: kept
+    for (const [k, v] of Object.entries(s)) if (!MERGED.includes(k)) out[k] = v;   // anything this tool does not merge: the latest copy's
+    for (const k of BY_ID) {
+      if (!s[k] || typeof s[k] !== "object") continue;
+      const pool = (out[k] ||= {});
+      for (const [id, x] of Object.entries(s[k])) pool[id] = pool[id] && stamp(pool[id]) > stamp(x) ? pool[id] : x;   // a tie: the later copy
+    }
     for (const [id, st] of Object.entries(s.stations || {})) out.stations[id] = out.stations[id] ? newer(out.stations[id], st, "updatedAt") : st;
     for (const [id, r] of Object.entries(s.rosters || {})) out.rosters[id] = r;
     for (const [day, d] of Object.entries(s.ledger || {})) {
@@ -49,8 +67,36 @@ export const summary = s => {
   const days = Object.keys(s.ledger || {}).sort();
   const events = days.reduce((t, d) => t + Object.keys(s.ledger[d].events || {}).length, 0);
   const orders = days.reduce((t, d) => t + Object.keys(s.ledger[d].orders || {}).length, 0);
-  return `${days.length} days${days.length ? ` (${days[0]} to ${days[days.length - 1]})` : ""}, ${orders} orders, ${events} scans, ${Object.keys(s.stations || {}).length} stations, ${(s.boxAnswers || []).length} box answers`;
+  const more = [["unfinished", "unfinished orders"], ["openBoxes", "open boxes"]].filter(([k]) => s[k] && Object.keys(s[k]).length).map(([k, w]) => `, ${Object.keys(s[k]).length} ${w}`).join("");
+  return `${days.length} days${days.length ? ` (${days[0]} to ${days[days.length - 1]})` : ""}, ${orders} orders, ${events} scans, ${Object.keys(s.stations || {}).length} stations, ${(s.boxAnswers || []).length} box answers${more}`;
 };
+
+// The folder of whole orders the hub keeps beside a data file (createHub in
+// hub-plugin.js): data\hub.json -> data\hub-orders.
+export const ordersDirOf = file => path.join(path.dirname(path.resolve(file)), path.basename(file, path.extname(file)) + "-orders");
+
+// Brings the whole orders of the copies to the merged file's folder. Only a
+// copy's own folder counts (a conflict copy or a set-aside copy has none: the
+// hub never wrote one under that name). A file already there is replaced only
+// by a newer one. Returns the lines to print.
+export function bringOrders(inputs, outFile) {
+  const dest = ordersDirOf(outFile), lines = [];
+  const sources = [...new Set(inputs.map(ordersDirOf))].filter(d => fs.existsSync(d));
+  if (!sources.length) return [`  hub-orders: no folder of unfinished orders beside the copies; nothing to bring over`];
+  for (const src of sources) {
+    const files = fs.readdirSync(src).filter(f => !f.endsWith(".tmp") && fs.statSync(path.join(src, f)).isFile());
+    if (src === dest) { lines.push(`  hub-orders: merged in place, the ${files.length} file${files.length === 1 ? "" : "s"} in ${src} stay where they are`); continue; }
+    fs.mkdirSync(dest, { recursive: true });
+    let copied = 0, kept = 0;
+    for (const f of files) {
+      const from = path.join(src, f), to = path.join(dest, f);
+      if (fs.existsSync(to) && fs.statSync(to).mtimeMs >= fs.statSync(from).mtimeMs) { kept++; continue; }
+      fs.copyFileSync(from, to); copied++;
+    }
+    lines.push(`  hub-orders: ${copied} file${copied === 1 ? "" : "s"} copied from ${src} to ${dest}${kept ? ` (${kept} already there as new or newer, kept)` : ""}`);
+  }
+  return lines;
+}
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2), i = args.indexOf("--out");
@@ -69,4 +115,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   fs.writeFileSync(tmp, JSON.stringify(merged));
   fs.renameSync(tmp, outFile);
   console.log(`  wrote  ${outFile}: ${summary(merged)}`);
+  for (const l of bringOrders(inputs, outFile)) console.log(l);
 }

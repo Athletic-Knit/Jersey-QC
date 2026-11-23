@@ -36,10 +36,17 @@ export default defineConfig(({ mode }) => {
   const dataFile = path.join(here, 'data', stage.data)
   const floor = String(env.JQC_REPLAY_FROM || 'C:\\JerseyQC\\data\\hub.json').split(';').map(s => s.trim()).filter(Boolean)
   const replayFiles = [...floor.map(file => ({ label: 'floor', file })), { label: `this ${name} server`, file: dataFile }]
+  // No printing on development or testing unless asked for (code review, 23 Nov
+  // 2026): their .env.local is copied from production, so JERSEY_PRINTER names
+  // the floor's Zebra, and a test order printed real labels on it. With
+  // JQC_STAGE_PRINT=1 in .env.local they print as production does; otherwise
+  // every print is refused and the station shows why.
+  const printOn = String(env.JQC_STAGE_PRINT || '').trim() === '1'
+  const noPrint = async () => { throw new Error(`Printing is off on the ${name} server (JQC_STAGE_PRINT=1 in .env.local turns it on)`) }
   return {
     root: here,
     cacheDir: path.join(here, `.vite-${name}`),
-    plugins: [react(), basicSsl(), hubPlugin({ file: dataFile, ...printerEnv(env) }), replayPlugin({ files: replayFiles })],
+    plugins: [react(), basicSsl(), hubPlugin({ file: dataFile, ...printerEnv(env), ...(printOn ? {} : { print: noPrint }) }), replayPlugin({ files: replayFiles })],
     server: {
       host: true, port: stage.port, strictPort: true,
       fs: { strict: false },   // node_modules may be a link into the production folder: the fonts live there
