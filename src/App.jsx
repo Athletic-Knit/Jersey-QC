@@ -3532,6 +3532,7 @@ export default function App() {
   const handsFree      = !!settings.autoScan && !handsFreePaused && remaining > 0;
 
   const triggerRef = useRef(null);
+  const scanBusyRef = useRef(false);   // true from the first moment of a scan until its result is on screen (code review M1; see doRunScan)
   const armRef     = useRef(() => {});   // re-arm hands-free from inside a scan (set once armAutoScan exists)
   const passCount      = roster.filter(r => r.scanned === "pass").length;
   const offRosterList  = log.filter(l => l.status === S_FLAGGED && (l.match?.offRoster || l.match?.noRow) && !l.resolution);
@@ -3920,6 +3921,11 @@ export default function App() {
 
   // ── Core scan ─────────────────────────────────────────────────────────────
   const doRunScan = useCallback(async (base64, dataUrl, recapture = null, { auto = false } = {}) => {
+    // One scan at a time (code review of 23 Nov 2026, M1). The `scanning` state only reaches doTriggerScan
+    // after a re-render, so two presses in the same moment both saw "not scanning" and both scanned, and the
+    // second result replaced the first without recording it. This ref is set at once and checked first.
+    if (scanBusyRef.current) return;
+    scanBusyRef.current = true;
     const version = rosterVersion.current;
     if (!firstScanTime) setFirstScanTime(Date.now());
     gateRef.current.disarm(); setArmed(false);
@@ -3999,12 +4005,20 @@ export default function App() {
       apiError = e.message;
     }
 
-    if (version !== rosterVersion.current) { setScanning(false); return; }   // roster changed mid-flight
-    setScanning(false);
-    setThumb(dataUrl);
-    const smallThumb = await shrinkDataUrl(dataUrl);
-    // The photo a flag will carry to the supervisor: the frame cropped to the jersey.
-    const photo = await cropDataUrl(dataUrl, detected.jersey_box, 640);
+    if (version !== rosterVersion.current) { scanBusyRef.current = false; setScanning(false); return; }   // roster changed mid-flight
+    let smallThumb, photo;
+    try {
+      setThumb(dataUrl);
+      smallThumb = await shrinkDataUrl(dataUrl);
+      // The photo a flag will carry to the supervisor: the frame cropped to the jersey.
+      photo = await cropDataUrl(dataUrl, detected.jersey_box, 640);
+    } finally {
+      // The scan counts as busy until here, not before the two picture steps above (code review M1): "scanning"
+      // used to go false first, and a pedal press or SCAN click while the pictures were made started a new scan
+      // whose result replaced this one unrecorded. Nothing below waits, so this and the result screen
+      // (setOverlay) land in the same render: there is no moment with neither a scan running nor a result up.
+      scanBusyRef.current = false; setScanning(false);
+    }
     // `shown` remembers what the app first put on the screen for this jersey,
     // so a correction later can be told apart from the operator answering a
     // question: a green overridden is a mistake, a pick from a list is not.
@@ -4066,8 +4080,8 @@ export default function App() {
   // and the result would sit hidden under the dialog until the next pedal press confirmed a jersey nobody saw.
   // Rule: no scan while any dialog is open (code review of 23 Nov 2026, finding H1, and the floor's first rule:
   // no wrong green, no jersey passed unseen). The scan-result overlay is NOT in this list: it is the scan's own screen.
-  // The pedal handler, hands-free and doTriggerScan stop on this list; note that the SCAN button, with a result
-  // already showing and no dialog open, still starts a new read (as it did before this change).
+  // The pedal handler, hands-free and doTriggerScan stop on this list. A result already showing stops a new scan
+  // too (doTriggerScan, the SCAN button; code review M1): Retry on the result screen is how a new read is asked for.
   // Found by listing every show* / dialog state of this component
   // (a test, no-scan-behind-dialog.test.js, re-checks the list against the source on every run).
   // Not listed on purpose: showFilters (a panel inside the roster table, no screen over the camera) and the
@@ -4100,6 +4114,9 @@ export default function App() {
   const doTriggerScan = useCallback((opts = {}) => {
     if (!videoRef.current || !canvasRef.current || scanning || !cameraOn || roster.length === 0 || inputMode !== "camera") return;
     if (anyDialogOpen) return;   // last line of defence: whatever calls this (pedal, SCAN button, hands-free), nothing scans behind a dialog
+    // Nor over a result that is not recorded yet, nor while another scan is still reading (code review M1). A new
+    // read is asked for with the result screen's own Retry, which closes the result first.
+    if (overlay || scanBusyRef.current) return;
     if (opts?.auto !== true && waitPedalRef.current) { waitPedalRef.current = false; setWaitPedal(false); }   // the pedal (or the SCAN button) after a flag: hands-free may arm again after this one
     const video = videoRef.current;
     if (!video.videoWidth) { setError("Camera is still starting — try again in a second."); return; }
@@ -4108,7 +4125,7 @@ export default function App() {
     if (!track || track.readyState !== "live") { setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); return; }
     const f = captureFrame();
     if (f) doRunScan(f.base64, f.dataUrl, captureFrame, { auto: opts?.auto === true });
-  }, [scanning, cameraOn, roster.length, inputMode, anyDialogOpen, captureFrame, doRunScan, stopCamera]);
+  }, [scanning, cameraOn, roster.length, inputMode, anyDialogOpen, overlay, captureFrame, doRunScan, stopCamera]);
   useEffect(() => { triggerRef.current = doTriggerScan; }, [doTriggerScan]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
@@ -5018,7 +5035,7 @@ export default function App() {
                           <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 56, fontSize: 18 }}>■</button>
                           <button onClick={toggleHandsFree} title={!settings.autoScan ? "Turn hands-free scanning on" : handsFreePaused ? "Resume hands-free scanning" : `Pause hands-free — the camera stays on and ${keyLabel} still scans`}
                             style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, borderColor: "#f59e0b", color: "#fcd34d", background: handsFree ? "rgba(245,158,11,0.14)" : "transparent", whiteSpace: "nowrap" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
-                          <button onClick={() => { gateRef.current.disarm(); setArmed(false); onTrial({ screen: "camera", n: 1, idx: 0, id: "scan", via: "pointer", key: "", ms: Date.now() - lastScreenClosed.current, moves: 0, hovers: 0 }); doTriggerScan(); }} disabled={scanning || anyDialogOpen}
+                          <button onClick={() => { gateRef.current.disarm(); setArmed(false); onTrial({ screen: "camera", n: 1, idx: 0, id: "scan", via: "pointer", key: "", ms: Date.now() - lastScreenClosed.current, moves: 0, hovers: 0 }); doTriggerScan(); }} disabled={scanning || anyDialogOpen || !!overlay}
                             style={{ ...btnPri, flex: 1, fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, letterSpacing: 1, padding: "14px", opacity: scanning ? 0.4 : 1 }}>
                             {scanning ? "Reading…" : "⚡ SCAN"}
                           </button>

@@ -22,4 +22,13 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Checks:** lint clean; 443 tests pass. Not yet clicked through on the test server (5174).
 - **Left open:** inside Packing, Still out, Issues, Finish later and the big photo, Enter now clicks the focused button of that dialog (before, the scan handler took it); to be tried on the test server. The roster Mark menu's "Back from repair — pass it" / "Found — pass it" ask with a Windows confirm box that Enter accepts (also noted under F5).
 - **Written by** Sonnet (3 rounds) · **reviewed by** Opus (round 2: "nearly ready", one hole; round 3 was stopped mid-review) · **finished and checked by** the Claude session (Opus 5.5): read the round-3 change, corrected one comment, lint and tests.
-- **Commit:** see the commit that adds this entry ("No scan behind any dialog")
+- **Commit:** 204ec84
+
+## 2026-11-23 · F7 · A second scan cannot replace a result that is not recorded (review M1)
+- **Finding:** "scanning" went false before the result screen was set (two picture steps ran in between), and the SCAN button only checked "scanning". A pedal press or SCAN click in that gap, or two presses in the same moment, or SCAN with a result already up, started a new read whose result replaced the first without recording it (code review M1, and the low finding "SCAN and By hand replace a pending result").
+- **Rule:** review fix.
+- **What changed and why:** a scan is now busy from its first moment (a ref, `scanBusyRef`, set before anything else, so two presses in one moment cannot both start) until its result is on screen: "scanning" goes false only after the pictures are made, in the same render as the result screen. `doTriggerScan` (pedal, SCAN, hands-free) refuses while a result is up or a scan is reading, and the SCAN button is greyed while a result is up; Retry on the result screen is how a new read is asked for, as before. By hand is unchanged: with a result up it opens the form with Back to that result, so nothing is lost. Files: `src/App.jsx`, `src/lib/__tests__/no-scan-behind-dialog.test.js`.
+- **Tests added:** "one scan at a time, and none over a result on screen" in `no-scan-behind-dialog.test.js` (reads App.jsx: the busy check comes first, nothing waits between "not busy" and the result screen, doTriggerScan refuses over a result).
+- **Checks:** lint clean; 444 tests pass. Not yet clicked through on the test server (5174).
+- **Written by** the Claude session (Opus 5.5) directly; the workflow was stopped before F7 started. Reviewed together with the matching rules (see below).
+- **Commit:** see the commit that adds this entry ("One scan at a time")

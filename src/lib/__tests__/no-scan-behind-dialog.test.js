@@ -71,7 +71,8 @@ describe("no scan behind a dialog", () => {
     expect(src).toMatch(/if \(anyDialogOpen\) \{ if \(gate\.armed\)/);   // the hands-free gate
     expect(src).toMatch(/if \(anyDialogOpen\) return;[^\n]*last line of defence/);   // doTriggerScan
     // The SCAN button and By hand: their `disabled` mentions anyDialogOpen (any spacing).
-    expect(src).toMatch(/doTriggerScan\(\);\s*\}\}\s*disabled=\{\s*scanning\s*\|\|\s*anyDialogOpen\s*\}/);
+    // (the SCAN button is also off while a result is up: code review M1, see the last test)
+    expect(src).toMatch(/doTriggerScan\(\);\s*\}\}\s*disabled=\{\s*scanning\s*\|\|\s*anyDialogOpen\s*\|\|\s*!!overlay\s*\}/);
     expect(src).toMatch(/actions\.manual\(\);\s*\}\}\s*disabled=\{\s*scanning\s*\|\|\s*anyDialogOpen\s*\}/);
     expect(src).not.toMatch(/\bmodalOpen\b/);   // the old, shorter list is gone
   });
@@ -102,5 +103,21 @@ describe("no scan behind a dialog", () => {
   // The development replay driver goes through doRunScan directly: it respects the same list.
   it("the replay driver waits while a dialog is open", () => {
     expect(src).toMatch(/if \(scanning \|\| overlay \|\| anyDialogOpen\) return;/);
+  });
+
+  // Code review M1: a second scan must never replace a result that is not recorded yet.
+  it("one scan at a time, and none over a result on screen", () => {
+    const run = src.indexOf("const doRunScan = useCallback(");
+    expect(run).toBeGreaterThan(-1);
+    const body = src.slice(run, src.indexOf("const captureFrame = useCallback("));
+    // The busy flag is a ref, checked and set before anything else, so two presses in one moment cannot both scan.
+    expect(body.indexOf("if (scanBusyRef.current) return;")).toBeGreaterThan(-1);
+    expect(body.indexOf("if (scanBusyRef.current) return;")).toBeLessThan(body.indexOf("setScanning(true)"));
+    // "scanning" goes false only after the pictures are made, i.e. after the last wait before the result screen.
+    const free = body.lastIndexOf("scanBusyRef.current = false; setScanning(false);");
+    expect(free).toBeGreaterThan(body.indexOf("await cropDataUrl("));
+    expect(body.slice(free)).not.toMatch(/\bawait\b/);   // nothing waits between "not busy" and the result screen
+    // doTriggerScan (pedal, SCAN, hands-free) refuses while a result is up or a scan is reading.
+    expect(src).toMatch(/if \(overlay \|\| scanBusyRef\.current\) return;/);
   });
 });
