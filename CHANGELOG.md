@@ -332,3 +332,4 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - `.claude/launch.json` says http for the 5174 server, which answers on https.
   - Unreachable code noted in comments, to remove later: `ReasonTextForm` and the custom reason, ScanOverlay's `!embedded` branches, and `putOrder`, `getOrder` and `orderKey` in `orderstore.js`.
 - **Written by** three helpers in parallel (guides; CLAUDE.md; comments) and the Claude session (review, fixes, merge) · **reviewed by** Opus (five wrong instructions and the PINs, fixed).
+- **Commits:** 2417099 and the next (documents), b4d29e0 (comments, merged), 95da5c7
