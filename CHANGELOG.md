@@ -197,3 +197,4 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - The first promotion that brings these scripts runs the OLD promote.ps1 on the server PC, so it backs up hub.json only and installs nothing. This change has no package changes.
   - Development's own folder (this PC) still links production's packages until `Development server.bat` is next run, which makes its own.
 - **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (two blockers, fixed and re-checked).
+- **Commit:** 9760346
