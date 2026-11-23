@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { csvCell, safeFilename, buildLogCSV, buildRosterSheet, localDateStamp, buildDaySheets } from "../export.js";
+import { csvCell, safeFilename, buildLogCSV, buildRosterSheet, localDateStamp, buildDaySheets, undidPass } from "../export.js";
 
 describe("csv", () => {
   it("quotes commas and doubles quotes", () => {
@@ -71,5 +71,22 @@ describe("day sheet", () => {
     expect(s.flags[1]).toEqual(["Stitching or seam", 1]);
     expect(s.orders[1][0]).toBe("Line 1");
     expect(s.events).toHaveLength(6);
+  });
+  // Code review of 23 Nov 2026: every undo was taken off Passed, also a flag
+  // taken back on the size screen and an un-check of a flagged row.
+  it("only an undo that took back a pass lowers Passed", () => {
+    const ev = (id, status, reason) => ({ id, t: `2026-10-19 09:0${id}:00`, status, reason, order: "25", operator: "Jordan", number: String(id), station: "st-line1" });
+    const day = { date: "2026-10-19", orders: [], events: [
+      ev(1, "pass"), ev(2, "pass"), ev(3, "pass"),
+      ev(4, "undo", "Taken back — wrong size picked (A-M)"),
+      ev(5, "undo", "Un-checked — was with the supervisor; scan it again"),
+      ev(6, "undo", "Un-checked — was entered by hand; scan it again"),
+      ev(7, "undo", "Un-checked — was passed; scan it again"),
+    ] };
+    const s = buildDaySheets(day, id => id);
+    const header = s.summary[4], row = s.summary[5];
+    expect(row[header.indexOf("Passed")]).toBe(2);
+    expect(undidPass({ status: "undo" })).toBe(true);   // an undo with no reason (older entries): as before
+    expect(undidPass({ status: "pass" })).toBe(false);
   });
 });

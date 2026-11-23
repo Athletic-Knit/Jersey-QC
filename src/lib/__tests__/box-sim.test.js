@@ -132,6 +132,12 @@ describe("the box model", () => {
     expect(["Y-M", "A-S", "A-XL", "A-2XL", "XXL", "A-3XL", "Youth L", ""].map(sizeClass)).toEqual(["youth", "asm", "alx", "a2x", "a2x", "a3x", "youth", "alx"]);
     expect(featureOf("A-2XL", false)).toBe("a2x|su");
   });
+  // Code review of 23 Nov 2026: ladies sizes were all adult L / XL. A ladies
+  // jersey is one class down from the adult class of its letter; a bare L is adult.
+  it("reads ladies sizes one class below adult of the same letter", () => {
+    expect(["L-XS", "L-M", "L-L", "L-XL", "L-2XL", "L-3XL", "Ladies S", "W-L"].map(sizeClass)).toEqual(["youth", "youth", "asm", "asm", "alx", "a2x", "youth", "asm"]);
+    expect(["L", "XL", "A-L"].map(sizeClass)).toEqual(["alx", "alx", "alx"]);
+  });
   it("names the box by room, and splits by weight", () => {
     expect(predictBox({})).toBe(null);
     expect(predictBox({ "a2x|st": 1 }).id).toBe("bag");

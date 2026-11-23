@@ -108,11 +108,23 @@ function activeMs(times, idleMin = 10) {
   return total;
 }
 
+// Did this "undo" event take back a PASS? The station uses status "undo" for
+// more than an un-checked pass: a flag taken back on the size screen ("Taken
+// back — wrong size picked (A-M)") and an un-check of a row that was entered
+// by hand, flagged or marked missing ("Un-checked — was entered by hand; …").
+// The event carries no field with the status it had before, only its reason,
+// so the reason decides: those two kinds do not lower Passed, and every other
+// undo (an un-checked pass, "Un-checked — was passed", or an older wording)
+// does, as before. Code review of 23 Nov 2026.
+export const undidPass = e => e.status === "undo"
+  && !/^Taken back\b/i.test(String(e.reason || ""))
+  && !/^Un-checked — was (?!passed\b)/i.test(String(e.reason || ""));
+
 function summarise(events) {
   const times = events.map(e => tsMs(e.t));
   const passTimes = events.filter(e => e.status === "pass").map(e => tsMs(e.t)).filter(x => x !== null).sort((a, b) => a - b);
   const gaps = passTimes.slice(1).map((t, i) => (t - passTimes[i]) / 1000).filter(g => g > 0 && g <= 600);
-  const passed = events.filter(e => e.status === "pass").length - events.filter(e => e.status === "undo").length;
+  const passed = events.filter(e => e.status === "pass").length - events.filter(undidPass).length;
   const active = activeMs(times);
   return {
     passed: Math.max(0, passed),

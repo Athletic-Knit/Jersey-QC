@@ -64,7 +64,10 @@ export function detectDelimiter(line) {
 }
 
 // "Order 55555", "Order no: 55555", "PO# 55555" in a title row above the header.
-const ORDER_IN_TEXT = /\b(?:order|po|job|work order)\s*(?:no\.?|number|id|#)?\s*[:#-]?\s*([A-Za-z0-9][\w-]*)/i;
+// The value must have a digit in it: a title "Order Form" is not order "Form"
+// (code review of 23 Nov 2026). Order numbers are numbers, sometimes with a
+// letter or dash ("A-55555").
+const ORDER_IN_TEXT = /\b(?:order|po|job|work order)\s*(?:no\.?|number|id|#)?\s*[:#-]?\s*((?=[\w-]*\d)[A-Za-z0-9][\w-]*)/i;
 // Orders that ship together (the owner, 20 Nov 2026: "it says on the order form"):
 // "Ship with 264248", "Ships with: 264248, 264249", "Ship w/ #264248 & 264249" in a
 // title row, or a "ship with" column. Their boxes may be filled together.
@@ -185,13 +188,48 @@ export function blankGroups(roster) {
 export function orderNumberOf(rows) { return (rows && rows.orderNumber) || ""; }
 export function shipWithOf(rows) { return (rows && rows.shipWith) || []; }
 
+// The records of a CSV text: a line break inside a quoted cell ("Smith
+// <newline> Jr", which Excel writes for a cell with Alt+Enter in it) belongs to
+// the cell and does not start a new row (code review of 23 Nov 2026). The break
+// becomes a space: a roster cell is one line on the screen and on a label.
+// A quote opens a quoted cell only at the start of a cell, so a stray inch
+// mark (12") cannot swallow the lines after it; a quote never closed means the
+// file was not quoted that way, and the plain lines are used as before.
+export function splitCSVRecords(text, delim) {
+  const out = [];
+  let cur = "", inQ = false, atStart = true;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') { if (text[i + 1] === '"') { cur += '""'; i++; continue; } inQ = false; cur += ch; }
+      else if (ch === "\r" && text[i + 1] === "\n") { cur += " "; i++; }
+      else if (ch === "\n" || ch === "\r") cur += " ";
+      else cur += ch;
+      continue;
+    }
+    if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
+      out.push(cur); cur = ""; atStart = true;
+      if (ch === "\r") i++;
+      continue;
+    }
+    if (ch === '"' && atStart) inQ = true;
+    cur += ch;
+    if (ch === delim) atStart = true;
+    else if (ch !== " " && ch !== "\t") atStart = false;
+  }
+  if (inQ) return text.split(/\r?\n/);
+  out.push(cur);
+  return out;
+}
+
 export function parseCSV(text) {
   const clean = stripBOM(String(text ?? ""));
-  const lines = clean.split(/\r?\n/).filter(l => l.trim() !== "");
-  if (lines.length < 2) return [];
+  const plain = clean.split(/\r?\n/).filter(l => l.trim() !== "");
+  if (plain.length < 2) return [];
   // The delimiter is judged over the first lines together, not the first line
   // alone: a title row above the header ("Order 4521 - Ravens") has none.
-  const delim = detectDelimiter(lines.slice(0, 15).join("\n"));
+  const delim = detectDelimiter(plain.slice(0, 15).join("\n"));
+  const lines = splitCSVRecords(clean, delim).filter(l => l.trim() !== "");
   return rowsToRoster(lines.map(l => splitCSVLine(l, delim)));
 }
 
@@ -236,6 +274,11 @@ export function normaliseRosterRows(rows) {
     }
     out.name   = (out.name   || "").trim();
     out.number = (out.number || "").trim();
+    // A number cell formatted with decimals in Excel ("0.0") reads as "12.0" or
+    // "7.00"; normNum would drop the dot and make it 120. Digits and a dot with
+    // only zeros after it are the digits; leading zeros stay ("07.0" is 07, as
+    // 07 and 7 are different jerseys, N2). Code review of 23 Nov 2026.
+    if (/^\d+\.0+$/.test(out.number)) out.number = out.number.replace(/\.0+$/, "");
     out.team   = (out.team   || "").trim();
     out.size   = (out.size   || "").trim();
     return out;

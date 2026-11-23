@@ -37,6 +37,15 @@ describe("what is in the DAMAGED box", () => {
       flags: [{ id: 30, rowId: 1, reason: "Twill peeling", t: "2026-11-17 10:03:00" }, { id: 40, rowId: 3, reason: "Hole or snag", t: "2026-11-17 10:05:00" }] };
     expect(damagedItems(packFromRecord(rec)).map(x => [x.number, x.reason])).toEqual([["7", "Twill peeling"], ["21", "Hole or snag"]]);
   });
+  // Code review of 23 Nov 2026: packFromRecord dropped `resolution`.
+  it("a past order's off-roster flag the supervisor dealt with is out of its list", () => {
+    const off = { id: 60, number: "88", name: "STRAY", reason: "Not on the roster", t: "2026-11-17 10:07:00" };
+    const rec = { order: "264247", station: "st-station1", rows: roster, bins: null, closedBins: [], flags: [off] };
+    expect(damagedItems(packFromRecord(rec)).map(x => x.name)).toEqual(["STRAY"]);
+    const done = { ...rec, flags: [{ ...off, resolution: "Dealt with by the supervisor" }] };
+    expect(packFromRecord(done).flags[0].resolution).toBe("Dealt with by the supervisor");
+    expect(damagedItems(packFromRecord(done))).toEqual([]);
+  });
 });
 
 describe("the DAMAGED box's list and label", () => {
