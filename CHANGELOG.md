@@ -286,3 +286,4 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - `serve-hidden.vbs` loses the older previous log if `server.log` is held open.
   - `vite.config.diag.js` (the development test server, not in git) still prints on the Zebra.
 - **Written by** the Claude session (Opus 5.5) and two helpers · **reviewed by** Opus (one blocker, fixed).
+- **Commits:** 8791077, 13df31a, 126ecfb (merged in 168a94a, ae06d5e), 160c295
