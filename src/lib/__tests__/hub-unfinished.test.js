@@ -146,7 +146,7 @@ describe("checking off the jerseys still out", () => {
     expect(events[0]).toMatchObject({ id: `co-2-${now()}`, status: "pass", order: "264247", run: 1000, station: "st-station1", rowId: 2, number: "9", name: "JONES", size: "A-L", team: "Navy", reason: "Checked off by supervisor", resolution: "Checked off by supervisor (Sam)", operator: "Sam" });
     expect(events[0].t).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
     expect(events[0].t.slice(0, 10)).toBe(today);
-    expect(Object.keys(led[today].events)).toEqual([`st-station1|co-2-${now()}`, `st-station1|co-4-${now()}`]);
+    expect(Object.keys(led[today].events)).toEqual([`1000|co-2-${now()}`, `1000|co-4-${now()}`]);
   });
   it("without a name the resolution has no brackets", async () => {
     const { call } = makeHub();

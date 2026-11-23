@@ -11,6 +11,7 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel, checksFor } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse, holdPrints } from "./lib/hub.js";
+import { ofRun, pickRun, orderDone, doneAt, eventsAsLog } from "./lib/ledgerview.js";
 import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
@@ -881,9 +882,7 @@ function PhotoLightbox({ src, onClose }) {
   );
 }
 
-// The same record and the same events: one run of an order on a station.
-// Events from before runs existed carry none and match any run.
-const sameRun = (a, b) => !a || !b || a === b;
+// Which record is the order, which events are its, and whether it is finished: src/lib/ledgerview.js.
 function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload, onPhoto = () => {}, date = "" }) {
   const [data, setData] = useState(null);     // { rec, events }
   const [tab,  setTab]  = useState("roster");
@@ -893,8 +892,8 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
     const load = () => hub.ledger(date).then(l => {
       if (!on) return;
       const runs = (l.orders || []).filter(x => x.station === station && x.order === order);
-      const rec = runs.find(x => sameRun(x.run, run)) || runs.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))[0];
-      const events = (l.events || []).filter(e => e.station === station && e.order === order && sameRun(e.run, rec?.run)).sort((a, b) => String(b.t).localeCompare(String(a.t)));
+      const rec = pickRun(runs, run);   // the run asked for, else the newest (M12)
+      const events = (l.events || []).filter(ofRun(rec)).sort((a, b) => String(b.t).localeCompare(String(a.t)));
       setData({ rec, events });
     }).catch(() => on && setErr("Could not fetch this order from the hub."));
     load();
@@ -921,10 +920,10 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 900, fontSize: 18 }}>Order {order} <span style={{ fontWeight: 400, color: "#64748b", fontSize: 14 }}>· {stationLabel(station)} · {rec?.operator || "—"}{rec?.jerseyType ? <span style={{ color: "#93c5fd" }}> · {jerseyTypeLabel(rec.jerseyType)}</span> : null}</span></div>
             <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
-              {rec ? <>{done} / {total} done · {c.pass ?? 0} pass · <span style={{ color: c.flag ? "#f87171" : undefined }}>{c.flag ?? 0} with supervisor</span> · <span style={{ color: c.manual ? "#fcd34d" : undefined }}>{c.manual ?? 0} by hand</span>{offRoster.length ? <> · <span style={{ color: "#f87171" }}>{offRoster.length} not on roster</span></> : null} · started {hm(rec.firstSeen)}{total > 0 && c.remaining === 0 ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(rec.lastSeen)}</span></> : <> · in progress</>}{rec.notes ? <> · notes: <span style={{ color: "#fcd34d" }}>{rec.notes}</span></> : null}</> : err || "Loading…"}
+              {rec ? <>{done} / {total} done · {c.pass ?? 0} pass · <span style={{ color: c.flag ? "#f87171" : undefined }}>{c.flag ?? 0} with supervisor</span> · <span style={{ color: c.manual ? "#fcd34d" : undefined }}>{c.manual ?? 0} by hand</span>{offRoster.length ? <> · <span style={{ color: "#f87171" }}>{offRoster.length} not on roster</span></> : null} · started {hm(rec.firstSeen)}{orderDone(rec) ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(doneAt(rec))}</span>{c.remaining > 0 ? <span style={{ color: "#fcd34d" }}> with {c.remaining} not scanned</span> : null}</> : <> · in progress</>}{rec.notes ? <> · notes: <span style={{ color: "#fcd34d" }}>{rec.notes}</span></> : null}</> : err || "Loading…"}
             </div>
           </div>
-          <button onClick={() => onDownload({ station, order, operator: rec?.operator })} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet (Excel)</button>
+          <button onClick={() => onDownload({ station, order, run: rec?.run || run, operator: rec?.operator, date })} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet (Excel)</button>
           {events.some(e => e.status === "flagged") && <button onClick={() => exportDamageReportXLSX(buildDamageRows(events, { stationLabel, typeLabel: jerseyTypeLabel }), { name: order, title: `Damage report — order ${order}` }).catch(e => setErr(e.message))} title="Every flagged jersey of this order with its photo" style={{ ...btnGhost, padding: "6px 12px", borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>}
           <button onClick={onClose} style={{ ...btnGhost, padding: "6px 12px" }}>✕ Close <Kbd light>Esc</Kbd></button>
         </div>
@@ -1138,11 +1137,13 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   useEffect(() => { const h = () => setFullScreen(!!document.fullscreenElement); document.addEventListener("fullscreenchange", h); return () => document.removeEventListener("fullscreenchange", h); }, []);
   const toggleFull = () => { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); else document.documentElement.requestFullscreen?.()?.catch(() => {}); };
   // The same QC Results workbook the station exports, built from what the hub holds.
+  // `o.date`: the day the order view or the orders list is showing ("" = today), never the
+  // board's own day when the order came from a range of days (code review M11).
   const downloadOrderSheet = (o) => hub.ledger(o.date ?? day).then(l => {
-    const rec = (l.orders || []).find(x => x.station === o.station && x.order === o.order && sameRun(x.run, o.run)) || o;
+    const rec = pickRun((l.orders || []).filter(x => x.station === o.station && x.order === o.order), o.run) || o;
     const rows = rec.rows || [];
     if (!rows.length) { setMsg(`The hub has no jersey list for order ${o.order} on ${stationLabel(o.station)} — that station last reported before today's update, or the order was done before it. Press Export on the station for its sheet; reload the station page so future orders come through.`); return; }
-    const log = (l.events || []).filter(e => e.station === rec.station && e.order === rec.order && sameRun(e.run, rec.run)).map(e => ({ match: { _id: e.rowId }, reason: e.reason, resolution: e.resolution, operator: e.operator, timestamp: e.t }));
+    const log = eventsAsLog((l.events || []).filter(ofRun(rec)));   // status included: the Summary sheet counts by it (M10)
     exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "", jerseyType: jerseyTypeLabel(rec.jerseyType), idleSpells: rec.idle?.spells || [], awaySpells: rec.away?.spells || [], bins: rec.binSummary || [], categoryOf: reasonCategory }, displayColumns(rows), row => binOfRow(rec.bins, rec.closedBins, row));
   }).catch(() => setMsg("Could not fetch that order from the hub."));
   const [order,   setOrder]   = useState("");
@@ -1199,7 +1200,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   const pct = s => s.counts?.total ? Math.round(((s.counts.total - s.counts.remaining) / s.counts.total) * 100) : 0;
   const todayStr   = data.today || new Date().toLocaleDateString("en-CA");
   const todayTotal = data.stations.reduce((n, s) => n + (s.day?.date === todayStr ? s.day.done : 0), 0);
-  const liveCount  = active.filter(s => age(s) <= 30).length;
+  const liveCount  = active.filter(s => age(s) <= 30 && !s.signedOut).length;   // a station signed out is not live (M8)
   const fmtMin = m => m == null ? "—" : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
   const byName = (a, b) => stationLabel(a.id).localeCompare(stationLabel(b.id), undefined, { numeric: true });
 
@@ -1223,8 +1224,9 @@ function SupervisorPanel({ operatorName, onSignOut }) {
             const top = (s.attention || []).filter(a => !a.resolution).sort(bySeverity)[0];
             const line = open
               ? (top ? <><RouteTag item={top} size={f(0.2)} /> {top.jersey} — {top.reason}{open > 1 ? ` · +${open - 1} more` : ""}</> : `${open} still open from earlier orders`)
+              : s.signedOut ? `signed out · ${s.signedOut.operator || "—"}`
               : stale ? `not reporting · last seen ${fmtMin(Math.round(age(s) / 60))} ago`
-              : total > 0 ? (c.remaining === 0 ? "order done" : s.lastScan ? `now at ${s.lastScan.text}` : "scanning") : "waiting for an order";
+              : total > 0 ? (orderDone(s) ? "order done" : s.lastScan ? `now at ${s.lastScan.text}` : "scanning") : "waiting for an order";
             return (
               <div key={s.id} style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr) auto", alignItems: "center", gap: "2cqw", background: `${col}26`, borderLeft: `2.5cqw solid ${col}`, borderRadius: "1cqh", padding: "0 2cqw", minHeight: 0, overflow: "hidden" }}>
                 <div style={{ minWidth: 0 }}>
@@ -1300,8 +1302,8 @@ function SupervisorPanel({ operatorName, onSignOut }) {
               </div>
               {orders.length === 0 && <div style={{ color: "#64748b", fontSize: 13, padding: "6px 0 10px" }}>No orders on this day.</div>}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {orders.slice().sort((a, b) => ((((a.counts?.total ?? 0) > 0 && a.counts?.remaining === 0) ? 1 : 0) - (((b.counts?.total ?? 0) > 0 && b.counts?.remaining === 0) ? 1 : 0)) || ((b.lastSeen || 0) - (a.lastSeen || 0))).map(o => {   /* in progress first, then the newest */
-                  const c = o.counts || {}; const total = c.total ?? 0; const done = total - (c.remaining ?? 0); const finished = total > 0 && c.remaining === 0;
+                {orders.slice().sort((a, b) => ((orderDone(a) ? 1 : 0) - (orderDone(b) ? 1 : 0)) || ((b.lastSeen || 0) - (a.lastSeen || 0))).map(o => {   /* in progress first, then the newest */
+                  const c = o.counts || {}; const total = c.total ?? 0; const done = total - (c.remaining ?? 0); const finished = orderDone(o);
                   const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
                   return (
                     <div key={`${o.station}|${o.order}|${o.run || 0}`} style={{ ...card, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -1311,7 +1313,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                           <strong style={{ color: "#e2e8f0" }}>{done} / {total}</strong> done
                           {c.flag > 0 && <span style={{ color: "#f87171" }}> · {c.flag} with supervisor</span>}
                           {c.manual > 0 && <span style={{ color: "#fcd34d" }}> · {c.manual} by hand</span>}
-                          {" · "}{finished ? <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(o.lastSeen)}</span> : `in progress · started ${hm(o.firstSeen)}`}
+                          {" · "}{finished ? <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(doneAt(o))}{c.remaining > 0 ? ` · ${c.remaining} not scanned` : ""}</span> : `in progress · started ${hm(o.firstSeen)}`}
                         </div>
                       </div>
                       <button onClick={() => setOpenOrder({ station: o.station, order: o.order, run: o.run || 0, date: o.date })} title="Open this order: roster with statuses, problems, and the log" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
@@ -1329,7 +1331,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                 {parked.slice().sort(byName).map(s => (
                   <span key={s.id} style={{ fontSize: 12, color: "#cbd5e1", display: "inline-flex", gap: 8, alignItems: "center", padding: "3px 4px 3px 10px", border: "1px solid #334155", borderRadius: 6 }}>
                     {stationLabel(s.id)} · {s.operatorName || "—"} · order {s.orderNumber || "—"} · last seen {fmtMin(Math.round(age(s) / 60))} ago{openOn(s) > 0 && <span style={{ color: "#f87171" }}>· {openOn(s)} open</span>}
-                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber })} disabled={!s.orderNumber} title="Open its last order" style={{ ...btnGhost, padding: "2px 8px", fontSize: 11, opacity: s.orderNumber ? 1 : 0.4 }}>Open</button>
+                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber, run: s.orderRun || 0 })} disabled={!s.orderNumber} title="Open its last order" style={{ ...btnGhost, padding: "2px 8px", fontSize: 11, opacity: s.orderNumber ? 1 : 0.4 }}>Open</button>
                     <button onClick={() => removeStation(s)} title="Take it off the board" style={{ ...btnGhost, padding: "2px 8px", fontSize: 11 }}>Remove</button>
                   </span>
                 ))}
@@ -1343,8 +1345,8 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <div style={{ fontWeight: 800, fontSize: 17 }}><span style={{ color: "#60a5fa" }}>{stationLabel(s.id)}</span> · {s.operatorName || "—"}</div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <div style={{ fontSize: 11, color: stale ? "#f87171" : "#22c55e" }}>{stale ? `last seen ${fmtMin(Math.round(age(s) / 60))} ago` : "● live"}</div>
-                    {(stale || (s.counts?.total > 0 && s.counts?.remaining === 0)) && (
+                    <div style={{ fontSize: 11, color: s.signedOut ? "#94a3b8" : stale ? "#f87171" : "#22c55e" }}>{s.signedOut ? `signed out ${new Date(s.signedOut.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : stale ? `last seen ${fmtMin(Math.round(age(s) / 60))} ago` : "● live"}</div>
+                    {(stale || orderDone(s)) && (
                       <button onClick={() => removeStation(s)}
                         title="Take this card off the board" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>Remove</button>
                     )}
@@ -1357,10 +1359,10 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                       title="Give the order running on this station its number (only the supervisor can)" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>{s.orderNumber && s.setOrder ? `→ ${s.setOrder.orderNumber}…` : "Set number"}</button>
                   )}
                   {s.orderNumber && s.counts?.total > 0 && (
-                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber })} title="Open this order: every jersey with its status, what was flagged and why, and the log" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
+                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber, run: s.orderRun || 0 })} title="Open this order: every jersey with its status, what was flagged and why, and the log" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
                   )}
                 </div>
-                <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: s.counts?.remaining === 0 ? "#22c55e" : "#3b82f6" }} /></div>
+                <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: orderDone(s) ? "#22c55e" : "#3b82f6" }} /></div>
                 <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
                   {s.counts?.total > 0
                     ? <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, marginRight: 6 }}>{(s.counts?.total ?? 0) - (s.counts?.remaining ?? 0)}<span style={{ fontSize: 14, color: "#64748b", fontWeight: 600 }}> / {s.counts?.total ?? 0}</span></div>
@@ -1374,7 +1376,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                   <strong style={{ color: "#e2e8f0" }}>{s.day?.date === todayStr ? s.day.done : 0}</strong> today
                   {!(s.counts?.total > 0)
                     ? " · signed in, no order yet — send one with the form"
-                    : s.counts?.remaining === 0
+                    : orderDone(s)
                     ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>order done</span></>
                     : stale ? " · pace unknown — not reporting"
                       : s.rate ? <> · <strong style={{ color: "#e2e8f0" }}>{Math.round(s.rate)}</strong>/h · about {fmtMin(s.etaMin)} left</>
@@ -2113,8 +2115,8 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
 // `canResolve`: Accept / Reject / Note are the supervisor's call; the operator sees the flag without them.
 function ResultCard({ result, onResolve, canResolve = true }) {
   const [note, setNote] = useState("");
-  const isManual  = result.status === S_MANUAL && !result.resolution;    // entered by hand, awaiting sign-off
-  const isFlagged = result.status === S_FLAGGED || isManual;
+  const isManual  = result.status === S_MANUAL && !result.resolution && !result.outcome;    // entered by hand, awaiting sign-off
+  const isFlagged = (result.status === S_FLAGGED && !result.outcome) || isManual;           // accepted or rejected: resolved, still a flag in the reports (M6)
   return (
     <div style={{ ...card, border: `1px solid ${statusColor(result.status)}`, background: isFlagged ? "rgba(239,68,68,0.06)" : "rgba(148,163,184,0.06)", padding: "6px 10px" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -3282,6 +3284,10 @@ export default function App() {
   const [rosterFile,         setRosterFile]         = useState(null);
   const [orderNumber,        setOrderNumber]        = useState("");
   const [orderRun,           setOrderRun]           = useState(0);      // when this order was started here; the hub keeps one record per run
+  // When Finish order was pressed, or null while the order is open. Saved with the order and sent
+  // to the hub, so the board shows an order finished with jerseys not scanned as finished, not
+  // "in progress" for ever (code review M7). "Back to this order" opens it again.
+  const [finishedAt,         setFinishedAt]         = useState(null);
   const [hubRosterId,        setHubRosterId]        = useState(null);   // the hub roster this order came from, taken by this station; Finish order removes it
   const [operatorName,       setOperatorName]       = useState(() => savedSignIn?.name || "");
   const [notes,              setNotes]              = useState("");
@@ -3587,10 +3593,10 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, orderRole: orderRole || kindOfRole(role), vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole: orderRole || kindOfRole(role), vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
     const t = setTimeout(() => setSaveOk(prev => (prev === saved ? prev : saved)), 0);   // said in the header when it fails
     return () => clearTimeout(t);
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, orderRole, checksLeft, inspect]);
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole, checksLeft, inspect]);
 
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
@@ -3605,7 +3611,7 @@ export default function App() {
   useEffect(() => {
     if (!signedIn || (role === "supervisor" && !sessionStarted)) return;
     const id = stationId();
-    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", orderRun: sessionStarted ? orderRun : 0, notes, jerseyType, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap, closedBins: sessionStarted ? closedBins : [], binSummary: sessionStarted ? binSummary : [], idleSpells, awaySpells }))
+    const send = () => hub.report(id, snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", orderRun: sessionStarted ? orderRun : 0, notes, jerseyType, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap, closedBins: sessionStarted ? closedBins : [], binSummary: sessionStarted ? binSummary : [], idleSpells, awaySpells, finishedAt: sessionStarted ? finishedAt : null }))
       .then(r => {
         setHubOk(true);
         // The supervisor named this order from the board: take the number; the next report confirms it.
@@ -3615,7 +3621,7 @@ export default function App() {
     send();
     const t = setInterval(send, 5000);
     return () => clearInterval(t);
-  }, [signedIn, sessionStarted, operatorName, role, orderNumber, orderRun, notes, jerseyType, rosterFile, roster, log, lastConfirmed, binMap, closedBins, binSummary, idleSpells, awaySpells]);
+  }, [signedIn, sessionStarted, operatorName, role, orderNumber, orderRun, notes, jerseyType, rosterFile, roster, log, lastConfirmed, binMap, closedBins, binSummary, idleSpells, awaySpells, finishedAt]);
 
   // Open the complete modal once every row is accounted for (after at least one scan).
   useEffect(() => {
@@ -3650,11 +3656,15 @@ export default function App() {
     const s = from || savedSession;
     setPickedUp(s.pickedUp || null); setOrderRole(kindOfSession(s));
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
-    setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
+    setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setFinishedAt(s.finishedAt || null); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
     setLog(s.log || []); setBinMap(modernBins(s.binMap || null)); setClosedBins(s.closedBins || []); setShipWith(s.shipWith || []); setCarried(s.carried || []); setBoxLabelled(s.boxLabelled || []); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
     ticketPrinted.current = (s.log || [])[0]?.id ?? 0;             // its last flag's ticket was printed when it happened
     vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
     inspectRef.current.load(s.inspect); syncInspect();
+    // An order that was finished (Finish order) and not yet cleared by New order comes back
+    // on its done screen, so New order or "Back to this order" decides it: without it the
+    // station scanned on while the board called the order finished (review of phase 2).
+    if (s.finishedAt) setFinished({ status: "none", text: `This order was finished at ${new Date(s.finishedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. Print the box lists again if they are missing, or start a new order.` });
     setSessionStarted(true); setResumeDecided(true);
   }, [savedSession, syncInspect]);
 
@@ -3665,7 +3675,7 @@ export default function App() {
   const setAsideSaved = useCallback(async () => {
     const s = savedSession; if (!s) return;
     const st = stationId(), summary = outOf(s.roster), kind = kindOfSession(s);
-    const session = { ...s, orderRole: kind, hubRosterId: null };
+    const session = { ...s, orderRole: kind, hubRosterId: null, finishedAt: null };   // put aside unfinished: not finished
     setAsideErr("");
     try { await hub.parkOrder({ id: s.pickedUp?.hubId || undefined, station: st, order: s.orderNumber, run: s.orderRun || s.savedAt || 0, operator: s.operatorName || "", jerseyType: s.jerseyType || "", kind: kind === "sorter" ? "sorter" : "", ...summary, out: outList(s.roster, s.log), session }); }
     catch (e) { setAsideErr(`It could NOT be saved on the server (${e.message}). Nothing was lost: try again, or sign out.`); return; }   // kept here until the server has it
@@ -3681,7 +3691,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true); setPickedUp(null); setOrderRole("");
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setClosedBins([]); setShipWith([]); setCarried([]); keptOpen.current = new Set(); setBoxLabelled([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setFinishedAt(null); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setClosedBins([]); setShipWith([]); setCarried([]); keptOpen.current = new Set(); setBoxLabelled([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
     waitPedalRef.current = false; setWaitPedal(false);
   }, []);
@@ -3760,6 +3770,7 @@ export default function App() {
   // with everything in them (this order's and what they carried) and the orders they serve.
   const finishOrder  = useCallback(async (keep = []) => {
     setShowFinish(false);
+    setFinishedAt(Date.now());
     const kept = new Set(keep.map(String));
     let note = "";
     if (kept.size) {
@@ -3875,7 +3886,9 @@ export default function App() {
   const signOut = useCallback(() => {
     if (sessionStarted && log.length > 0 && !window.confirm(`Sign out? Order ${orderNumber || "—"} stays on this station — the next person to sign in here can resume it.`)) return;
     clearSignIn();
-    hub.removeStation(stationId()).catch(() => {});   // free the station on the board at once, not after it goes stale
+    // Free the station at once (another PC may sign in on it), but keep it on the board with its
+    // day tally and the flags still on their way to the supervisor: deleting it lost both (code review M8).
+    hub.signOutStation(stationId()).catch(() => {});
     window.location.reload();
   }, [sessionStarted, log.length, orderNumber]);
 
@@ -4525,9 +4538,15 @@ export default function App() {
     const resolution = decision === "accept" ? `Accepted — manually verified${note ? ": " + note : ""}`
                      : decision === "reject" ? `Rejected — sent back for rework${note ? ": " + note : ""}`
                      : (note || "Note added");
-    const status = decision === "note" ? entry?.status || S_FLAGGED : S_MANUAL;
-    setLog(prev => prev.map(l => l.id === logId ? { ...l, status, resolution } : l));
-    setLastResult(prev => prev?.id === logId ? { ...prev, status, resolution } : prev);
+    // The entry keeps its status (a flag stays a flag) and the decision goes in its
+    // resolution and `outcome`. Accept and Reject used to rewrite a flag to "manual", and
+    // the damage report, the defects sheet and the flag rate only count "flagged": the
+    // flag vanished from every report (code review M6). The roster row still passes
+    // (Accept) or opens again (Reject) below.
+    const status = entry?.status || S_FLAGGED;
+    const outcome = decision === "accept" ? "accepted" : decision === "reject" ? "rejected" : entry?.outcome;
+    setLog(prev => prev.map(l => l.id === logId ? { ...l, status, resolution, ...(outcome ? { outcome } : {}) } : l));
+    setLastResult(prev => prev?.id === logId ? { ...prev, status, resolution, ...(outcome ? { outcome } : {}) } : prev);
     // Accept: the jersey passes. Reject: it goes out for rework and comes back
     // through the camera, so its row opens again; until then a rescan shows FLAGGED.
     if (entry?.match?._id !== undefined && decision === "accept") {
@@ -4889,7 +4908,7 @@ export default function App() {
           onFull={binFull} onReprint={reprintBinList} onLabels={() => { setShowBins(false); setBoxAuto(false); setShowBinSetup(true); }} onPacking={() => { setShowBins(false); setShowPacking(true); }} onClose={() => closeDialog(() => setShowBins(false))} />
       )}
       {finished && (
-        <FinishedModal orderNumber={orderNumber} status={finished} onReprint={() => printFinishLists()} onPrint={() => setShowPrint(true)} onNew={newOrder} onBack={() => closeDialog(() => setFinished(null))} />
+        <FinishedModal orderNumber={orderNumber} status={finished} onReprint={() => printFinishLists()} onPrint={() => setShowPrint(true)} onNew={newOrder} onBack={() => closeDialog(() => { setFinished(null); setFinishedAt(null); })} />
       )}
       {showBlanks && blanks.length > 0 && !overlay && (
         <BlanksModal groups={blanks} boxOf={binOf} scanKey={scanKey} last={lastConfirmed && isBlank(lastConfirmed.match) ? lastConfirmed : null}

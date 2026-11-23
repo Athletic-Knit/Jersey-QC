@@ -50,7 +50,9 @@ export function replayRuns(sources, q) {
     for (const r of Object.values(runs).filter(r => r.source === label)) {
       for (const [, d] of days) {
         for (const ev of Object.values(d.events || {})) {
-          if (ev?.station !== r.station || String(ev.order ?? "") !== r.order || (ev.run || 0) !== r.run) continue;
+          // The run's scans wherever they were scanned (the hub keeps on each event the station that
+          // scanned it, and a run picked up at another station keeps its run); by station without a run.
+          if (String(ev?.order ?? "") !== r.order || (r.run && ev.run ? ev.run !== r.run : (ev.station !== r.station || (ev.run || 0) !== r.run))) continue;
           r.events[`${ev.station}|${ev.id}`] = slimEvent(ev);
         }
       }

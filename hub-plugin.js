@@ -4,7 +4,8 @@
 // shape a real roster server can adopt later:
 //   GET    /api/hub/stations            every station's latest snapshot
 //   POST   /api/hub/stations/:id        a station reports (body = snapshot)
-//   DELETE /api/hub/stations/:id
+//   DELETE /api/hub/stations/:id                 the supervisor takes a station off the board
+//   POST   /api/hub/stations/:id/signout         the operator signed out: the station stays on the board, marked
 //   DELETE /api/hub/stations/:id/carried?key=…   supervisor marks an item from an earlier order done
 //   GET    /api/hub/orders?q=264247         an order by its number, any day in the ledger: rows, boxes, flags — the station's Print menu
 //   GET    /api/hub/ledger?from=&to=         several days, slim (no photos, no rosters) — the board's "Compare days" workbook
@@ -90,6 +91,53 @@ export function pruneLedger(led, { keepDays = 90, photoDays = 14 } = {}) {
   return led;
 }
 
+// ── One scan, one ledger entry (code review of 23 Nov 2026, M5) ──────────────
+// Stations re-send their whole log every 5 s. The ledger used to file each event
+// under the day it ARRIVED and the station that SENT it, so an order running past
+// midnight, a parked order picked up at another station, or a renamed order
+// counted the same scans again, and the day sheet and Compare days were inflated.
+// Now an event is filed under its OWN day (its stamp, "2026-11-23 14:05:12") and
+// keyed by the run of the order and its own id: one run of an order is one start
+// of it (`orderRun`, the time it was started, kept when another station picks it
+// up), so the same scan re-sent by any station lands on the same entry. Events
+// from before runs existed keep the station and order in their key.
+export const eventKey = (ev, station = ev?.station) => (ev?.run ? `${ev.run}|${ev.id}` : `${station}|${ev?.order}|${ev?.id}`);
+export const eventDay = (ev, fallback) => (/^\d{4}-\d{2}-\d{2}/.test(String(ev?.t || "")) ? String(ev.t).slice(0, 10) : fallback);
+// Files one event, as a station sent it: the station that filed it first is kept
+// (the one that scanned it; a station that picked the order up re-sends it), and a
+// photo once seen is kept when later reports leave it out. → true when it was new.
+export function fileEvent(led, ev, station, today) {
+  const day = (led[eventDay(ev, today)] ||= { events: {}, orders: {} });
+  const events = (day.events ||= {});
+  const k = eventKey(ev, station), old = events[k];
+  events[k] = { ...ev, station: old?.station || ev.station || station,
+    ...(ev.photo ? {} : old?.photo ? { photo: old.photo } : {}),
+    ...(ev.damagePhotos?.length ? {} : old?.damagePhotos?.length ? { damagePhotos: old.damagePhotos } : {}) };
+  return !old;
+}
+// The ledger as the old filing left it, put right once when the hub starts:
+// every event moved to its own day under its new key, copies merged (the newest
+// content, the first station, any photo). Run again it changes nothing.
+// → how many copies were dropped.
+export function normaliseLedger(led) {
+  const all = new Map();
+  let copies = 0;
+  for (const date of Object.keys(led || {}).sort()) {
+    for (const ev of Object.values(led[date]?.events || {})) {
+      if (!ev || ev.id === undefined) continue;
+      const k = eventKey(ev), have = all.get(k);
+      if (!have) { all.set(k, { ev, date }); continue; }
+      copies++;
+      all.set(k, { date: have.date, ev: { ...have.ev, ...ev, station: have.ev.station || ev.station,
+        ...(ev.photo || !have.ev.photo ? {} : { photo: have.ev.photo }),
+        ...(ev.damagePhotos?.length || !have.ev.damagePhotos?.length ? {} : { damagePhotos: have.ev.damagePhotos }) } });
+    }
+    if (led[date]) led[date].events = {};
+  }
+  for (const [k, { ev, date }] of all) ((led[eventDay(ev, date)] ||= { events: {}, orders: {} }).events ||= {})[k] = ev;
+  return copies;
+}
+
 export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", printers: stationPrinters = {}, labelSize = "", flagPrinter = "", flagPrinters: stationFlagPrinters = {}, flagLabelSize = "", print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
   let state = { stations: {}, rosters: {} };
   try { state = { ...state, ...JSON.parse(fs.readFileSync(file, "utf8")) }; }
@@ -102,6 +150,8 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
       try { fs.renameSync(file, aside); console.error(`[hub] ${file} could not be read (${e.message}); kept as ${aside}, starting empty`); } catch { /* leave it */ }
     }
   }
+  // Scans the old filing counted twice are merged once, at start (M5). Saved with the next write.
+  if (state.ledger) { const copies = normaliseLedger(state.ledger); if (copies) console.log(`[hub] ledger: ${copies} copies of the same scan merged (each scan is now filed once, under its own day)`); }
 
   // Writes are coalesced: with flag photos in the ledger the file is a few MB,
   // and every station reports every 5 s.
@@ -228,12 +278,13 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
       });
       if (counts) rec.counts = counts;
     }
-    const dayLed = (led[new Date(at).toLocaleDateString("en-CA")] ||= { events: {}, orders: {} });
-    const events = (dayLed.events ||= {});
+    // The id `co-<row>-<time>` is the one the station's log line gets when it opens the
+    // order (applyCheckOff in orderstore.js, `ledgerId`), so the station re-sending it
+    // updates this entry instead of counting the pass a second time (M5).
     off.forEach(j => {
       const evId = `co-${j.rowId}-${at}`;
-      events[`${u.station}|${evId}`] = { id: evId, t: localStamp(at), status: short ? "short" : "pass", order: u.order, run: u.run, jerseyType: u.jerseyType || "", station: u.station, rowId: j.rowId,
-        number: j.number, name: j.name, size: j.size, team: j.team, reason: word, resolution: word + (by ? ` (${by})` : ""), operator: by };
+      fileEvent(led, { id: evId, t: localStamp(at), status: short ? "short" : "pass", order: u.order, run: u.run, jerseyType: u.jerseyType || "", station: u.station, rowId: j.rowId,
+        number: j.number, name: j.name, size: j.size, team: j.team, reason: word, resolution: word + (by ? ` (${by})` : ""), operator: by }, u.station, localStamp(at).slice(0, 10));
     });
   };
   const summary = r => ({ id: r.id, shipWith: r.shipWith || [], orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
@@ -254,11 +305,17 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           // The supervisor renamed the running order from the board: the station
           // now reports the new number. Same order, so nothing is carried and the
           // day tally continues; the record under the old name goes.
-          const renamed = !!prev?.setOrder && body.orderNumber === prev.setOrder.orderNumber;
           // One start of an order on a station is a run (`orderRun`, the time it
           // was started). The same number started again is another run: its own
           // record in the ledger, the finished one kept as it was.
           const sameRun = !!prev && (prev.orderRun || 0) === (body.orderRun || 0);
+          // The operator corrected the order number in the station's header: the
+          // same run under another number is the same order renamed, not a new one
+          // (code review M9: every keystroke used to open a new order record and add
+          // the station's whole done count to the day tally again).
+          const renamed = !!prev?.orderNumber && body.orderNumber !== prev.orderNumber && (
+            (!!prev.setOrder && body.orderNumber === prev.setOrder.orderNumber)
+            || (!!body.orderNumber && !!prev.orderRun && sameRun));
           if (prev && prev.orderNumber && !renamed && (body.orderNumber !== prev.orderNumber || !sameRun)) {
             // Key without the order number: if the order is renamed twice the same jersey must not be listed twice.
             const open = (prev.attention || []).filter(a => !a.resolution).map(a => ({ ...a, order: prev.orderNumber, key: `${a.time}|${a.jersey}|${a.status}` }));
@@ -273,25 +330,37 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           const done  = doneOf(body.counts);
           const sameOrder = !!prev && ((prev.orderNumber === body.orderNumber && sameRun) || renamed);
           const day = prev?.day?.date === today ? { ...prev.day } : { date: today, done: 0 };
-          day.done = Math.max(0, day.done + (sameOrder ? done - doneOf(prev.counts) : done));   // an un-checked jersey takes one off again
+          const { events = [], rows = [], bins = null, ...rest } = body;
+          const led = (state.ledger ||= {});
+          // Another order on this station: count only the jerseys the hub has not seen
+          // passed yet today. An order picked up from the unfinished pile arrives with
+          // everything done on it before, and that was counted where it was done (M5).
+          const freshDone = sameOrder ? 0 : events.filter(ev => ev && ev.id !== undefined && (ev.status === "pass" || ev.status === "manual")
+            && eventDay(ev, today) === today && !led[today]?.events?.[eventKey(ev, id)]).length;
+          day.done = Math.max(0, day.done + (sameOrder ? done - doneOf(prev.counts) : freshDone));   // an un-checked jersey takes one off again
           let history = (sameOrder && prev.history) || [];
           history = [...history, { t: now, done }].filter(h => now - h.t <= 20 * 60000).slice(-300);
           const first = history[0], span = now - first.t;
           const rate   = span >= 2 * 60000 && done > first.done ? (done - first.done) / span * 3600000 : null;   // jerseys per hour
           const etaMin = rate ? Math.round((body.counts?.remaining || 0) / rate * 60) : null;
-          // Day ledger: every scan event from every station, keyed so a re-sent
-          // event (same id) updates in place — a resolution added later lands too.
-          const { events = [], rows = [], bins = null, ...rest } = body;
-          const led = (state.ledger ||= {}); const dayLed = (led[today] ||= { events: {}, orders: {} });
-          // A photo arrives with the first few reports after a flag (the damage photos a little later, once taken); keep them when later reports leave them out.
-          events.forEach(ev => { if (ev && ev.id !== undefined) { const k = `${id}|${ev.id}`; const old = dayLed.events[k]; dayLed.events[k] = { ...ev, station: id, ...(ev.photo ? {} : old?.photo ? { photo: old.photo } : {}), ...(ev.damagePhotos?.length ? {} : old?.damagePhotos?.length ? { damagePhotos: old.damagePhotos } : {}) }; } });
+          // Day ledger: every scan event from every station, each filed once under its
+          // own day (fileEvent, M5), so a re-sent event updates in place — a resolution
+          // added later lands too, and a photo once seen is kept.
+          const dayLed = (led[today] ||= { events: {}, orders: {} });
+          events.forEach(ev => { if (ev && ev.id !== undefined) fileEvent(led, ev, id, today); });
           const okey = (order, run) => `${id}|${order}${run ? "|" + run : ""}`;
-          if (renamed && prev.orderNumber) delete dayLed.orders[okey(prev.orderNumber, prev.orderRun)];
+          // Renamed: the record moves to the new number and keeps when it started.
+          let renamedFrom = null;
+          if (renamed && prev.orderNumber) { const k = okey(prev.orderNumber, prev.orderRun); renamedFrom = dayLed.orders[k] || null; delete dayLed.orders[k]; }
           if (body.orderNumber) {
             // The order record keeps the latest roster with each jersey's status, so the
             // supervisor can download the order's QC Results sheet at any time.
-            const ok = okey(body.orderNumber, body.orderRun); const o = dayLed.orders[ok] || { station: id, order: body.orderNumber, run: body.orderRun || 0, operator: body.operatorName, firstSeen: now };
-            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", jerseyType: body.jerseyType || o.jerseyType || "", rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null, closedBins: body.closedBins || o.closedBins || null, binSummary: body.binSummary || o.binSummary || null, idle: body.idle || o.idle || null, away: body.away || o.away || null };
+            const ok = okey(body.orderNumber, body.orderRun); const o = dayLed.orders[ok] || (renamedFrom ? { ...renamedFrom, order: body.orderNumber, run: body.orderRun || 0 } : null) || { station: id, order: body.orderNumber, run: body.orderRun || 0, operator: body.operatorName, firstSeen: now };
+            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", jerseyType: body.jerseyType || o.jerseyType || "", rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null, closedBins: body.closedBins || o.closedBins || null, binSummary: body.binSummary || o.binSummary || null, idle: body.idle || o.idle || null, away: body.away || o.away || null,
+              // When the station pressed Finish order (code review M7: an order finished with jerseys
+              // still unscanned showed "in progress" for ever). The station is the judge: "Back to
+              // this order" sends null again. A station from before this change sends nothing: kept.
+              finishedAt: "finishedAt" in body ? (body.finishedAt || null) : (o.finishedAt || null) };
           }
           pruneLedger(led);   // 90 days; photos on the newest 14
           const setOrder = renamed ? undefined : prev?.setOrder;          // pending until the station reports it
@@ -312,6 +381,16 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           const s = state.stations[id]; if (s) { s.carried = (s.carried || []).filter(c => c.key !== key); save(); console.log(`[hub] ${new Date().toLocaleTimeString()} ${id}: supervisor marked done — ${key}`); }
           return json(res, 200, { ok: true });
         }
+        // The operator signed out (code review M8). The station stays on the board as
+        // "signed out": deleting it, as Sign out used to, lost the day's tally and the
+        // flags still on their way to the supervisor. Its next report clears the mark.
+        if (req.method === "POST" && id && parts[2] === "signout") {
+          const s = state.stations[id]; if (!s) return json(res, 200, { ok: true });   // never reported: nothing to mark
+          s.signedOut = { at: now_(), operator: s.operatorName || "" }; save();
+          console.log(`[hub] ${new Date().toLocaleTimeString()} ${id}: ${s.operatorName || "the operator"} signed out`);
+          return json(res, 200, { ok: true });
+        }
+        // The supervisor takes a station off the board ("Remove").
         if (req.method === "DELETE" && id) { delete state.stations[id]; save(); return json(res, 200, { ok: true }); }
       }
       // An order by its number, from any day the ledger still has: the roster
@@ -329,7 +408,9 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
             const k = `${o.station}|${o.order}|${o.run || 0}`, before = found[k];
             const flags = { ...(before?.flagsById || {}) };
             Object.values(d.events || {}).forEach(ev => {
-              if (ev.station !== o.station || String(ev.order) !== String(o.order) || (ev.run || 0) !== (o.run || 0) || ev.status !== "flagged") return;
+              // The run's flags wherever they were scanned (an event keeps the station that scanned it,
+              // and a run picked up at another station keeps its run); by station before runs existed.
+              if ((o.run && ev.run ? ev.run !== o.run : (ev.station !== o.station || (ev.run || 0) !== (o.run || 0))) || String(ev.order) !== String(o.order) || ev.status !== "flagged") return;
               const slim = { ...ev }; delete slim.photo; delete slim.damagePhotos; flags[ev.id] = slim;
             });
             found[k] = { date, exact: n === q, station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", firstSeen: before?.firstSeen ?? o.firstSeen, lastSeen: o.lastSeen, counts: o.counts || null, jerseyType: o.jerseyType || "", rows: o.rows || [], bins: o.bins || null, closedBins: o.closedBins || [], flagsById: flags };
@@ -350,7 +431,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           return {
             date,
             events: Object.values(d.events || {}).map(ev => { const slim = { ...ev }; delete slim.photo; delete slim.damagePhotos; return slim; }).sort((a, b) => String(a.t).localeCompare(String(b.t))),
-            orders: Object.values(d.orders || {}).map(o => ({ station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", counts: o.counts || null, jerseyType: o.jerseyType || "", firstSeen: o.firstSeen, lastSeen: o.lastSeen })),
+            orders: Object.values(d.orders || {}).map(o => ({ station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", counts: o.counts || null, jerseyType: o.jerseyType || "", firstSeen: o.firstSeen, lastSeen: o.lastSeen, finishedAt: o.finishedAt || null })),
           };
         });
         return json(res, 200, { from, to, days, known: Object.keys(state.ledger || {}).sort() });

@@ -229,7 +229,9 @@ export function buildDaySheets(ledger, stationLabel = id => id, { categoryOf = (
     ["How to read it", "Active minutes leave out gaps longer than 10 minutes (breaks). Jerseys per active hour = passed / active hours. Median seconds per jersey = typical time between two confirmed jerseys. Compare with how long the same order took by hand."],
   ];
   const orderRows = orders.map(o => {
-    const evs = events.filter(e => e.station === o.station && e.order === o.order);
+    // This station's scans of this run of the order: the same number started twice is two runs,
+    // each with its own row (an event from before runs existed has none and matches any run).
+    const evs = events.filter(e => e.station === o.station && String(e.order) === String(o.order) && (!e.run || !o.run || e.run === o.run));
     const s = summarise(evs); const c = o.counts || {};
     const awayMin = o.away ? Math.round((o.away.seconds || 0) / 60 * 10) / 10 : "";
     return [stationLabel(o.station), o.order, o.jerseyType || "", o.operator || "", c.total ?? "", s.passed, s.byHand, s.flagged + s.offRoster, c.remaining ?? "", hhmm(s.first), hhmm(s.last), s.activeMin, s.perHour ?? "", o.idle ? o.idle.count : "", o.away ? `${o.away.count}${o.away.count ? " · " + awayMin + " min" : ""}` : "", o.rosterFile || "", s.flagRate, s.passRate, s.medianSec ?? ""];

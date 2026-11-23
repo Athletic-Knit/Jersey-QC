@@ -92,7 +92,9 @@ export function applyCheckOff(rec, entry) {
   const extraOpen = log0.some(l => extras.has(l.id) && !l.resolution);
   if (!fresh.length && !extraOpen && !entry.closed) return rec;
   const words = c => (to(c) === "short" ? "Shipped short — supervisor" : "Checked off by supervisor");
-  const lines = fresh.map((r, i) => { const c = byId[r._id]; return { id: now + i, match: { ...r, scanned: to(c) }, status: to(c), reason: words(c), resolution: `${words(c)}${c.by ? " (" + c.by + ")" : ""}`, timestamp: stampOf(c), operator: c.by || "Supervisor" }; });
+  // `ledgerId`: the hub filed this check-off as `co-<row>-<time>` (checkOffInLedger in
+  // hub-plugin.js); the station reports the line under that id, so it is one pass, not two (M5).
+  const lines = fresh.map((r, i) => { const c = byId[r._id]; return { id: now + i, ...(c.at ? { ledgerId: `co-${r._id}-${c.at}` } : {}), match: { ...r, scanned: to(c) }, status: to(c), reason: words(c), resolution: `${words(c)}${c.by ? " (" + c.by + ")" : ""}`, timestamp: stampOf(c), operator: c.by || "Supervisor" }; });
   const session = {
     ...rec.session,
     roster: roster.map(r => (fresh.includes(r) ? { ...r, scanned: to(byId[r._id]), checkedBy: "supervisor" } : r)),

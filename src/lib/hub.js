@@ -23,7 +23,7 @@ export const LIVE_MS = 20000;
 export function stationUse(answer, me = browserId()) {
   const now = answer?.now || Date.now();
   const out = {};
-  for (const s of answer?.stations || []) out[s.id] = { operator: s.operatorName || "", live: now - (s.updatedAt || 0) < LIVE_MS, mine: !s.browserId || s.browserId === me };
+  for (const s of answer?.stations || []) out[s.id] = { operator: s.operatorName || "", live: !s.signedOut && now - (s.updatedAt || 0) < LIVE_MS, mine: !s.browserId || s.browserId === me };   // signed out = free at once
   return out;
 }
 
@@ -56,7 +56,8 @@ export function holdPrints(reason = "") { printsHeld = String(reason || ""); }
 export const hub = {
   report:        (id, snapshot) => call(`/api/hub/stations/${id}`, { method: "POST", body: JSON.stringify(snapshot) }),
   stations:      ()             => call("/api/hub/stations"),
-  removeStation: id             => call(`/api/hub/stations/${id}`, { method: "DELETE" }),
+  removeStation: id             => call(`/api/hub/stations/${id}`, { method: "DELETE" }),          // the supervisor's Remove
+  signOutStation: id            => call(`/api/hub/stations/${id}/signout`, { method: "POST" }),    // the operator signed out: kept on the board, marked (M8)
   setOrder:      (id, body)     => call(`/api/hub/stations/${id}/order`, { method: "POST", body: JSON.stringify(body) }),   // supervisor names a station's running order
   clearCarried:  (id, key)      => call(`/api/hub/stations/${id}/carried?key=${encodeURIComponent(key)}`, { method: "DELETE" }),
   rosters:       ()             => call("/api/hub/rosters"),
@@ -93,7 +94,7 @@ export const hub = {
 // operator took); the hub keeps a photo once it has seen it, so older flags
 // keep theirs without being re-sent every 5 s.
 const PHOTOS_PER_REPORT = 6;   // the newest log entries that carry their photo in each 5-second report
-export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap, closedBins = [], binSummary = [], idleSpells = [], awaySpells = [] }) {
+export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap, closedBins = [], binSummary = [], idleSpells = [], awaySpells = [], finishedAt = null }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
   return {
@@ -104,6 +105,9 @@ export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, note
     // orderRun: when this order was started on this station. The same order
     // number started again is a new run with its own record on the hub.
     operatorName, role, orderNumber, orderRun, notes, jerseyType, rosterFile, browserId: browserId(),
+    // When Finish order was pressed (null while the order is open): the board shows
+    // the order finished even with jerseys not scanned (code review M7).
+    finishedAt: finishedAt || null,
     // The roster with each jersey's status, so the supervisor can download an
     // order's QC Results sheet without the station. Bins travel with it.
     rows: roster.map(r => ({ ...r, scanned: r.scanned || false })),
@@ -119,7 +123,9 @@ export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, note
     // resolved at its end must still reach the ledger (~300 bytes an event).
     events: log.map((l, i) => {
       const ev = {
-        id: l.id, t: l.timestamp, status: l.status, order: orderNumber, run: orderRun, jerseyType, operator: l.operator || operatorName, rowId: l.match?._id,
+        // A supervisor's check-off line carries the id the hub already filed it under
+        // (`ledgerId`, applyCheckOff), so it is not counted twice (code review M5).
+        id: l.ledgerId ?? l.id, t: l.timestamp, status: l.status, order: orderNumber, run: orderRun, jerseyType, operator: l.operator || operatorName, rowId: l.match?._id,
         number: l.match?.number ?? l.detected?.number ?? "", name: l.match?.name ?? l.detected?.name ?? "", size: l.match?.size ?? "", team: l.match?.team ?? "",
         offRoster: !!l.match?.offRoster, reason: l.reason || "", resolution: l.resolution || "",
         read: l.detected ? `#${l.detected.number || "?"}${l.detected.number_complete === false ? "?" : ""}${l.detected.name ? " " + l.detected.name : ""}${l.detected.laid_flat === false ? " [not flat]" : ""}` : "",

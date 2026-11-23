@@ -68,3 +68,51 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - The operator simulation no longer exercises colour-column twins (its camera reports the team as the colour).
 - **Written by** Sonnet (four separate attempts, each rejected after 3 rounds because the rules overlap) and then by the Claude session (Opus 5.5) as one change, building on those attempts and on Opus's findings · **reviewed by** Opus (one review, blockers only: one blocker, the empty-field doubt, now fixed).
 - **Commit:** 696c313
+
+## 2026-11-23 · Phase 2 · Reports and the supervisor board (review M5–M12)
+- **Findings:**
+  - **M5:** the day sheet and Compare days counted the same scans more than once. An order past midnight, a parked order picked up at another station, a renamed order and a supervisor's check-off each added the same scans again.
+  - **M6:** Accept or Reject turned a flag into "manual", so the flag left every damage report.
+  - **M7:** an order finished with jerseys not scanned showed "in progress" for ever.
+  - **M8:** Sign out deleted the station from the hub, with its day tally and the flags on their way to the supervisor.
+  - **M9:** each keystroke in the header's order number opened a new order record and added the done count again.
+  - **M10:** the board's order sheet dropped each event's status, so its Summary counted nothing.
+  - **M11:** the order view's order sheet ignored the day being viewed.
+  - **M12:** a station card's "Open order" opened the oldest run of the order.
+- **Rule:** review fixes. Nothing on the floor changes for the operator except that Sign out leaves the station on the board, marked "signed out".
+- **What changed and why:**
+  - **The ledger** (hub-plugin.js):
+    - A scan is filed under its own day, from its stamp, keyed by the order's run and its own id (`eventKey`, `fileEvent`), so a re-send from any station lands on the same entry. The station that scanned it is kept.
+    - The existing ledger is put right once when the hub starts (`normaliseLedger`): copies are merged, keeping the newest content, the first station and any photo. Order records are untouched. On the test hub this merged 1,523 copies: its reports counted 4,043 passes for 2,574 real scans.
+    - A check-off line carries the hub's id (`ledgerId`), so it is one pass, not two.
+    - For a new order on a station, the day tally adds only passes the hub has not seen.
+    - The same run under another number is a rename: one record, its start kept.
+  - **The station** (App.jsx):
+    - Accept and Reject keep the flag's status and record `outcome`.
+    - Finish order sets `finishedAt` (saved, reported). "Back to this order" clears it.
+    - A reload on the done screen brings the done screen back.
+    - Finish later never parks an order as finished.
+    - Sign out calls the new `POST /stations/:id/signout`, which marks the station and frees it at once. The supervisor's Remove still deletes.
+  - **The board:** the rules moved to a new file, `src/lib/ledgerview.js`:
+    - `orderDone`: finished by Finish order, or with nothing left to scan;
+    - `pickRun`: the run asked for, else the newest;
+    - `ofRun`: every event of the run, wherever it was scanned;
+    - `eventsAsLog`: status kept.
+  - The order sheet takes the day and run being viewed.
+  - The day sheet's order rows match the run.
+  - The Print menu's "Another order" and the replay find a run's scans wherever they were scanned.
+  - **Files:** `hub-plugin.js`, `replay-plugin.js`, `src/App.jsx`, `src/lib/hub.js`, `src/lib/orderstore.js`, `src/lib/export.js`, `src/lib/ledgerview.js` (new), `CLAUDE.md`, tests.
+- **Tests added:** `src/lib/__tests__/review-reports.test.js` (new, 15 tests: one block per finding, plus the two review follow-ups). The check-off test in `hub-unfinished.test.js` was changed to the new key.
+- **Checks:**
+  - Lint is clean and all 480 tests pass.
+  - The 3000-order simulation shows WRONG GREEN 0, unchanged; matching was not touched.
+  - On the test server (5174) a test station's rename, `finishedAt`, sign-out and one-scan filing were tried and are right. The test station was removed afterwards.
+  - The board's screens were not looked at in the browser. They need a supervisor sign-in.
+- **Review:** Opus, one review, blockers only. It found one blocker: a reload on the done screen left the order "finished" on the board while the station scanned on. That is fixed, with a test. It also checked `normaliseLedger` on a copy of the test data: nothing lost, and a second run changes nothing. Two of its notes were fixed too: the Print menu and the replay matched a run's scans by station only, and a renamed record now takes the new run.
+- **Left open (non-blocking, from the review):**
+  - A new order's first report counts passes and by-hand jerseys only, while later reports count every jersey done, including flags and missing.
+  - The supervisor's Remove now restarts a station's day tally at 0.
+  - Emptying the header's order number mid-edit still lists the order's open flags as "earlier order" items. This was already so before this change.
+  - Two stations with the same run open at once overwrite each other's entries.
+  - The sign-out call can race the page reload, as the old delete did.
+- **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (one blocker, fixed).
