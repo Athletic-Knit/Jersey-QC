@@ -139,33 +139,75 @@ export function normaliseLedger(led) {
 }
 
 export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", printers: stationPrinters = {}, labelSize = "", flagPrinter = "", flagPrinters: stationFlagPrinters = {}, flagLabelSize = "", print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
+  // One hub per data file (code review M20). Saving hub-plugin.js or a file it imports makes
+  // Vite load this module again and create a new hub in the same process, while the old one
+  // may still hold changes it has not written (writes wait 1.5 s) and its server may still
+  // take requests (Vite starts the new server before it closes the old, and keeps the old one
+  // if the new one fails to start). So the old hub is closed first: what it holds is written,
+  // and from then on it hands every request, also one whose body was still arriving, to the
+  // newest hub for the file. Only then is the file read, so the new hub starts from everything.
+  const key = path.resolve(file);
+  const hubs = (globalThis.__jerseyQcHubs ||= new Map());
+  hubs.get(key)?.close();
+
   let state = { stations: {}, rosters: {} };
-  try { state = { ...state, ...JSON.parse(fs.readFileSync(file, "utf8")) }; }
-  catch (e) {
-    // No file is a first run. A file that is there but does not parse (a write
-    // cut short, OneDrive holding it) is kept aside: starting empty and saving
-    // over it would wipe the 90-day ledger.
-    if (fs.existsSync(file)) {
+  // `blocked`: the file is there but could not be read or set aside. Nothing is written then:
+  // a hub that started empty and saved would wipe the 90-day ledger (code review M19). Every
+  // change is refused with a 503, which the stations and the board show, until the server
+  // is restarted with a file it can read.
+  let blocked = "";
+  // OneDrive can hold the file for a moment ("UNKNOWN: unknown error, read", 17 Nov 2026):
+  // a read that fails is tried again three times, half a second apart, before anything else.
+  const pause = ms => { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* no wait */ } };
+  let text = null, readErr = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try { text = fs.readFileSync(file, "utf8"); readErr = null; break; }
+    catch (e) { readErr = e; if (e.code === "ENOENT") break; pause(500); }
+  }
+  if (readErr && readErr.code !== "ENOENT") {
+    // There, but it cannot be read at all: it is not set aside (it may be whole), and nothing is written over it.
+    blocked = `${file} could not be read (${readErr.message})`;
+  } else if (text !== null) {
+    try { state = { ...state, ...JSON.parse(text) }; }
+    catch (e) {
+      // Read, but it does not parse (a write cut short): kept aside, and the hub starts empty.
+      // If it cannot be set aside, nothing is written over it.
       const aside = `${file}.unreadable-${Date.now().toString(36)}`;
-      try { fs.renameSync(file, aside); console.error(`[hub] ${file} could not be read (${e.message}); kept as ${aside}, starting empty`); } catch { /* leave it */ }
+      try { fs.renameSync(file, aside); console.error(`[hub] ${file} could not be read (${e.message}); kept as ${aside}, starting empty`); }
+      catch (e2) { blocked = `${file} does not parse (${e.message}) and could not be set aside (${e2.message})`; }
     }
   }
+  if (blocked) console.error(`[hub] ${blocked}. NOTHING WILL BE SAVED until the server is restarted with a file it can read: every change is refused.`);
   // Scans the old filing counted twice are merged once, at start (M5). Saved with the next write.
   if (state.ledger) { const copies = normaliseLedger(state.ledger); if (copies) console.log(`[hub] ledger: ${copies} copies of the same scan merged (each scan is now filed once, under its own day)`); }
 
   // Writes are coalesced: with flag photos in the ledger the file is a few MB,
   // and every station reports every 5 s.
-  let saveTimer = null;
+  let saveTimer = null, closed = false;
   const writeNow = () => {
-    saveTimer = null;
+    clearTimeout(saveTimer); saveTimer = null;
+    if (blocked) return;
     try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file + ".tmp", JSON.stringify(state)); fs.renameSync(file + ".tmp", file); }   // whole or not at all
     catch (e) { console.error("[hub] could not save:", e.message); }
   };
-  const save = () => { if (!saveTimer) saveTimer = setTimeout(writeNow, 1500); };
-  globalThis.process?.on?.("exit", () => { if (saveTimer) { clearTimeout(saveTimer); writeNow(); } });   // flush a pending write when the dev server stops
+  const save = () => { if (!saveTimer && !closed) saveTimer = setTimeout(writeNow, 1500); };
+  // One exit listener for every hub: a pending write is flushed when the dev server stops.
+  if (!globalThis.__jerseyQcExit) { globalThis.__jerseyQcExit = true; globalThis.process?.on?.("exit", () => hubs.forEach(h => h.flush())); }
+  // Closing: what is pending is written now, and nothing more is saved from this hub (the newest
+  // hub for the file takes its requests, see handle).
+  const close = () => {
+    if (closed) return;
+    if (saveTimer) writeNow();
+    closed = true;
+    if (hubs.get(key)?.close === close) hubs.delete(key);
+  };
+  const flush = () => { if (saveTimer) writeNow(); };
   const now_ = now;
   const json = (res, code, body) => { res.statusCode = code; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(body)); };
-  const readBody = req => new Promise((resolve, reject) => {
+  // The body is read once and kept on the request (`__jqcBody`), so a request read here can
+  // be handed to the newest hub whole (M20).
+  const readBody = req => (req.__jqcBody !== undefined ? Promise.resolve(req.__jqcBody) : readBodyRaw(req));
+  const readBodyRaw = req => new Promise((resolve, reject) => {
     const chunks = []; let size = 0;   // joined before decoding: an accented letter split across two chunks stays whole
     req.on("data", c => { const b = Buffer.isBuffer(c) ? c : Buffer.from(String(c)); chunks.push(b); size += b.length; if (size > 20e6) reject(new Error("body too large")); });
     req.on("end", () => { try { const s = Buffer.concat(chunks).toString("utf8"); resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } });
@@ -290,6 +332,18 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   const summary = r => ({ id: r.id, shipWith: r.shipWith || [], orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
 
   async function handle(req, res) {
+    // The whole body first, then the request goes to the NEWEST hub for this file: a request
+    // that reached a hub replaced while its body was arriving lands in the new hub's state, not
+    // in this one's, which is no longer saved (M20, found by the phase 4 review).
+    if (req.method !== "GET" && req.method !== "HEAD" && req.__jqcBody === undefined) {
+      try { req.__jqcBody = await readBodyRaw(req); } catch (e) { return json(res, 400, { error: e.message }); }
+    }
+    const newest = hubs.get(key);
+    if (newest && newest.handle !== handle) return newest.handle(req, res);
+    if (closed) return json(res, 503, { error: "the hub is restarting: try again in a moment" });
+    // A hub whose file could not be read answers nothing, reads included: an empty board would
+    // look like a quiet floor, a 503 shows that the hub is in trouble (M19).
+    if (blocked) return json(res, 503, { error: `the hub is not saving anything: ${blocked}. Restart the server once the file can be read.` });
     const parts = new URL(req.url, "http://hub").pathname.split("/").filter(Boolean);
     const [kind, id] = parts;
     try {
@@ -712,13 +766,15 @@ Connection: close
     });
   };
 
-  return { handle, redirectPlainHttp, state: () => state, flush: writeNow };
+  hubs.set(key, { close, handle, flush });
+  return { handle, redirectPlainHttp, state: () => state, flush: writeNow, close, blocked: () => blocked };
 }
 
 export default function hubPlugin(opts = {}) {
-  const { handle, redirectPlainHttp } = createHub(opts);
+  const { handle, redirectPlainHttp, close } = createHub(opts);
   return {
     name: "jersey-hub",
+    buildEnd() { close(); },   // the dev server closing: what is pending is written first; a replaced hub was closed already (M20)
     configureServer(server) {
       server.middlewares.use("/api/hub", (req, res) => { handle(req, res); });
       redirectPlainHttp(server.httpServer);

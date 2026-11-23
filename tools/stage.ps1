@@ -14,7 +14,8 @@
 # window (close the window to stop it). Each stage has its own folder and its
 # own data file, so nothing done on development or testing touches the floor.
 # A missing development or testing folder is made: cloned from GitHub, with
-# .env.local copied and node_modules linked from production.
+# .env.local copied from production. Every folder has its own packages (npm ci,
+# tools\stagelib.ps1); a folder that still links production's gets its own.
 param([Parameter(Mandatory = $true)][ValidateSet("development", "testing", "production")][string]$Stage)
 $ErrorActionPreference = "Continue"
 $repo    = "https://github.com/Athletic-Knit/Jersey-QC.git"
@@ -60,14 +61,22 @@ foreach ($from in @($prodDir, $here)) {
   if (-not (Test-Path (Join-Path $dir ".env.local")) -and (Test-Path (Join-Path $from ".env.local"))) {
     Copy-Item (Join-Path $from ".env.local") (Join-Path $dir ".env.local"); Say "Settings (.env.local) copied from $from"
   }
-  if (-not (Test-Path (Join-Path $dir "node_modules")) -and (Test-Path (Join-Path $from "node_modules"))) {
-    cmd /c mklink /J "$dir\node_modules" "$from\node_modules" | Out-Null; Say "Packages linked from $from"
+}
+# Each stage has its own packages (tools\stagelib.ps1, code review M21). They used to be a
+# link to production's, so an install on development or testing changed the floor's packages.
+. (Join-Path $PSScriptRoot "stagelib.ps1")
+function EnsurePackages {
+  $need = Get-PackagesNeed $dir
+  if (-not $need) { return }
+  Step "Making this folder's own packages ($need)"
+  if ($Stage -ne "production" -and (Answers)) {
+    Say "The $Stage server is stopped for it; this window starts it again." Yellow
+    if (-not (Stop-PortServer $port)) { Say "The $Stage server on port $port did not stop: close its window and run this again." Red; exit 1 }
   }
+  if ($Stage -eq "production" -and (Answers)) { Say "Production's packages are made only by a promotion (tools\promote.ps1), with the floor's server stopped." Yellow; return }
+  if (-not (Install-Packages $dir)) { Say "The packages could NOT be installed (see above). Nothing was started." Red; exit 1 }
 }
-if (-not (Test-Path (Join-Path $dir "node_modules"))) {
-  Step "Installing the packages (first run, a few minutes)"
-  Push-Location $dir; npm.cmd install; Pop-Location
-}
+EnsurePackages
 New-Item -ItemType Directory -Force (Join-Path $dir "data") | Out-Null
 
 # ---- Promote the previous step and take it -------------------------------
@@ -92,6 +101,7 @@ if ($Stage -eq "development") {
   & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir "tools\pull-testing.ps1")
   if ($LASTEXITCODE -ne 0) { Say "The testing folder did not take it (see above). The testing server still starts with what it has." Yellow }
 } else {
+  # (production: promote.ps1 makes the packages when they change, with the floor's server stopped)
   Step "Promoting testing to PRODUCTION"
   git fetch -q origin
   $waiting = @(git log --oneline "HEAD..origin/testing")
@@ -107,6 +117,9 @@ if ($Stage -eq "development") {
     } else { Say "Not promoted. Production stays as it is." Yellow }
   }
 }
+
+# What was just taken may have changed the packages (development, testing).
+if ($Stage -ne "production") { EnsurePackages }
 
 # ---- The server ------------------------------------------------------------
 Step "The server"

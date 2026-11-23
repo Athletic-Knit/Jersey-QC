@@ -152,3 +152,48 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - A column passed over now shows as an extra column in the roster table.
 - **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (two blockers, fixed and re-checked).
 - **Commit:** c8d066f
+
+## 2026-11-23 · Phase 4 · The hub's data file and the stages (review M19–M21)
+- **Findings:**
+  - **M19:** a data file that could not be read and could not be set aside (OneDrive holding it) was written over with an empty hub: 90 days of ledger gone.
+  - **M20:** each reload of the server (any saved server file, a promotion) made a new hub while the old one's pending write (1.5 s) still fired, so old state could land over new.
+  - **M21:** development and testing used production's packages through a link, so an install on either changed the floor's packages; a promoted package change was never installed; backups copied hub.json but not the unfinished orders (data\hub-orders).
+- **Rule:** review fixes. The owner's: nothing is changed on the floor without a promotion.
+- **What changed and why:**
+  - **The data file** (hub-plugin.js):
+    - A read that fails is tried three more times, half a second apart.
+    - A file that still cannot be read is left as it is, and the hub is `blocked`: it writes nothing and answers every request, reads too, with a 503 that stations and the board show.
+    - A file that does not parse is set aside as before. If it cannot be set aside, the hub is blocked.
+  - **One hub per data file** (a map on `globalThis`):
+    - A new hub closes the old one first: its pending write goes to disk, then the new hub reads the file.
+    - The old hub then reads each request's whole body and hands it to the newest hub. A request mid-upload during a reload, or one reaching the old server when the new server fails to start, lands in the new hub.
+    - One exit listener flushes every hub.
+  - **The stages** (`tools/stagelib.ps1`, new, used by stage.ps1, promote.ps1 and pull-testing.ps1):
+    - **Own packages:** each stage folder has its own packages (`npm ci`). A folder that still links another folder's packages gets its own; the link is removed with `rmdir` alone, which never touches the folder it points to. Only a real junction or symbolic link counts as a link: a OneDrive folder does not.
+    - **Changed packages:** a stamp in node_modules records which package-lock.json the packages were made from. When it changes:
+      - `promote.ps1 -Production` stops the "Jersey QC server" task and port 5173. It stops with nothing changed if the task does not stop. It then installs and starts the task again; a failed install says how to recover or go back.
+      - `pull-testing.ps1` stops the testing server for the install.
+      - `stage.ps1` does it for development and testing.
+    - **Backups:** promotion and the testing pull copy `data\hub*.json` and `data\hub*-orders\` into `data\backups\<date_time>\`, keeping the newest 20.
+  - **Files:** `hub-plugin.js`, `tools/stagelib.ps1` (new), `tools/stage.ps1`, `tools/promote.ps1`, `tools/pull-testing.ps1`, `CLAUDE.md`, tests.
+- **Tests added:** `src/lib/__tests__/review-hub.test.js` (new, 9 tests):
+  - an unreadable file is never written;
+  - a bad file is set aside;
+  - a new hub starts from the old one's unwritten changes;
+  - a request mid-upload lands in the new hub;
+  - the old server works through the new hub;
+  - the scripts never link packages, back up the orders, and use `rmdir` without /s.
+- **Checks:**
+  - Lint is clean and all 506 tests pass.
+  - The four scripts parse.
+  - `stagelib.ps1` was run on throwaway folders: a linked folder got its own packages and the linked folder's file was untouched; a changed lock file was noticed; a failed `npm ci` returned failure; backups kept 20.
+  - The test server (5174) reloaded on the new hub code without losing its data.
+  - promote.ps1, pull-testing.ps1 and stage.ps1 were NOT run (they move branches and stop servers); nothing was run on the server PC.
+- **Review:** Opus, blockers only. It found two blockers in my first version, both fixed and re-checked by Opus:
+  - a request mid-upload during a reload answered 200 but its change was lost (a "Finish later" could vanish);
+  - a new server that failed to start left the floor answering 503 to everything.
+- **Left open (non-blocking):**
+  - A missing stamp in a real node_modules is taken as current. A production folder whose packages are already stale stays so until the next package change.
+  - The first promotion that brings these scripts runs the OLD promote.ps1 on the server PC, so it backs up hub.json only and installs nothing. This change has no package changes.
+  - Development's own folder (this PC) still links production's packages until `Development server.bat` is next run, which makes its own.
+- **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (two blockers, fixed and re-checked).
