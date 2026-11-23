@@ -8,5 +8,16 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 root = fso.GetParentFolderName(fso.GetParentFolderName(WScript.ScriptFullName))
 sh.CurrentDirectory = root
 If Not fso.FolderExists(root & "\data") Then fso.CreateFolder(root & "\data")
+' The last run's log is kept as data\server-previous.log (replacing an older
+' one): a restart used to write over it, and the crash that caused the restart
+' was lost with it (code review, 23 Nov 2026). If it cannot be moved (still
+' held open), the server starts all the same.
+On Error Resume Next
+If fso.FileExists(root & "\data\server.log") Then
+  If fso.FileExists(root & "\data\server-previous.log") Then fso.DeleteFile root & "\data\server-previous.log", True
+  fso.MoveFile root & "\data\server.log", root & "\data\server-previous.log"
+End If
+Err.Clear
+On Error GoTo 0
 code = sh.Run("cmd /c npm.cmd run dev > ""data\server.log"" 2>&1", 0, True)
 WScript.Quit code

@@ -43,7 +43,11 @@ Write-Host "Waiting to go to $($toName) ($($waiting.Count)):" -ForegroundColor C
 $waiting | ForEach-Object { Write-Host "  $_" }
 $files = @(git diff --name-only "$to..$from")
 # Saving one of these makes the server reload itself: every station's page reloads and shows Resume.
-$serverFiles = @($files | Where-Object { $_ -match '^(hub-plugin\.js|vite\.config\.js|src/lib/(labels|roster|boxmodel)\.js|package(-lock)?\.json)$' })
+# The configs (vite.config.stage.js runs development and testing), the two server plugins, and
+# every file hub-plugin.js imports, also through another file (labels.js imports roster.js).
+# replay-plugin.js imports nothing of ours. A new import in either plugin goes in this list too
+# (code review, 23 Nov 2026: the stage config and the replay plugin were missing).
+$serverFiles = @($files | Where-Object { $_ -match '^(hub-plugin\.js|replay-plugin\.js|vite\.config(\.stage)?\.js|src/lib/(labels|roster|boxmodel)\.js|package(-lock)?\.json)$' })
 Write-Host ""
 Write-Host "Files that change: $($files.Count)"
 if ($serverFiles.Count) {
@@ -106,9 +110,16 @@ if ($LASTEXITCODE -ne 0) {
   exit 1
 }
 git push -q origin production
+$pushed = ($LASTEXITCODE -eq 0)
 $after = (git rev-parse --short HEAD).Trim()
 Write-Host ""
 Write-Host "Production moved from $before to $after." -ForegroundColor Green
+# The move here stands either way (the floor runs from this folder); only GitHub is behind
+# (code review, 23 Nov 2026: a failed push used to go unsaid).
+if (-not $pushed) {
+  Write-Host "BUT GitHub was NOT updated: the push of production failed. Production moved on this PC only." -ForegroundColor Red
+  Write-Host "When GitHub answers again, push it from $($root):  git push origin production" -ForegroundColor Red
+}
 if ($packagesChange) {
   if (-not (Install-Packages $root)) {
     Write-Host "The packages could NOT be installed, and the floor's server is STOPPED." -ForegroundColor Red

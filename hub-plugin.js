@@ -268,13 +268,32 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   const UNFINISHED_DAYS = 90;
   const orderDir = path.join(path.dirname(file), path.basename(file, path.extname(file)) + "-orders");
   const orderPath = id => path.join(orderDir, String(id).replace(/[^\w-]/g, "") + ".json");
+  // An order file that is there but does not parse (a write cut short, a sync
+  // tool holding it) is not written over: it may still be put together by
+  // hand. It is kept aside as <file>.unreadable-<time>, the way the hub keeps
+  // its own data file (code review, 23 Nov 2026). If it cannot be read or set
+  // aside, the park is refused (507) and the order stays open at the station.
+  const keepUnreadableOrder = p => {
+    let text;
+    try { text = fs.readFileSync(p, "utf8"); }
+    catch (e) { if (e.code === "ENOENT") return; text = null; }
+    if (text !== null) { try { JSON.parse(text); return; } catch { /* set aside below */ } }
+    const aside = `${p}.unreadable-${Date.now().toString(36)}`;
+    fs.renameSync(p, aside);   // throws when it cannot: nothing is written over the file then
+    console.error(`[hub] ${p} could not be read; kept as ${aside}, the order is written afresh`);
+  };
   const writeOrder = (id, session) => {   // whole or not at all; throws when the disk refuses
     fs.mkdirSync(orderDir, { recursive: true });
     const text = JSON.stringify(session), p = orderPath(id);
+    keepUnreadableOrder(p);
     fs.writeFileSync(p + ".tmp", text); fs.renameSync(p + ".tmp", p);
     return Buffer.byteLength(text);
   };
-  const readOrder = id => { try { return JSON.parse(fs.readFileSync(orderPath(id), "utf8")); } catch { return null; } };
+  const readOrder = id => {
+    const p = orderPath(id);
+    let text; try { text = fs.readFileSync(p, "utf8"); } catch (e) { if (e.code !== "ENOENT") console.error(`[hub] ${p} could not be read (${e.message})`); return null; }
+    try { return JSON.parse(text); } catch (e) { console.error(`[hub] ${p} could not be read (${e.message}); left as it is until the order is parked again`); return null; }
+  };
   const dropOrderFile = id => { try { fs.unlinkSync(orderPath(id)); } catch { /* none */ } };
   const OUT_STATUS = ["flag", "missing", "short", "todo", "extra"];   // extra: a jersey not on the roster, with the supervisor (20 Nov 2026)
   const outCount = { flag: "flagged", missing: "missing", short: "missing", todo: "toScan" };   // which count an out jersey is in (an extra is in none: it is not on the roster)
