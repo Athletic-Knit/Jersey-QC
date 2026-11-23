@@ -116,3 +116,4 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - Two stations with the same run open at once overwrite each other's entries.
   - The sign-out call can race the page reload, as the old delete did.
 - **Written by** the Claude session (Opus 5.5) · **reviewed by** Opus (one blocker, fixed).
+- **Commit:** 6603876
