@@ -13,6 +13,7 @@ import { hub, stationId, snapshotOf, stationUse, holdPrints } from "./lib/hub.js
 import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
+import { duplicateOptions } from "./lib/dupoptions.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel } from "./lib/printjobs.js";
 const SECOND_LOOK = false;
@@ -1638,8 +1639,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }, { ...notRight, run: actions.reopenLast }];
     if (mode === "manual")     return [];
     if (mode === "clean")      return [{ id: "cleaned", label: "✓ It is clean now", primary: true, run: actions.cleaned }, { id: "stays", label: "🚩 It will not come out", run: actions.cleanFailed }, { id: "back", label: "← Back", run: actions.back }];
-    if (mode === "duplicate" && state.match?.scanned === "flag") return [{ id: "back", label: "🔧 Back from repair — pass it", primary: true, run: () => actions.passBack(state.match._id) }, { id: "skip", label: "Skip", run: actions.skipDuplicate }, retry];   // a flagged jersey scanned again: it may be back from repair (the owner, 20 Nov 2026)
-    if (mode === "duplicate")  return [{ id: "skip", label: "✓ Skip", primary: true, run: actions.skipDuplicate }, retry, { id: "dup", label: "🚩 Duplicate", run: actions.flagDuplicate }];
+    if (mode === "duplicate")  return duplicateOptions({ match: state.match, actions, retry });   // a flagged jersey scanned again: Skip first, "Back from repair" a mouse click only (src/lib/dupoptions.js)
     if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") {
       if (count !== null) return [];                         // counting down: nothing to pick, no key does anything
