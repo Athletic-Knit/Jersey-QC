@@ -67,4 +67,4 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - The green screen's "camera could not see the whole number" line and its simulation counter are now unreachable and can be removed.
   - The operator simulation no longer exercises colour-column twins (its camera reports the team as the colour).
 - **Written by** Sonnet (four separate attempts, each rejected after 3 rounds because the rules overlap) and then by the Claude session (Opus 5.5) as one change, building on those attempts and on Opus's findings · **reviewed by** Opus (one review, blockers only: one blocker, the empty-field doubt, now fixed).
-- **Commit:** see the commit that adds this entry ("Matching rules")
+- **Commit:** 696c313
