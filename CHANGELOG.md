@@ -31,4 +31,40 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests added:** "one scan at a time, and none over a result on screen" in `no-scan-behind-dialog.test.js` (reads App.jsx: the busy check comes first, nothing waits between "not busy" and the result screen, doTriggerScan refuses over a result).
 - **Checks:** lint clean; 444 tests pass. Not yet clicked through on the test server (5174).
 - **Written by** the Claude session (Opus 5.5) directly; the workflow was stopped before F7 started. Reviewed together with the matching rules (see below).
-- **Commit:** see the commit that adds this entry ("One scan at a time")
+- **Commit:** 45bee4b
+
+## 2026-11-23 · F1–F4 + owner's rule · The matching rules, as one change (review H2, M4; Noam N1, N2, N4, N5; the owner's no-name rule)
+- **Finding:** the matcher could go green on a doubtful read (review H2: a "4" the camera called covered went green as #4 on a roster with #14 and #40); counted 07 and 7 as one jersey; matched one word of a name; read team names such as Cherry Hill or Silver Lake as jersey colours (review M4); and went green on a nameless row when the jersey showed a name.
+- **Rules applied:**
+  - **N1 (Noam):** a doubtful read is always yellow, also when name and number match exactly, and also when the doubtful field came back empty.
+  - **N2 (Noam):** 07 and 7 are different jerseys. The owner, 23 Nov 2026: when both are on the roster the camera's read is trusted.
+  - **N4 (Noam):** green needs the whole name; capitals, accents, apostrophes, spaces and hyphens do not count (spaces and hyphens: the owner, 23 Nov 2026).
+  - **N5 (Noam):** a team's name never decides a green.
+  - **The owner, 23 Nov 2026:** a name read where the roster row has no name is always yellow, also on a roster with no names.
+- **What changed and why:**
+  - `normNum` (text.js) keeps leading zeros. `nameMatches` (text.js) is whole-name equality.
+  - colour.js no longer reads the team column. A row with no colour on the roster is "unknown", never ruled out: without this, twins with a blank colour lost to the other twin and went green (988 wrong greens in Opus's first fuzz test).
+  - match.js:
+    - the suspect path never returns green, and marks its lists `doubtful`;
+    - a last check (`isDoubtfulRead`) turns any green from a doubtful camera read into a one-row list;
+    - the one-item-list shortcut needs the number digit for digit and the whole name, and never agrees a nameless row with a name read or a numberless row with a number read;
+    - a read of 07 offers #7 as a near miss;
+    - an upside-down 60 can be #09.
+  - App.jsx: the typed team shortcut no longer passes #07 for a typed 7, or #4 for a typed 40. Typed SAMUEL 9 no longer passes a numberless Samuel.
+  - CLAUDE.md states the rules in the roster format section and corrects the notes they replace.
+  - Files: `src/lib/text.js`, `src/lib/colour.js`, `src/lib/match.js`, `src/App.jsx`, `CLAUDE.md`, tests.
+- **Tests added:**
+  - `src/lib/__tests__/review-rules.test.js` (new): one block per rule, with the decided examples.
+  - `invariants.test.js`: rewritten. New invariants: a doubtful read is never green; the team column never changes the result; green on a nameless row only when no name was read; twins need a known colour.
+  - readguard, match, text and vigilance tests: updated to the new rules. The colour tests now use a colour column.
+- **Checks:** lint clean; 465 tests pass. 3000-order simulation: WRONG GREEN 0, green 74.0% → 70.9%, yellow 19.8% → 23.5%, by hand 1.0% → 1.6% of jerseys. Opus's fuzz test, run before the last fix: 430,801 reads and 101,159 greens checked; the only failures were the empty-field doubt and the typed numberless row, and both are fixed in this change.
+- **Accepted risks, decided or for Noam:**
+  - With #7 and #07 both open, a camera that drops a printed 0 goes green on #7. This is the owner's call.
+  - With Smith #2 and Smithe #2 both open, a SMITHE jersey read as a complete "SMITH" goes green on Smith.
+  - If the live model marks name_complete false on jerseys with no name printed, number-only orders will go mostly yellow. A short live test on blank-name jerseys would settle it.
+- **Not done:**
+  - The vision prompt is unchanged (a "keep a printed 0" line needs the live recognition test first).
+  - The green screen's "camera could not see the whole number" line and its simulation counter are now unreachable and can be removed.
+  - The operator simulation no longer exercises colour-column twins (its camera reports the team as the colour).
+- **Written by** Sonnet (four separate attempts, each rejected after 3 rounds because the rules overlap) and then by the Claude session (Opus 5.5) as one change, building on those attempts and on Opus's findings · **reviewed by** Opus (one review, blockers only: one blocker, the empty-field doubt, now fixed).
+- **Commit:** see the commit that adds this entry ("Matching rules")

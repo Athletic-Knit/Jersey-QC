@@ -4,6 +4,9 @@ import { parseModelText, normPosition, normOrientation, uprightRotation } from "
 import { colourFamilies, narrowByColour } from "../colour.js";
 
 const row = (i, name, number, team = "T", size = "A-L", extra = {}) => ({ _id: i, name, number, team, size, scanned: false, ...extra });
+// A row whose jersey colour is in a colour column. The team column is never read
+// for colour (Noam, code review of 23 Nov 2026, N5), so colour tests use this.
+const col = (i, name, number, colour, size = "A-L", extra = {}) => row(i, name, number, "T", size, { colour, ...extra });
 
 // The demo roster: #40 Samuel, #4 Evanovich, #14 Nguyen.
 const named = [
@@ -67,7 +70,10 @@ describe("green needs a name and a number", () => {
     expect(findMatches(r, "", "40").type).toBe("pick");                                    // Samuel has a name and it was not read: never green
     const r2 = [...r, row(3, "", "4")];
     expect(findMatches(r2, "", "4").type).toBe("exact");                              // clean, complete read of the nameless #4: green
-    expect(findMatches(r2, "", "4", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 3 } });   // doubtful read with #40 open: still the nameless #4 — a hidden digit is a rescan, and the green says the camera could not see the whole number
+    // A doubtful read is always yellow (N1, 23 Nov 2026): the nameless #4 first, and nothing else (19 Nov rule).
+    const m2 = findMatches(r2, "", "4", { numberComplete: false });
+    expect(m2).toMatchObject({ type: "pick", doubtful: true });
+    expect(ids(m2)).toEqual([3]);
   });
   it("number-only roster still goes green on a clean read", () => {
     const r = [row(0, "", "40"), row(1, "", "4")];
@@ -76,25 +82,25 @@ describe("green needs a name and a number", () => {
 });
 
 describe("folded jersey", () => {
-  it("#5 read off a jersey the model says is not flat, while #35 is open → green on #5: #35 is not offered (a fold is a rescan, the owner, 19 Nov 2026)", () => {
-    const r = [row(0, "", "35", "yellow"), row(1, "", "5", "black"), row(2, "", "40", "blue")];
-    expect(findMatches(r, "", "5", { laidFlat: false, numberComplete: true })).toMatchObject({ type: "exact", match: { _id: 1 } });
+  it("#5 read off a jersey the model says is not flat, while #35 is open → yellow with #5 alone: #35 is not offered (19 Nov 2026), and a doubtful read is never green (N1, 23 Nov 2026)", () => {
+    const r = [col(0, "", "35", "yellow"), col(1, "", "5", "black"), col(2, "", "40", "blue")];
+    expect(findMatches(r, "", "5", { laidFlat: false, numberComplete: true })).toMatchObject({ type: "pick", doubtful: true, candidates: [{ _id: 1 }] });
   });
-  it("same read, nothing a fold could hide → green", () => {
-    const r = [row(0, "", "5", "black"), row(1, "", "40", "blue")];
-    expect(findMatches(r, "", "5", { laidFlat: false }).type).toBe("exact");
+  it("same read, nothing a fold could hide → still yellow (N1)", () => {
+    const r = [col(0, "", "5", "black"), col(1, "", "40", "blue")];
+    expect(findMatches(r, "", "5", { laidFlat: false }).type).toBe("pick");
   });
   it("'not flat' on a complete TWO-digit read changes nothing: a fold cannot add a third digit", () => {
-    const r = [row(0, "", "54", "blue"), row(1, "", "5", "black"), row(2, "", "40", "blue")];
+    const r = [col(0, "", "54", "blue"), col(1, "", "5", "black"), col(2, "", "40", "blue")];
     expect(findMatches(r, "", "54", { laidFlat: false, numberComplete: true })).toMatchObject({ type: "exact", match: { _id: 0 } });
   });
-  it("doubtful read, three rows of that number, two passed → green on the last", () => {
-    const r = [row(0, "", "54", "blue", "A-L"), row(1, "", "54", "blue", "A-S", { scanned: "pass" }), row(2, "", "54", "red", "A-M", { scanned: "pass" })];
-    expect(findMatches(r, "", "54", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+  it("doubtful read, three rows of that number, two passed → yellow with the last open one (N1)", () => {
+    const r = [col(0, "", "54", "blue", "A-L"), col(1, "", "54", "blue", "A-S", { scanned: "pass" }), col(2, "", "54", "red", "A-M", { scanned: "pass" })];
+    expect(findMatches(r, "", "54", { numberComplete: false })).toMatchObject({ type: "pick", candidates: [{ _id: 0 }] });
   });
-  it("doubtful read, two rows of that number in different colours → the colour seen decides", () => {
-    const r = [row(0, "", "54", "white"), row(1, "", "54", "red")];
-    expect(findMatches(r, "", "54", { numberComplete: false, colour: "white" })).toMatchObject({ type: "exact", match: { _id: 0 } });
+  it("doubtful read, two rows of that number in different colours → yellow even when the colour agrees with one (N1)", () => {
+    const r = [col(0, "", "54", "white"), col(1, "", "54", "red")];
+    expect(findMatches(r, "", "54", { numberComplete: false, colour: "white" }).type).toBe("pick");
     expect(findMatches(r, "", "54", { numberComplete: false }).type).toBe("pick");
   });
   it("a read of 0 with no #0 row offers hidden-digit rows, never #4", () => {
@@ -125,9 +131,11 @@ describe("no alternative, no yellow", () => {
     expect(m.type).toBe("pick");
     expect(ids(m)).toEqual([0]);
   });
-  it("#4 read flagged covered on a NAMELESS row, nothing else open → green", () => {
+  it("#4 read flagged covered on a NAMELESS row, nothing else open → yellow with that row (N1, 23 Nov 2026; it was green)", () => {
     const r = [row(0, "", "4", "red"), row(1, "Nguyen", "23")];
-    expect(findMatches(r, "", "4", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    const m = findMatches(r, "", "4", { numberComplete: false });
+    expect(m.type).toBe("pick");
+    expect(ids(m)).toEqual([0]);
   });
   it("same read while #40 is still open → yellow", () => {
     const r = [row(0, "Evanovich", "4"), row(1, "Samuel", "40")];
@@ -148,9 +156,9 @@ describe("no alternative, no yellow", () => {
     expect(ids(m2)).toEqual(expect.arrayContaining([0, 2]));
     expect(findMatches(r, "LEACH", "21")).toMatchObject({ type: "exact", match: { _id: 0 } });   // with the name read: green
   });
-  it("SAMU… with #40 and one Samuel → green", () => {
+  it("SAMU… with #40 and one Samuel → yellow with Samuel (N1: a cut-off name is doubtful; it was green)", () => {
     const r = [row(0, "Samuel", "40"), row(1, "Nguyen", "23")];
-    expect(findMatches(r, "SAMU", "40", { nameComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches(r, "SAMU", "40", { nameComplete: false })).toMatchObject({ type: "pick", candidates: [{ _id: 0 }] });
   });
   it("STEPHENSON with no number and one #22 Stephenson → a soft question on that row (the number was not seen); with #5 read as well → yellow (contradiction)", () => {
     const r = [row(0, "Stephenson", "22"), row(1, "", "5")];
@@ -173,10 +181,10 @@ describe("no alternative, no yellow", () => {
 describe("colour settles same-number rows", () => {
   // Order 41 on the floor: numbers repeat across colours, the team column is the colour.
   const order41 = () => [
-    row(0, "", "1", "red", "A-M"), row(1, "", "1", "red", "A-S"), row(2, "", "1", "yellow", "A-L"),
-    row(3, "", "31", "green", "A-S"), row(4, "", "31", "green", "A-XL"), row(5, "Rine", "31", "green", "A-3XL"), row(6, "Donnelly", "31", "red", "A-M"),
-    row(7, "", "35", "yellow", "A-S"), row(8, "", "35", "yellow", "A-S"),
-    row(9, "", "40", "blue", "A-XL"), row(10, "Hunter", "22", "red", "Y-XL"), row(11, "Stephenson", "22", "yellow", "A-L"),
+    col(0, "", "1", "red", "A-M"), col(1, "", "1", "red", "A-S"), col(2, "", "1", "yellow", "A-L"),
+    col(3, "", "31", "green", "A-S"), col(4, "", "31", "green", "A-XL"), col(5, "Rine", "31", "green", "A-3XL"), col(6, "Donnelly", "31", "red", "A-M"),
+    col(7, "", "35", "yellow", "A-S"), col(8, "", "35", "yellow", "A-S"),
+    col(9, "", "40", "blue", "A-XL"), col(10, "Hunter", "22", "red", "Y-XL"), col(11, "Stephenson", "22", "yellow", "A-L"),
   ];
   it("#1 on a yellow jersey → green on the yellow row", () => {
     expect(findMatches(order41(), "", "1", { colour: "yellow" })).toMatchObject({ type: "exact", match: { _id: 2 } });
@@ -195,7 +203,7 @@ describe("colour settles same-number rows", () => {
     expect(colourFamilies("scarlet")).toEqual(["red"]);
     expect(colourFamilies("sky blue")).toEqual(["blue"]);
     expect(colourFamilies("Ravens")).toEqual([]);
-    const rows = [row(0, "", "7", "teal"), row(1, "", "7", "red")];
+    const rows = [col(0, "", "7", "teal"), col(1, "", "7", "red")];
     expect(narrowByColour(rows, { colour: "blue" }).rows.map(r => r._id)).toEqual([0]);
     expect(narrowByColour(rows, { colour: "green" }).rows.map(r => r._id)).toEqual([0]);
   });
@@ -209,13 +217,13 @@ describe("colour settles same-number rows", () => {
     expect(findMatches(r, "", "7", { colour: "black" }).type).toBe("pick");
   });
   it("trim colour orders the list but never decides a green", () => {
-    const r = [row(0, "", "7", "white"), row(1, "", "7", "navy")];
+    const r = [col(0, "", "7", "white"), col(1, "", "7", "navy")];
     const m = findMatches(r, "", "7", { colour: "silver", trim: "navy blue" });
     expect(m.type).toBe("pick");
     expect(ids(m)[0]).toBe(1);
   });
   it("the floor case: white #31 with red trim, no name read; rows green, green, RINE green, DONNELLY red → never green on Donnelly", () => {
-    const r = [row(0, "", "31", "green", "A-S"), row(1, "", "31", "green", "A-XL"), row(2, "Rine", "31", "green", "A-3XL"), row(3, "Donnelly", "31", "red", "A-M")];
+    const r = [col(0, "", "31", "green", "A-S"), col(1, "", "31", "green", "A-XL"), col(2, "Rine", "31", "green", "A-3XL"), col(3, "Donnelly", "31", "red", "A-M")];
     const m = findMatches(r, "", "31", { colour: "white", trim: "red" });
     expect(m.type).toBe("pick");
     expect(ids(m)).toEqual([0, 1]);   // the jersey has no name, so RINE and DONNELLY are off the list — but they still keep this a question
@@ -223,18 +231,18 @@ describe("colour settles same-number rows", () => {
     expect(m2.type).toBe("pick");
   });
   it("the floor case later in the order: every other #31 has passed, the jersey looks white, the roster says green → green on the last open row", () => {
-    const r = [row(0, "", "31", "green", "A-S"), row(1, "", "31", "green", "A-XL"), row(2, "Rine", "31", "green", "A-3XL"), row(3, "Donnelly", "31", "red", "A-M")];
+    const r = [col(0, "", "31", "green", "A-S"), col(1, "", "31", "green", "A-XL"), col(2, "Rine", "31", "green", "A-3XL"), col(3, "Donnelly", "31", "red", "A-M")];
     r[0].scanned = "pass"; r[2].scanned = "pass"; r[3].scanned = "pass";
     expect(findMatches(r, "", "31", { colour: "white", trim: "orange" })).toMatchObject({ type: "exact", match: { _id: 1 } });
   });
   it("the navy #0 scanned twice: navy has passed, white is open, the jersey looks navy → not green on the white one", () => {
-    const r = [row(0, "", "0", "navy"), row(1, "", "0", "white")];
+    const r = [col(0, "", "0", "navy"), col(1, "", "0", "white")];
     r[0].scanned = "pass";
     expect(findMatches(r, "", "0", { colour: "navy blue" }).type).not.toBe("exact");
     expect(findMatches(r, "", "0", { colour: "white" })).toMatchObject({ type: "exact", match: { _id: 1 } });
   });
   it("a nameless read with two nameless rows of that number in different body colours → the body colour decides", () => {
-    const r = [row(0, "", "31", "green"), row(1, "", "31", "white"), row(2, "Donnelly", "31", "red")];
+    const r = [col(0, "", "31", "green"), col(1, "", "31", "white"), col(2, "Donnelly", "31", "red")];
     expect(findMatches(r, "", "31", { colour: "white", trim: "red" })).toMatchObject({ type: "exact", match: { _id: 1 } });
   });
   it("a nameless read on #22 (two NAMED rows) on a yellow jersey → still yellow: a named row needs its name read", () => {
@@ -324,9 +332,9 @@ describe("the camera doubts its read", () => {
     expect(ids(m2)).toEqual(expect.arrayContaining([0, 1, 2]));
     expect(ids(m2)).not.toContain(3);
   });
-  it("a doubtful single-digit read on the roster is that row: #5, not #35 or #50 (the owner, 19 Nov 2026)", () => {
+  it("a doubtful single-digit read on the roster lists that row only: #5, not #35 or #50 (the owner, 19 Nov 2026), and is yellow (N1)", () => {
     const r = [row(0, "", "5"), row(1, "", "35"), row(2, "", "50"), row(3, "", "6"), row(4, "", "70")];
-    expect(findMatches(r, "", "5", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches(r, "", "5", { numberComplete: false })).toMatchObject({ type: "pick", doubtful: true, candidates: [{ _id: 0 }] });
   });
   it("a doubtful single-digit read that is on no row offers the rows a hidden digit would make, and nothing else", () => {
     const r = [row(1, "", "35"), row(2, "", "50"), row(3, "", "6"), row(4, "", "70")];
@@ -340,9 +348,9 @@ describe("the camera doubts its read", () => {
     expect(m.type).toBe("pick");
     expect(ids(m)).toEqual([0]);
   });
-  it("number-only roster, single digit sitting left of centre → green on #4 all the same: #40 is not offered", () => {
+  it("number-only roster, single digit sitting left of centre → yellow with #4 alone: #40 is not offered (19 Nov), never green (N1; the review's own example)", () => {
     const r = [row(0, "", "40"), row(1, "", "4")];
-    expect(findMatches(r, "", "4", { position: "left" })).toMatchObject({ type: "exact", match: { _id: 1 } });
+    expect(findMatches(r, "", "4", { position: "left" })).toMatchObject({ type: "pick", doubtful: true, candidates: [{ _id: 1 }] });
   });
   it("number-only roster, single digit centred and complete → green", () => {
     const r = [row(0, "", "40"), row(1, "", "4")];
@@ -352,26 +360,29 @@ describe("the camera doubts its read", () => {
     const r = [row(0, "", "40"), row(1, "", "4")];
     expect(findMatches(r, "", "40", { position: "right" }).type).toBe("exact");
   });
-  it("name and number both read in full, number flagged covered / not flat / off centre → green: the name settles it", () => {
-    expect(findMatches(named, "EVANOVICH", "4", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 1 } });
-    expect(findMatches(named, "EVANOVICH", "4", { laidFlat: false })).toMatchObject({ type: "exact", match: { _id: 1 } });
-    expect(findMatches(named, "EVANOVICH", "4", { position: "left" })).toMatchObject({ type: "exact", match: { _id: 1 } });
-    expect(findMatches(named, "EVANOVICH", "4", { numberComplete: false, laidFlat: false, position: "right", obstruction: "second digit may be under a fold" })).toMatchObject({ type: "exact", match: { _id: 1 } });
+  // N1 (Noam, 23 Nov 2026): a doubtful read is always yellow, even when the whole
+  // name and the number point at one row. Until then the name "settled it" (green).
+  it("name and number both read in full, number flagged covered / not flat / off centre → yellow, that row first (N1)", () => {
+    for (const read of [{ numberComplete: false }, { laidFlat: false }, { position: "left" }, { numberComplete: false, laidFlat: false, position: "right", obstruction: "second digit may be under a fold" }]) {
+      const m = findMatches(named, "EVANOVICH", "4", read);
+      expect(m).toMatchObject({ type: "pick", doubtful: true });
+      expect(ids(m)[0]).toBe(1);
+    }
     // Already passed: a duplicate, not a question.
     const done = named.map(r => r._id === 1 ? { ...r, scanned: "pass" } : r);
     expect(findMatches(done, "EVANOVICH", "4", { numberComplete: false })).toMatchObject({ type: "duplicate", match: { _id: 1 } });
   });
-  it("…but the same name on another open row with a hidden-digit number keeps it a question", () => {
+  it("…and the same name on another open row with a hidden-digit number is on the list too", () => {
     const r = [row(0, "Seach", "9"), row(1, "Seach", "19"), row(2, "Nguyen", "14")];
     const m = findMatches(r, "SEACH", "9", { numberComplete: false });
     expect(m.type).toBe("pick");
     expect(ids(m)).toEqual([0, 1]);
-    // Once the #19 has passed, #9 is the only Seach left: green.
+    // Once the #19 has passed, #9 is the only Seach left: still yellow (N1), #9 alone.
     const done = r.map(x => x._id === 1 ? { ...x, scanned: "pass" } : x);
-    expect(findMatches(done, "SEACH", "9", { numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches(done, "SEACH", "9", { numberComplete: false })).toMatchObject({ type: "pick", candidates: [{ _id: 0 }] });
   });
-  it("a cut-short name with a covered number that agree on one row → green: nothing else competes", () => {
-    expect(findMatches(named, "EVAN", "4", { nameComplete: false, numberComplete: false })).toMatchObject({ type: "exact", match: { _id: 1 } });
+  it("a cut-short name with a covered number that agree on one row → yellow with that row (N1)", () => {
+    expect(findMatches(named, "EVAN", "4", { nameComplete: false, numberComplete: false })).toMatchObject({ type: "pick", candidates: [{ _id: 1 }] });
   });
   it("a nameless 6 on a jersey that is not upright, with a 9 open on the roster → ask with both; upright → green", () => {
     const r = [row(0, "", "6"), row(1, "", "9"), row(2, "", "23")];
@@ -390,9 +401,9 @@ describe("the camera doubts its read", () => {
     expect(findMatches(r, "AK", "6", { orientation: "upside_down" }).type).toBe("pick");
     expect(findMatches([row(0, "Seach", "6"), row(1, "Walker", "9")], "AK", "6", { orientation: "upside_down" }).type).toBe("pick");
   });
-  it("rotated180: 6↔9, 18↔81, 66↔99, 69→69; nothing for 2 3 4 5 7 or a leading zero", () => {
+  it("rotated180: 6↔9, 18↔81, 66↔99, 69→69, 60↔09 (a leading zero counts since 07 ≠ 7, N2); nothing for 2 3 4 5 7", () => {
     expect(rotated180("6")).toBe("9"); expect(rotated180("18")).toBe("81"); expect(rotated180("66")).toBe("99"); expect(rotated180("69")).toBe("69");
-    expect(rotated180("23")).toBe(""); expect(rotated180("60")).toBe(""); expect(rotated180("0")).toBe("0"); expect(rotated180("00")).toBe("");
+    expect(rotated180("23")).toBe(""); expect(rotated180("60")).toBe("09"); expect(rotated180("09")).toBe("60"); expect(rotated180("0")).toBe("0"); expect(rotated180("00")).toBe("00");
   });
   it("suspect read with nothing on the roster → none, with the reason", () => {
     const m = findMatches([row(0, "Samuel", "40")], "", "9", { numberComplete: false });
@@ -490,9 +501,9 @@ describe("the side of the hidden digit trims the list", () => {
     const unknown = findMatches(roster, "", "4", { numberComplete: false, obstruction: "a hand" });
     expect(unknown.candidates.map(c => c.number).sort()).toEqual(["14", "40", "41", "54"]);
   });
-  it("#4 open with a cover to the right and only #14 as the alternative → green on #4: #14 is not offered", () => {
+  it("#4 open with a cover to the right and only #14 as the alternative → yellow with #4 alone: #14 is not offered (N1: never green)", () => {
     const r = [row(0, "4"), row(1, "14")];
-    expect(findMatches(r, "", "4", { numberComplete: false, obstruction: "hand over the right digit" })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches(r, "", "4", { numberComplete: false, obstruction: "hand over the right digit" })).toMatchObject({ type: "pick", candidates: [{ _id: 0 }] });
   });
 });
 

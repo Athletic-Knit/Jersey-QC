@@ -11,13 +11,15 @@ export function norm(s) {
   return stripAccents(s).toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-// Jersey numbers: digits only, leading zeros dropped — except an all-zero
-// number: "00" is a real goalie number and must stay distinct from "0".
+// Jersey numbers: the digits exactly as printed. Spaces, "#" and anything else
+// that is not a digit are dropped; leading zeros are KEPT.
+// Rule (Noam, code review of 23 Nov 2026, N2): 07 and 7 are different jerseys,
+// just as 00 and 0 always were. Before that rule this function dropped leading
+// zeros, so #07 and #7 counted as the same jersey.
+// The owner's decision of 23 Nov 2026: when #7 and #07 are both on the roster,
+// the camera's read is trusted (a clean "7" is #7); there is no extra question.
 export function normNum(s) {
-  const digits = String(s ?? "").replace(/\D/g, "");
-  if (digits === "") return "";
-  if (/^0+$/.test(digits)) return digits;
-  return digits.replace(/^0+/, "");
+  return String(s ?? "").replace(/\D/g, "");
 }
 
 // Words of a name, normalised: "Jordan Blake" → ["jordan", "blake"]
@@ -25,21 +27,21 @@ export function nameWords(s) {
   return stripAccents(s).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 }
 
-// True when the read name agrees with the roster name: exact, or the read
-// name is one whole word of the roster name (shirt says BLAKE, roster says
-// Jordan Blake), or the other way round, or the read name is the roster
-// name's last words (shirt says SMITH-JONES or DE LA CRUZ, roster says
-// Jamie Smith-Jones or Chris De La Cruz).
+// True when the name read is the WHOLE roster name.
+// Rule (Noam, code review of 23 Nov 2026, N4): the roster holds exactly the
+// name printed on the jersey, and a green needs the whole name. Only capitals,
+// accents and apostrophes may differ (O'NEIL = ONEIL, CÔTÉ = COTE), and spaces
+// and hyphens are ignored (DE LA CRUZ = DELACRUZ = DE-LA-CRUZ; confirmed by the
+// owner on 23 Nov 2026). All of that is what norm() does, so this is norm()
+// equality. Missing letters (SMITH for SMITHE), one word of a longer name
+// (DYK for VAN DYK, BLAKE for Jordan Blake) or extra words do NOT match: the
+// matcher then shows a yellow list instead of a green.
+// Before this rule any one word of the roster name matched.
+// (Letters that do not decompose, such as ø, ł, ß, are dropped by norm() on
+// both sides; the floor does not use them, so this is left as it is.)
 export function nameMatches(read, roster) {
   const a = norm(read), b = norm(roster);
-  if (!a || !b) return false;
-  if (a === b) return true;
-  const aw = nameWords(read), bw = nameWords(roster);
-  if (aw.length === 1 && bw.includes(aw[0])) return true;
-  if (bw.length === 1 && aw.includes(bw[0])) return true;
-  if (aw.length > 1 && bw.length > aw.length && bw.slice(-aw.length).join("") === aw.join("")) return true;
-  if (bw.length > 1 && aw.length > bw.length && aw.slice(-bw.length).join("") === bw.join("")) return true;
-  return false;
+  return !!a && a === b;
 }
 
 // Levenshtein distance; strings here are short (names, numbers).

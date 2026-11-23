@@ -71,17 +71,22 @@ function nearNumbers(nNum, roster, { anyDigit = false, side = null, sameLength =
     }
     if (sameLength) return false;
     if (nNum.length < rn.length)   return editDistance(rn, nNum) <= 1;
-    return rn.length === 1 && nNum === rn + rn;
+    // A longer read than the roster number: the sleeve digit doubled ("88" for #8),
+    // or a 0 in front ("07" read where the roster has #7). Since 07 and 7 are
+    // different jerseys (N2) the second is a near miss to offer on the yellow list,
+    // never a match (code review of 23 Nov 2026).
+    return rn.length === 1 && (nNum === rn + rn || nNum === "0" + rn);
   });
 }
 
 // What a number reads as when the jersey is upside down: 6 ↔ 9, 18 ↔ 81,
-// 66 ↔ 99; "" when a digit has no upside-down twin (2, 3, 4, 5, 7) or the
-// result would start with 0.
+// 66 ↔ 99, 60 ↔ 09; "" when a digit has no upside-down twin (2, 3, 4, 5, 7).
+// A result that starts with 0 counts: since 07 and 7 are different jerseys (N2,
+// 23 Nov 2026), a #09 on the roster is a real twin of an upside-down 60.
 export function rotated180(nNum) {
   const map = { 0: "0", 1: "1", 6: "9", 8: "8", 9: "6" };
   const out = [...String(nNum)].reverse().map(d => map[d]).join("");
-  if (out.length !== String(nNum).length || !out || (out.length > 1 && out[0] === "0")) return "";
+  if (out.length !== String(nNum).length || !out) return "";
   return out;
 }
 
@@ -160,8 +165,11 @@ function settleTwins(rows, eligible, read) {
   // matches no row at all (white jersey, roster says green and red), the
   // roster's colour words are not describing these jerseys — floor rosters
   // name teams, not fabric — and the last open twin stays green.
+  // (`agreeing`, not `rows`: a twin whose colour is not on the roster is no
+  // evidence either way, so the last open twin with no colour of its own stays
+  // a question when the colour seen matches a passed twin.)
   const byBody = narrowByColour(rows, read);
-  if (byBody.strong && !byBody.rows.includes(survivors[0])) return null;
+  if (byBody.strong && !byBody.agreeing.includes(survivors[0])) return null;
   return eligible.includes(survivors[0]) ? { type: "exact", match: survivors[0] } : null;
 }
 
@@ -198,8 +206,21 @@ const soleOpen = (direct, cands) => {
  *
  * Green needs a name AND a number that both agree with one row, read in full.
  * A number with no name on a roster that has names is yellow: the name may be
- * hidden, and so may a digit. A partial or off-centre read is never green.
- * Number-only rosters stay green on a clean, complete, centred read.
+ * hidden, and so may a digit. A number-only row stays green on a clean,
+ * complete, centred read of its number with no name on the jersey.
+ *
+ * The rules decided in the code review of 23 Nov 2026 (each is marked where it
+ * is applied below):
+ *   N1  A doubtful read is ALWAYS yellow (Noam). Doubtful = part of the name or
+ *       number covered or cut off, or a one-digit number off-centre, or a
+ *       one-digit number on a jersey that is not laid flat. No exception, not
+ *       even when name and number match a row exactly.
+ *   N2  07 and 7 are different jerseys (Noam): see normNum in text.js.
+ *   N4  Green needs the whole name (Noam): see nameMatches in text.js.
+ *   N5  The team column never decides a green (Noam): see colour.js.
+ *   NN  A name read on the jersey while the roster row has no name is ALWAYS
+ *       yellow, also on a roster with no name column at all (the owner,
+ *       23 Nov 2026): it may be a stray jersey from another order.
  */
 // A read with no name at all, the number sitting in the middle of the jersey
 // and nothing said about the name area: the name area is in view and empty,
@@ -234,19 +255,52 @@ export function findMatches(roster, name, number, read = {}) {
   // so does a list that was trimmed for the operator's eyes (`trimmed`: the
   // named rows still count) and a last open twin the colour seen argues
   // against (`twins`: the passed twin scanned again).
-  if (m.type === "pick" && m.candidates.length === 1 && !m.trimmed && !m.twins && agreesWithRead(m.candidates[0], name, number, read)) return { type: "exact", match: m.candidates[0] };
+  // N1 (Noam, 23 Nov 2026): the 19 Nov rule applies only to a clean, complete
+  // read. A list that comes from a doubtful read (`doubtful`) stays a list,
+  // even with one jersey on it.
+  if (m.type === "pick" && m.candidates.length === 1 && !m.trimmed && !m.twins && !m.doubtful && agreesWithRead(m.candidates[0], name, number, read)) m = { type: "exact", match: m.candidates[0] };
+  // N1, the last word: a camera read that says ANY part of the name or number
+  // was hidden is never green, whatever path above reached "exact". This also
+  // covers a doubt about a field that came back empty (the camera saw letters
+  // it could not read, so `name` is ""), which the suspect path in
+  // findMatchesInner does not see (found by the code review's fuzz test,
+  // 23 Nov 2026: a nameless #5 went green on a "name unreadable" read).
+  if (m.type === "exact" && isDoubtfulRead(number, read)) {
+    return { type: "pick", candidates: [m.match], reason: "Check the jersey: the camera could not see all of the name or number. Is it this one?", soft: true, doubtful: true };
+  }
   return m;
 }
 
+// N1: does the camera doubt its own read? Covered or cut-off name or number
+// (also when nothing could be read in that field), or a one-digit number that
+// is off-centre or on a jersey not laid flat (a second digit may be hidden).
+// A typed entry is never doubtful: the operator's word stands.
+export function isDoubtfulRead(number, read = {}) {
+  if (read.typed) return false;
+  const n = normNum(number);
+  return read.nameComplete === false || read.numberComplete === false
+    || (n.length === 1 && (read.laidFlat === false || read.position === "left" || read.position === "right"));
+}
+
+// Does this one row say exactly what was read? Used only by the one-item-list
+// shortcut above.
 function agreesWithRead(row, name, number, read) {
-  const nName = norm(name), nNum = normNum(number);
+  const nName = norm(name), nNum = normNum(number), rNum = normNum(row.number);
   // Typed by the operator: the name may be part of it, but a typed number is the
   // number. Typed 400 with only #40 open is a question, not #40 passed (seen on
   // the test server 20 Nov 2026: 400 and 122 passed #40 and #12 by hand).
-  if (read.typed) return !(nNum && normNum(row.number) && normNum(row.number) !== nNum);
-  if (normNum(row.number) && normNum(row.number) !== nNum) return false;
-  if (norm(row.name) && !(nName && read.nameComplete !== false && nameMatches(nName, row.name))) return false;
-  return true;
+  // (A typed number on a row with NO number is not that row either: typed
+  // SAMUEL 9 is not the numberless Samuel. Code review of 23 Nov 2026.)
+  if (read.typed) return !(nNum && rNum !== nNum);
+  // From the camera the number must be the row's number exactly, digit for digit
+  // (N2). That includes "both empty", and excludes a number read on a row that
+  // has none: a stray #1 SAMUEL is not the roster's numberless Samuel (code
+  // review of 23 Nov 2026; it went green in the 3000-order simulation).
+  if (rNum !== nNum) return false;
+  // A row with a name: the whole name read, in full (N4).
+  if (norm(row.name)) return !!nName && read.nameComplete !== false && nameMatches(nName, row.name);
+  // A row with no name: only when no name was read either (rule NN above).
+  return !nName;
 }
 
 function findMatchesInner(roster, name, number, read = {}) {
@@ -261,7 +315,7 @@ function findMatchesInner(roster, name, number, read = {}) {
   // complete two-digit number on a rumpled jersey is still that number.
   const partialNum  = !typed && !!nNumRaw && (read.numberComplete === false || (read.laidFlat === false && nNumRaw.length === 1));
   const offCentre   = !typed && !!nNumRaw && nNumRaw.length === 1 && (position === "left" || position === "right");
-  let   suspect     = partialName || partialNum || offCentre;
+  const suspect     = partialName || partialNum || offCentre;   // a doubtful read: never green (N1)
 
   // Misread guard: 3+ digits cannot be a jersey number — unless the roster
   // itself carries that number (a #104 exists on some orders).
@@ -295,20 +349,15 @@ function findMatchesInner(roster, name, number, read = {}) {
     : [];
   const byBoth = byNum.filter(r => byName.includes(r));
 
-  // The whole name AND the number were read, and together they point at a row:
-  // that is the jersey. A doubt about the number alone ("the 9 may be a 19
-  // under a fold", "the 4 sits left of centre") cannot change the name, so it
-  // is only a question when THIS name is also on the roster with a number a
-  // hidden digit would make (SEACH #9 and SEACH #19 both open). Every
-  // one-digit jersey went yellow before this; the floor said: exact row → green.
-  if (suspect && !partialName && byBoth.length >= 1) {
-    const sameNameOther = byName.filter(r => !byBoth.includes(r) && !isDone(r));
-    if (!sameNameOther.length) suspect = false;
-  }
+  // (Until 23 Nov 2026 an exact name + number cleared the doubt here and went
+  // green "whatever the camera said about the digit". N1 removed that: a
+  // doubtful read is always yellow, so the doubt is never cleared.)
 
   // The camera doubts its own read: part of the name or number was covered,
-  // cut off, or the number sat off-centre (a digit hidden). Never green. Offer
-  // every row the read could be a piece of, and say what was wrong.
+  // cut off, or the number sat off-centre (a digit hidden). Never green (N1).
+  // Offer every row the read could be a piece of, the most likely first, and
+  // say what was wrong. Every result from here is `doubtful`, which also stops
+  // the one-item-list shortcut in findMatches from turning it green.
   if (suspect) {
     const shown = String(name ?? "").trim();
     const why = [];
@@ -336,7 +385,10 @@ function findMatchesInner(roster, name, number, read = {}) {
       ? dedupe([...exact, ...guessedDigit])
       : dedupe([...hidden, ...(nNum.length === 1 && hidden.length ? [] : nearNumbers(nNum, roster, { anyDigit: partialNum })), ...(partialNum ? subNumberCandidates(nNum, roster) : []), ...(partialName ? [] : nearNames(nName, roster))]);   // a covered lone digit with hidden-digit rows to offer needs no substitutions
     // Name and number pointing at different rows is a contradiction: always ask.
+    // Otherwise `direct`, the row the read itself points at, goes to the top of
+    // the list (it used to go green when no other row competed; N1 ended that).
     const contradiction = byName.length >= 1 && byNum.length >= 1 && byBoth.length === 0;
+    let direct = null;
     if (!contradiction) {
       // A row with a name is only ever "direct" when its name was read: a
       // nameless read on a named row is never green, however few rows there are.
@@ -351,33 +403,20 @@ function findMatchesInner(roster, name, number, read = {}) {
       // on the other jersey in the picture — and stays a question. Typed by the
       // operator, the name alone is their word.
       const nameSettles = r => typed || !!nNum || !normNum(r.number);
-      const direct = byBoth[0]
+      direct = byBoth[0]
         || (!partialName && byName.length === 1 && byNum.length === 0 && (nNum ? normNum(byName[0].number) === nNum : nameSettles(byName[0])) ? byName[0] : null)
         // …and a row with no name is only "direct" when no name was read either:
         // "#5?" with ZHANG on the jersey is not the roster's nameless #5 (a stray
         // #56 ZHANG with a digit under a fold went green on it in the simulation,
-        // 11 Nov 2026). The camera already doubts the number; the name it read
-        // matches nothing; that is a question.
-        || (byNum.length === 1 && byName.length === 0 && !norm(byNum[0].name) && (!nName || numberOnly) ? byNum[0] : null);
-      const sure = soleOpen(direct, cands);
-      if (sure) return sure;
-      // Several rows carry the read (same number, different colour or size):
-      // the colour seen, then "every other one has passed", settle it the
-      // same way they do for a clean read — as long as no hidden-digit row is
-      // still open to compete.
-      // Twins must carry the number that was read: "Bro" with #64 never settles
-      // on #98 Brown. Any other open candidate (a different number reached by
-      // name, a hidden-digit row) keeps it a question.
-      const sameNum = nNum ? exact.filter(r => normNum(r.number) === nNum) : exact;
-      if ((nNum || !partialName) && sameNum.length > 1 && !cands.some(r => !sameNum.includes(r) && !isDone(r))) {   // a cut-short name with no number never settles
-        const sure2 = settleTwins(sameNum, nName ? sameNum.filter(r => byName.includes(r)) : sameNum.filter(r => !norm(r.name)), read);   // eligible: the name read fits, or no name to read
-        if (sure2) return sure2;
-      }
+        // 11 Nov 2026), also on a roster with no names at all (rule NN).
+        || (byNum.length === 1 && byName.length === 0 && !norm(byNum[0].name) && !nName ? byNum[0] : null);
+      if (direct && isDone(direct)) direct = null;   // a passed row is not offered first
     }
     if (cands.length) {
-      const shown = withoutNamed(trimBySide(cands, nNum, side, partialNum && read.numberComplete === false), nName, read, numberOnly);
+      const ordered = direct ? dedupe([direct, ...cands]) : cands;
+      const shown = withoutNamed(trimBySide(ordered, nNum, side, partialNum && read.numberComplete === false), nName, read, numberOnly);
       const sameNum = nNum ? exact.filter(r => normNum(r.number) === nNum) : [];
-      return { type: "pick", candidates: shown, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true, trimmed: !!shown.trimmed || undefined, twins: sameNum.length > 1 || undefined };
+      return { type: "pick", candidates: shown, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true, doubtful: true, trimmed: !!shown.trimmed || undefined, twins: sameNum.length > 1 || undefined };
     }
     return { type: "none", reason: `${why.join("; ")}${what}`, soft: true };
   }
@@ -418,14 +457,22 @@ function findMatchesInner(roster, name, number, read = {}) {
     return { type: "pick", candidates: dedupe([...byName, ...byNum]), reason: `Name matches #${nums} but the number read as #${nNum}` };
   }
 
-  // Number read; no name read, or a number-only roster.
-  if (byNum.length >= 1 && (nName === "" || numberOnly)) {
-    return single(byNum) || sameReadRows(byNum, read, "More than one row with this number — check size and team", nName === "" ? byNum.filter(r => !norm(r.name)) : byNum);
+  // Number read and no name read.
+  // (Until 23 Nov 2026 a number-only roster came here with a name read as well
+  // and went green: rule NN made that a question, handled just below.)
+  if (byNum.length >= 1 && nName === "") {
+    return single(byNum) || sameReadRows(byNum, read, "More than one row with this number — check size and team", byNum.filter(r => !norm(r.name)));
   }
 
-  // Number is on the roster but the name read agrees with no row.
+  // Number is on the roster but the name read agrees with no row: a misread
+  // name, a jersey whose name is not the roster's (N4), or a name printed on a
+  // jersey whose row has no name (rule NN, also on a roster with no names).
   if (byNum.length >= 1) {
-    return { type: "pick", candidates: dedupe([...byNum, ...nearNames(nName, roster)]), reason: `#${nNum} is on the roster but the name read as "${String(name).trim()}"` };
+    const shown = String(name).trim();
+    const reason = byNum.every(r => !norm(r.name))
+      ? `The jersey shows the name "${shown}" but the roster has no name for #${nNum} — check it is this order's jersey`
+      : `#${nNum} is on the roster but the name read as "${shown}"`;
+    return { type: "pick", candidates: dedupe([...byNum, ...nearNames(nName, roster)]), reason };
   }
 
   // Name is on the roster; the number is not.

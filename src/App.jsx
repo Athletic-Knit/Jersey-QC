@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
 import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
+import { normNum } from "./lib/text.js";
 import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
@@ -4474,9 +4475,14 @@ export default function App() {
       // The team the operator chose settles same-number rows: one row of that
       // team is the jersey (or a duplicate if it is done); several keep the list,
       // narrowed to that team.
+      // Only a row whose number IS the number typed, digit for digit (or no number
+      // typed): a typed 7 with a team must not pass #07 of that team, nor a typed
+      // 40 pass #4 (code review of 23 Nov 2026, N2; the matcher's own typed-number
+      // rule did not reach this shortcut).
       if ((m.type === "pick" || m.type === "close") && team.trim()) {
         const same = m.candidates.filter(c => teamKey(c.team) === teamKey(team));
-        if (m.type === "pick" && same.length === 1) m = isDone(same[0]) ? { type: "duplicate", match: same[0] } : { type: "exact", match: same[0] };
+        const numberFits = r => !normNum(number) || normNum(r.number) === normNum(number);
+        if (m.type === "pick" && same.length === 1 && numberFits(same[0])) m = isDone(same[0]) ? { type: "duplicate", match: same[0] } : { type: "exact", match: same[0] };
         else if (same.length >= 1) m = { ...m, candidates: same };
       }
       if (m.type === "duplicate") { setOverlay({ mode: "duplicate", scan: o.scan, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.scanned === "flag" ? " is flagged — with the supervisor." : " already passed this session."}` }); playTone("flag"); return; }

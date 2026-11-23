@@ -115,7 +115,10 @@ function camera(r, jersey) {
   const colourWord = jersey.team.toLowerCase();
   if (chance(r, 0.6)) read.jersey_colour = colourWord;
   // what the shirt actually shows: last name only, upper case
-  if (jersey.first && chance(r, 0.8)) read.name = read.name.slice(jersey.first.length).trim();   // the shirt shows the surname
+  // The roster holds exactly the name printed on the jersey (Noam, 23 Nov 2026, N4), so the shirt
+  // shows the whole roster name. A sheet that breaks that rule (first name on the sheet, surname on
+  // the shirt) still happens now and then: those jerseys go yellow, never green.
+  if (jersey.first && chance(r, 0.1)) read.name = read.name.slice(jersey.first.length).trim();   // the shirt shows the surname only
   read.name = read.name.toUpperCase();
   const m = r();
   let kind = "clean";

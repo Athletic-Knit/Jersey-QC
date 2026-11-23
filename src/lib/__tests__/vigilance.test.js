@@ -67,7 +67,7 @@ describe("reconcile two reads into one screen", () => {
     expect(r.match).toMatchObject({ type: "exact", match: { _id: 0 } });
   });
   it("two greens on different rows never pass as agreement", () => {
-    const twins = [row(0, "", "40", { team: "blue" }), row(1, "", "40", { team: "red" })];
+    const twins = [row(0, "", "40", { colour: "blue" }), row(1, "", "40", { colour: "red" })];   // colour column: the team is never a colour (N5, 23 Nov 2026)
     const mm = d => findMatches(twins, d.name, d.number, { colour: d.jersey_colour });
     const d1 = read("40", "", { jersey_colour: "blue" }), d2 = read("40", "", { jersey_colour: "red" });
     const r = reconcile(d1, mm(d1), d2, mm(d2));

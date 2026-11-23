@@ -34,8 +34,11 @@ describe("findMatches: exact and ambiguity", () => {
   it("accents do not break the match", () => {
     expect(findMatches(roster, "COTE", "77").type).toBe("exact");
   });
-  it("surname matches a full roster name", () => {
-    expect(findMatches(roster, "BLAKE", "10")).toMatchObject({ type: "exact", match: { _id: 9 } });
+  // N4 (Noam, 23 Nov 2026): the roster holds the printed name; one word of it is not a match.
+  it("a surname alone against a full roster name is yellow with that row, not green", () => {
+    const m = findMatches(roster, "BLAKE", "10");
+    expect(m.type).toBe("pick");
+    expect(m.candidates.map(c => c._id)).toContain(9);
   });
 });
 

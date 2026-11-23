@@ -14,8 +14,11 @@ describe("norm", () => {
 });
 
 describe("normNum", () => {
-  it("drops leading zeros but keeps 00", () => {
-    expect(normNum("07")).toBe("7");
+  // N2 (Noam, 23 Nov 2026): 07 and 7 are different jerseys, so leading zeros are kept.
+  it("keeps the digits exactly, leading zeros included", () => {
+    expect(normNum("07")).toBe("07");
+    expect(normNum("007")).toBe("007");
+    expect(normNum(" #07 ")).toBe("07");
     expect(normNum("7")).toBe("7");
     expect(normNum("00")).toBe("00");
     expect(normNum("0")).toBe("0");
@@ -27,11 +30,26 @@ describe("normNum", () => {
 });
 
 describe("nameMatches", () => {
-  it("matches a surname against a full roster name", () => {
-    expect(nameMatches("BLAKE", "Jordan Blake")).toBe(true);
-    expect(nameMatches("Jordan Blake", "Blake")).toBe(true);
+  // N4 (Noam, 23 Nov 2026): the whole name or nothing. Only capitals, accents and
+  // apostrophes may differ; spaces and hyphens are ignored (the owner, 23 Nov 2026).
+  it("needs the whole name: one word of it, missing letters or extra words do not match", () => {
+    expect(nameMatches("BLAKE", "Jordan Blake")).toBe(false);
+    expect(nameMatches("Jordan Blake", "Blake")).toBe(false);
+    expect(nameMatches("DYK", "Van Dyk")).toBe(false);
+    expect(nameMatches("SMITH", "Smithe")).toBe(false);
+    expect(nameMatches("SMITHE", "Smith")).toBe(false);
     expect(nameMatches("BLAKE", "Blakely")).toBe(false);
     expect(nameMatches("", "Blake")).toBe(false);
+    expect(nameMatches("", "")).toBe(false);
+  });
+  it("ignores capitals, accents, apostrophes, spaces and hyphens", () => {
+    expect(nameMatches("JORDAN BLAKE", "Jordan Blake")).toBe(true);
+    expect(nameMatches("ONEIL", "O'Neil")).toBe(true);
+    expect(nameMatches("O'NEIL", "ONeil")).toBe(true);
+    expect(nameMatches("COTE", "Côté")).toBe(true);
+    expect(nameMatches("DELACRUZ", "De La Cruz")).toBe(true);
+    expect(nameMatches("DE-LA-CRUZ", "De La Cruz")).toBe(true);
+    expect(nameMatches("SMITH JONES", "Smith-Jones")).toBe(true);
   });
   it("is accent-insensitive", () => {
     expect(nameMatches("COTE", "Côté")).toBe(true);
