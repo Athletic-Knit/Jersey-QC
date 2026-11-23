@@ -23,7 +23,6 @@ const renderSrc = appSrc.slice(appSrc.lastIndexOf("\n  return ("));
 // States that look like dialogs but are not a screen over the camera (why, each).
 const NOT_DIALOGS = {
   showFilters: "a panel inside the roster table; the camera stays usable",
-  showTrial: "lives inside Settings, which is listed",
 };
 
 // A whole-word match for a state name (so "finished" is not found inside "unfinished").
@@ -86,7 +85,7 @@ describe("no scan behind a dialog", () => {
     expect(src).toMatch(/const anyDialogOpen = dialogOverResult \|\| showBlanks;/);
     expect(definition("dialogOverResult")).not.toMatch(word("showBlanks"));
     const sites = src.match(/<ScanOverlay\b[^\n]*/g) || [];
-    expect(sites.length).toBe(2);   // the narrow and the wide render site
+    expect(sites.length).toBe(1);   // one render site: the narrow full-screen layout was removed with `wide` (consolidation, 23 Nov 2026)
     for (const s of sites) expect(s).toMatch(/paused=\{overlayPaused\}/);
     // ScanOverlay's own key handler returns at once when paused.
     const k = src.indexOf("a held key or pedal is one press");

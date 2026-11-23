@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } fro
 import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum } from "./lib/text.js";
-import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
+import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { createAwayWatch } from "./lib/attention.js";
@@ -18,8 +18,6 @@ import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel
 import { duplicateOptions } from "./lib/dupoptions.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel } from "./lib/printjobs.js";
-const SECOND_LOOK = false;
-import { TRIAL_METHODS, trialMethodLabel, SCREEN_KINDS, loadTrial, appendTrial, clearTrial, summariseTrial, trialVerdict, trialCSV } from "./lib/trial.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG } from "./config.js";
 
 
@@ -1539,18 +1537,10 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, onTrial = null, listSort = "size", paused = false }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", paused = false }) {
   const reasons = reasonsFor(jerseyType);
-  // Input trial (src/lib/trial.js): the overlay is mounted anew for every
-  // screen (its key is the mode and the scan), so "shown" is the mount; every
-  // option that runs goes through `fire`, which says how it was reached.
-  const shownAt = useRef(0);
-  useEffect(() => { shownAt.current = Date.now(); }, []);   // when the screen mounts (a clock read in render is impure for the linter)
-  const trialMoves = useRef(0), trialHovers = useRef(0);
-  const fire = useCallback((o, i, via, key = "", opts = null) => {
-    if (onTrial && o) onTrial({ screen: state.mode, n: opts ? opts.length : null, idx: i, id: o.id, via, key, ms: Date.now() - shownAt.current, moves: trialMoves.current, hovers: trialHovers.current });
-    o.run();
-  }, [onTrial, state.mode]);
+  // Runs an option: a click, the Select key or the pedal.
+  const fire = useCallback(o => o?.run(), []);
   const mode    = state.mode;
   const isGreen = mode === "confirm" || mode === "done";
   // The camera says the number it read is covered or cut off (it is asked to
@@ -1576,7 +1566,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const isSizePick = mode === "offSize" || mode === "listFlag";   // Flag on the list: what is wrong, then (duplicate, not on the roster) what size is it?
   const isRed   = mode === "flag" || mode === "duplicate" || mode === "supervisor";
   const isMenu  = mode === "reasons" || mode === "reasonText";
-  const isManual = mode === "manual" || mode === "manualDone";
+  const isManual = mode === "manual";
   const isClean = mode === "clean";   // "Dirt or mark": clean it at the station
 
   const bg     = isGreen ? "#052e16" : (isList || isManual || isSizePick) ? "#1c1a06" : isMenu ? "#1a1033" : isClean ? "#082f49" : "#450a0a";
@@ -1650,7 +1640,6 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       { id: "notag", label: "🏷 No size tag", run: () => actions.offRosterSize("") },
       { id: "back", label: "← Back", run: actions.back }];
     if (mode === "flag")       return [{ ...retry, primary: true }, { id: "listflag", label: "🚩 Flag", run: actions.listFlag }];   // Retry and Flag only (the owner, 20 Nov 2026); Flag opens the yellow list's menu: No size tag, Duplicate, Not on the roster
-    if (mode === "manualDone") return [{ id: "cont", label: "✓ Continue", primary: true, run: actions.continueManual }, { id: "back", label: "← Back", run: actions.undoManual }, { ...notRight, run: actions.reopenLast }];
     if (mode === "manual")     return [];
     if (mode === "clean")      return [{ id: "cleaned", label: "✓ It is clean now", primary: true, run: actions.cleaned }, { id: "stays", label: "🚩 It will not come out", run: actions.cleanFailed }, { id: "back", label: "← Back", run: actions.back }];
     if (mode === "duplicate")  return duplicateOptions({ match: state.match, actions, retry });   // a flagged jersey scanned again: Skip first, "Back from repair" a mouse click only (src/lib/dupoptions.js)
@@ -1696,7 +1685,6 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       const n = options.length; if (!n) return;
       let next = selectedIdx, tries = 0;
       do { next = (next + dir + n) % n; tries++; } while ((options[next]?.disabled || options[next]?.mouseOnly) && tries < n);
-      trialMoves.current++;
       setSelectedIdx(next);
     };
     const onKey = (e) => {
@@ -1707,9 +1695,9 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if ((mode === "offSize" || mode === "listFlag") && e.code === "Escape") { e.preventDefault(); actions.back(); return; }
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target?.tagName)) return;   // the Enter that submitted the form is still bubbling: it must not also pick the first row of the list it opened
-      if (e.code === retryKey) { if (mode === "confirm") { e.preventDefault(); showNudge(); return; } const i = options.findIndex(x => x.id === "retry"); if (i >= 0) { e.preventDefault(); lastKeyRef.current = Date.now(); fire(options[i], i, "key", e.code, options); } return; }
-      if (e.code === byHandKey) { const i = options.findIndex(x => x.id === "manual"); if (i >= 0) { e.preventDefault(); lastKeyRef.current = Date.now(); fire(options[i], i, "key", e.code, options); } return; }   // straight to the form, like R goes straight to retry
-      if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled && !o.mouseOnly) fire(o, selectedIdx, "key", e.code, options); return; }
+      if (e.code === retryKey) { if (mode === "confirm") { e.preventDefault(); showNudge(); return; } const i = options.findIndex(x => x.id === "retry"); if (i >= 0) { e.preventDefault(); lastKeyRef.current = Date.now(); fire(options[i]); } return; }
+      if (e.code === byHandKey) { const i = options.findIndex(x => x.id === "manual"); if (i >= 0) { e.preventDefault(); lastKeyRef.current = Date.now(); fire(options[i]); } return; }   // straight to the form, like R goes straight to retry
+      if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled && !o.mouseOnly) fire(o); return; }
       // The assigned keys come first; a plain arrow only moves its own way when
       // it is not assigned to the other direction (a pedal board wired the
       // other way round sets Down = ArrowUp and Up = ArrowDown, 9 Nov 2026).
@@ -1722,7 +1710,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   }, [options, selectedIdx, mode, confirmKey, cancelKey, upKey, retryKey, byHandKey, actions, showNudge, fire, paused]);
 
   // A bumped mouse never overrides a key press made in the last moment.
-  const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) { trialHovers.current++; setSelectedIdx(i); } }, []);
+  const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) setSelectedIdx(i); }, []);
 
   // The highlighted option follows the key down a long list: the list scrolls
   // so the row the Select key would take is always on screen.
@@ -1741,7 +1729,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const optionButton = (o, i) => {
     const sel = i === selectedIdx;
     return (
-      <button key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
+      <button key={o.id} onClick={() => fire(o)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
         style={{ padding: "13px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.22)"}`, background: o.primary ? (o.locked ? "#14532d" : accent) : "transparent", color: o.primary && !o.locked ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 20, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
         <span>{o.label} {o.id === "retry" && mode !== "confirm" ? <Kbd light>{formatKey(retryKey)}</Kbd> : o.id === "manual" ? <Kbd light>{formatKey(byHandKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
         {o.hint && <span style={{ fontSize: 15, fontWeight: 400, opacity: 0.8 }}>{o.hint}</span>}
@@ -1874,7 +1862,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             <div style={twoColumns(candidates.length)}>
               {options.map((o, i) => o.candidate && (
                 <CandidateRow key={o.id} c={o.candidate} primary={primary} secondary={secondary} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent}
-                  onClick={() => fire(o, i, "pointer", "", options)} onHover={() => hover(i)} confirmKey={confirmKey} />
+                  onClick={() => fire(o)} onHover={() => hover(i)} confirmKey={confirmKey} />
               ))}
             </div>
           </div>
@@ -1903,7 +1891,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
                   <div style={{ width: 150, flexShrink: 0, display: "flex", alignItems: "center", fontSize: "clamp(22px, 2.4vw, 32px)", fontWeight: 900, color: "#fde68a" }}>{g.label}</div>
                   <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 10 }}>
                     {options.map((o, i) => o.group !== gi ? null : (
-                      <button key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={i === selectedIdx ? "1" : undefined}
+                      <button key={o.id} onClick={() => fire(o)} onMouseEnter={() => hover(i)} data-sel={i === selectedIdx ? "1" : undefined}
                         style={{ padding: "12px 6px", borderRadius: 14, border: `3px solid ${i === selectedIdx ? accent : "rgba(255,255,255,0.14)"}`, background: i === selectedIdx ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", color: "#fff", cursor: "pointer", fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 3.4vw, 50px)", fontWeight: 800, lineHeight: 1, ...liftSt(i === selectedIdx) }}>
                         {o.label}
                       </button>
@@ -1913,7 +1901,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
               ))}
               <div style={{ display: "flex", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
                 {options.map((o, i) => o.group !== undefined ? null : (
-                  <button key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={i === selectedIdx ? "1" : undefined}
+                  <button key={o.id} onClick={() => fire(o)} onMouseEnter={() => hover(i)} data-sel={i === selectedIdx ? "1" : undefined}
                     style={{ flex: 1, minWidth: 220, padding: "16px 20px", borderRadius: 14, border: `3px solid ${i === selectedIdx ? accent : o.on ? "#22c55e" : "rgba(255,255,255,0.14)"}`, background: o.on ? "rgba(34,197,94,0.2)" : i === selectedIdx ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", color: "#fff", cursor: "pointer", fontSize: "clamp(22px, 2.4vw, 30px)", fontWeight: 800, ...liftSt(i === selectedIdx) }}>
                     {o.label}
                   </button>
@@ -1925,7 +1913,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             {options.map((o, i) => {
               const sel = i === selectedIdx;
               return (
-                <button key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
+                <button key={o.id} onClick={() => fire(o)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
                   style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderRadius: 14, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.14)"}`, background: sel ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", color: "#fff", cursor: "pointer", textAlign: "left", ...liftSt(sel) }}>
                   <span style={{ fontFamily: o.id.startsWith("sz") ? FONT_DISPLAY : FONT_UI, fontSize: o.id.startsWith("sz") ? "clamp(34px, 3.6vw, 52px)" : 22, fontWeight: 800, lineHeight: 1 }}>{o.label}</span>
                   <span style={hintSt(sel, accent)} aria-hidden="true">←</span>
@@ -2056,31 +2044,6 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       {mode === "manual" && (
         <ManualEntryForm detected={detected} initial={state.initial} teams={state.teams || []} onSubmit={actions.manualSubmit} onBack={actions.back} />
       )}
-      {mode === "manualDone" && match && (
-        <>
-          <div style={{ fontSize: 72, lineHeight: 1, marginBottom: 4 }}>✍</div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, 6vw, 72px)", fontWeight: 900, color: accent, textAlign: "center", lineHeight: 1 }}>ENTERED BY HAND</div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, min(12cqh, 14cqw), 96px)", fontWeight: 800, color: "#fff", marginTop: 12, textAlign: "center", lineHeight: 1, padding: "0 24px", overflowWrap: "anywhere" }}>#{match.number}{match.name ? ` · ${match.name}` : ""}</div>
-          {match.team && <div style={{ fontSize: "clamp(22px, 4cqh, 36px)", color: "#fcd34d", marginTop: 8, textAlign: "center", fontWeight: 700 }}>{match.team}</div>}
-          <div style={{ display: "flex", gap: 18, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
-            {hasSize && (
-              <div style={{ padding: "6px 36px 10px", borderRadius: 22, border: "5px solid #f59e0b", background: "rgba(245,158,11,0.14)", textAlign: "center", minWidth: 180 }}>
-                <div style={{ fontSize: "clamp(18px, 3cqh, 26px)", color: "#fcd34d", fontWeight: 800, marginBottom: 2, letterSpacing: 1 }}>SIZE</div>
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, min(13cqh, 18cqw), 120px)", fontWeight: 900, color: "#fff", letterSpacing: 2, lineHeight: 1 }}>{match.size}</div>
-              </div>
-            )}
-            {binNum !== null && (
-              <div style={{ padding: "6px 36px 10px", borderRadius: 22, border: "5px solid #3b82f6", background: "rgba(59,130,246,0.16)", textAlign: "center", minWidth: 180 }}>
-                <div style={{ fontSize: "clamp(18px, 3cqh, 26px)", color: "#93c5fd", fontWeight: 800, marginBottom: 2, letterSpacing: 1 }}>BOX</div>
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px, min(13cqh, 18cqw), 120px)", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{binNum}</div>
-              </div>
-            )}
-          </div>
-          {state.reason && <div style={{ fontSize: 21, color: "#fde68a", marginTop: 10, opacity: 0.9, textAlign: "center", padding: "0 24px" }}>{state.reason}</div>}
-          <div style={{ marginTop: 28, display: "flex", gap: 14 }}>{options.map((o, i) => optionButton(o, i))}</div>
-        </>
-      )}
-
       {/* ── REASONS menu ── */}
       {isMenu && (
         <>
@@ -2091,7 +2054,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             {options.map((o, i) => {
               const sel = i === selectedIdx;
               return (
-                <div key={o.id} onClick={() => fire(o, i, "pointer", "", options)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
+                <div key={o.id} onClick={() => fire(o)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
                   style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 12, minWidth: 0, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.12)"}`, background: sel ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.04)", cursor: "pointer", ...liftSt(sel) }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 24, fontWeight: 700, color: "#fff" }}>{o.label}</div>
@@ -2162,7 +2125,6 @@ function ResultCard({ result, onResolve, canResolve = true }) {
 function SettingsPanel({ settings, cameras, onSave, onClose }) {
   const [temp,      setTemp]      = useState(settings);
   const [listening, setListening] = useState(null);
-  const [showTrial, setShowTrial] = useState(false);
 
   useEffect(() => {
     if (!listening) return;
@@ -2172,10 +2134,10 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
   }, [listening]);
 
   useEffect(() => {
-    const h = e => { if (e.key === "Escape" && !listening && !showTrial) onClose(); };
+    const h = e => { if (e.key === "Escape" && !listening) onClose(); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [onClose, listening, showTrial]);
+  }, [onClose, listening]);
 
   const keyRows = [
     { label: "Scan",       key: "scanKey" },
@@ -2284,20 +2246,6 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>How many jerseys fill a box is learnt: every Box full asks what size the box was, and all stations learn from the answers.</div>
         </div>
 
-        <div style={{ marginBottom: 18 }}>
-          <div style={labelSt}>Input trial — which setup is this station trying?</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-            {TRIAL_METHODS.map(m => (
-              <button key={m.id} type="button" onClick={() => setTemp(t => ({ ...t, trialMethod: m.id }))} title={m.hint}
-                style={{ ...btnGhost, padding: "8px 12px", fontSize: 15, borderColor: (temp.trialMethod || "") === m.id ? "#c084fc" : "#3f4b5c", background: (temp.trialMethod || "") === m.id ? "rgba(192,132,252,0.15)" : "transparent", color: (temp.trialMethod || "") === m.id ? "#e9d5ff" : "#cbd5e1", fontWeight: (temp.trialMethod || "") === m.id ? 700 : 400 }}>
-                {m.label}
-              </button>
-            ))}
-          </div>
-          <div style={{ fontSize: 14, color: "#7c8ba1", marginBottom: 8 }}>With a setup named, every decision on a result screen is timed (which screen, by click or by key, how many steps, how long) and kept in this browser across orders. Nothing goes to the board.</div>
-          <button type="button" onClick={() => setShowTrial(true)} style={{ ...btnGhost, padding: "8px 14px", fontSize: 15 }}>📊 Compare the setups</button>
-        </div>
-
         {problems.length > 0 && (
           <div style={{ fontSize: 15, color: "#f87171", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 }}>
             {problems.map(p => <div key={p}>{p}</div>)}
@@ -2307,61 +2255,6 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
         <div style={{ display: "flex", gap: 8, position: "sticky", bottom: -28, margin: "0 -28px -28px", padding: "14px 28px 28px", background: "#161b22", borderTop: "1px solid #21262d" }}>{/* Save and Cancel stay in view while the panel scrolls */}
           <button disabled={problems.length > 0} onClick={() => { onSave(temp); onClose(temp); }} style={{ ...btnPri, flex: 1, opacity: problems.length ? 0.5 : 1 }}>Save</button>
           <button onClick={onClose} style={btnGhost}>Cancel</button>
-        </div>
-      </div>
-      {showTrial && <TrialPanel onClose={() => setShowTrial(false)} />}
-    </div>
-  );
-}
-
-// ── Input trial: the comparison ──────────────────────────────────────────────
-// Per setup, what the records in this browser say: passes, screen time per
-// pass, and the median by screen kind; the verdict in words; the CSV.
-function TrialPanel({ onClose }) {
-  const [records, setRecords] = useState(() => loadTrial());
-  const sum = useMemo(() => summariseTrial(records), [records]);
-  const verdict = useMemo(() => trialVerdict(sum), [sum]);
-  const methods = TRIAL_METHODS.filter(m => m.id);
-  useEffect(() => {
-    const h = e => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
-    window.addEventListener("keydown", h, true);
-    return () => window.removeEventListener("keydown", h, true);
-  }, [onClose]);
-  const download = () => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([String.fromCharCode(0xfeff) + trialCSV(records)], { type: "text/csv;charset=utf-8" }));
-    a.download = `input-trial_${localDateStamp()}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  };
-  const wipe = () => { if (window.confirm(`Delete all ${records.length} trial records in this browser? Export first if anyone wants them.`)) { clearTrial(); setRecords([]); } };
-  const td = { padding: "6px 10px", borderBottom: "1px solid #21262d", fontSize: 15, textAlign: "right", whiteSpace: "nowrap" };
-  const th = { ...td, color: "#94a3b8", fontWeight: 600 };
-  const secs = v => v == null ? "—" : `${v}s`;
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#161b22", borderRadius: 12, border: "1px solid #21262d", padding: 28, width: 900, maxWidth: "94vw", maxHeight: "92%", overflowY: "auto", boxSizing: "border-box" }}>
-        <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 4 }}>📊 Mouse + pedal against up/down keys + pedal</div>
-        <div style={{ fontSize: 14, color: "#7c8ba1", marginBottom: 14 }}>{records.length} decisions recorded in this browser. Screen time runs from a screen appearing to the operator's choice on it; the scan trigger is shown but not counted, it is the pedal either way.</div>
-        <div style={{ padding: "12px 16px", borderRadius: 8, background: "rgba(192,132,252,0.10)", border: "1px solid rgba(192,132,252,0.4)", color: "#e9d5ff", fontSize: 16, lineHeight: 1.45, marginBottom: 16 }}>{verdict}</div>
-        <table style={{ borderCollapse: "collapse", width: "100%" }}>
-          <thead>
-            <tr><th style={{ ...th, textAlign: "left" }}></th>{methods.map(m => <th key={m.id} style={th} colSpan={2}>{m.label}</th>)}</tr>
-            <tr><th style={{ ...th, textAlign: "left" }}>Screen</th>{methods.map(m => <Fragment key={m.id}><th style={th}>decisions</th><th style={th}>median</th></Fragment>)}</tr>
-          </thead>
-          <tbody>
-            <tr style={{ fontWeight: 700 }}><td style={{ ...td, textAlign: "left" }}>Every screen · passes · screen time per pass</td>
-              {methods.map(m => { const s = sum[m.id]; return <Fragment key={m.id}><td style={td}>{s.all.n} · {s.passes}</td><td style={td}>{secs(s.secondsPerPass)}</td></Fragment>; })}</tr>
-            {SCREEN_KINDS.map(k => (
-              <tr key={k.id}><td style={{ ...td, textAlign: "left", color: "#cbd5e1" }}>{k.label}</td>
-                {methods.map(m => { const c = sum[m.id].byKind[k.id]; return <Fragment key={m.id}><td style={td}>{c.n || "—"}{c.n && c.movesPer ? <span style={{ color: "#94a3b8" }}> · {c.movesPer} steps</span> : null}{c.n && c.pointerShare ? <span style={{ color: "#94a3b8" }}> · {c.pointerShare}% click</span> : null}</td><td style={td}>{secs(c.medianS)}</td></Fragment>; })}</tr>
-            ))}
-            <tr><td style={{ ...td, textAlign: "left", color: "#94a3b8" }}>Orders · operators</td>{methods.map(m => <Fragment key={m.id}><td style={td} colSpan={2}>{sum[m.id].orders} · {sum[m.id].operators}</td></Fragment>)}</tr>
-          </tbody>
-        </table>
-        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
-          <button onClick={download} disabled={!records.length} style={{ ...btnPri, opacity: records.length ? 1 : 0.5 }}>⬇ Export CSV</button>
-          <button onClick={wipe} disabled={!records.length} style={{ ...btnGhost, borderColor: "#ef4444", color: "#f87171", opacity: records.length ? 1 : 0.5 }}>Delete the records</button>
-          <div style={{ flex: 1 }} />
-          <button onClick={onClose} style={btnGhost}>Close</button>
         </div>
       </div>
     </div>
@@ -3391,9 +3284,6 @@ export default function App() {
     p.catch(() => setFsHint("The browser refused — press F11 instead"));
     setTimeout(() => setFsHint(null), 6000);
   };
-  // The result screen always takes the right half and the camera stays where
-  // it is, whatever the screen size: one layout to learn, on every PC.
-  const wide = true;
   const [showBinSetup,       setShowBinSetup]       = useState(false);
   // A supervisor's sign-in is the board and nothing else: no station, no scanning, no saved order to resume.
   const [showSupervisor,     setShowSupervisor]     = useState(() => savedSignIn?.role === "supervisor" || savedSignIn?.role === "admin");
@@ -4048,19 +3938,6 @@ export default function App() {
         m = r.match;
         if (r.agreed && again) { detected = d2; dataUrl = again.dataUrl; }
       }
-      // Second look, off by default: a doubtful first read used to be re-shot
-      // 0.7 s later before anything showed, which turned a 1.5 s yellow into a
-      // 4 s one. The operator can say "scan" or press R instead.
-      if (SECOND_LOOK && recapture && (m === null || m.soft) && version === rosterVersion.current) {
-        await new Promise(r => setTimeout(r, 700));
-        const again = recapture();
-        if (again) {
-          console.log("[second look] first read was doubtful — reading a fresh frame");
-          const d2 = await readOne(again.base64, again.dataUrl);
-          const m2 = matchOf(d2);
-          if (m2 && (m2.type === "exact" || m2.type === "duplicate" || !m2.soft || m === null)) { detected = d2; m = m2; dataUrl = again.dataUrl; }
-        }
-      }
     } catch (e) {
       apiError = e.message;
     }
@@ -4148,7 +4025,7 @@ export default function App() {
   // order-screen pickers (showUnfinished, showAssigned, showReplay), which only exist before an order is open.
   const dialogOverResult = showBinSetup     // "Set out the boxes" screen
     || showRosterComplete                   // all jerseys scanned: export / finish
-    || showSettings                         // Settings (its Input trial panel lives inside it)
+    || showSettings                         // Settings
     || showResume                           // "resume the saved order?" at sign-in
     || showSupervisor                       // the supervisor board
     || showHistory                          // every jersey scanned this order
@@ -4570,20 +4447,9 @@ export default function App() {
         reason: `#${number || "?"}${name ? " " + name : ""} is not on the roster — check the number`,
         note: "Typed by operator" });
     },
-    continueManual() { setOverlay(null); armAutoScan(); },
     // Back from a list the operator typed for: the form again, as it was typed.
     editTyped() {
       const o = overlay; if (!o?.typed) return;
-      setOverlay({ mode: "manual", scan: o.scan, match: null, teams: teamNames, returnTo: null, initial: o.typed });
-    },
-    // Back from "entered by hand": the entry is already in the log and on the
-    // row, so take it back (the log line stays, marked taken back; the row
-    // opens again) and reopen the form with what was typed.
-    undoManual() {
-      const o = overlay; if (!o?.match) return;
-      setRoster(prev => prev.map(r => r._id === o.match._id && r.scanned === "manual" ? { ...r, scanned: false } : r));
-      setLog(prev => prev.map(l => l.id === o.entryId ? { ...l, status: "undo", reason: "Taken back — re-entered by hand" } : l));
-      setLastResult(r => (r?.id === o.entryId ? null : r)); setLastConfirmed(c => (c?.id === o.entryId ? null : c));
       setOverlay({ mode: "manual", scan: o.scan, match: null, teams: teamNames, returnTo: null, initial: o.typed });
     },
     };
@@ -4685,16 +4551,6 @@ export default function App() {
     else markRow(r._id, v || false);
   }; });
 
-  // Input trial: while Settings → Input trial names a setup, every decision on
-  // a result screen (and every scan trigger) is kept in this browser, across
-  // orders, with the setup's name on it. Compare under Settings.
-  const trialMethod = settings.trialMethod || "";
-  const lastScreenClosed = useRef(Date.now());
-  useEffect(() => { if (!overlay) lastScreenClosed.current = Date.now(); }, [overlay]);
-  const onTrial = useCallback(rec => {
-    if (!trialMethod) return;
-    appendTrial({ t: Date.now(), method: trialMethod, station: stationId(), operator: operatorName, order: orderNumber, run: orderRun, ...rec });
-  }, [trialMethod, operatorName, orderNumber, orderRun]);
   // ── Global keyboard: scan trigger only ───────────────────────────────────
   useEffect(() => {
     const onKey = (e) => {
@@ -4708,12 +4564,11 @@ export default function App() {
       if (document.activeElement?.tagName === "BUTTON") document.activeElement.blur();
       e.preventDefault();
       gateRef.current.disarm(); setArmed(false);
-      onTrial({ screen: "camera", n: 1, idx: 0, id: "scan", via: "key", key: e.code, ms: Date.now() - lastScreenClosed.current, moves: 0, hovers: 0 });
       doTriggerScan();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, anyDialogOpen, sessionStarted, scanKey, doTriggerScan, onTrial]);
+  }, [overlay, anyDialogOpen, sessionStarted, scanKey, doTriggerScan]);
 
   // ── Replay (development only): yesterday's scans through today's screens ──
   // The station page with ?replay=<order> loads public/sim/replay-<order>.json
@@ -4811,7 +4666,6 @@ export default function App() {
         }
         case "offSize":    a.offRosterSize(s.size || ""); break;
         case "manual":     a.manualSubmit({ number: s.number, name: s.name || "", size: s.off ? "" : s.size || "", team: s.off ? "" : s.team || "" }); break;
-        case "manualDone": a.continueManual(); break;
         case "duplicate":  if (s.dup) a.flagDuplicate(); else a.skipDuplicate(); break;
         case "flag":       a.manual(); break;                            // could not read / not found: typed in
         case "supervisor": a.continueSupervisor(); break;
@@ -4862,10 +4716,6 @@ export default function App() {
         <BinSetupModal entries={boxPlan} by={binFieldOf(binMap)} labels={boxPlanLabels} autoPrint={boxAuto} onPrinted={boxesLabelled} onConfirm={() => { setShowBinSetup(false); setBoxAuto(false); }} />
       )}
 
-      {overlay && !wide && (
-        <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort} paused={overlayPaused}
-          stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera" && !sorting} />
-      )}
 
       {replay && replay.hidden && (
         <button onClick={() => setReplay(r => ({ ...r, hidden: false }))} title="Show the replay bar" style={{ position: "fixed", right: 10, bottom: 10, zIndex: 3000, background: "#0d1117", border: "2px solid #f59e0b", borderRadius: 10, padding: "4px 10px", color: "#fcd34d", fontWeight: 800, fontSize: 13, cursor: "pointer", opacity: 0.85 }}>▲ Replay {Math.min(replay.i + 1, replay.steps.length)}/{replay.steps.length}{replay.playing ? " ▶" : " ⏸"}</button>
@@ -5004,7 +4854,6 @@ export default function App() {
           {manualCount > 0 && <Pill color="#f59e0b" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the jerseys entered by hand">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
           {saveOk === false && <Pill color="#f87171" title="This PC's storage is full or blocked: the order is not being saved, so a reload or a crash would lose the work since. Tell the supervisor; do not close or reload this page.">⚠ NOT SAVING — tell the supervisor</Pill>}
-          {trialMethod && <span title="Input trial: every decision on a result screen is being timed for this setup (Settings → Input trial)"><Pill color="#c084fc" onClick={() => setShowSettings(true)}>⏱ {trialMethodLabel(trialMethod)}</Pill></span>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
@@ -5117,7 +4966,7 @@ export default function App() {
                           <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 56, fontSize: 18 }}>■</button>
                           <button onClick={toggleHandsFree} title={!settings.autoScan ? "Turn hands-free scanning on" : handsFreePaused ? "Resume hands-free scanning" : `Pause hands-free — the camera stays on and ${keyLabel} still scans`}
                             style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, borderColor: "#f59e0b", color: "#fcd34d", background: handsFree ? "rgba(245,158,11,0.14)" : "transparent", whiteSpace: "nowrap" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
-                          <button onClick={() => { gateRef.current.disarm(); setArmed(false); onTrial({ screen: "camera", n: 1, idx: 0, id: "scan", via: "pointer", key: "", ms: Date.now() - lastScreenClosed.current, moves: 0, hovers: 0 }); doTriggerScan(); }} disabled={scanning || anyDialogOpen || !!overlay}
+                          <button onClick={() => { gateRef.current.disarm(); setArmed(false); doTriggerScan(); }} disabled={scanning || anyDialogOpen || !!overlay}
                             style={{ ...btnPri, flex: 1, fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, letterSpacing: 1, padding: "14px", opacity: scanning ? 0.4 : 1 }}>
                             {scanning ? "Reading…" : "⚡ SCAN"}
                           </button>
@@ -5200,8 +5049,8 @@ export default function App() {
 
         {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
-          {overlay && wide && (
-            <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort} paused={overlayPaused}
+          {overlay && (   /* the result screen takes this half, so the camera stays in view: one layout on every PC */
+            <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} listSort={settings.listSort} paused={overlayPaused}
               stream={null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera" && !sorting} />
           )}
 
