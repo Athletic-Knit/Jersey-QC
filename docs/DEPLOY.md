@@ -99,7 +99,14 @@ On the server PC, a Windows scheduled task called **"Jersey QC server"** starts 
 - The task runs `wscript.exe tools\serve-hidden.vbs`, which runs `npm run dev` with no window.
 - Output goes to `data\server.log`. Each start moves the previous run's log to `data\server-previous.log`, so the log of a crash is kept.
 - Set it up (once, no admin needed) with `tools\install-autostart.ps1` in the production folder.
-- `schtasks /run /tn "Jersey QC server"` starts it; `schtasks /end /tn "Jersey QC server"` stops it.
+- `schtasks /run /tn "Jersey QC server"` starts it. To stop it (or before a restart), end the task, then end whatever still listens on 5173 (ending the task does not always end the server under it):
+
+```powershell
+schtasks /end /tn "Jersey QC server"
+Get-NetTCPConnection -LocalPort 5173 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+```
+
+Check that nothing answers on https://localhost:5173, then `schtasks /run /tn "Jersey QC server"`.
 
 The server reloads itself when one of its own files changes (see the list under Promotion). The process stays the same and the log says "server restarted". Stations reload and show Resume.
 
@@ -122,7 +129,7 @@ powershell -ExecutionPolicy Bypass -File tools\setup-production.ps1 -StopOnly
 
 This stops that PC's copy of the server on 5173 and disables its "Jersey QC server" task.
 
-To go back: run `tools\install-autostart.ps1` in the old folder, then `schtasks /Run /TN "Jersey QC server"`.
+To go back, on a break: stop the new server (the task and port 5173, as under "The scheduled task"). Copy `C:\JerseyQC\data\hub.json` and `C:\JerseyQC\data\hub-orders\` back over the old folder's `data\` (everything since the move is only there). Run `tools\install-autostart.ps1` in the old folder, then `schtasks /run /tn "Jersey QC server"`. Delete `PRODUCTION-MOVED.txt` from the old folder, or every document will go on saying production is `C:\JerseyQC`. On the other PC, enable its task again only if it is meant to serve.
 
 Why it matters: while both PCs run a server out of one OneDrive folder, both write the same `data\hub.json`, and a file saved on one PC restarts the server on both.
 
@@ -150,7 +157,7 @@ What to do:
 1. Read `data\server.log` for the reason.
 2. Find what holds the file (OneDrive, an antivirus scan, an editor) and free it, or restore the newest good copy from `data\backups\`.
 3. If a `hub.json.unreadable-*` file was made, do not delete it: it may still be put together. `tools\merge-hub-data.mjs` merges several copies into one.
-4. Restart the server: `schtasks /end /tn "Jersey QC server"` then `schtasks /run /tn "Jersey QC server"`. Stations show Resume.
+4. Restart the server: stop it as under "The scheduled task" above (the task AND whatever listens on 5173), then `schtasks /run /tn "Jersey QC server"`. Stations show Resume.
 
 An unfinished order's file that does not parse is kept aside the same way (`<id>.json.unreadable-<time>`).
 
@@ -167,9 +174,11 @@ Which queue is used, in order:
 3. `JERSEY_PRINTER`.
 4. The first queue on the server PC whose name or driver says Zebra, ZD4 or ZDesigner.
 
-Flag tickets use `JERSEY_FLAG_PRINTER_STATIONn`, then `JERSEY_FLAG_PRINTER`, then the station's label printer. Roll sizes: `JERSEY_LABEL_SIZE` (default `1x0.5`), `JERSEY_FLAG_LABEL_SIZE` (default `2x1`). See the settings table in `README.md`.
+The 2 x 1 in roll (flag tickets, box labels and box lists) uses `JERSEY_FLAG_PRINTER_STATIONn`, then `JERSEY_FLAG_PRINTER`, then the station's label printer. Roll sizes: `JERSEY_LABEL_SIZE` (default `1x0.5`), `JERSEY_FLAG_LABEL_SIZE` (default `2x1`). See the settings table in `README.md`.
 
 A print that gets no answer is stopped after 30 seconds and the station shows why, in plain words.
+
+**Which printer the hub really uses:** a Zebra plugged into the server PC wins over a `JERSEY_PRINTER` that names a printer shared from another PC. Open `https://localhost:5173/api/hub/print?station=st-station1` on the server PC and read `printer` and `flagPrinter`. Then check THAT queue: `printer-check.ps1 -Printer "<that queue>"` (with no `-Printer` it checks `JERSEY_PRINTER`, else `\\AK-NB-164\Zebra`).
 
 **`tools\printer-check.ps1`**, run on the server PC, checks the path a label takes, step by step, with times: does the sharing PC's name resolve (and to what address), do its ports 445 and 135 answer, does the printer open, and one test label. `-NoPrint` skips the test label; `-Printer "<queue>"` checks another queue.
 
@@ -225,7 +234,7 @@ The open order is saved in the station browser's storage, keyed by station, so a
 | The page opens but every scan fails ("SCAN FAILED") | `data\server.log`: look for `[anthropic]` lines. "no API key" means `.env.local` has no `CLAUDE_API_KEY`. A 401 means the key is wrong. Timeouts mean the server PC cannot reach `api.anthropic.com` |
 | "The hub is not saving anything" | The data file cannot be read: see Data files |
 | "Board offline" at a station | The station cannot reach the hub. If the server itself is up, scanning still works; if the whole server is down, scans fail too, because the model's requests go through the server |
-| Labels do not print, or take 30 s | Run `tools\printer-check.ps1` on the server PC. Check `JERSEY_PRINTER` in `.env.local` and that the Zebra has labels and is not paused |
+| Labels do not print, or take 30 s | See which queue the hub uses (`/api/hub/print?station=…`, under Printers), then run `tools\printer-check.ps1 -Printer "<that queue>"` on the server PC. Check the Zebra has labels and is not paused |
 | A promotion refuses to run | Read what it says: wrong branch, changes made by hand, GitHub unreachable, or the server would not stop. It changes nothing when it refuses |
 | The server reloaded during work | A server file changed (a promotion, or someone saved a file in production: they must not). Stations press Resume |
 | A station's header shows "NOT SAVING" | The station browser's storage is full. The operator uses Finish later to put the order on the server; then clear the browser's site data for the app on that PC |

@@ -94,8 +94,8 @@ All go in `.env.local` in the project folder (gitignored by `*.local`). The code
 | `VITE_CLAUDE_THINKING` | page | `off` / `adaptive` (default `off`). |
 | `VITE_SEND_MAX_PX` | page | Longest side of the frame sent to the model (default `800`). |
 | `VITE_OPERATORS` | page | Names offered at sign-in, comma-separated (default `Person 1,Person 2,Person 3`); "Other" is always offered too. |
-| `VITE_PIN_STATION1` / `2` / `3` | page | Station PINs (defaults `1001`, `1002`, `1003`). |
-| `VITE_PIN_INSPECTOR`, `VITE_PIN_SORTER`, `VITE_PIN_PACKER`, `VITE_PIN_SUPERVISOR`, `VITE_PIN_ADMIN` | page | Role PINs (defaults `1111`, `4444`, `2222`, `3333`, `9999`). |
+| `VITE_PIN_STATION1` / `2` / `3` | page | Station PINs. The defaults are in `src/config.js`; set real ones in `.env.local` (the PINs are in the page's code: a gate against passers-by, not security). |
+| `VITE_PIN_INSPECTOR`, `VITE_PIN_SORTER`, `VITE_PIN_PACKER`, `VITE_PIN_SUPERVISOR`, `VITE_PIN_ADMIN` | page | Role PINs; defaults in `src/config.js`, real ones in `.env.local`. |
 | `VITE_PIN_REQUIRED` | page | `false` switches the PIN gate off (default on). |
 | `VITE_REPLAY` | page | `1` turns the replay on. `vite.config.stage.js` sets it for development and testing; the floor's `vite.config.js` never does. |
 | `JERSEY_PRINTER_STATION1` / `2` / `3` | hub | Print queue on the server PC for that station's stickers. A printer shared from another PC works (`\\AK-NB-164\ZDesigner ZD411-203dpi ZPL`). The suffix is the station id after `st-`, case-insensitive. Never overridden. |
@@ -272,7 +272,7 @@ The code says "bin"; on the floor, on every screen and every label it is a **box
   - The box size shows in Packing, the Boxes dialog, Box full's message, Finish order, and the "Boxes" sheet of the order's Excel (`buildBinsSheet`). The station reports `closedBins` and `binSummary`, so the board shows the same.
 - **Packing view** (the owner, 19 Nov 2026): team by team (or size by size), each team's boxes, full or open, what is in them, what is missing and what is still to scan. A FULL box (closed with Box full) is not the same as a COMPLETE team. It prints a "DONE BOXES" list and a "NOT DONE" list (`boxesListLabels`).
 - **Shortage before sealing** (`shortages` / `jerseyList`): for every open box, the jerseys of its team or size that are in no box, split into still to scan and short (flagged or missing). The Boxes dialog shows "⚠ Short N: #5, #12"; Finish order shows an amber block "Before the boxes are sealed: N jerseys are in no box".
-- **The DAMAGED box:** one more box at every station, where each flagged jersey goes with its ticket (a cleaned jersey is not flagged and does not go in). Its label ("DAMAGED / Flagged jerseys", `damagedBoxLabel`) is not printed by itself: it is the same box all day (the owner, 19 Nov 2026); it prints from the Boxes dialog or the Print menu. A flagged row's Box column reads "Damaged". Its list (`damagedItems` / `damagedListJobs`, `damagedListLabels`): every jersey flagged right now with its newest reason, printed on request (Boxes dialog, Print menu) and by Finish order.
+- **The DAMAGED box:** one more box at every station, where each flagged jersey goes with its ticket (a cleaned jersey is not flagged and does not go in). Its label ("DAMAGED / Flagged jerseys", `damagedBoxLabel`) is not printed by itself: it is the same box all day (the owner, 19 Nov 2026); it prints from the Print menu (DAMAGED → Its label). A flagged row's Box column reads "Damaged". Its list (`damagedItems` / `damagedListJobs`, `damagedListLabels`): every jersey flagged right now with its newest reason, printed on request (Boxes dialog, Print menu) and by Finish order.
 
 ### Labels at the station
 
@@ -435,7 +435,7 @@ The rules are in READ FIRST. The scripts (all in `tools/`, run with `powershell 
 | `stagelib.ps1` | dot-sourced by the three above: `Test-Junction` (only a real junction or symbolic link counts as a link, not a OneDrive folder), `Get-LockHash`, `Get-PackagesNeed` ("linked", "missing", "changed"; a real `node_modules` with no stamp is taken as current and stamped), `Install-Packages` (`rmdir` the link, then `npm ci`, then the stamp `.jqc-lock-sha256`), `Stop-PortServer`, `Backup-Data` (`data\hub*.json` and `data\hub*-orders\` into `data\backups\<date_time>\`, the newest 20 kept) |
 | `setup-production.ps1` | moves production out of OneDrive (READ FIRST); `-Check`, `-StopOnly` |
 | `merge-hub-data.mjs` | merges copies of the data file (see "The hub") |
-| `install-autostart.ps1` | registers the "Jersey QC server" task (at log-on, hidden, restarted if it stops). `schtasks /run`, `/end`, `/delete /tn "Jersey QC server"` |
+| `install-autostart.ps1` | registers the "Jersey QC server" task (at log-on, hidden, restarted if it stops). `schtasks /run`, `/delete /tn "Jersey QC server"`; to stop it, `/end` the task AND stop whatever listens on 5173 (see docs/DEPLOY.md) |
 | `serve-hidden.vbs` | what the task runs: `npm run dev` with no window, output in `data\server.log` (the last run's kept as `server-previous.log`) |
 | `print-raw.ps1` | sends ZPL raw to a queue; `-List` lists the queues as JSON |
 | `printer-check.ps1`, `clear-print-queue.ps1` | printer troubleshooting (see "Labels and printers") |

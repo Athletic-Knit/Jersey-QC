@@ -151,16 +151,16 @@ Jerseys with no name and no number cannot be read by the camera. When the roster
 - **It is clean now**: the jersey is not flagged. It goes back to the green screen (or stays passed).
 - **It will not come out**: it is flagged as "Dirt that will not come out".
 
-**Damage photo.** On the FLAGGED screen, press **Photo of the damage** (or the pedal). Hold the damaged part under the camera: it counts 3-2-1 and takes the photo. **Retake** or **Take another** as needed. The photos go to the supervisor and into the damage report.
+**Damage photo.** On the FLAGGED screen, press **Photo of the damage**. For a defect (logo, twill, stitching, holes, dirt that will not come out) the pedal takes the photo too; for Name or number, Not on the roster, Duplicate and No size tag the pedal presses **Continue** instead. Hold the damaged part under the camera: it counts 3-2-1 and takes the photo. **Retake** or **Take another** as needed. The photos go to the supervisor and into the damage report.
 
-**The DAMAGED box.** Every station has one, besides the team and size boxes. Its label prints with the order's first flag. The Boxes dialog lists what is in it and has **🖨 Print its list**.
+**The DAMAGED box.** Every station has one, besides the team and size boxes. Its label does not print by itself: it is the same box all day. Print it from **🖨 Print → DAMAGED → Its label**. The Boxes dialog lists what is in it and has **🖨 Print its list**.
 
 **Wrong size picked** on a "Not on the roster" or "Duplicate" flag: press **← Back · wrong size**. The flag is taken back. Throw away the tickets that printed, and pick the right size.
 
 ### Box full
 
-1. When a box is full (by room or by weight: your judgement), tap **📦 Packing** (under the camera), then **📦 Boxes**.
-2. Find the box and press **📦 Box 5.1 full**.
+1. When a box is full (by room or by weight: your judgement), tap **📦 Packing** (bottom left, beside History).
+2. On the team's (or size's) row press **📦 Box 5.1 full**. (Or **📦 All boxes**, then **Box full** on that box's row.)
 3. Answer "What size is Box 5.1?" (small, medium, large). The suggested one is marked. Your answer teaches the app how many jerseys fit in each box.
 4. The box's list prints: a count label first, then the jersey lists. Tape the box and stick the labels on it.
 5. That team carries on in the next box (5.2). Its label prints if it was not printed before.

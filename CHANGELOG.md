@@ -287,3 +287,48 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
   - `vite.config.diag.js` (the development test server, not in git) still prints on the Zebra.
 - **Written by** the Claude session (Opus 5.5) and two helpers · **reviewed by** Opus (one blocker, fixed).
 - **Commits:** 8791077, 13df31a, 126ecfb (merged in 168a94a, ae06d5e), 160c295
+
+## 2026-11-23 · Phase 7 · Maintainability: documents and comments
+- **Goal:** anyone new (an intern, IT, a manager) can find out what the app does, how to use it, how it is deployed, and why each rule is there.
+- **What changed:**
+  - **Front door and guides:**
+    - `README.md`, rewritten as the front door: what the app does, the three stages, how to run and test it, a map of the code, and ONE complete table of settings.
+    - `docs/OPERATOR-GUIDE.md` (new): the station and the supervisor board, task by task, with what to do when something goes wrong.
+    - `docs/DEPLOY.md` (new), for IT: the PCs, stages, the bat files, promotion and how to undo it, the scheduled task and its logs, the move out of OneDrive, data files, printers, firewall, kiosk, troubleshooting.
+  - **`CLAUDE.md`,** rewritten as a current reference by topic:
+    - every rule is kept with who decided it and when;
+    - the history is left to git and this changelog;
+    - the READ FIRST rules, "Which PC is which" and git authorship are kept intact;
+    - 20 places where the old text contradicted the code were corrected to the code. For example: the API key is `CLAUDE_API_KEY`; there is no "edit with A" on the green screen; Box full is under 📦 Packing; Skip comes first on a flagged jersey's ALREADY DONE screen.
+  - **Old documents:**
+    - `HANDOFF.md` is retired: what was still true moved into the guides, and its open ideas into the roadmap.
+    - `DEMO-CHECKLIST.md` and `ROADMAP.md` are brought up to date.
+  - **Comments** (code unchanged; checked line by line):
+    - a header on every file that had none (App.jsx with a map of its components, main.jsx, vite.config.js, eslint.config.js, 14 test files);
+    - a comment on every exported function and every screen component;
+    - stale comments fixed: the model named in `vision.js`, `boxes.js` (only the simulation's baseline now), contradicting comments in `match.js`, B as the scan key (it is Enter), and the removed screens and flags.
+  - **On screen:** the set-out screen said the DAMAGED box's label prints "from Boxes". It prints from the Print menu.
+- **Corrections to earlier entries in this changelog:**
+  - The green screen's amber "Camera could not see the whole number" line is NOT unreachable: it shows on the green that follows a pick from a doubtful list (phases 1 and 5 said otherwise).
+  - The DAMAGED box label prints only on request (the owner, 19 Nov 2026), not with the first flag.
+- **Review:** Opus checked the guides and CLAUDE.md against the code for wrong instructions; no owner's rule was lost. Five wrong instructions were found and corrected:
+  - **the DAMAGED label:** where it prints from;
+  - **Box full:** the button names;
+  - **stopping the server:** ending the task alone does not stop it; port 5173 must be stopped too;
+  - **undoing the move out of OneDrive:** the steps were incomplete;
+  - **checking the printer:** see first which queue the hub really uses.
+
+  The PIN values were also taken out of CLAUDE.md (only "defaults in src/config.js, real ones in .env.local").
+- **For the owner:**
+  - **The PINs.** The station and supervisor PINs are the defaults in the code unless `.env.local` sets them, and no `.env.local` seen here sets them. Set real ones.
+  - **Facts the writers could not confirm from the code:**
+    - whether `setup-production.ps1` has been run;
+    - which PC runs the testing server;
+    - whether checklist items 8 and 10 (the flag list, a real roster file) were ever done.
+- **Left open:**
+  - `tools/break-it.js` and `tools/browser-harness.js` are out of date: they use B, look for the old full-screen result and expect the removed "entered by hand" screen.
+  - `setup-production.ps1`'s closing message names `promote.ps1` without `-Production`.
+  - `Start Jersey QC.bat` runs `npm install` (not `npm ci`) and shows the PINs on screen.
+  - `.claude/launch.json` says http for the 5174 server, which answers on https.
+  - Unreachable code noted in comments, to remove later: `ReasonTextForm` and the custom reason, ScanOverlay's `!embedded` branches, and `putOrder`, `getOrder` and `orderKey` in `orderstore.js`.
+- **Written by** three helpers in parallel (guides; CLAUDE.md; comments) and the Claude session (review, fixes, merge) · **reviewed by** Opus (five wrong instructions and the PINs, fixed).

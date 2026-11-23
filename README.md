@@ -134,7 +134,7 @@ Each stage folder has a file called `.env.local` with its settings. It is never 
 | `JERSEY_PRINTER_STATION1`, `2`, `3` | The Windows print queue for that station's labels, as seen from the server PC | none |
 | `JERSEY_PRINTER` | The print queue for any station without its own. A Zebra plugged into the server PC wins over a printer shared from another PC | the first Zebra queue on the server PC |
 | `JERSEY_LABEL_SIZE` | The sticker roll, in inches, width x height | `1x0.5` |
-| `JERSEY_FLAG_PRINTER_STATION1`, `2`, `3`, `JERSEY_FLAG_PRINTER` | The queue for flag tickets, per station and for all | the station's label printer |
+| `JERSEY_FLAG_PRINTER_STATION1`, `2`, `3`, `JERSEY_FLAG_PRINTER` | The queue for the 2 x 1 in roll (flag tickets, box labels and box lists), per station and for all | the station's label printer |
 | `JERSEY_FLAG_LABEL_SIZE` | The flag ticket roll | `2x1` |
 | `JQC_STAGE_PRINT` | `1` lets the development or testing server print. Without it they print nothing (production always prints) | off |
 | `JQC_REPLAY_FROM` | Development and testing only: the floor data file(s) the replay reads from, separated by `;` | `C:\JerseyQC\data\hub.json` |
