@@ -1525,7 +1525,7 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, onTrial = null, listSort = "size" }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, onTrial = null, listSort = "size", paused = false }) {
   const reasons = reasonsFor(jerseyType);
   // Input trial (src/lib/trial.js): the overlay is mounted anew for every
   // screen (its key is the mode and the scan), so "shown" is the mount; every
@@ -1687,6 +1687,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     };
     const onKey = (e) => {
       if (e.repeat) return;                       // a held key or pedal is one press, not many
+      if (paused) return;   // a dialog is open over this result: the pedal must not pick, tick or confirm behind it (code review of 23 Nov 2026, H1)
       if (mode === "done") return;
       if (mode === "manual" || mode === "reasonText") { if (e.code === "Escape") { e.preventDefault(); actions.back(); } return; }   // typing, not navigating
       if ((mode === "offSize" || mode === "listFlag") && e.code === "Escape") { e.preventDefault(); actions.back(); return; }
@@ -1704,7 +1705,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [options, selectedIdx, mode, confirmKey, cancelKey, upKey, retryKey, byHandKey, actions, showNudge, fire]);
+  }, [options, selectedIdx, mode, confirmKey, cancelKey, upKey, retryKey, byHandKey, actions, showNudge, fire, paused]);
 
   // A bumped mouse never overrides a key press made in the last moment.
   const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) { trialHovers.current++; setSelectedIdx(i); } }, []);
@@ -4060,8 +4061,45 @@ export default function App() {
     return { base64: dataUrl.split(",")[1], dataUrl };
   }, [settings.rotation]);
 
+  // Is any dialog, full-screen panel or picker showing over the station? ONE list, so no screen is forgotten.
+  // A NEW DIALOG MUST BE ADDED HERE (to dialogOverResult), or the pedal (Enter) and hands-free will scan behind it,
+  // and the result would sit hidden under the dialog until the next pedal press confirmed a jersey nobody saw.
+  // Rule: no scan while any dialog is open (code review of 23 Nov 2026, finding H1, and the floor's first rule:
+  // no wrong green, no jersey passed unseen). The scan-result overlay is NOT in this list: it is the scan's own screen.
+  // The pedal handler, hands-free and doTriggerScan stop on this list; note that the SCAN button, with a result
+  // already showing and no dialog open, still starts a new read (as it did before this change).
+  // Found by listing every show* / dialog state of this component
+  // (a test, no-scan-behind-dialog.test.js, re-checks the list against the source on every run).
+  // Not listed on purpose: showFilters (a panel inside the roster table, no screen over the camera) and the
+  // order-screen pickers (showUnfinished, showAssigned, showReplay), which only exist before an order is open.
+  const dialogOverResult = showBinSetup     // "Set out the boxes" screen
+    || showRosterComplete                   // all jerseys scanned: export / finish
+    || showSettings                         // Settings (its Input trial panel lives inside it)
+    || showResume                           // "resume the saved order?" at sign-in
+    || showSupervisor                       // the supervisor board
+    || showHistory                          // every jersey scanned this order
+    || showFinish                           // Finish order confirm
+    || showBins                             // the Boxes dialog (Box full, box lists)
+    || !!finished                           // the "Order N is done" screen
+    || showPrint                            // the Print menu
+    || showPacking                          // the packing view, team by team
+    || showStillOut                         // picked-up order: what is still out
+    || showIssues                           // Missing / Duplicate / Flagged lists
+    || showPark                             // "Finish later" dialog
+    || !!bigPhoto;                          // a flag photo shown large
+  // Blanks is the one dialog kept out of dialogOverResult: the Blanks screen is not drawn while a result is up
+  // (`showBlanks && … && !overlay` below), so it can never sit over a result, and its own "Flag one" opens the
+  // reasons menu while showBlanks stays true (that menu needs its keys).
+  const anyDialogOpen = dialogOverResult || showBlanks;   // the blank-jersey counting screen is a dialog too
+  // A result screen (green, yellow, red, flagged) that is up while a dialog is open must not take the pedal either:
+  // the operator could tap History, Packing or Issues over a pick list, press the pedal, and pass a jersey unseen
+  // (code review of 23 Nov 2026, H1, second half). ScanOverlay ignores its keys while this is true; the mouse still works.
+  // showBlanks is deliberately not part of it (see above; a test checks it stays out).
+  const overlayPaused = dialogOverResult;
+
   const doTriggerScan = useCallback((opts = {}) => {
     if (!videoRef.current || !canvasRef.current || scanning || !cameraOn || roster.length === 0 || inputMode !== "camera") return;
+    if (anyDialogOpen) return;   // last line of defence: whatever calls this (pedal, SCAN button, hands-free), nothing scans behind a dialog
     if (opts?.auto !== true && waitPedalRef.current) { waitPedalRef.current = false; setWaitPedal(false); }   // the pedal (or the SCAN button) after a flag: hands-free may arm again after this one
     const video = videoRef.current;
     if (!video.videoWidth) { setError("Camera is still starting — try again in a second."); return; }
@@ -4070,16 +4108,15 @@ export default function App() {
     if (!track || track.readyState !== "live") { setError("Camera disconnected — check the USB cable, then press Start Camera."); stopCamera(); return; }
     const f = captureFrame();
     if (f) doRunScan(f.base64, f.dataUrl, captureFrame, { auto: opts?.auto === true });
-  }, [scanning, cameraOn, roster.length, inputMode, captureFrame, doRunScan, stopCamera]);
+  }, [scanning, cameraOn, roster.length, inputMode, anyDialogOpen, captureFrame, doRunScan, stopCamera]);
   useEffect(() => { triggerRef.current = doTriggerScan; }, [doTriggerScan]);
 
   // ── Hands-free: after a confirm, scan when the picture changes and settles ─
-  const modalOpen = showBinSetup || showRosterComplete || showSettings || showResume || showSupervisor || showHistory || showFinish || showBins || !!finished || showPrint || showBlanks;
   useEffect(() => {
     if (!cameraOn || inputMode !== "camera" || !handsFree) { gateRef.current.disarm(); return; }   // paused, or nothing left in the order: never scan the empty table
     const id = setInterval(() => {
       const gate = gateRef.current;
-      if (modalOpen) { if (gate.armed) { gate.disarm(); setArmed(false); } return; }   // never scan behind a dialog
+      if (anyDialogOpen) { if (gate.armed) { gate.disarm(); setArmed(false); } return; }   // never scan behind a dialog
       if (!gate.armed) { setArmed(a => a ? false : a); return; }
       if (overlay || scanning) return;
       const track = streamRef.current?.getVideoTracks?.()[0];
@@ -4089,7 +4126,7 @@ export default function App() {
       else if (!gate.armed) setArmed(false);
     }, 200);
     return () => clearInterval(id);
-  }, [cameraOn, inputMode, handsFree, overlay, scanning, modalOpen, doTriggerScan, stopCamera]);
+  }, [cameraOn, inputMode, handsFree, overlay, scanning, anyDialogOpen, doTriggerScan, stopCamera]);
 
   // A roster the supervisor sends while an order is running: say so quietly.
   // It is offered on the order screen when this order ends or on Finish order.
@@ -4110,9 +4147,9 @@ export default function App() {
   }, [sessionStarted]);
 
   const armAutoScan = useCallback(() => {
-    if (!handsFree || !cameraOn || inputMode !== "camera" || modalOpen || waitPedalRef.current) return;   // after a flag: the pedal scans the next one
+    if (!handsFree || !cameraOn || inputMode !== "camera" || anyDialogOpen || waitPedalRef.current) return;   // after a flag: the pedal scans the next one
     gateRef.current.arm(lastScanFrameRef.current); setArmed(true);
-  }, [handsFree, cameraOn, inputMode, modalOpen]);
+  }, [handsFree, cameraOn, inputMode, anyDialogOpen]);
   useEffect(() => { armRef.current = armAutoScan; }, [armAutoScan]);
 
   // Closing a dialog (complete modal, settings, supervisor view) hands the table
@@ -4132,7 +4169,7 @@ export default function App() {
     else if (!handsFreePaused) { gateRef.current.disarm(); setArmed(false); setHandsFreePaused(true); return; }
     else setHandsFreePaused(false);
     pedalDone();
-    if (cameraOn && inputMode === "camera" && !modalOpen && !overlay && remaining > 0) { gateRef.current.arm(lastScanFrameRef.current); setArmed(true); }
+    if (cameraOn && inputMode === "camera" && !anyDialogOpen && !overlay && remaining > 0) { gateRef.current.arm(lastScanFrameRef.current); setArmed(true); }
   };
 
   // ── Photo upload ──────────────────────────────────────────────────────────
@@ -4563,7 +4600,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.repeat) return;
-      if (overlay || showBinSetup || showRosterComplete || showSettings || showResume || showFinish || showBins || finished || showPrint || showBlanks || showHistory || showSupervisor || !sessionStarted) return;
+      if (overlay || anyDialogOpen || !sessionStarted) return;   // no scan behind any dialog; dialogs that use Enter themselves still get it (this handler never stops the key there)
       if (e.code !== scanKey) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       // The scan key is Enter by default, and Enter on a focused button clicks it
@@ -4577,7 +4614,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, showBinSetup, showRosterComplete, showSettings, showResume, showFinish, showBins, finished, showPrint, showBlanks, showHistory, showSupervisor, sessionStarted, scanKey, doTriggerScan, onTrial]);
+  }, [overlay, anyDialogOpen, sessionStarted, scanKey, doTriggerScan, onTrial]);
 
   // ── Replay (development only): yesterday's scans through today's screens ──
   // The station page with ?replay=<order> loads public/sim/replay-<order>.json
@@ -4640,7 +4677,7 @@ export default function App() {
     if (!replay || !replay.playing || !sessionStarted || !replayStep) return;
     const next = () => setReplay(r => ({ ...r, i: r.i + 1, phase: "scan", seen: false }));
     if (replay.phase === "scan") {
-      if (scanning || overlay) return;                                   // the last screen is still up
+      if (scanning || overlay || anyDialogOpen) return;                  // the last screen is still up, or a dialog is open (same rule as the pedal)
       if (replayStep.kind === "scan") {
         replayReadRef.current = replayStep.detected;
         const frame = placeholderFrame(replayStep.detected.number, replayStep.detected.name);
@@ -4684,7 +4721,7 @@ export default function App() {
       }
     }, replay.delay);
     return () => clearTimeout(t);
-  }, [replay, replayStep, sessionStarted, scanning, overlay, roster, actions, doRunScan, unscan, markRow]);
+  }, [replay, replayStep, sessionStarted, scanning, overlay, anyDialogOpen, roster, actions, doRunScan, unscan, markRow]);
 
   const overlayKey = overlay ? `${overlay.mode}:${overlay.scan?.id}:${(overlay.candidates || []).map(c => c._id).join(",")}` : "";
   const exportMeta = { orderNumber, operatorName, notes, jerseyType: jerseyTypeLabel(jerseyType), idleSpells, awaySpells, bins: binSummary, categoryOf: reasonCategory };
@@ -4727,7 +4764,7 @@ export default function App() {
       )}
 
       {overlay && !wide && (
-        <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort}
+        <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort} paused={overlayPaused}
           stream={cameraOn && inputMode === "camera" ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera" && !sorting} />
       )}
 
@@ -4759,7 +4796,7 @@ export default function App() {
       {showSettings && (
         <SettingsPanel settings={settings} cameras={cameras} onSave={setSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
       )}
-      {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
+      {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => closeDialog(() => setBigPhoto(null))} />}
 
       {retried && !overlay && !noJersey && (
         <div style={{ position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 1950, background: "#1e293b", color: "#fcd34d", border: "2px solid #f59e0b", borderRadius: 999, padding: "10px 22px", fontSize: 20, fontWeight: 800, boxShadow: "0 8px 30px rgba(0,0,0,0.5)", whiteSpace: "nowrap" }}>
@@ -4807,7 +4844,7 @@ export default function App() {
             {parkErr && <div style={{ ...errSt, marginBottom: 12 }}>{parkErr}</div>}
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={parkOrder} disabled={parking} style={{ ...bigBtn, background: "#f59e0b", color: "#0d1117", flex: 1, opacity: parking ? 0.6 : 1 }}>{parking ? "Saving on the server…" : "⏸ Finish later"}</button>
-              <button onClick={() => { setShowPark(false); setParkErr(""); }} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>Keep going</button>
+              <button onClick={() => closeDialog(() => { setShowPark(false); setParkErr(""); })} style={{ ...btnGhost, fontSize: 17, padding: "14px 22px" }}>Keep going</button>
             </div>
           </div>
         </div>
@@ -4981,13 +5018,13 @@ export default function App() {
                           <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 56, fontSize: 18 }}>■</button>
                           <button onClick={toggleHandsFree} title={!settings.autoScan ? "Turn hands-free scanning on" : handsFreePaused ? "Resume hands-free scanning" : `Pause hands-free — the camera stays on and ${keyLabel} still scans`}
                             style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, borderColor: "#f59e0b", color: "#fcd34d", background: handsFree ? "rgba(245,158,11,0.14)" : "transparent", whiteSpace: "nowrap" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
-                          <button onClick={() => { gateRef.current.disarm(); setArmed(false); onTrial({ screen: "camera", n: 1, idx: 0, id: "scan", via: "pointer", key: "", ms: Date.now() - lastScreenClosed.current, moves: 0, hovers: 0 }); doTriggerScan(); }} disabled={scanning}
+                          <button onClick={() => { gateRef.current.disarm(); setArmed(false); onTrial({ screen: "camera", n: 1, idx: 0, id: "scan", via: "pointer", key: "", ms: Date.now() - lastScreenClosed.current, moves: 0, hovers: 0 }); doTriggerScan(); }} disabled={scanning || anyDialogOpen}
                             style={{ ...btnPri, flex: 1, fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, letterSpacing: 1, padding: "14px", opacity: scanning ? 0.4 : 1 }}>
                             {scanning ? "Reading…" : "⚡ SCAN"}
                           </button>
                         </>
                     }
-                    <button onClick={() => { gateRef.current.disarm(); setArmed(false); actions.manual(); }} disabled={scanning} title="Type the jersey in — when the camera cannot read it"
+                    <button onClick={() => { gateRef.current.disarm(); setArmed(false); actions.manual(); }} disabled={scanning || anyDialogOpen} title="Type the jersey in — when the camera cannot read it"
                       style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, whiteSpace: "nowrap" }}>⌨ By hand</button>
                     {blanks.length > 0 && (
                       <button onClick={() => { gateRef.current.disarm(); setArmed(false); setShowBlanks(true); }} title="Jerseys with no name and no number: count them in by team and size"
@@ -5065,7 +5102,7 @@ export default function App() {
         {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && wide && (
-            <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort}
+            <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} onTrial={onTrial} listSort={settings.listSort} paused={overlayPaused}
               stream={null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera" && !sorting} />
           )}
 
