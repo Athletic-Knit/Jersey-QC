@@ -1,3 +1,7 @@
+// Roster files and the rules on their rows (src/lib/roster.js): CSV and Excel
+// quirks, header aliases, the order number and title rows, boxes and closing a
+// full one, an order saved before boxes had two numbers, shortages before a
+// box is sealed, and rosters of blank jerseys by quantity.
 import { blankGroups, isBlankRow, MAX_QUANTITY } from "../roster.js";
 import { shortages, jerseyList } from "../roster.js";
 import { describe, it, expect } from "vitest";

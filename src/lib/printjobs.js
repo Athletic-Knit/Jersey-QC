@@ -15,11 +15,14 @@ import { binListLabels, jerseyLabel, flagLabel, damagedListLabels } from "./labe
 // A box an earlier ship-with order left open (`pack.carried`, the owner, 20 Nov 2026) holds that
 // order's jerseys too; its list names every order in it: "264247 (12) + 264248 (8)".
 const carriedRows = (pack, bin) => (pack?.carried || []).filter(c => c.bin === bin).flatMap(c => (c.items || []).map(x => ({ ...x, scanned: "pass", carried: true })));
+// The order line of a box's list: the order number alone, or, in a carried
+// box, every order in it with its count.
 export function ordersInBox(pack, bin, rows) {
   const prev = carriedRows(pack, bin); if (!prev.length) return String(pack?.orderNumber || "");
   const n = new Map(); rows.forEach(r => { const o = r.carried ? r.order || "?" : String(pack?.orderNumber || ""); n.set(o, (n.get(o) || 0) + 1); });
   return [...n].map(([o, k]) => `${o} (${k})`).join(" + ");
 }
+// Every box of the order (see above): { bin, label, open, rows, count }.
 export function packBoxes(pack) {
   const { roster = [], binMap = null } = pack || {};
   const closedBins = pack?.closedBins || [];
@@ -89,6 +92,7 @@ export function damagedItems(pack) {
 }
 // Its list (kind "binlist") and its own label (kind "binticket").
 export function damagedListJobs(pack) { return damagedListLabels(damagedItems(pack), { orderNumber: pack?.orderNumber }); }
+// The DAMAGED box's label: printed with the order's first flag, once an order.
 export const damagedBoxLabel = pack => ({ bin: "DAMAGED", title: "DAMAGED", label: "Flagged jerseys", by: "", count: 0, orderNumber: String(pack?.orderNumber || "") });
 
 // One of the hub's order records (GET /api/hub/orders) → a pack. Its box

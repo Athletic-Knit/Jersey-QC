@@ -1,3 +1,7 @@
+// The damage report's rows (src/lib/damage.js), and a few small helpers that
+// sit near it: which stations are in use from the hub's answer (hub.js), the
+// order's numbers line for the prompt and the jersey box the model returns
+// (vision.js), and the photo budget of the saved session (persist.js).
 import { describe, it, expect } from "vitest";
 import { buildDamageRows, DAMAGE_COLUMNS } from "../damage.js";
 import { normBox } from "../vision.js";

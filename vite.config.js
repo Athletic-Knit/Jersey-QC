@@ -1,3 +1,10 @@
+// ── The floor's server (PRODUCTION, port 5173) ───────────────────────────────
+// `npm run dev` with this file is what the stations and the supervisor board
+// talk to: Vite serves the app over HTTPS to the network, the hub (hub-plugin.js)
+// runs inside it under /api/hub with data/hub.json, and /api/anthropic is a
+// proxy that adds the API key to each read. The development and testing
+// servers use vite.config.stage.js instead, which reuses printerEnv and
+// anthropicProxy from here; replay is never on here.
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import hubPlugin from './hub-plugin.js'
@@ -11,7 +18,10 @@ import process from 'node:process'
 // JERSEY_LABEL_SIZE the roll ("1x0.5", inches, width x height). The flag
 // tickets are on a 2 x 1 in roll: JERSEY_FLAG_PRINTER_STATION1 …,
 // JERSEY_FLAG_PRINTER and JERSEY_FLAG_LABEL_SIZE the same way; with no flag
-// printer set, the tickets go to the station's sticker printer.
+// printer set, the tickets go to the station's sticker printer. A Zebra plugged
+// into the server's own PC beats a JERSEY_PRINTER / JERSEY_FLAG_PRINTER shared
+// from another PC (the owner, 20 Nov 2026; hubPrinter in hub-plugin.js).
+// → the options hubPlugin takes.
 export function printerEnv(env) {
   const printers = {}, flagPrinters = {}
   for (const [k, v] of Object.entries(env)) {
@@ -28,6 +38,7 @@ export function printerEnv(env) {
 // rename it to take the key off the page. A request that brings its own key
 // (the test tools do) keeps it.
 export function anthropicKey(env) { return env.CLAUDE_API_KEY || env.VITE_CLAUDE_API_KEY || "" }
+// The proxy's settings for /api/anthropic; `log` writes one line per call.
 export function anthropicProxy(env, { log = false } = {}) {
   const key = anthropicKey(env)
   const stamp = () => new Date().toLocaleTimeString('en-CA', { hour12: false })
@@ -47,7 +58,7 @@ export function anthropicProxy(env, { log = false } = {}) {
   }
 }
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "")
+  const env = loadEnv(mode, process.cwd(), "")   // every variable of .env.local, not only VITE_ ones (the printers, the key)
   return {
   // basicSsl serves over HTTPS with a self-signed cert.
   // Required: browsers only allow getUserMedia (the camera) on a secure

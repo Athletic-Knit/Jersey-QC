@@ -1,3 +1,5 @@
+// The hub's ledger keep (pruneLedger in hub-plugin.js): 90 days of ledger,
+// photos only on the newest 14 days, and the events that lost them marked.
 import { describe, it, expect } from "vitest";
 import { pruneLedger } from "../../../hub-plugin.js";
 

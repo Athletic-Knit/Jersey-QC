@@ -1,3 +1,28 @@
+// ── Jersey QC: every screen of the app ───────────────────────────────────────
+// One file holds the station (sign-in, the order screen, the camera, the result
+// screens, the roster table and every dialog), the packer's and sorter's
+// variants of it, and the supervisor board. It draws and wires; the rules live
+// in src/lib (matching in match.js and scanpolicy.js, rosters and boxes in
+// roster.js, labels in labels.js and printjobs.js, the hub in hub.js, saving in
+// persist.js, the self-check and inspection in vigilance.js) and the floor's
+// settings in src/config.js. Styles are inline; all state is in App, at the end.
+//
+// Map, in file order:
+//   shared styles and small parts    Pill, ScreenKeys (on-screen keys), Kbd
+//   station chrome                   IdleWatch, RosterRow, CompareDays, ResumeModal
+//   sign-in and order setup          SignInModal, BinByPicker, JerseyTypePicker,
+//                                    UnfinishedOrders, OrderSetupModal
+//   on the result screens            LivePreview, Countdown, ReasonTextForm, ManualEntryForm
+//   supervisor board                 PhotoThumbs, PhotoLightbox, OrderView, RouteTag,
+//                                    UnfinishedPile, SupervisorPanel
+//   the result screens               CandidateRow, ScanOverlay
+//   station dialogs                  ResultCard, SettingsPanel, BinSetupModal (set out
+//                                    boxes), ReplayFinder, StillOutModal, BinsModal
+//                                    (boxes), PackingModal, IssuesModal, HistoryModal,
+//                                    BlanksModal, FinishedModal, PrintModal,
+//                                    FinishOrderModal, RosterCompleteModal
+//   App                              state, scan flow (doRunScan), result actions,
+//                                    order start and finish, the station layout
 import { useState, useRef, useCallback, useEffect, useMemo, memo, Fragment } from "react";
 import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
@@ -32,6 +57,7 @@ const backWords = b => (b?.was === "flag" ? `Back from repair${b.reason ? " — 
 // Its open flag or missing line in the log is closed when it passes.
 const closeOpenFor = (log, id, resolution) => log.map(l => (l.match?._id === id && (l.status === S_FLAGGED || l.status === "missing" || l.status === "short") && !l.resolution ? { ...l, resolution } : l));
 
+// A key code as the screens show it on a key cap: "KeyR" → "R", "ArrowUp" → "↑".
 function formatKey(code) {
   if (!code) return "?";   // a key that has no setting yet (older saved settings) must never crash the screen
   const map = {
@@ -64,6 +90,7 @@ const modalCard = { background: "#161b22", borderRadius: 16, border: "1px solid 
 const errSt     = { fontSize: 15, color: "#f87171", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 };
 const bigBtn    = { width: "100%", padding: "15px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 19, cursor: "pointer" };
 
+// A log entry's colour by its status: green passed, red flagged, amber undone or missing.
 function statusColor(s) {
   if (s === S_PASS)    return "#22c55e";
   if (s === S_FLAGGED) return "#ef4444";
@@ -72,6 +99,7 @@ function statusColor(s) {
   return "#64748b";
 }
 
+// A small rounded count in the header ("3 By hand"); `active` fills it, when it is the filter shown.
 function Pill({ color, children, onClick, active = false, title }) {
   return (
     <span onClick={onClick} title={title} style={{ background: active ? color : `${color}22`, color: active ? "#0d1117" : color, fontSize: 14, fontWeight: 700, padding: "4px 11px", borderRadius: 20, border: `1px solid ${color}55`, whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", userSelect: "none" }}>
@@ -115,6 +143,7 @@ function ScreenKeys({ layout = "digits", onKey, onEnter, enterLabel = "OK" }) {
   );
 }
 
+// A key cap drawn beside a button's label, so the operator sees which key does it.
 function Kbd({ light, children }) {
   return (
     <kbd style={{ background: light ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.3)", padding: "3px 9px", borderRadius: 6, fontSize: 15, fontWeight: 700 }}>
@@ -125,7 +154,6 @@ function Kbd({ light, children }) {
 
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
-// ── Resume modal ──────────────────────────────────────────────────────────────
 // ── Idle watch ───────────────────────────────────────────────────────────────
 // Two clocks. The notice appears when nobody has touched the station — no
 // key, click or tap — for IDLE_AFTER_MIN minutes, and any touch hides it
@@ -253,6 +281,10 @@ function CompareDays({ days = [], stationLabel, onProblem }) {
   );
 }
 
+// ── Resume modal ──────────────────────────────────────────────────────────────
+// A saved order found at sign-in: resume it or discard it. An order of the
+// other kind (a sorter's for an inspector, or the other way) can only be set
+// aside under Unfinished orders (the owner, 19 Nov 2026).
 function ResumeModal({ session, onResume, onDiscard, role = "", onSetAside, onSignOut, error = "" }) {
   const done = outOf(session.roster).done;   // passed or by hand, as Finish later counts it: a missing or flagged jersey is not done (code review, low finding)
   // A sorter's order is not an inspector's, and the other way round (the owner, 19 Nov 2026).
@@ -546,6 +578,10 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
   );
 }
 
+// The order screen, before every order: the order number, the roster file (or
+// an order the supervisor sent, behind "Assigned orders"), the jersey type, how
+// it is sorted into boxes, the orders it ships with, and the way to an
+// unfinished order or (development and testing only) a replay.
 function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, onPrint, onPickUp, onReplay, stationLabel = id => String(id || "").replace(/^st-/, "") }) {
   const [showReplay, setShowReplay] = useState(false);   // development and testing only: replay a floor order
   const [order,   setOrder]   = useState("");
@@ -803,6 +839,8 @@ function Countdown({ n }) {
 }
 
 // ── A defect the reason list does not cover: the operator types it ───────────
+// Reached only by a reason marked `custom`, and no reason in config.js is one now:
+// "Others" flags at once, with nothing to type (the owner, 17 Nov 2026).
 function ReasonTextForm({ match, onSubmit, onBack }) {
   const [text, setText] = useState("");
   const onKey = e => {
@@ -1014,6 +1052,7 @@ const attnColour = s => (s === "manual" || s === "missing" || s === "short") ? "
 // Open items come before resolved ones, then the heavier, then the newer.
 const attnSeverity = a => a.status === "flagged" ? severityOf(a.reason) : { tag: a.status === "manual" ? "SIGN OFF" : a.status === "missing" ? "MISSING" : "SHORT", weight: 1, colour: "#f59e0b" };
 const bySeverity = (a, b) => ((a.resolution ? 1 : 0) - (b.resolution ? 1 : 0)) || (attnSeverity(b).weight - attnSeverity(a).weight) || String(b.time || b.t || "").localeCompare(String(a.time || a.t || ""));
+// The board's tag on an open item (REMAKE, STITCHER, SIGN OFF…), filled when it weighs most.
 function RouteTag({ item, size = 10 }) {
   const s = attnSeverity(item);
   const hot = s.weight >= 4;
@@ -1115,6 +1154,10 @@ function UnfinishedPile({ by, onClose }) {
   );
 }
 
+// The supervisor board: a card per station (live), the items that need the
+// supervisor, rosters to send, the orders of a chosen day with their sheets,
+// the unfinished pile and the wall view. A supervisor's sign-in is this and
+// nothing else.
 function SupervisorPanel({ operatorName, onSignOut }) {
   const [showPile, setShowPile] = useState(false);   // the unfinished orders
   const [pileCount, setPileCount] = useState(0);
@@ -1495,7 +1538,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
 // ── Scan overlay ──────────────────────────────────────────────────────────────
 // Every screen is a list of options: the Confirm key selects the highlighted
 // one, the Navigate key (or ↑↓) moves the highlight. The first option is always
-// the safe default, so B-B-B keeps the rhythm and a bad photo can always be
+// the safe default, so the Select key pressed again and again keeps the rhythm and a bad photo can always be
 // retried without writing a record.
 const HEADLINE_FIELDS = ["number", "name"];
 
@@ -1550,6 +1593,10 @@ function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, ac
   );
 }
 
+// Every result screen of a scan, by `state.mode`: the green confirm with its
+// checklist, the yellow lists, red, ALREADY DONE, the reasons menu, Clean it
+// now, FLAGGED, the by-hand form and the size picker. It draws and takes keys;
+// what each choice does is in `actions` (App).
 function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", paused = false }) {
   const reasons = reasonsFor(jerseyType);
   // Runs an option: a click, the Select key or the pedal.
@@ -1606,7 +1653,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   // (both end on the camera screen) — a jersey went in the bin unchecked that
   // way on 5 Nov 2026. So the pedal only shows a nudge, laid over the screen
   // for 5 s with nothing moving underneath; the Retry button is a mouse click
-  // only (no key reaches it: the arrows skip it, B never runs it).
+  // only (no key reaches it: the arrows skip it, the Select key never runs it).
   const [nudge, setNudge] = useState("");
   const nudgeTimer = useRef(null);
   const showNudge = useCallback(() => {
@@ -2105,7 +2152,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
 // `canResolve`: Accept / Reject / Note are the supervisor's call; the operator sees the flag without them.
 function ResultCard({ result, onResolve, canResolve = true }) {
   const [note, setNote] = useState("");
-  const isManual  = result.status === S_MANUAL && !result.resolution && !result.outcome;    // entered by hand, awaiting sign-off
+  const isManual  = result.status === S_MANUAL && !result.resolution && !result.outcome;    // entered by hand, awaiting sign-off (an order saved before 20 Nov 2026)
   const isFlagged = (result.status === S_FLAGGED && !result.outcome) || isManual;           // accepted or rejected: resolved, still a flag in the reports (M6)
   return (
     <div style={{ ...card, border: `1px solid ${statusColor(result.status)}`, background: isFlagged ? "rgba(239,68,68,0.06)" : "rgba(148,163,184,0.06)", padding: "6px 10px" }}>
@@ -2278,7 +2325,8 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
 }
 
 // ── Bin setup modal ───────────────────────────────────────────────────────────
-// Opens when an order starts. With `autoPrint` (a new order) the box labels
+// The "Set out N boxes" screen: each team or size with how many boxes it is
+// expected to fill (the box model). Opens when an order starts. With `autoPrint` (a new order) the box labels
 // print as the screen opens, nobody has to ask (owner, 12 Nov 2026); the
 // button prints them again. Opened later from the Boxes dialog it only prints
 // on the button.
@@ -2344,11 +2392,6 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
   );
 }
 
-// ── Bins: which one is full ──────────────────────────────────────────────────
-// Every open bin with what is in it so far. "Bin full" closes it: its list
-// prints (what is in it, ten jerseys a label), the team or size moves to a
-// new bin number and that bin's label prints. Closed bins stay listed, with
-// their list to print again.
 // ── Replay an order (development and testing only; the owner, 20 Nov 2026) ───────
 // Type a floor order's number; every run of it the floor's data file has (a
 // station, a start) is listed; tapping one starts that order here with its
@@ -2485,6 +2528,12 @@ function flaggedAs(o) {
   return { number: String((t ? t.number : d.number) || "").trim(), name: String((t ? t.name : d.name) || "").trim(), team: String(t?.team || "").trim() };
 }
 
+// ── Boxes: which one is full ─────────────────────────────────────────────────
+// Every open box with what is in it so far. "Box full" asks which box it went
+// in and closes it: its list prints (fourteen jerseys a label, with the count
+// label), the team or size moves to its next box and that box's label prints
+// when it has not printed before. Closed boxes stay listed, with their list to
+// print again; the DAMAGED box is listed too.
 const BOX_CHOICES = BOXES;   // a box on the floor is one box: small, medium or large
 function BinsModal({ open, closed, by = "team", cap = 45, status, short = {}, damaged = [], onDamagedList, onFull, onReprint, onLabels, onPacking, onClose }) {
   const [asking, setAsking] = useState(null);   // the bin whose box is being asked
@@ -2755,7 +2804,6 @@ function IssuesModal({ missing, dups, flagged, binOf, onClose }) {
   );
 }
 
-// ── Roster complete modal ─────────────────────────────────────────────────────
 // ── History: every jersey scanned this order, latest first ──────────────────
 // One line per jersey (its latest log entry). A passed jersey can be flagged
 // from here when a problem is found later; a flagged one is with the
@@ -3146,6 +3194,10 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
   );
 }
 
+// ── Roster complete modal ─────────────────────────────────────────────────────
+// Every roster row has a status: the order is complete, or every jersey is at
+// least accounted for (some with the supervisor or missing). Offers the Excel
+// export and Finish order.
 function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onExport, onDismiss, onFinish }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const stats = [
@@ -3189,8 +3241,12 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onE
 const printWords = msg => (/exception|categoryinfo|fullyqualifiederrorid|at line:|\+ ~/i.test(String(msg)) || String(msg).length > 160
   ? "the printer did not take the labels: check it is on, has labels and is connected (the details are in the server log)"
   : msg);
+// A failed print in the station's words; a PowerShell dump becomes one plain sentence.
 const printProblem = e => e.status === 503 ? "No label printer for this station" : `Not printed: ${e.status ? printWords(e.message) : "could not reach the server"}`;
 
+// The whole app: sign-in, then the supervisor board, or a station with its
+// order, camera, scan flow, roster table and dialogs. Every piece of state
+// lives here.
 export default function App() {
   const videoRef        = useRef(null);
   const canvasRef       = useRef(null);
@@ -3284,7 +3340,7 @@ export default function App() {
   // the counter for the badge and the saved session.
   const vigilRef = useRef(createVigilance({ log: m => console.log(m) }));
   const [checksLeft, setChecksLeft] = useState(0);
-  const [noJersey, setNoJersey] = useState("");      // a B press that read nothing: a quiet notice for a moment, no screen
+  const [noJersey, setNoJersey] = useState("");      // a scan-key press that read nothing: a quiet notice for a moment, no screen
   const [retried, setRetried] = useState(null);      // the last read dropped by Retry: { number, name }, shown until the next scan so a retry never passes for a pass
   const noJerseyTimer = useRef(null);
   const sortingRef = useRef(false);   // a sorter: no double-check after a mistake (kept in a ref for the scan's callbacks)
@@ -3335,6 +3391,7 @@ export default function App() {
   // to every "which box did it go in" answer from every station; the last one
   // seen is kept on this PC for when the hub is away.
   const [boxModel, setBoxModel] = useState(() => { try { const m = JSON.parse(localStorage.getItem("jerseyqc.boxmodel") || "null"); return m?.units && m?.caps ? { ...BOX_PRIOR, ...m } : BOX_PRIOR; } catch { return BOX_PRIOR; } });
+  // Fetched from the hub at sign-in and at every order start.
   useEffect(() => {
     if (!signedIn) return;
     hub.boxModel().then(r => { if (r?.model?.units && r.model.caps) { setBoxModel({ ...BOX_PRIOR, ...r.model }); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(r.model)); } catch { /* private window */ } } }).catch(() => {});
@@ -3434,6 +3491,7 @@ export default function App() {
       .then(r => setSticker({ id: entry.id, status: "done", printer: r.printer }))
       .catch(e => setSticker({ id: entry.id, status: e.status === 503 ? "none" : "error", message: e.status ? e.message : "could not reach the server" }));
   }, [binMap, orderNumber]);
+  // Each new pass prints its sticker once, when stickers are on.
   useEffect(() => {
     if (!settings.stickers || !lastConfirmed || stickerPrinted.current === lastConfirmed.id) return;
     stickerPrinted.current = lastConfirmed.id;
@@ -3457,6 +3515,7 @@ export default function App() {
       .catch(e => setTicket({ id: entry.id, status: e.status === 503 ? "none" : "error", message: e.status ? e.message : "could not reach the server" }));
   }, [binMap, orderNumber]);
   const newestEntry = log[0];
+  // Each new flag in the log prints its tickets once, when flag tickets are on.
   useEffect(() => {
     if (!settings.flagTickets || !newestEntry || newestEntry.status !== S_FLAGGED || ticketPrinted.current === newestEntry.id) return;
     ticketPrinted.current = newestEntry.id;
@@ -3515,6 +3574,7 @@ export default function App() {
 
   useEffect(() => { saveSettings(settings); }, [settings]);
 
+  // SheetJS from the CDN, once, for reading Excel rosters and writing the exports.
   useEffect(() => {
     if (window.XLSX) return;
     const s = document.createElement("script");
@@ -3534,6 +3594,7 @@ export default function App() {
     return () => clearTimeout(t);
   }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole, checksLeft, inspect]);
 
+  // An order with scans in it asks "Leave site?" before the tab closes or reloads.
   useEffect(() => {
     if (!sessionStarted || log.length === 0) return;
     const h = e => { e.preventDefault(); e.returnValue = ""; };
@@ -4006,8 +4067,8 @@ export default function App() {
 
   // ── Camera scan trigger ───────────────────────────────────────────────────
   // The current camera frame as { base64, dataUrl }, rotated as the settings
-  // say; null when the camera is not live. Used for the scan and for the
-  // second look.
+  // say; null when the camera is not live. Used for the scan, the self-check's
+  // second frame (doRunScan's `recapture`) and the damage photo.
   const captureFrame = useCallback(() => {
     const video = videoRef.current, canvas = canvasRef.current;
     if (!video || !canvas || !video.videoWidth) return null;
@@ -4121,7 +4182,7 @@ export default function App() {
   useEffect(() => { armRef.current = armAutoScan; }, [armAutoScan]);
 
   // Closing a dialog (complete modal, settings, supervisor view) hands the table
-  // back to the operator: re-arm, so the next placement scans without B. The
+  // back to the operator: re-arm, so the next placement scans without the pedal. The
   // baseline is the last scan's frame, so the same jersey still lying there does
   // not scan again. `autoScan` overrides the setting when Settings just saved it.
   const closeDialog = useCallback((hide, autoScan = settings.autoScan) => {
@@ -4228,7 +4289,7 @@ export default function App() {
       else if ((shown?.mode === "pick" || shown?.mode === "close") && !(exactRow && shown.ids?.includes(exactRow._id)) && !fromList) noteMistake("notOnList");   // an extra jersey flagged from the list is not the app missing a row
       else if (shown?.mode === "flag" && exactRow) noteMistake("couldNotRead");
       // On the roster: the same green screen a scan gets (checklist, Confirm, Flag;
-      // the owner, 20 Nov 2026). Confirm records it as entered by hand.
+      // the owner, 20 Nov 2026). Confirm records a plain pass with "Entered by hand" as its reason.
       if (exactRow) {
         setOverlay({ mode: "confirm", scan: o.scan, match: exactRow, typed: { number, name, team }, note: "Entered by hand" });
         return;
@@ -4276,7 +4337,7 @@ export default function App() {
       setOverlay(null); playTone("retry"); armAutoScan();
     },
     // A row picked from a list, by key or by mouse. On a list the operator
-    // typed for, the pick IS the hand entry: it goes in as entered by hand.
+    // typed for, the pick goes through commitTyped: the same green screen, then a pass "Entered by hand".
     pick(c)  {
       if (!overlay || !c || isDone(c)) return;
       if (overlay.typed) { commitTyped(overlay, overlay.typed, c); return; }
@@ -4556,6 +4617,7 @@ export default function App() {
     const l = log.find(x => x.match?._id === r._id && (x.status === S_PASS || x.status === S_MANUAL));
     actions.reopen(l || { id: Date.now(), match: r, detected: null, thumb: null });
   };
+  // Un-check a row (the Mark menu), after a yes to "Un-check #N?": it is to scan again.
   const unscan = useCallback((id) => {
     const row = roster.find(r => r._id === id); if (!row || !row.scanned) return;
     const was = { pass: "passed", manual: "entered by hand", flag: "with the supervisor", missing: "marked missing", short: "marked short-shipped" }[row.scanned] || row.scanned;
@@ -4608,6 +4670,7 @@ export default function App() {
   const replayName = REPLAY_ON ? replayRequested() : "";
   const blankReplay = name => ({ name, steps: [], i: 0, phase: "scan", playing: false, delay: 1500, seen: false, tally: {}, error: "" });
   const [replay, setReplay] = useState(() => { const r = REPLAY_ON && !replayName ? storedReplay() : null; if (r) holdPrints("Replay: nothing is printed"); return r ? { ...blankReplay(r.name), steps: replaySteps(r.events) } : null; });
+  // The old way in: ?replay=<order> loads public/sim/replay-<order>.json.
   useEffect(() => {
     if (!replayName) return;
     fetch(`/sim/replay-${encodeURIComponent(replayName)}.json`).then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
@@ -4654,6 +4717,8 @@ export default function App() {
     setReplay(r => ({ ...r, i: to, phase: "scan", seen: false, playing: false, tally: { ...r.tally, skipped: (r.tally.skipped || 0) + (to - r.i) } }));
     setReplaySkip("");
   }, [replay, sessionStarted, roster, stamp, firstScanTime]);
+  // The replay's player: while Play is on, each step is a scan read from the
+  // ledger, then the operator's choice on the screen it made, then the next.
   useEffect(() => {
     if (!replay || !replay.playing || !sessionStarted || !replayStep) return;
     const next = () => setReplay(r => ({ ...r, i: r.i + 1, phase: "scan", seen: false }));
@@ -5074,7 +5139,7 @@ export default function App() {
           )}
         </div>
 
-        {/* RIGHT: Info panel — on a wide screen the result screen takes this half so the camera stays in view */}
+        {/* RIGHT: Info panel — the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && (   /* the result screen takes this half, so the camera stays in view: one layout on every PC */
             <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} listSort={settings.listSort} paused={overlayPaused}
@@ -5139,7 +5204,7 @@ export default function App() {
                   </span>
                   {/* The sort is one menu, not six buttons: fewer words on the bar. It lets go of the
                       keyboard as soon as something is chosen: a menu with the cursor in it would take the
-                      scan key B as "jump to Box". */}
+                      station's keys as its own (a letter key jumps to a choice: B to "Box"). */}
                   <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#94a3b8", fontWeight: 700 }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3" /></svg>
                     <select value={rosterSort} onChange={e => { setRosterSort(e.target.value); e.currentTarget.blur(); }} aria-label="Sort the table by" title="Sort the table: Size is the rack order (youth before adult, XS before 3XL); Status puts the done ones first"

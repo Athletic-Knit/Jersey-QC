@@ -16,6 +16,9 @@
 // jersey takes and what each box holds to all of them (an ordinal logistic
 // regression on the log of the load, held to the starting estimates until the
 // floor's answers outweigh them). Weight is not learnt: it comes off a scale.
+// The station uses the weight only when Settings → Packing turns the estimate
+// on (`boxWeights`, off by default: the operator judges the weight until a
+// scale is connected to the station, the owner, 11 Nov 2026).
 //
 // No config.js here: the hub runs this too.
 import { sizeRank } from "./roster.js";
@@ -60,6 +63,7 @@ function adultClass(size) {
   if (/^([3-9]xl|xxxl|xxxxl)$/.test(t)) return "a3x";
   return "alx";
 }
+// The kind of jersey the model counts by: size class and construction ("a2x|st").
 export const featureOf = (size, stitched = true) => `${sizeClass(size)}|${stitched ? "st" : "su"}`;
 export const FEATURES = SIZE_CLASSES.flatMap(c => [`${c.id}|st`, `${c.id}|su`]);
 
@@ -79,6 +83,8 @@ export function binCounts(rows, stitched = true) {
   (rows || []).forEach(r => { const f = featureOf(r?.size, stitched); c[f] = (c[f] || 0) + 1; });
   return c;
 }
+// Counts times a per-kind table; a kind the table lacks counts as adult L / XL stitched.
+// pieces: jerseys in the bin; loadOf: its room in units; weightOf: its estimated lb.
 const total = (counts, per) => Object.entries(counts || {}).reduce((t, [f, n]) => t + n * (per[f] ?? per["alx|st"] ?? 1), 0);
 export const pieces   = counts => Object.values(counts || {}).reduce((t, n) => t + n, 0);
 export const loadOf   = (counts, model = PRIOR) => total(counts, model.units);

@@ -51,6 +51,7 @@ async function call(url, opts = {}) {
 // printer: a 500-jersey replay would print a ticket a flag and a label a box
 // on the real Zebra (the owner, 20 Nov 2026).
 let printsHeld = "";
+// Holds every print: printLabels fails at once with `reason` (status 423). "" lets prints through again.
 export function holdPrints(reason = "") { printsHeld = String(reason || ""); }
 
 export const hub = {

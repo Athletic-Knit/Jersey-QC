@@ -1,5 +1,8 @@
 // ── Roster files: CSV / Excel → rows the app can match against ───────────────
 // Every column the file carries is kept; the four core ones are canonicalised.
+// Also the rules about the rows once read, shared by the station, the board and
+// the hub (which runs this file too): boxes ("bins" in the code), sizes in rack
+// order, the roster table's search, sort and filters, blank jerseys, shortages.
 
 // Excel "CSV UTF-8" starts the file with a byte-order mark; it would otherwise
 // become part of the first header and hide the name column.
@@ -24,6 +27,8 @@ const STATE_COLUMNS = ["_id", "scanned", "mark"];
 // bring yesterday's results back as roster data ("Status: PASS" on unscanned rows).
 const APP_COLUMNS = ["status", "bin", "box", "reason", "resolution", "inspected by", "time", ...STATE_COLUMNS];
 
+// A header cell → its canonical column ("Player Name" → "name"), else the
+// header as written, lower-cased.
 export function canonicalHeader(h) {
   const key = stripBOM(String(h ?? "")).trim().toLowerCase();
   for (const [canon, list] of Object.entries(ALIASES)) if (list.includes(key)) return canon;
@@ -186,6 +191,7 @@ export function blankGroups(roster) {
 
 // The order number a parsed roster carried, or "".
 export function orderNumberOf(rows) { return (rows && rows.orderNumber) || ""; }
+// The order numbers it ships with (a "Ship with" title row or column), or [].
 export function shipWithOf(rows) { return (rows && rows.shipWith) || []; }
 
 // The records of a CSV text: a line break inside a quoted cell ("Smith
@@ -228,6 +234,7 @@ export function splitCSVRecords(text, delim) {
   return out;
 }
 
+// A CSV, TSV or text file's contents → roster rows (as rowsToRoster makes them).
 export function parseCSV(text) {
   const clean = stripBOM(String(text ?? ""));
   const plain = clean.split(/\r?\n/).filter(l => l.trim() !== "");
@@ -315,6 +322,7 @@ export const BIN_BY = [
 // (owner, 12 Nov 2026). The code still says "bin" for the thing itself.
 // An older saved order has plain numbers (3): they read as box 3, no second number.
 export const boxParts = b => { const m = String(b ?? "").trim().match(/^(\d+)(?:\.(\d+))?$/); return m ? [Number(m[1]), Number(m[2] || 0)] : [1e9, 0]; };
+// Box order for sorting: 2.1 before 2.2 before 10.1.
 export const binOrder = (a, b) => { const x = boxParts(a), y = boxParts(b); return (x[0] - y[0]) || (x[1] - y[1]); };
 const groupOf = b => boxParts(b)[0];
 // An order saved before the boxes had two numbers: its open bin 3 becomes box
@@ -328,12 +336,15 @@ export const ALL_LABEL = "Whole order";
 // a bin list and in the Bins sheet's total.
 export const BLANK_KEY = "?";
 export const blankLabel = field => (field === "size" ? "No size" : "No team");
+// What a box map sorts by: "size", "all" (not sorted: one box for the whole
+// order) or "team" (a team map carries no `__by`). binCount: how many boxes it names.
 export const binFieldOf = binMap => (binMap && binMap.__by === "size" ? "size" : binMap && binMap.__by === "all" ? "all" : "team");
 export const binCount = binMap => Object.keys(binMap || {}).filter(k => k !== "__by").length;
 
 // Sizes in the order they sit on a rack: youth before adult before ladies, XS … 3XL.
 // Ladies is "L-" with the dash ("L-M" is ladies medium; a bare "L" is large).
 const SIZE_ORDER = ["xs", "s", "m", "l", "xl", "2xl", "xxl", "3xl", "xxxl", "4xl", "5xl"];
+// A size → [group (0 youth, 1 adult, 2 ladies, 3 other), place in SIZE_ORDER, its key].
 export function sizeRank(size) {
   const k = teamKey(size).replace(/\s+/g, "");
   const m = k.match(/^(youth|adult|ladies|women|y|a|l(?=[-/])|w(?=[-/]))?[-/]?(.*)$/);
@@ -342,6 +353,7 @@ export function sizeRank(size) {
   const i = SIZE_ORDER.indexOf(m?.[2] || k);
   return [group, i < 0 ? 99 : i, k];
 }
+// Two sizes in rack order (for sort).
 export const bySize = (a, b) => { const x = sizeRank(a), y = sizeRank(b); return (x[0] - y[0]) || (x[1] - y[1]) || x[2].localeCompare(y[2]); };
 
 // The sizes a station may pick for a jersey that is on no roster row (an extra
@@ -363,6 +375,7 @@ export function sizeChoiceGroups(roster) {
   if (other.length) groups.push({ label: "Also on this order", sizes: [...other].sort(bySize).map(s => ({ value: s, short: s })) });
   return groups;
 }
+// The same sizes as one flat list of values.
 export const sizeChoices = roster => sizeChoiceGroups(roster).flatMap(g => g.sizes.map(s => s.value));
 
 // The pick list's order (the owner, 19 Nov 2026): by size, so the operator
@@ -371,6 +384,7 @@ export const sizeChoices = roster => sizeChoiceGroups(roster).flatMap(g => g.siz
 // can choose team or number instead (Settings → Pick list). Ties keep the
 // matcher's order (Array.prototype.sort is stable).
 export const LIST_SORTS = [{ id: "size", label: "Size" }, { id: "team", label: "Team" }, { id: "number", label: "Number" }];
+// The list's rows in a new array, sorted by `by` ("size", "team" or "number").
 export function sortCandidates(rows, by = "size") {
   const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
   const team = (a, b) => String(a.team || "").localeCompare(String(b.team || ""), undefined, { sensitivity: "base", numeric: true });

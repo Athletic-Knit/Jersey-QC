@@ -1,3 +1,5 @@
+// The buttons of the ALREADY DONE screen (src/lib/dupoptions.js): on a flagged
+// jersey the pedal only ever skips (code review H3, Noam, 23 Nov 2026).
 import { describe, it, expect, vi } from "vitest";
 import { duplicateOptions } from "../dupoptions.js";
 

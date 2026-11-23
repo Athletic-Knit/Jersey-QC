@@ -12,6 +12,9 @@
 
 export const AWAY_MIN_SECONDS = 5;
 
+// Watches the page and calls onSpell({ start, end, seconds, how }) for every
+// away spell of `minSeconds` or more; `how` is "hidden" or "unfocused". The
+// station starts one while an order is open; stop() ends the open spell too.
 export function createAwayWatch({ onSpell, minSeconds = AWAY_MIN_SECONDS, doc = globalThis.document, win = globalThis.window, now = () => Date.now() } = {}) {
   let away = null;   // { start, how } while the screen is left
   const leave = how => { if (!away) away = { start: now(), how }; };
@@ -34,6 +37,7 @@ export function createAwayWatch({ onSpell, minSeconds = AWAY_MIN_SECONDS, doc = 
   };
 }
 
+// An away spell's `how`, in the words of the Attention sheet.
 export const awayLabel = how => how === "hidden" ? "Screen hidden (minimised, another tab, or locked)" : "Another window in front";
 
 // For the hub snapshot and the day sheet: how often and how long.
@@ -41,6 +45,7 @@ export function awaySummary(spells = []) {
   const s = Array.isArray(spells) ? spells : [];
   return { count: s.length, seconds: s.reduce((t, x) => t + (x.seconds || 0), 0) };
 }
+// Seconds as "12 min" or "1 h 05 min".
 export const fmtMin = seconds => { const m = Math.round((seconds || 0) / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`; };
 
 // The "Attention" sheet of an order's export: every idle spell and every away

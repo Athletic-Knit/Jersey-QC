@@ -1,3 +1,7 @@
+// The lint rules for the app and the hub (`npx eslint src hub-plugin.js
+// replay-plugin.js`, run before every commit): ESLint's recommended rules, the
+// React hooks rules and Vite's fast-refresh rule. An unused name that starts
+// with a capital or "_" is allowed (constants kept on purpose, `_usage`).
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'

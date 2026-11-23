@@ -1,3 +1,7 @@
+// The self-check after a mistake and the operator's inspection regime
+// (src/lib/vigilance.js): the count of double-checked jerseys, when two reads
+// agree and what screen they make together, the turned-jersey read, and the
+// inspect-fully / quick-look / spot-check rhythm with its tick-off checks.
 import { describe, it, expect } from "vitest";
 import { createVigilance, readsAgree, reconcile, describeRead, turnMatters, settleTurned, CHECKS_AFTER_MISTAKE, createInspection, inspectLabel, checksFor, INSPECT_FULL, INSPECT_EVERY } from "../vigilance.js";
 import { findMatches } from "../match.js";

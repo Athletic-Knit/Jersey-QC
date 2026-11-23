@@ -1,5 +1,6 @@
 // ── The read: one image in, { name, number } out ──────────────────────────────
-// Sonnet 5.5 with thinking off, low effort. Measured 20 Oct on 9 frames (2
+// Haiku 5.5 (claude-haiku-5-5) with thinking off, low effort, by default;
+// VITE_CLAUDE_MODEL / _EFFORT / _THINKING override it. Measured 20 Oct on 9 frames (2
 // clean, 7 with a digit covered by a fold, hand, fabric or the picture edge),
 // 5 runs each, through this function:
 //   Haiku 4.5              clean 10/10  covered 16/35   0.8 s   $1.66 per 1000
@@ -135,6 +136,8 @@ export function orderNumbersHint(numbers) {
   return `\nNumbers on this order: ${list.join(", ")}. Read what is printed, never pick from this list — but if the number you read is one digit and a two-digit number on this order contains that digit, look hard at the fabric within one digit's width on each side of the digit. If a fold line, a crease, a sleeve, a hand, a tag or the edge of the picture is there, a second digit may be hidden under it: set number_complete to false and say what is beside the digit in obstruction. If the fabric on both sides is open and smooth, the number is complete: say so. Answer with the JSON object only.`;
 }
 
+// One read through the Anthropic proxy (/api/anthropic): the frame and the
+// prompt in, the parsed JSON out. A failed call is retried `retries` times.
 export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort = DEFAULT_EFFORT, thinking = DEFAULT_THINKING, orderNumbers = null, timeoutMs = 25000, retries = 1, fetchImpl = globalThis.fetch }) {
   const hint = orderNumbersHint(orderNumbers).trim();
   // Current-generation models think before answering (adaptive thinking is on

@@ -1,7 +1,8 @@
 // ── Labels for the Zebra ─────────────────────────────────────────────────────
 // Two kinds, both ZPL (the Zebra's own language) sent raw to the printer by
 // the hub, so no browser print dialog and no driver rendering are involved:
-//   • a jersey sticker, printed on every pass: the bin the jersey goes in and
+//   • a jersey sticker, printed on every pass when the station has stickers
+//     on (off by default, the owner, 17 Nov 2026): the box the jersey goes in and
 //     what the order is sorted by (the team or the size), for the packer who
 //     stacks the folded jerseys by bin;
 //   • a flag ticket, printed on every flag: the jersey (number, name, team,
@@ -9,8 +10,13 @@
 //     packed, and what is wrong with it on the right. It goes on its own,
 //     bigger roll: 2 in wide by 1 in tall (JERSEY_FLAG_LABEL_SIZE), on the
 //     flag printer when there is one;
-//   • a bin label (on request from the Bin setup screen): "BIN 3" and what
-//     the bin holds.
+//   • a box label: "BOX 5.1" and what the box holds, printed when the order
+//     starts (the set-out screen), when a box is opened after a full one, and
+//     on request;
+//   • lists, on the 2 x 1 in roll: what is in a box (with the customer's count
+//     label), what is in the DAMAGED box, a list of boxes.
+// labels.js also runs on the hub (hub-plugin.js builds the ZPL), so it never
+// imports config.js.
 // The sticker roll is 1 in wide by 0.5 in tall (JERSEY_LABEL_SIZE); every
 // layout is in fractions of the label so another roll only needs the setting.
 import { binEntries, binFieldOf, binFor, boxParts, bySize } from "./roster.js";
@@ -102,10 +108,11 @@ export function jerseyLabelZPL(l, size = labelSize()) {
 // ── The flag ticket ──────────────────────────────────────────────────────────
 // What a flagged jersey's ticket says, from its log entry: the number and
 // name (from the roster row when there is one, else what the camera read),
-// where it goes (`tag`: the board's tag for the reason's route, from
-// severityOf in config.js — the caller passes it, as config.js needs Vite's
-// env and this file also runs on the hub), the reason, the team, size and
-// bin, the order and the station. No time: it told the reader nothing (the owner, 17 Nov 2026).
+// the reason, the team and size, the order and the station. It also carries
+// `tag` (the board's tag for the reason's route, from severityOf in config.js
+// — the caller passes it, as config.js needs Vite's env and this file also
+// runs on the hub) and the bin, which the printed ticket leaves off (see
+// flagLabelZPL). No time: it told the reader nothing (the owner, 17 Nov 2026).
 const stationShort = id => String(id || "").replace(/^st-/, "").replace(/^station\s*/i, "St ").trim();
 export function flagLabel(entry, binMap, { orderNumber = "", station = "", tag = "DECIDE" } = {}) {
   const row = entry?.match || null, read = entry?.detected || null;
@@ -236,14 +243,14 @@ export function binLabels(roster, binMap, { orderNumber = "", boxes = null } = {
   });
 }
 
-// "BIN 3" as big as the label allows (half its height), the team or size
-// under it, a small footer with the order number and "by team" / "by size"
-// (just the order number on a small label). No jersey count: nobody knows
-// how many will go in before the bin is full. It is read from
-// across the table, so the bin and what it holds take the room and the footer
-// gets what is left. Bin labels go on the 2 x 1 in roll (kind "binticket"):
-// the ones printed when the order starts and the one for a bin opened when
-// another was full are the same label. On that roll the text keeps 2 mm clear
+// "BOX 5.1" (or its `title`, "DAMAGED") as big as the label allows (half its
+// height), the team or size under it, a small footer with the order number and
+// "by team" / "by size" (just the order number on a small label). No jersey
+// count: nobody knows how many will go in before the box is full. It is read
+// from across the table, so the box and what it holds take the room and the
+// footer gets what is left. Box labels go on the 2 x 1 in roll (kind
+// "binticket"): the ones printed when the order starts and the one for a box
+// opened when another was full are the same label. On that roll the text keeps 2 mm clear
 // of the left and right edges, where the ZD411 cuts.
 export function binLabelZPL(l, size = labelSize()) {
   const { w: full, h, top = 0, dpi = 203 } = size;
@@ -253,7 +260,7 @@ export function binLabelZPL(l, size = labelSize()) {
   const a     = h - top;                                          // the printable height
   const pad   = Math.round(a * 0.04);
   const small = Math.max(12, Math.round(a * 0.12));              // the footer
-  const big   = Math.round(a * 0.5);                              // "BIN 3"
+  const big   = Math.round(a * 0.5);                              // "BOX 5.1"
   const mid   = Math.round(a * 0.27);                             // the team or size
   const footer = (wide
     ? [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : l.by === "team" ? "by team" : ""]
@@ -270,8 +277,8 @@ export function binLabelZPL(l, size = labelSize()) {
 // ── The list of what is in a box ─────────────────────────────────────────────
 // Printed when a box is closed (it is full, or the order is finished), on the
 // 2 x 1 in roll, for the taped box: packing and the customer read it.
-//   • one count label: "BOX 5.1", how many pieces are in it, and the team or
-//     size and the order number small under that;
+//   • one count label, the customer's: the team or size, how many pieces are
+//     in it and of each size, the order number (binCountZPL below);
 //   • then the jerseys, as "23-JAMES-AXL" (number, name, size), fourteen to a
 //     label in two columns of seven, read down the left column and then down
 //     the right, in jersey-number order. These labels have no header at all:
@@ -318,12 +325,13 @@ export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "t
 }
 
 // The count label is the CUSTOMER'S label: it goes on the outside of the taped
-// box. No box number on it (5.1 is the floor's own name for the box and means
-// nothing to them; the manager, 17 Nov 2026): the team (or the size, in an
-// order sorted by size) as big as it fits, how many pieces, how many of each
-// size, and the order number. An order that is not sorted leads with the
-// order number. The floor still knows which box it is for: the box has its
-// BOX 5.1 label inside, and the list prints as that box is closed.
+// box. The box number is not what it leads with (5.1 is the floor's own name
+// for the box and means nothing to them; the manager, 17 Nov 2026): the team
+// (or the size, in an order sorted by size) as big as it fits, how many
+// pieces, how many of each size, and the order number. An order that is not
+// sorted leads with the order number. The box number is only small, in the
+// bottom-left corner, for the packer (see below); the box also has its
+// BOX 5.1 label inside.
 function binCountZPL(l, size) {
   const { w: full, h, top = 0, dpi = 203 } = size;
   const side  = full >= 300 ? Math.round(dpi * 2 / 25.4) : 0;
@@ -405,6 +413,8 @@ function damagedListZPL(l, size) {
     "^PQ1", "^XZ"].join("\n");
 }
 
+// One label of a list, as ZPL: a DAMAGED or boxes list page, the count label
+// (`title`), or a page of a box list's rows in two columns.
 export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   if (l.damaged) return damagedListZPL(l, size);
   if (l.title) return binCountZPL(l, size);
@@ -426,8 +436,8 @@ export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
 }
 
 // Every label of one kind, back to back. `kind`: "bin" (default), "jersey",
-// "flag", "binlist" (what is in a bin) or "binticket" (a bin label on the
-// 2 x 1 in roll, for a bin opened when another was full).
+// "flag", "binlist" (what is in a box, the DAMAGED list, a list of boxes) or
+// "binticket" (a box label on the 2 x 1 in roll).
 export function labelsZPL(labels, size = labelSize(), kind = "bin") {
   const one = kind === "jersey" ? jerseyLabelZPL : kind === "flag" ? flagLabelZPL : kind === "binlist" ? binListZPL : binLabelZPL;
   return labels.map(l => one(l, size)).join("\n") + "\n";

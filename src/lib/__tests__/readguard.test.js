@@ -1,3 +1,8 @@
+// The read guard: the matcher's rules for what may be green, read by read
+// (src/lib/match.js), with the model's answer parsed as the station parses it
+// (vision.js) and the colour words of colour.js. Green needs a name and a
+// number; a doubtful read (fold, cut-off, off-centre digit) is a question
+// (N1, Noam, 23 Nov 2026); twins are settled by colour only on the body.
 import { describe, it, expect } from "vitest";
 import { findMatches, rotated180 } from "../match.js";
 import { parseModelText, normPosition, normOrientation, uprightRotation } from "../vision.js";

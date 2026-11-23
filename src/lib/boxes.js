@@ -1,9 +1,11 @@
-// ── Which box a bin is packed in ─────────────────────────────────────────────
-// Packing has a bag (a one-piece order) and a small, a medium and a large box.
-// The box follows from how many jerseys are in the bin when it is closed: the
-// smallest one that holds them. The limits are the station's settings
-// (boxBag, boxSmall, boxMedium, boxLarge: the most jerseys each holds); more
-// than a large box holds is that many large boxes.
+// ── The flat count: the box simulation's baseline ────────────────────────────
+// Only the packing simulation (box-sim.test.js) and this file's own tests use
+// it. The app names a bin's box with the box model (boxmodel.js: room by size
+// class and construction, and weight; the owner would not cap jerseys per box,
+// 10 Nov 2026), and no station has settings for these limits any more. The
+// flat count is the rule the box model is measured against: the smallest of a
+// bag, a small, a medium and a large box whose jersey count holds the bin;
+// more than a large box holds is that many large boxes.
 export const DEFAULT_BOXES = { boxBag: 1, boxSmall: 6, boxMedium: 15, boxLarge: 30 };
 export const BOX_KINDS = [
   { id: "bag",    key: "boxBag",    label: "Bag" },

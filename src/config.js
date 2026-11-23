@@ -30,8 +30,9 @@ export const CHECKLIST = CHECKS.map(c => c.label);   // the words alone, for any
 // (the owner, 20 Nov 2026). Any other flag restarts Inspect fully.
 export const REASON_CHECK = { mark: "fabric", mark_stays: "fabric", fabric: "holes", twill: "thread", stitching: "thread" };
 
-// One tap on the "not right" menu. `route` is where the jersey goes; in Phase 1
-// everything except "mark" shows the same red "Go to supervisor".
+// One tap on the "not right" menu. `route` is where the jersey goes (the board
+// weighs it, routeOfReason); every reason but "mark" flags the jersey (the
+// FLAGGED screen), and "mark" opens the Clean it now screen.
 // One short menu for every order (17 Nov 2026, after the demo to the manager:
 // the old menu showed near-twins side by side, "Missing or wrong logo" beside
 // "Missing, wrong or crooked crest or logo", and its labels were sentences).

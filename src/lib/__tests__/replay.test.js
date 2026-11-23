@@ -1,3 +1,6 @@
+// Replay of a real order (src/lib/replay.js): the ledger's text of a read
+// turned back into a camera read, the steps the operator took, and the row a
+// step speaks of.
 import { describe, it, expect } from "vitest";
 import { parseRead, replaySteps, findReplayRow } from "../replay.js";
 

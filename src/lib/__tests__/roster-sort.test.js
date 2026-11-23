@@ -1,3 +1,6 @@
+// The station's roster table (src/lib/roster.js): its sort (size, the rack
+// order, by default), its filters' choices, and its search box ("7" is #7
+// exactly, never #70; the owner, 17 Nov 2026).
 import { describe, it, expect } from "vitest";
 import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices, rosterMatches } from "../roster.js";
 

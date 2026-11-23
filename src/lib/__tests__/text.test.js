@@ -1,3 +1,7 @@
+// Text normalisation (src/lib/text.js): names compared without accents,
+// capitals, apostrophes, spaces or hyphens but as a whole (N4), and jersey
+// numbers kept exactly, leading zeros included, so 07 is not 7 (N2; Noam,
+// 23 Nov 2026).
 import { describe, it, expect } from "vitest";
 import { norm, normNum, nameMatches, editDistance, stripAccents } from "../text.js";
 
