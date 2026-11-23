@@ -291,7 +291,15 @@ function agreesWithRead(row, name, number, read) {
   // the test server 20 Nov 2026: 400 and 122 passed #40 and #12 by hand).
   // (A typed number on a row with NO number is not that row either: typed
   // SAMUEL 9 is not the numberless Samuel. Code review of 23 Nov 2026.)
-  if (read.typed) return !(nNum && rNum !== nNum);
+  // A typed NAME counts too, when the row has one: typed SMITH 12 where #12 is
+  // JONES on the roster is a question, not JONES passed (code review of
+  // 23 Nov 2026). Whole name, as from the camera (N4). A typed name on a row
+  // with no name does not block it: the operator's word stands (review-rules).
+  if (read.typed) {
+    if (nNum && rNum !== nNum) return false;
+    if (nName && norm(row.name)) return nameMatches(nName, row.name);
+    return true;
+  }
   // From the camera the number must be the row's number exactly, digit for digit
   // (N2). That includes "both empty", and excludes a number read on a row that
   // has none: a stray #1 SAMUEL is not the roster's numberless Samuel (code
@@ -454,7 +462,11 @@ function findMatchesInner(roster, name, number, read = {}) {
   // row first and never go green.
   if (byName.length >= 1 && byNum.length >= 1) {
     const nums = [...new Set(byName.map(r => r.number))].join(" / ");
-    return { type: "pick", candidates: dedupe([...byName, ...byNum]), reason: `Name matches #${nums} but the number read as #${nNum}` };
+    const typedName = String(name).trim();
+    const reason = typed
+      ? `You typed ${typedName} #${nNum}, but ${typedName} is #${nums} on the roster — which one?`
+      : `Name matches #${nums} but the number read as #${nNum}`;
+    return { type: "pick", candidates: dedupe([...byName, ...byNum]), reason };
   }
 
   // Number read and no name read.
@@ -469,9 +481,14 @@ function findMatchesInner(roster, name, number, read = {}) {
   // jersey whose row has no name (rule NN, also on a roster with no names).
   if (byNum.length >= 1) {
     const shown = String(name).trim();
+    // Typed by the operator, say it in their terms: the name they typed is not
+    // the roster's name for that number (code review of 23 Nov 2026).
+    const onRoster = [...new Set(byNum.map(r => String(r.name || "").trim()).filter(Boolean))].join(" / ");
     const reason = byNum.every(r => !norm(r.name))
       ? `The jersey shows the name "${shown}" but the roster has no name for #${nNum} — check it is this order's jersey`
-      : `#${nNum} is on the roster but the name read as "${shown}"`;
+      : typed
+        ? `You typed ${shown}, but #${nNum} is ${onRoster} on the roster — which one?`
+        : `#${nNum} is on the roster but the name read as "${shown}"`;
     return { type: "pick", candidates: dedupe([...byNum, ...nearNames(nName, roster)]), reason };
   }
 

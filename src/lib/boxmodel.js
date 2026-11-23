@@ -18,6 +18,7 @@
 // floor's answers outweigh them). Weight is not learnt: it comes off a scale.
 //
 // No config.js here: the hub runs this too.
+import { sizeRank } from "./roster.js";
 
 export const SIZE_CLASSES = [
   { id: "youth", label: "Youth" },
@@ -34,7 +35,22 @@ export const BOXES = [
 export const MORE = "more";   // the answer "it did not fit in one large box"
 
 // "Y-M", "A-2XL", "Youth L", "XXL" → a size class. An unknown size counts as adult L / XL.
+// Ladies sizes ("L-M" with the dash, "Ladies M", "W-S"; told apart by roster.js's
+// sizeRank, so a bare "L" stays adult large) were filed as adult L / XL. A ladies
+// jersey is cut smaller than an adult one of the same letter, so it takes the
+// class one step down from the adult class of its letter: ladies M is youth,
+// ladies L is adult S / M, ladies 2XL is adult L / XL. That step is an estimate
+// (code review of 23 Nov 2026); the learnt room numbers do not separate ladies.
+const CLASS_ORDER = SIZE_CLASSES.map(c => c.id);   // smallest first
 export function sizeClass(size) {
+  if (sizeRank(size)[0] === 2) {
+    const letter = String(size ?? "").toLowerCase().replace(/[\s_]+/g, "").replace(/^(ladies|women|l|w)[-/]?/, "");
+    const adult = adultClass(letter);
+    return CLASS_ORDER[Math.max(0, CLASS_ORDER.indexOf(adult) - 1)];
+  }
+  return adultClass(size);
+}
+function adultClass(size) {
   const k = String(size ?? "").toLowerCase().replace(/[\s_]+/g, "");
   const m = k.match(/^(youth|adult|y|a)?[-/]?(.*)$/);
   if (/^y/.test(m?.[1] || "")) return "youth";

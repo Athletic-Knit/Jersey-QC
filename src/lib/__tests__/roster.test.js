@@ -289,3 +289,26 @@ describe("blank jerseys: a roster of sizes and quantities", () => {
     expect(blankGroups([{ _id: 1, name: "SMITH", number: "7" }])).toEqual([]);
   });
 });
+
+// Code review of 23 Nov 2026, the low findings.
+describe("roster file quirks", () => {
+  it("a title row 'Order Form' does not give the order number 'Form'", () => {
+    const r = parseCSV("Order Form\nName,Number\nSmith,12\nJones,7\n");
+    expect(orderNumberOf(r)).toBe("");
+    expect(orderNumberOf(parseCSV("Order Form - Order 55555\nName,Number\nSmith,12\n"))).toBe("55555");
+    expect(orderNumberOf(parseCSV("PO# A-264247\nName,Number\nSmith,12\n"))).toBe("A-264247");
+  });
+  it("a number cell with decimals (12.0, 7.00) is the digits, leading zeros kept", () => {
+    const r = rowsToRoster([["Name", "Number"], ["Smith", "12.0"], ["Jones", "7.00"], ["Lee", "07.0"], ["Kim", "07"], ["Li", "12.5"]]);
+    expect(r.map(x => x.number)).toEqual(["12", "7", "07", "07", "12.5"]);
+  });
+  it("a quoted cell with a line break in it stays one cell of one row", () => {
+    const r = parseCSV('Name,Number,Team\n"Smith\nJr",12,Navy\nJones,7,"Red\r\nWhite"\r\nLee,4,Navy\n');
+    expect(r.map(x => [x.name, x.number, x.team])).toEqual([["Smith Jr", "12", "Navy"], ["Jones", "7", "Red White"], ["Lee", "4", "Navy"]]);
+  });
+  it("ordinary quoting is unchanged, and a stray inch mark does not swallow lines", () => {
+    const r = parseCSV('Name,Number,Team\n"Smith, John",12,"Navy ""A"""\nJones,7,Sleeve 12"\nLee,4,Navy\n');
+    expect(r.map(x => [x.name, x.number])).toEqual([["Smith, John", "12"], ["Jones", "7"], ["Lee", "4"]]);
+    expect(r[0].team).toBe('Navy "A"');
+  });
+});

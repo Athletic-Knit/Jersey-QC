@@ -99,7 +99,10 @@ export function packFromRecord(rec) {
   return {
     orderNumber: String(rec?.order ?? ""), roster, binMap: rec?.bins || null, closedBins: rec?.closedBins || [], station: rec?.station || "",
     flags: (rec?.flags || []).map(ev => ({
-      id: ev.id, reason: ev.reason || "", timestamp: ev.t || "", detected: null,
+      // `resolution` comes along: without it a past order's DAMAGED list kept the
+      // off-roster jerseys the supervisor had already dealt with (code review of
+      // 23 Nov 2026; damagedItems leaves a resolved flag with no row out).
+      id: ev.id, reason: ev.reason || "", resolution: ev.resolution || "", timestamp: ev.t || "", detected: null,
       match: roster.find(r => r._id === ev.rowId) || { number: ev.number, name: ev.name, size: ev.size, team: ev.team },
     })),
     past: { station: rec?.station || "", date: rec?.date || "", operator: rec?.operator || "", counts: rec?.counts || null },
