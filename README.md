@@ -11,7 +11,7 @@ A web app for checking finished sports jerseys on the finishing floor before the
   - **Yellow**: the read is unsure, or more than one jersey fits. The operator picks the right one from a list.
   - **Red**: nothing on the roster fits, or the read failed. The operator scans again or flags the jersey.
 - Every jersey goes into a **box** for its team or size. The app names the boxes (5.1, 5.2 …), says when to close one, and prints the box labels and the list of what is in each box on a Zebra label printer.
-- A jersey with a fault is **flagged**: the operator picks a reason, the app prints a black flag ticket, and the jersey goes in the DAMAGED box.
+- A jersey with a fault is **flagged**: the operator picks a reason and, for damage that can be pointed to, taps where it is on a drawing of the garment (front and back, up to 3 spots); the app prints a black flag ticket (on the tall 2 x 3 in or 2 x 4 in labels with the garment and the spots), and the jersey goes in the DAMAGED box.
 - A **supervisor board** on another PC shows every station live: what each one is on, what needs attention, and Excel reports for an order, a day or a range of days.
 
 How to use it at a station: [docs/OPERATOR-GUIDE.md](docs/OPERATOR-GUIDE.md).
@@ -78,6 +78,7 @@ Other simulations (packing, recognition stress, replay of a real order) are desc
 | `src/lib/damage.js` | The damage report workbook, with photos |
 | `src/lib/dupoptions.js` | The buttons of the ALREADY DONE screen |
 | `src/lib/export.js` | Excel and CSV exports: order results, scan log, day sheet, comparison of days |
+| `src/lib/garments.js` | The garment outlines (11 kinds, hockey by default) the damage is marked on, and the catalogue's style codes |
 | `src/lib/hub.js` | How a station and the board talk to the server |
 | `src/lib/labels.js` | Every label layout, in ZPL (the Zebra printer's own language) |
 | `src/lib/ledgerview.js` | How the board reads the server's record of orders and scans |
@@ -134,8 +135,9 @@ Each stage folder has a file called `.env.local` with its settings. It is never 
 | `JERSEY_PRINTER_STATION1`, `2`, `3` | The Windows print queue for that station's labels, as seen from the server PC | none |
 | `JERSEY_PRINTER` | The print queue for any station without its own. A Zebra plugged into the server PC wins over a printer shared from another PC | the first Zebra queue on the server PC |
 | `JERSEY_LABEL_SIZE` | The sticker roll, in inches, width x height | `1x0.5` |
-| `JERSEY_FLAG_PRINTER_STATION1`, `2`, `3`, `JERSEY_FLAG_PRINTER` | The queue for the 2 x 1 in roll (flag tickets, box labels and box lists), per station and for all | the station's label printer |
-| `JERSEY_FLAG_LABEL_SIZE` | The flag ticket roll | `2x1` |
+| `JERSEY_FLAG_PRINTER_STATION1`, `2`, `3`, `JERSEY_FLAG_PRINTER` | The queue for the ticket roll (flag tickets, box labels and box lists), per station and for all | the station's label printer |
+| `JERSEY_FLAG_LABEL_SIZE` | The ticket roll, in inches, width x height: `2x1`, or the tall `2x3` / `2x4` (the flag ticket then shows the garment with the damage marked; see `docs/DEPLOY.md`) | `2x1` |
+| `JERSEY_FLAG_LABEL_SIZE_STATION1`, `2`, `3` | That station's ticket roll, so the stations can move to the tall roll one at a time | `JERSEY_FLAG_LABEL_SIZE` |
 | `JQC_STAGE_PRINT` | `1` lets the development or testing server print. Without it they print nothing (production always prints) | off |
 | `JQC_REPLAY_FROM` | Development and testing only: the floor data file(s) the replay reads from, separated by `;` | `C:\JerseyQC\data\hub.json` |
 
