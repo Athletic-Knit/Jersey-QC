@@ -249,7 +249,8 @@ export const GARMENT_IDS = Object.keys(GARMENTS);
 // Object.hasOwn, not GARMENTS[kind]: the kind comes from roster files and hub
 // request bodies, and "constructor" or "__proto__" must not pass as a kind.
 const isKind = kind => typeof kind === "string" && Object.hasOwn(GARMENTS, kind);
-const garment = kind => GARMENTS[isKind(kind) ? kind : DEFAULT_GARMENT];
+// The shape of a kind; an unknown or empty kind is hockey.
+export const garment = kind => GARMENTS[isKind(kind) ? kind : DEFAULT_GARMENT];
 
 // ── Style codes → kind ───────────────────────────────────────────────────────
 // A roster may carry a "Style" column (kept as `style`). Exact codes first,
@@ -264,7 +265,7 @@ export const GARMENT_STYLES = {
   // scarves, pennants, banners, garment bags. They have no kind, so the row
   // falls back to the order's garment.
   none: {
-    exact: ["A1830", "BA101"],                         // hockey toque (p. 38); adjustable belt (p. 56)
+    exact: ["A1830", "BA101", "AT200"],                // hockey toque (p. 38) and its custom code; adjustable belt (p. 56)
     prefixes: [/^(ZAA|AH|BAH)/],                       // ZAA accessories (p. 91); caps and hats
   },
   exact: {
@@ -296,6 +297,21 @@ export const GARMENT_STYLES = {
     // lacrosse (p. 98), volleyball (p. 100).
     ZBA16: "tank", ZBA17: "tank", ZBA26: "tank", ZBA27: "tank", ZBA36: "tank", ZBA76: "tank",
     ZLF16: "tank", ZLF17: "tank", ZV16: "tank", ZV17: "tank", ZV26: "tank", ZV27: "tank",
+    // The custom codes printed under each in-stock product ("Available in
+    // custom A600", pp. 4–75), where every product carrying the code is the
+    // same kind. Left out because they cover more than one kind: A200 (A1810
+    // polo, A1900 long sleeve), BA200 (tees, BA1900 long sleeve, BA601L
+    // tank), BA300 (BA5200 full button, BA1763 and BA1343 tees), V200 and
+    // S200 (tees, a long sleeve, V601L tank): those rows use the order's garment.
+    H845: "hockey", H680: "hockey", H950: "shorts", HS640: "socks", HS925: "socks", SV80: "tank",
+    A600: "hoodie", A500: "hoodie", A400: "hoodie", A100: "tee",
+    AS200: "shorts", AS100: "shorts",
+    BA400: "button", BA100: "tee", BA900: "pants", BA750: "pants", BAS200: "shorts", BAS100: "shorts",
+    B500: "tank", B200: "tank", B100: "tank", B300: "tank", BS200: "shorts", BS100: "shorts",
+    LF100: "tank", LF200: "tank", LS200: "shorts", LS100: "shorts",
+    V100: "tee", VS200: "shorts", VS100: "shorts",
+    S100: "tee", SS200: "shorts", SS100: "shorts",
+    T200: "tank", T100: "tank",
   },
   // Checked in order, first match wins: the longer, more particular prefixes
   // come before the short ones they start with (ZH7 socks before ZH hockey,

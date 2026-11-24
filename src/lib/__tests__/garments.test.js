@@ -277,6 +277,16 @@ describe("catalogue style codes", () => {
     ZS11: "tee", ZCS550: "shorts", ZCB750: "shorts",
     // too short to be a catalogue code: no guess
     A1: "", S1: "", V2: "", B2: "", T1: "",
+    // the custom codes under the in-stock products ("Available in custom …", pp. 4–75)
+    H845: "hockey", H680: "hockey", H950: "shorts", HS640: "socks", HS925: "socks", SV80: "tank",
+    A600: "hoodie", A500: "hoodie", A400: "hoodie", A100: "tee", AT200: "",
+    AS200: "shorts", AS100: "shorts", BS200: "shorts", BS100: "shorts", LS200: "shorts", LS100: "shorts",
+    VS200: "shorts", VS100: "shorts", SS200: "shorts", SS100: "shorts", BAS200: "shorts", BAS100: "shorts",
+    BA400: "button", BA100: "tee", BA900: "pants", BA750: "pants",
+    B500: "tank", B200: "tank", B100: "tank", B300: "tank", LF100: "tank", LF200: "tank", T200: "tank", T100: "tank",
+    V100: "tee", S100: "tee",
+    // custom codes shared by products of different kinds: no guess
+    A200: "", BA200: "", BA300: "", V200: "", S200: "",
   };
   for (const [code, kind] of Object.entries(CODES)) {
     it(`${code} → ${kind || "(the order's garment)"}`, () => expect(styleKind(code)).toBe(kind));
