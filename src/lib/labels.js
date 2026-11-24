@@ -413,7 +413,7 @@ function summaryCountZPL(l, size) {
   const c     = l.counts || {};
   const head  = l.orderNumber ? `Order ${l.orderNumber}` : "Order";
   const what  = `SUMMARY   ${c.total ?? 0} ${c.total === 1 ? "jersey" : "jerseys"}`;
-  const tally = `${c.passed ?? 0} passed   ${c.failed ?? 0} failed   ${c.missing ?? 0} missing`;
+  const tally = `${c.passed ?? 0} passed   ${c.failed ?? 0} failed   ${c.missing ?? 0} missing${c.extra ? `   +${c.extra} extra` : ""}`;   // extra: flags with no roster row (not on the roster, a duplicate), apart from the order's count
   const foot  = [l.station, l.date].filter(Boolean).join("   ");
   const out = ["^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
     line(side, top + pad, fit(head, w, big), w, "C", head),

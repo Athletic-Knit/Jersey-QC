@@ -78,13 +78,26 @@ export function notInBox(pack, bin) {
 // Finish order can hold them back with the box's own list when the box stays
 // open for a ship-with order (review, 24 Nov 2026).
 export function notInBoxJobs(pack, bin, label = "") {
-  return listLabels(notInBox(pack, bin).map(x => `${who(x.row)}: ${x.why}`), { title: `NOT IN BOX ${bin}${label ? " " + label : ""}`, orderNumber: pack?.orderNumber })
+  // No order number in the header: with a long team name it squeezed the header to 1.4 mm type
+  // (review, 24 Nov 2026); the box's count label and its rows carry the order.
+  return listLabels(notInBox(pack, bin).map(x => `${who(x.row)}: ${x.why}`), { title: `NOT IN BOX ${bin}${label ? " " + label : ""}` })
     .map(l => ({ ...l, box: String(bin) }));
 }
-// Is `bin` the last box of its team or size: no later box of the group has anything in it.
+// Is `bin` the last box of its team or size: no later box of the group has
+// anything in it, and nothing of the group is left to scan (the rule Box full
+// uses; review, 24 Nov 2026: a closed 1.1 with an empty 1.2 and three jerseys
+// still to scan is not last — they are going into 1.2 in an hour).
+// On a finished order (`pack.finished`: the done screen; `pack.past`: a record
+// from the hub) nothing more will be scanned, so a jersey never scanned is
+// short and the group's last box lists it.
 export function isLastBox(pack, bin) {
   const g = boxParts(bin)[0];
-  return !packBoxes(pack).some(x => boxParts(x.bin)[0] === g && binOrder(x.bin, bin) > 0 && x.count > 0);
+  if (packBoxes(pack).some(x => boxParts(x.bin)[0] === g && binOrder(x.bin, bin) > 0 && x.count > 0)) return false;
+  if (pack?.finished || pack?.past) return true;
+  const binMap = pack?.binMap, closed = pack?.closedBins || [];
+  const key = Object.entries(binMap || {}).find(([k, v]) => k !== "__by" && v === bin)?.[0] ?? closed.find(c => c.bin === bin)?.key;
+  if (key === undefined) return false;
+  return !(pack?.roster || []).some(r => !r.scanned && binFor(binMap, r) === binMap[key]);
 }
 
 // ── The order summary (the owner, 24 Nov 2026) ─────────────────────────────
@@ -100,11 +113,17 @@ const who = x => [String(x?.number ?? "").trim() ? `#${String(x.number).trim()}`
 export function orderSummary(pack) {
   const roster = pack?.roster || [], binMap = pack?.binMap || null, closed = pack?.closedBins || [];
   const passed = roster.filter(inBin).sort(byNumber).map(row => ({ row, bin: binMap ? binOfRow(binMap, closed, row) : null }));
-  const failed = damagedItems(pack);
+  // Failed comes from the ROSTER (every row flagged right now), with the reason of its newest flag
+  // from the log; a flagged row with no flag entry (a past order with its events gone) still counts
+  // (review, 24 Nov 2026). The flags with no row — not on the roster, a duplicate, no size tag —
+  // are `extra`: in the DAMAGED box, but not among the order's jerseys, so they are counted apart.
+  const dmg = damagedItems(pack), reasonOf = new Map(dmg.filter(x => x._id !== undefined).map(x => [x._id, x.reason]));
+  const failed = roster.filter(r => r.scanned === "flag").sort(byNumber).map(r => ({ _id: r._id, number: r.number, name: r.name, team: r.team, size: r.size, reason: reasonOf.get(r._id) || "flagged" }));
+  const extra  = dmg.filter(x => x._id === undefined);
   const marked = roster.filter(r => r.scanned === "missing" || r.scanned === "short").sort(byNumber);
   const notScanned = roster.filter(r => !r.scanned).sort(byNumber);
-  return { passed, failed, missing: { marked, notScanned },
-    counts: { total: roster.length, passed: passed.length, failed: failed.length, missing: marked.length + notScanned.length, marked: marked.length, notScanned: notScanned.length } };
+  return { passed, failed, extra, missing: { marked, notScanned },
+    counts: { total: roster.length, passed: passed.length, failed: failed.length, extra: extra.length, missing: marked.length + notScanned.length, marked: marked.length, notScanned: notScanned.length } };
 }
 // The summary's labels (kind "binlist"), in print order: the PASSED list (only
 // `withPassed`: on a 500-jersey order it is 70 labels by itself, and the box
@@ -116,7 +135,7 @@ export function summaryJobs(pack, { withPassed = false, station = "", date = "" 
   const s = orderSummary(pack), o = pack?.orderNumber;
   const passed  = withPassed ? listLabels(s.passed.map(p => `${who(p.row)}${p.bin ? "  Box " + p.bin : ""}`), { title: "PASSED", orderNumber: o }) : [];
   const missing = listLabels([...s.missing.marked.map(r => `${who(r)}: marked missing`), ...s.missing.notScanned.map(r => `${who(r)}: not scanned`)], { title: "MISSING", orderNumber: o });
-  const failed  = listLabels(s.failed.map(x => `${who(x)}: ${x.reason || "flagged"}`), { title: "FAILED", orderNumber: o });
+  const failed  = listLabels([...s.failed.map(x => `${who(x)}: ${x.reason || "flagged"}`), ...s.extra.map(x => `${who(x)}: ${x.reason || "flagged"} (not on the roster)`)], { title: "FAILED", orderNumber: o });
   return [...passed, ...missing, ...failed, { summary: true, orderNumber: String(o || ""), station: String(station || ""), date: String(date || ""), counts: s.counts }];
 }
 

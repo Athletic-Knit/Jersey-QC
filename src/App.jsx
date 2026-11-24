@@ -1966,7 +1966,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             {state.typed ? `Typed: #${state.typed.number || "?"}${state.typed.name ? " · " + state.typed.name : ""}` : <>
             Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}{detected?.jersey_colour ? ` · ${detected.jersey_colour} jersey` : ""}
             </>}
-            {diff.length > 0 && !diff.includes("number") && !diff.includes("name") && <span style={{ marginLeft: 12, color: accent }}>· differs by {diff.map(cap).join(" and ")}</span>}{/* a list that differs by number or name is plain to see on the tiles */}
+            {diff.some(f => f !== "number" && f !== "name") && <span style={{ marginLeft: 12, color: accent }}>· differs by {diff.filter(f => f !== "number" && f !== "name").map(cap).join(" and ")}</span>}{/* the team (or an extra column), whether or not the names differ too (review, 24 Nov 2026); a number or a name that differs is plain to see on the tiles */}
           </div>
           <div ref={listRef} style={{ width: candidates.length > 3 ? "100%" : "calc(50% + 20px)", maxWidth: candidates.length > 3 ? 1600 : 820, padding: "0 24px", boxSizing: "border-box", flex: "0 1 auto", minHeight: 0, overflowY: "auto" }}>{/* the list takes all the room left on the screen (a 27 in panel shows far more than half), and scrolls only past that. One column (three rows or fewer) is exactly as wide as one column of the two-column list (half the panel less the gap: 50% + 20px of padding), centred, and its tiles' text is bigger (the owner, 23 Nov 2026: the one-column tiles were nearly twice as wide; three rows still fit without scrolling) */}
             {candidates.length === 0 && (
@@ -2865,7 +2865,7 @@ function IssuesModal({ missing, dups, flagged, binOf, onClose }) {
 // the passed list" adds every passed jersey with its box. Finish order prints
 // the summary by itself; this screen is how the operator sees it first (the
 // owner: "have option for operators to see the list before printing").
-function OrderSummaryModal({ orderNumber, summary, status, onPrint, onFinish, onClose }) {
+function OrderSummaryModal({ orderNumber, summary, status, labels = { summary: 0, withPassed: 0 }, onPrint, onFinish, onClose }) {
   useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
   const c = summary.counts;
   const line = (key, j, extra, colour, box = null) => (
@@ -2896,16 +2896,22 @@ function OrderSummaryModal({ orderNumber, summary, status, onPrint, onFinish, on
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 30, maxWidth: 1400, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ fontSize: 30, fontWeight: 900, color: "#60a5fa", whiteSpace: "nowrap" }}>📋 Order {orderNumber || "—"}</div>
-          <div style={{ fontSize: 17, color: "#cbd5e1", flex: 1 }}>{c.total} {c.total === 1 ? "jersey" : "jerseys"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} missing</span></div>
-          <button onClick={() => onPrint(false)} disabled={status?.status === "printing"} title="The count label, the FAILED list and the MISSING list, on the 2 x 1 in roll" style={{ ...btnPri, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap", background: "#3b82f6", color: "#0d1117" }}>🖨 Print summary</button>
-          <button onClick={() => onPrint(true)} disabled={status?.status === "printing"} title="The same, plus every passed jersey with its box" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>🖨 With the passed list</button>
+          <div style={{ fontSize: 17, color: "#cbd5e1", flex: 1 }}>{c.total} {c.total === 1 ? "jersey" : "jerseys"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} missing</span>{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} not on the roster</span>}</div>
+          <button onClick={() => onPrint(false)} disabled={status?.status === "printing"} title="The count label, the FAILED list and the MISSING list, on the 2 x 1 in roll" style={{ ...btnPri, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap", background: "#3b82f6", color: "#0d1117" }}>🖨 Print summary · {labels.summary} {labels.summary === 1 ? "label" : "labels"}</button>
+          <button onClick={() => onPrint(true)} disabled={status?.status === "printing"} title="The same, plus every passed jersey with its box" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>🖨 With the passed list · {labels.withPassed}</button>
           {onFinish && <button onClick={onFinish} style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap", borderColor: "#22c55e", color: "#86efac" }}>🏁 Finish order…</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         {status && <div style={{ marginTop: 10, fontSize: 16, fontWeight: 600, color: colour }}>{status.status === "printing" ? "🖨 Printing… " : "🖨 "}{status.text}</div>}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start", marginTop: 16 }}>
           {col(`Passed · ${c.passed}`, "#4ade80", summary.passed.map(p => line("p" + p.row._id, p.row, "", "", p.bin)), "Nothing has passed yet.")}
-          {col(`Failed · ${c.failed}`, "#f87171", summary.failed.map((f, i) => line("f" + (f._id ?? "x" + i), f, f.reason || "flagged", "#fecaca")), "Nothing is flagged.")}
+          {col(`Failed · ${c.failed}`, "#f87171", summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca")), "Nothing is flagged.", c.extra > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca"))}
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#94a3b8", margin: "6px 0 2px" }}>Not on the roster · {c.extra}</div>{/* in the DAMAGED box, not among the order's jerseys */}
+              {summary.extra.map((f, i) => line("x" + i, f, f.reason || "flagged", "#fecaca"))}
+            </div>
+          ) : null)}
           {col(`Missing · ${c.missing}`, "#fbbf24", [], "", (
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {sub(`Marked missing · ${c.marked}`, summary.missing.marked.map(r => line("m" + r._id, r, "", "")), "None.")}
@@ -3187,8 +3193,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
             </div>
             <div style={secSt}>Order summary · {sum.counts.passed} passed · {sum.counts.failed} failed · {sum.counts.missing} missing</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{/* the count label, FAILED and MISSING; the passed list on request (the owner, 24 Nov 2026) */}
-              <button style={smBtn} onClick={() => send([[summaryJobs(pack, { station: stationLabel(pack.station), date: localDateStamp() }), "binlist"]], "the order summary")}>Summary (failed + missing)</button>
-              <button style={smBtn} onClick={() => send([[summaryJobs(pack, { withPassed: true, station: stationLabel(pack.station), date: localDateStamp() }), "binlist"]], "the order summary with the passed list")}>With the passed list</button>
+              <button style={smBtn} onClick={() => { const l = summaryJobs(pack, { station: stationLabel(pack.station), date: localDateStamp() }); if (many(l.length, "summary labels")) send([[l, "binlist"]], "the order summary"); }}>Summary (failed + missing) · {summaryJobs(pack).length}</button>
+              <button style={smBtn} onClick={() => { const l = summaryJobs(pack, { withPassed: true, station: stationLabel(pack.station), date: localDateStamp() }); if (many(l.length, "summary labels")) send([[l, "binlist"]], "the order summary with the passed list"); }}>With the passed list · {summaryJobs(pack, { withPassed: true }).length}</button>
             </div>
             <div style={secSt}>Flag tickets · {flags.length}</div>
             {flags.length === 0 ? <div style={{ color: "#64748b" }}>No flags on this order.</div> : (
@@ -3840,9 +3846,11 @@ export default function App() {
   // The summary screen (OrderSummaryModal) and its printing.
   const summaryNow = useMemo(() => orderSummary(packNow), [packNow]);
   const [summaryPrint, setSummaryPrint] = useState(null);   // { status, text } on the summary screen
+  const summaryLabelCounts = useMemo(() => ({ summary: summaryJobs(packNow).length, withPassed: summaryJobs(packNow, { withPassed: true }).length }), [packNow]);
   const printSummary = useCallback(withPassed => {
     const labels = summaryJobs(packNow, { withPassed, station: stationLabel(stationId()), date: localDateStamp() });
     const what = withPassed ? "Order summary with the passed list" : "Order summary";
+    if (labels.length > 30 && !window.confirm(`Print ${labels.length} labels?`)) return;   // a 500-jersey order is dozens of labels (review, 24 Nov 2026)
     setSummaryPrint({ status: "printing", text: what });
     printOnTicketRoll(labels, "binlist")
       .then(res => setSummaryPrint({ status: "done", text: `${what} printed: ${labels.length} ${labels.length === 1 ? "label" : "labels"} on ${res.printer}` }))
@@ -4010,8 +4018,8 @@ export default function App() {
   }, [resumeSession, role, operatorName]);
   // The order on this station, as the Print menu takes it (printjobs.js).
   const printPack = useMemo(() => !sessionStarted || !roster.length ? null
-    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels },
-  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels]);
+    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels, finished: !!finishedAt },   // finished: on the done screen a jersey never scanned is short (isLastBox)
+  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels, finishedAt]);
   const flagTag = useCallback(reason => severityOf(reason).tag, []);
   // The list of what is in the DAMAGED box, whenever the inspector asks for it.
   // The list of boxes that are done (full, or their team complete) and the list
@@ -5037,7 +5045,7 @@ export default function App() {
         onPass={id => { setShowStillOut(false); actions.passBack(id); }} onClose={() => closeDialog(() => setShowStillOut(false))} />}
       {showIssues && <IssuesModal missing={issues.missing} dups={issues.dups} flagged={issues.flagged} binOf={binOf} onClose={() => closeDialog(() => setShowIssues(false))} />}
       {showSummary && (
-        <OrderSummaryModal orderNumber={orderNumber} summary={summaryNow} status={summaryPrint} onPrint={printSummary}
+        <OrderSummaryModal orderNumber={orderNumber} summary={summaryNow} status={summaryPrint} labels={summaryLabelCounts} onPrint={printSummary}
           onFinish={finished ? null : () => { setShowSummary(false); setSummaryPrint(null); askFinish(); }}
           onClose={() => closeDialog(() => { setShowSummary(false); setSummaryPrint(null); })} />
       )}
