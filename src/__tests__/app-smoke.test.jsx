@@ -24,6 +24,7 @@ vi.mock("../lib/persist.js", async orig => ({
 import { createElement } from "react";
 import App from "../App.jsx";
 import { saveSignIn, saveSession } from "../lib/persist.js";
+import { garmentView, toView } from "../lib/garments.js";
 
 // The hub: every call answers, and is remembered.
 let hubCalls = [];
@@ -49,8 +50,8 @@ const read = (number, name) => ({ jersey_present: true, orientation: "upright", 
 const pressEnter = () => act(() => { fireEvent.keyDown(window, { key: "Enter", code: "Enter" }); });
 
 // Signed in at this station with an order left open: the app offers to resume it.
-async function resumeOrder(extra) {
-  saveSignIn({ role: "inspector", name: "Pat" });
+async function resumeOrder(extra, role = "inspector") {
+  saveSignIn({ role, name: "Pat" });
   saveSession(order(extra));
   render(createElement(App));
   fireEvent.click(await screen.findByRole("button", { name: /resume/i }));
@@ -92,5 +93,288 @@ describe("the station screen", () => {
     fireEvent.click(screen.getByRole("button", { name: /new order/i }));
     await screen.findByText(/Set up the order/);
     expect(hubCalls.filter(c => c.url.includes("/api/hub/stations/")).length).toBeGreaterThan(reportsBefore);   // the last report went first (M16)
+  });
+});
+
+// ── Where is the damage (the plan, 23 Nov 2026) ──────────────────────────────
+// A jersey through the camera (the upload button stands in for the camera).
+async function scan(r) {
+  reads.push(r);
+  fireEvent.click(screen.getByRole("button", { name: /upload/i }));
+  const input = document.querySelector('input[type="file"][accept="image/*"]');
+  await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "jersey.jpg", { type: "image/jpeg" })] } }); });
+}
+// The flag tickets sent to the hub.
+const flagPrints = () => hubCalls.filter(c => c.url.includes("/api/hub/print") && c.method === "POST" && c.body?.kind === "flag");
+// A tap on the garment at its own 0–1 point: the SVG is given a box on the
+// screen exactly its viewBox (a test browser lays nothing out).
+function tapGarment(side, x, y, kind = "hockey") {
+  const svg = document.querySelector(`svg[data-side="${side}"]`);
+  const v = garmentView(kind);
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: v.vbW, height: v.vbH, right: v.vbW, bottom: v.vbH, x: 0, y: 0 });
+  const [cx, cy] = toView(v, [x, y]);
+  fireEvent.click(svg, { clientX: cx, clientY: cy });
+}
+// Scan #12 SMITH, Flag on the green, pick a reason from the menu.
+async function flagWith(reason) {
+  await scan(read("12", "SMITH"));
+  await screen.findByText(/Confirm · \d+ to check/);
+  fireEvent.click(screen.getByRole("button", { name: /🚩 Flag/ }));
+  fireEvent.click(await screen.findByText(reason));
+}
+const wait = ms => act(() => new Promise(r => setTimeout(r, ms)));
+
+describe("where is the damage", () => {
+  it("Holes → tap two spots → Done: one flag ticket, with the spots and the garment", async () => {
+    await resumeOrder();
+    await flagWith("Holes");
+    await screen.findByText("Where is the damage?");
+    await wait(20);
+    expect(flagPrints()).toHaveLength(0);                       // the ticket waits for the spots
+    tapGarment("front", 0.5, 0.5);
+    tapGarment("back", 0.4, 0.75);
+    tapGarment("front", 0.02, 0.98);                            // beside the garment (under the sleeve): no spot
+    await screen.findByRole("button", { name: /Done · 2 marked/ });
+    expect(screen.getByText(/Front: centre · Back:/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Done · 2 marked/ }));
+    await screen.findByText("FLAGGED");
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+    const [label] = flagPrints()[0].body.labels;
+    expect(label.garment).toBe("hockey");
+    expect(label.spots).toEqual([{ side: "front", x: 0.5, y: 0.5 }, { side: "back", x: 0.4, y: 0.75 }]);
+    expect(label.reason).toBe("Holes");
+    // The FLAGGED screen shows the marks; Continue goes on as before, and nothing prints again.
+    expect(document.querySelectorAll("[data-spot]").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    await wait(50);
+    expect(flagPrints()).toHaveLength(1);
+  });
+
+  it("a tap on a spot takes it off; Undo takes the last off; at most three", async () => {
+    await resumeOrder();
+    await flagWith("Twill peeling");
+    await screen.findByText("Where is the damage?");
+    for (const y of [0.4, 0.5, 0.6, 0.7]) tapGarment("front", 0.5, y);
+    await screen.findByRole("button", { name: /Done · 3 marked/ });
+    await wait(450);                                            // past the double-tap guard
+    fireEvent.click(document.querySelector('[data-spot="2"]'));
+    await screen.findByRole("button", { name: /Done · 2 marked/ });
+    fireEvent.click(screen.getByRole("button", { name: /Undo last mark/ }));
+    await screen.findByRole("button", { name: /Done · 1 marked/ });
+    fireEvent.click(screen.getByRole("button", { name: /Done · 1 marked/ }));
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+    expect(flagPrints()[0].body.labels[0].spots).toEqual([{ side: "front", x: 0.5, y: 0.4 }]);
+  });
+
+  it("Skip (the pedal: it is highlighted first) → one ticket with no spots", async () => {
+    await resumeOrder();
+    await flagWith("Stitching or seam");
+    await screen.findByText("Where is the damage?");
+    expect(screen.getByRole("button", { name: /Done · tap the damage/ }).disabled).toBe(true);
+    await wait(500);                                            // past the Select key's quiet moment
+    await pressEnter();                                         // Select runs Skip
+    await screen.findByText("FLAGGED");
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+    expect(flagPrints()[0].body.labels[0].spots).toEqual([]);
+    expect(flagPrints()[0].body.labels[0].garment).toBe("hockey");
+  });
+
+  it("Esc is Skip", async () => {
+    await resumeOrder();
+    await flagWith("Logo or crest");
+    await screen.findByText("Where is the damage?");
+    await act(() => { fireEvent.keyDown(window, { key: "Escape", code: "Escape" }); });
+    await screen.findByText("FLAGGED");
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+  });
+
+  it("the pedal on the step never scans: it skips", async () => {
+    await resumeOrder();
+    await flagWith("Holes");
+    await screen.findByText("Where is the damage?");
+    reads.push(read("7", "JONES"));
+    await pressEnter();                                         // at once: ignored (a double press on the reason), and no scan
+    await wait(20);
+    expect(screen.getByText("Where is the damage?")).toBeTruthy();
+    await wait(500);
+    await pressEnter();                                         // the scan key is the Select key: here it runs Skip
+    await screen.findByText("FLAGGED");
+    await wait(50);
+    expect(reads).toHaveLength(1);                              // no read was asked for
+  });
+
+  it("Others never asks where, and its ticket still draws the order's garment", async () => {
+    await resumeOrder({ garment: "pants" });
+    await flagWith("Others");
+    await screen.findByText("FLAGGED");
+    expect(screen.queryByText("Where is the damage?")).toBeNull();
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+    expect(flagPrints()[0].body.labels[0].spots).toEqual([]);
+    expect(flagPrints()[0].body.labels[0].garment).toBe("pants");
+  });
+
+  it("a double tap on one point leaves the spot (the second tap does not take it off)", async () => {
+    await resumeOrder();
+    await flagWith("Holes");
+    await screen.findByText("Where is the damage?");
+    tapGarment("front", 0.5, 0.5);
+    await screen.findByRole("button", { name: /Done · 1 marked/ });
+    fireEvent.click(document.querySelector('[data-spot="1"]'));   // the second tap of a double tap lands on the new dot
+    await wait(20);
+    expect(screen.getByRole("button", { name: /Done · 1 marked/ })).toBeTruthy();
+  });
+
+  it("the buttons stay in place when the first spot goes on: Done, Skip, Undo", async () => {
+    await resumeOrder();
+    await flagWith("Holes");
+    await screen.findByText("Where is the damage?");
+    const names = () => screen.getAllByRole("button").map(b => b.textContent).map(t => (/Done ·/.test(t) ? "done" : /Skip — no mark/.test(t) ? "skip" : /Undo last mark/.test(t) ? "undo" : null)).filter(Boolean);
+    expect(names()).toEqual(["done", "skip", "undo"]);
+    expect(screen.getByRole("button", { name: /Undo last mark/ }).disabled).toBe(true);
+    tapGarment("front", 0.5, 0.5);
+    await screen.findByRole("button", { name: /Done · 1 marked/ });
+    expect(names()).toEqual(["done", "skip", "undo"]);
+    await wait(500);
+    await pressEnter();                                         // the highlight moved to Done: the pedal finishes
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+    expect(flagPrints()[0].body.labels[0].spots).toHaveLength(1);
+  });
+
+  it("while the step is up the left panel's ways out are greyed", async () => {
+    await resumeOrder();
+    await flagWith("Holes");
+    await screen.findByText("Where is the damage?");
+    expect(screen.getByRole("button", { name: /Upload & scan/ }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /Skip — no mark/ }));
+    await screen.findByText("FLAGGED");
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+  });
+
+  it("a flag whose step is left another way still prints its ticket, once", async () => {
+    // #7 is missing; while #12's step is up, #7 is passed from the roster's Mark menu (Found — pass it):
+    // the step is gone and a new entry is on top of the flag.
+    await resumeOrder({ roster: [roster[0], { ...roster[1], scanned: "missing" }] });
+    await flagWith("Holes");
+    await screen.findByText("Where is the damage?");
+    const confirm = window.confirm; window.confirm = () => true;
+    try {
+      const select = screen.getByText("Jones").closest("tr").querySelector("select");
+      fireEvent.change(select, { target: { value: "back" } });
+    } finally { window.confirm = confirm; }
+    await waitFor(() => expect(screen.queryByText("Where is the damage?")).toBeNull());
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+    expect(flagPrints()[0].body.labels[0]).toMatchObject({ reason: "Holes", spots: [], garment: "hockey" });
+    await wait(50);
+    expect(flagPrints()).toHaveLength(1);
+  });
+
+  it("Undo of the last spot, then a pedal press at once, does not Skip", async () => {
+    await resumeOrder();
+    await flagWith("Holes");
+    await screen.findByText("Where is the damage?");
+    tapGarment("front", 0.5, 0.5);
+    await screen.findByRole("button", { name: /Done · 1 marked/ });
+    fireEvent.click(screen.getByRole("button", { name: /Undo last mark/ }));   // the highlight goes back to Skip
+    await screen.findByRole("button", { name: /Done · tap the damage/ });
+    await pressEnter();                                                         // meant as another Undo: ignored
+    await wait(20);
+    expect(screen.getByText("Where is the damage?")).toBeTruthy();
+    expect(flagPrints()).toHaveLength(0);
+  });
+
+  // The step stays up while a roster mark puts a new log line on top of the flag (review round 3).
+  for (const [what, extra, pick, finish] of [
+    ["Missing on another row, then a spot and Done", {}, "missing", "done"],
+    ["Un-check on another passed row, then Skip", { roster: [roster[0], { ...roster[1], scanned: "pass" }] }, "unscan", "skip"],
+  ]) {
+    it(`${what}: the flag still prints one ticket, with its marks`, async () => {
+      await resumeOrder(extra);
+      await flagWith("Holes");
+      await screen.findByText("Where is the damage?");
+      const confirm = window.confirm; window.confirm = () => true;
+      try {
+        const select = screen.getByText("Jones").closest("tr").querySelector("select");
+        fireEvent.change(select, { target: { value: pick } });
+      } finally { window.confirm = confirm; }
+      await wait(20);
+      expect(flagPrints()).toHaveLength(0);
+      if (finish === "done") {
+        tapGarment("front", 0.5, 0.5);
+        fireEvent.click(await screen.findByRole("button", { name: /Done · 1 marked/ }));
+      } else fireEvent.click(screen.getByRole("button", { name: /Skip — no mark/ }));
+      await screen.findByText("FLAGGED");
+      await waitFor(() => expect(flagPrints()).toHaveLength(1));
+      expect(flagPrints()[0].body.labels[0]).toMatchObject({ reason: "Holes", garment: "hockey", spots: finish === "done" ? [{ side: "front", x: 0.5, y: 0.5 }] : [] });
+      await wait(50);
+      expect(flagPrints()).toHaveLength(1);
+    });
+  }
+
+  it("Finish order and Finish later are greyed while the step is up", async () => {
+    await resumeOrder();
+    await flagWith("Holes");
+    await screen.findByText("Where is the damage?");
+    expect(screen.getByRole("button", { name: /🏁 finish order/i }).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: /⏸ finish later/i }).disabled).toBe(true);
+  });
+
+  for (const [flag, size] of [["🏷 No size tag", null], ["🚩 Not on the roster", "L"], ["🔁 Duplicate", "L"]]) {
+    it(`${flag} never asks where`, async () => {
+      await resumeOrder();
+      await scan(read("88", ""));                                // on no row: red, with Flag
+      fireEvent.click(await screen.findByRole("button", { name: /🚩 Flag/ }));
+      fireEvent.click(await screen.findByRole("button", { name: flag }));
+      if (size) fireEvent.click((await screen.findAllByRole("button", { name: size }))[1]);   // Youth L, Adult L, …: the adult one
+      await screen.findByText("FLAGGED");
+      expect(screen.queryByText("Where is the damage?")).toBeNull();
+      await waitFor(() => expect(flagPrints()).toHaveLength(1));
+    });
+  }
+
+  it("a sorter never sees it: the only flags are No size tag, Duplicate and Not on the roster", async () => {
+    await resumeOrder({ role: "sorter", orderRole: "sorter" }, "sorter");
+    await scan(read("12", "SMITH"));
+    fireEvent.click(await screen.findByRole("button", { name: /🚩 Flag/ }));
+    await screen.findByText("What is wrong?");
+    expect(screen.queryByText("Holes")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "🏷 No size tag" }));
+    await screen.findByText("FLAGGED");
+    expect(screen.queryByText("Where is the damage?")).toBeNull();
+  });
+
+  it("an order resumed on the step prints that flag's ticket once, unmarked", async () => {
+    const flag = { id: 5000, status: "flagged", match: roster[0], detected: null, reason: "Holes", reasonId: "fabric", locating: true, garment: "hockey", timestamp: "10:00:00" };
+    await resumeOrder({ roster: [{ ...roster[0], scanned: "flag" }, roster[1]], log: [flag] });
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+    expect(flagPrints()[0].body.labels[0]).toMatchObject({ reason: "Holes", garment: "hockey", spots: [] });
+    await wait(50);
+    expect(flagPrints()).toHaveLength(1);
+  });
+
+  it("an order resumed with a flag still on the step under a newer line prints it once", async () => {
+    const flag = { id: 5000, status: "flagged", match: roster[0], detected: null, reason: "Holes", reasonId: "fabric", locating: true, garment: "hockey", timestamp: "10:00:00" };
+    const miss = { id: 5001, status: "undo", match: roster[1], detected: null, reason: "Un-checked", timestamp: "10:00:05" };
+    await resumeOrder({ roster: [{ ...roster[0], scanned: "flag" }, roster[1]], log: [miss, flag] });
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+    expect(flagPrints()[0].body.labels[0]).toMatchObject({ reason: "Holes", garment: "hockey", spots: [] });
+    await wait(50);
+    expect(flagPrints()).toHaveLength(1);
+  });
+
+  it("an order resumed with its flag already printed prints nothing", async () => {
+    const flag = { id: 5000, status: "flagged", match: roster[0], detected: null, reason: "Holes", reasonId: "fabric", garment: "hockey", spots: [], timestamp: "10:00:00" };
+    await resumeOrder({ roster: [{ ...roster[0], scanned: "flag" }, roster[1]], log: [flag] });
+    await wait(50);
+    expect(flagPrints()).toHaveLength(0);
+  });
+
+  it("the order's garment comes back on resume and draws the outline", async () => {
+    await resumeOrder({ garment: "pants" });
+    await flagWith("Holes");
+    await screen.findByText("Where is the damage?");
+    tapGarment("front", 0.3, 0.5, "pants");
+    fireEvent.click(await screen.findByRole("button", { name: /Done · 1 marked/ }));
+    await waitFor(() => expect(flagPrints()).toHaveLength(1));
+    expect(flagPrints()[0].body.labels[0].garment).toBe("pants");
   });
 });

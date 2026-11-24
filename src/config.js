@@ -1,5 +1,6 @@
 // ── Floor configuration ───────────────────────────────────────────────────────
 import { DEFAULT_MODEL, DEFAULT_EFFORT, DEFAULT_THINKING } from "./lib/vision.js";
+import { DEFAULT_GARMENT, GARMENTS, GARMENT_IDS } from "./lib/garments.js";
 
 export const MODEL = import.meta.env.VITE_CLAUDE_MODEL || DEFAULT_MODEL;
 // Effort (low | medium | high) and thinking ("off" | "adaptive") for the read.
@@ -36,22 +37,25 @@ export const REASON_CHECK = { mark: "fabric", mark_stays: "fabric", fabric: "hol
 // One short menu for every order (17 Nov 2026, after the demo to the manager:
 // the old menu showed near-twins side by side, "Missing or wrong logo" beside
 // "Missing, wrong or crooked crest or logo", and its labels were sentences).
-// A reason is two or three plain words. `only` keeps the two that belong to
+// A reason is two or three plain words. `where: true` marks a physical
+// defect: after it is picked the station asks where on the garment the damage
+// is (the owner, 23 Nov 2026; not for No size tag, Duplicate, Not on the
+// roster or Others). `only` keeps the two that belong to
 // one way of making a jersey off the other's menu; `cat` is the defect
 // category the reports count it under.
 export const REASONS = [
-  { id: "wrong_decoration", label: "Name or number",       route: "Supervisor → pink slip → decoration", cat: "Decoration" },
-  { id: "logo",      label: "Logo or crest",     route: "Supervisor → pink slip → decoration", cat: "Decoration" },
-  { id: "twill",     label: "Twill peeling",     route: "Supervisor → pink slip → decoration", cat: "Decoration", only: "stitched" },
-  { id: "print",     label: "Sublimation error", route: "Supervisor → full remake",            cat: "Artwork",    only: "sublimated" },   // the floor's word for a print or colour fault (it read "Print or colour" for a day, 17 Nov 2026)
-  { id: "stitching", label: "Stitching or seam", route: "Supervisor → stitcher",               cat: "Sewing" },
-  { id: "fabric",    label: "Holes",             route: "Supervisor → full remake",            cat: "Fabric" },
+  { id: "wrong_decoration", label: "Name or number",       route: "Supervisor → pink slip → decoration", cat: "Decoration", where: true },
+  { id: "logo",      label: "Logo or crest",     route: "Supervisor → pink slip → decoration", cat: "Decoration", where: true },
+  { id: "twill",     label: "Twill peeling",     route: "Supervisor → pink slip → decoration", cat: "Decoration", where: true, only: "stitched" },
+  { id: "print",     label: "Sublimation error", route: "Supervisor → full remake",            cat: "Artwork",    where: true, only: "sublimated" },   // the floor's word for a print or colour fault (it read "Print or colour" for a day, 17 Nov 2026)
+  { id: "stitching", label: "Stitching or seam", route: "Supervisor → stitcher",               cat: "Sewing", where: true },
+  { id: "fabric",    label: "Holes",             route: "Supervisor → full remake",            cat: "Fabric", where: true },
   { id: "label",     label: "Size label",        route: "Supervisor → stitcher",               cat: "Label" },
   { id: "mark",      label: "Dirt or mark",      route: "Clean in place", inPlace: true,       cat: "Cleaning" },   // cleaned at the station, not flagged: the "Clean it now" screen
   { id: "other",     label: "Others",            route: "Supervisor decides",                  cat: "Other" },      // flags at once, nothing to type (the owner, 17 Nov 2026; it was "Something else" with a text box)
 ];
 // "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
-export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning" };
+export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning", where: true };
 // A jersey with no size tag, flagged from the pick list (the owner, 19 Nov
 // 2026): with no size to read there is no row to pick, so it is flagged as it
 // is — the number read, no row — and goes to the stitcher for a tag.
@@ -68,6 +72,13 @@ export const JERSEY_TYPES = [
 ];
 export const jerseyTypeOf = id => JERSEY_TYPES.find(t => t.id === id) || null;
 export const jerseyTypeLabel = id => jerseyTypeOf(id)?.label || "";
+
+// What the order's garments are, for the outline on the "where is the damage"
+// step and on the flag ticket: the ids and labels straight from
+// src/lib/garments.js, which holds the shapes. Hockey by default: the most common order (the owner,
+// 24 Nov 2026). A row whose `style` the catalogue table knows uses its own kind.
+export const GARMENT_MENU = GARMENT_IDS.map(id => ({ id, label: GARMENTS[id].label }));
+export const DEFAULT_ORDER_GARMENT = DEFAULT_GARMENT;
 
 export const REASONS_BY_CONSTRUCTION = {
   stitched:   REASONS.filter(r => !r.only || r.only === "stitched"),

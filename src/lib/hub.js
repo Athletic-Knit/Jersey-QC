@@ -95,7 +95,7 @@ export const hub = {
 // operator took); the hub keeps a photo once it has seen it, so older flags
 // keep theirs without being re-sent every 5 s.
 const PHOTOS_PER_REPORT = 6;   // the newest log entries that carry their photo in each 5-second report
-export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap, closedBins = [], binSummary = [], idleSpells = [], awaySpells = [], finishedAt = null }) {
+export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", garment = "", rosterFile, roster, log, lastConfirmed, binMap, closedBins = [], binSummary = [], idleSpells = [], awaySpells = [], finishedAt = null }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
   return {
@@ -105,7 +105,7 @@ export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, note
     away: { count: awaySpells.length, seconds: sum(awaySpells, s => s.seconds), spells: awaySpells.slice(-200) },
     // orderRun: when this order was started on this station. The same order
     // number started again is a new run with its own record on the hub.
-    operatorName, role, orderNumber, orderRun, notes, jerseyType, rosterFile, browserId: browserId(),
+    operatorName, role, orderNumber, orderRun, notes, jerseyType, garment, rosterFile, browserId: browserId(),
     // When Finish order was pressed (null while the order is open): the board shows
     // the order finished even with jerseys not scanned (code review M7).
     finishedAt: finishedAt || null,

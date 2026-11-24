@@ -273,7 +273,7 @@ export const GARMENT_STYLES = {
     H550: "hockey", H8000: "hockey", H7500: "hockey", H7100: "hockey", H6500: "hockey", H6400: "hockey",
     H6100: "hockey", H6250: "hockey", H6000: "hockey", H686: "hockey",
     SV100: "tank",                                     // scrimmage vest
-    HS630: "socks", HS2100: "socks", HS1100: "socks", BA90: "socks",
+    HS630: "socks", HS2100: "socks", HS1100: "socks", HS825: "socks", BA90: "socks",
     H901: "shorts",                                    // pant shells (p. 23): knee length, shaped like shorts
     // Apparel.
     A3050: "hoodie", A3025: "hoodie", A3087: "hoodie", A3000: "hoodie",
@@ -413,4 +413,44 @@ export function spotWords(kind, spots) {
     }
     return words.length ? `${SIDE_LABELS[side]}: ${words.join(", ")}` : "";
   }).filter(Boolean).join(" · ");
+}
+
+// The kind most of a roster's rows are, by their `style` column, or "" when
+// no kind has more than half the rows (no style column, a mixed order): the
+// order screen and the supervisor's send form then pre-select it for the
+// order (the plan, 23 Nov 2026). Each row still uses its own style.
+export function rosterGarment(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return "";
+  const count = new Map();
+  for (const r of list) { const k = styleKind(r?.style); if (k) count.set(k, (count.get(k) || 0) + 1); }
+  let best = "", n = 0;
+  for (const [k, c] of count) if (c > n) { best = k; n = c; }
+  return n * 2 > list.length ? best : "";
+}
+
+// A garment kind the order may carry: a known kind, else the default.
+export const orderGarmentOf = kind => (isKind(kind) ? kind : DEFAULT_GARMENT);
+
+// ── Drawing a garment on screen ──────────────────────────────────────────────
+// The station draws each side as an SVG whose viewBox is the garment's box
+// (`aspect` × 1, scaled to VIEW_H units tall) with `pad` all round, so a spot
+// on the edge of a sleeve still shows whole. `toView` and `fromView` turn a
+// garment point (0–1) into viewBox units and back; the station's tap handler
+// and its tests use them, so the two agree.
+export const VIEW_H = 100;
+export function garmentView(kind) {
+  const g = garment(kind), pad = 8, w = Math.round(g.aspect * VIEW_H * 10) / 10, h = VIEW_H;
+  return { kind: g.id, w, h, pad, vbW: w + 2 * pad, vbH: h + 2 * pad };
+}
+export const toView = (view, [x, y]) => [view.pad + x * view.w, view.pad + y * view.h];
+export const fromView = (view, vx, vy) => [(vx - view.pad) / view.w, (vy - view.pad) / view.h];
+// A tapped point as a spot: 0–1 rounded to three places, or null when the tap
+// missed the garment (beside it, between the legs, under a sleeve).
+export function spotAt(kind, side, x, y) {
+  if (!SIDES.includes(side) || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const r = v => Math.round(v * 1000) / 1000;
+  const sx = r(x), sy = r(y);
+  if (sx < 0 || sx > 1 || sy < 0 || sy > 1 || !insideGarment(kind, sx, sy)) return null;
+  return { side, x: sx, y: sy };
 }

@@ -5,6 +5,7 @@ import { describe, it, expect } from "vitest";
 import {
   GARMENTS, GARMENT_IDS, GARMENT_STYLES, SIDES, MAX_SPOTS, DEFAULT_GARMENT,
   garmentOf, insideGarment, spotWords, styleKind, regionOf, anchorOf,
+  rosterGarment, orderGarmentOf, garmentView, toView, fromView, spotAt, VIEW_H,
 } from "../garments.js";
 
 const inBox = ([x, y]) => x >= 0 && x <= 1 && y >= 0 && y <= 1;
@@ -293,5 +294,54 @@ describe("catalogue style codes", () => {
   }
   it("a code with no kind uses the order's garment", () => {
     for (const code of ["A1830", "BA101", "ZAA101"]) expect(garmentOf({ style: code }, "tee")).toBe("tee");
+  });
+});
+
+describe("the order's garment and the station's drawing", () => {
+  it("HS825 is a sock", () => {
+    expect(styleKind("HS825")).toBe("socks");
+    expect(garmentOf({ style: "HS825" }, "hockey")).toBe("socks");
+  });
+  it("rosterGarment: the kind more than half the rows have, else nothing", () => {
+    const r = styles => styles.map(style => ({ name: "A", number: "1", style }));
+    expect(rosterGarment(r(["BA5500", "BA5500", "BA5200", ""]))).toBe("button");
+    expect(rosterGarment(r(["HS2100", "HS630", "H550", "H550"]))).toBe("");        // a tie: nothing picked
+    expect(rosterGarment(r(["", "", "H550"]))).toBe("");                          // most rows say nothing
+    expect(rosterGarment(r(["A1830", "A1830"]))).toBe("");                        // toques: no kind
+    expect(rosterGarment([])).toBe("");
+    expect(rosterGarment(null)).toBe("");
+    expect(rosterGarment([{ name: "A" }, { name: "B" }])).toBe("");
+  });
+  it("orderGarmentOf: a known kind, else hockey", () => {
+    expect(orderGarmentOf("pants")).toBe("pants");
+    expect(orderGarmentOf("")).toBe("hockey");
+    expect(orderGarmentOf("__proto__")).toBe("hockey");
+    expect(orderGarmentOf(undefined)).toBe("hockey");
+  });
+  it("garmentView, toView and fromView agree, for every kind", () => {
+    for (const kind of GARMENT_IDS) {
+      const v = garmentView(kind);
+      expect(v.kind).toBe(kind);
+      expect(v.h).toBe(VIEW_H);
+      expect(v.vbW / v.vbH).toBeCloseTo((v.w + 2 * v.pad) / (v.h + 2 * v.pad));
+      expect(Math.abs(v.w / v.h - GARMENTS[kind].aspect)).toBeLessThan(0.01);
+      for (const p of [[0, 0], [1, 1], [0.3, 0.7]]) {
+        const [vx, vy] = toView(v, p), back = fromView(v, vx, vy);
+        expect(back[0]).toBeCloseTo(p[0]); expect(back[1]).toBeCloseTo(p[1]);
+      }
+    }
+    expect(garmentView("cape").kind).toBe("hockey");
+  });
+  it("spotAt: a tap on the garment is a spot rounded to 3 places; beside it, off the box or on no side, nothing", () => {
+    expect(spotAt("hockey", "front", 0.50004, 0.5)).toEqual({ side: "front", x: 0.5, y: 0.5 });
+    expect(spotAt("hockey", "back", 0.02, 0.98)).toBeNull();      // under the sleeve
+    expect(spotAt("pants", "front", 0.5, 0.9)).toBeNull();        // between the legs
+    expect(spotAt("hockey", "front", 1.2, 0.5)).toBeNull();
+    expect(spotAt("hockey", "inside", 0.5, 0.5)).toBeNull();
+    expect(spotAt("hockey", "front", NaN, 0.5)).toBeNull();
+    for (const kind of GARMENT_IDS) for (const r of GARMENTS[kind].regions) {
+      const [x, y] = anchorOf(r);
+      if (insideGarment(kind, x, y)) expect(spotAt(kind, r.side || "front", x, y)).not.toBeNull();
+    }
   });
 });

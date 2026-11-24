@@ -149,3 +149,16 @@ describe("where a flag goes, and its weight on the board", () => {
     expect(severityOf("Sublimation error").tag).toBe("REMAKE");
   });
 });
+
+describe("where is the damage: which reasons ask", () => {
+  it("the seven physical defects ask (and Dirt that will not come out); No size tag, Size label, Dirt or mark and Others do not", async () => {
+    const { REASONS, MARK_STAYS, NO_SIZE_TAG, GARMENT_MENU, DEFAULT_ORDER_GARMENT } = await import("../../config.js");
+    const { GARMENT_IDS, GARMENTS } = await import("../garments.js");
+    expect(REASONS.filter(r => r.where).map(r => r.label)).toEqual(["Name or number", "Logo or crest", "Twill peeling", "Sublimation error", "Stitching or seam", "Holes"]);
+    expect(MARK_STAYS.where).toBe(true);
+    expect(NO_SIZE_TAG.where).toBeFalsy();
+    expect(GARMENT_MENU.map(g => g.id)).toEqual(GARMENT_IDS);
+    expect(GARMENT_MENU.every(g => g.label === GARMENTS[g.id].label)).toBe(true);
+    expect(DEFAULT_ORDER_GARMENT).toBe("hockey");
+  });
+});

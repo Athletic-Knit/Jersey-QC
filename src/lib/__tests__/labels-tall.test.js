@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   labelSize, labelsZPL, flagLabelZPL, flagPanels, binLabelZPL, binListZPL, binListLabels, damagedListLabels, boxesListLabels,
-  repageLists, rowsPerLabel, pagesPerLabel, isTallTicket, textUnits, FLAG_LIFT,
+  repageLists, rowsPerLabel, pagesPerLabel, isTallTicket, textUnits, FLAG_LIFT, listChunks,
 } from "../labels.js";
 import { GARMENT_IDS, garment } from "../garments.js";
 
@@ -199,5 +199,74 @@ describe("lists on a tall roll", () => {
     const lines = boxes(d);
     expect(d.split("^XZ").filter(s => s.includes("^XA"))).toHaveLength(1);
     for (const b of lines) expect(b.y + b.h).toBeLessThanOrEqual(size.h);
+  });
+});
+
+describe("the stage-2 review follow-ups", () => {
+  it("isTallTicket and pagesPerLabel both count dots: a 300 dpi roll agrees with the same roll at 203 dpi", () => {
+    for (const spec of ["2x4", "2x3", "2x2.5", "2x1", "1x4", "1.9x4"]) {
+      expect(isTallTicket(labelSize(spec, 300))).toBe(isTallTicket(labelSize(spec)));
+      expect(pagesPerLabel(labelSize(spec, 300))).toBe(pagesPerLabel(labelSize(spec)));
+    }
+    expect(isTallTicket(labelSize("2x2.5"))).toBe(true);
+    expect(isTallTicket({ w: 406, h: 812, dpi: 203 })).toBe(true);   // dots alone, no inches
+  });
+  it("side by side, the drawing sits right under its caption; the outline (not its box) fills the panel's width or height", () => {
+    const size = labelSize("2x4");
+    for (const kind of ["pants", "socks", "tank"]) {
+      const { across, panels } = flagPanels(kind, size);
+      expect(across).toBe(true);
+      const g = garment(kind), xs = g.outline.map(p => p[0]), ys = g.outline.map(p => p[1]);
+      for (const side of ["front", "back"]) {
+        const p = panels[side];
+        const top = p.dy + Math.min(...ys) * p.dh, bottom = p.dy + Math.max(...ys) * p.dh;
+        const left = p.dx + Math.min(...xs) * p.dw, right = p.dx + Math.max(...xs) * p.dw;
+        expect(Math.abs(top - (p.y + p.cap + p.capGap)), `${kind} top`).toBeLessThanOrEqual(1);
+        expect(left).toBeGreaterThanOrEqual(p.x - 1);
+        expect(right).toBeLessThanOrEqual(p.x + p.w);
+        expect(bottom).toBeLessThanOrEqual(p.y + p.h);
+        // it touches the panel's sides or its bottom: nothing left over in both ways
+        const roomX = p.w - (right - left), roomY = p.y + p.h - bottom;
+        expect(Math.min(roomX, roomY), kind).toBeLessThanOrEqual(6);
+      }
+    }
+  });
+  it("a spot on the top edge is drawn under the caption, never over it", () => {
+    for (const [spec, kind] of [["2x4", "pants"], ["2x4", "hockey"], ["2x3", "socks"]]) {
+      const size = labelSize(spec), { panels } = flagPanels(kind, size);
+      const z = flagLabelZPL(ticket(kind, [{ side: "front", x: 0.5, y: 0 }]), size);
+      const ring = boxes(z).find(b => b.kind === "GC" && b.t !== b.w);
+      expect(ring.y, `${spec} ${kind}`).toBeGreaterThanOrEqual(panels.front.y + panels.front.cap + panels.front.capGap);
+    }
+  });
+  it("a box label and a count label on a short odd roll (not tall, one list page) use the whole label, as before", () => {
+    const size = labelSize("1.5x1.8");
+    const label = { bin: "5.1", label: "Navy", by: "team", count: 14, orderNumber: "264247" };
+    const footer = boxes(binLabelZPL(label, size)).find(b => b.text?.startsWith("Order"));
+    expect(footer.y + footer.h).toBeGreaterThan(size.h * 0.8);
+  });
+});
+
+describe("listChunks: a long print is cut between lists, never inside one", () => {
+  const rows = (n, team = "Navy") => Array.from({ length: n }, (_, i) => ({ number: String(i + 1), name: `P${i + 1}`, size: "A-L", team }));
+  it("whole lists only, at most `max` labels a chunk, nothing lost or reordered", () => {
+    const lists = [];
+    for (let b = 1; b <= 12; b++) lists.push(...binListLabels(rows(100, `T${b}`), { bin: `${b}.1`, label: `T${b}`, orderNumber: "1" }));   // 8 labels each
+    lists.push(...damagedListLabels(rows(30).map(r => ({ ...r, reason: "Holes" })), { orderNumber: "1" }));
+    const chunks = listChunks(lists, 20);
+    expect(chunks.flat()).toEqual(lists);
+    for (const c of chunks) {
+      expect(c.length).toBeLessThanOrEqual(20);
+      // each chunk ends a list: a count label, or the DAMAGED list's first page (printed last)
+      const last = c.at(-1);
+      expect(last.title || (last.damaged && last.page === 1)).toBeTruthy();
+    }
+    expect(chunks.length).toBeGreaterThan(1);
+  });
+  it("a list longer than `max` is cut where it must; a short print is one chunk", () => {
+    const one = binListLabels(rows(400), { bin: "1.1", label: "Navy", orderNumber: "1" });   // 29 pages + the count label
+    expect(listChunks(one, 20).map(c => c.length)).toEqual([20, 10]);
+    expect(listChunks(one.slice(0, 5), 100)).toEqual([one.slice(0, 5)]);
+    expect(listChunks([], 100)).toEqual([]);
   });
 });

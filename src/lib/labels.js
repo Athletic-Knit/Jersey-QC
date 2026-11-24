@@ -177,7 +177,9 @@ export const FLAG_COPIES = 2;
 // A tall roll: 2.5 in or more, at least 2 in wide. Its ticket draws today's
 // layout in a band one inch tall at the top, and the garment under it.
 export const TALL_TICKET_IN = 2.5;
-export const isTallTicket = size => (Number(size?.heightIn) || 0) >= TALL_TICKET_IN && (Number(size?.widthIn) || 0) >= 2;
+// In dots, like pagesPerLabel, so the two never disagree about a roll.
+const dpiOf = size => Number(size?.dpi) || 203;
+export const isTallTicket = size => (Number(size?.h) || 0) >= Math.round(TALL_TICKET_IN * dpiOf(size)) && (Number(size?.w) || 0) >= Math.round(2 * dpiOf(size));
 export function flagLabelZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const { w, h } = size;
   const tall  = isTallTicket(size);
@@ -270,24 +272,35 @@ const OUTLINE_DOTS = 3, DETAIL_DOTS = 2;
 export function flagPanels(kind, size) {
   const { w, h } = size, dpi = size.dpi || 203;
   const band = Math.min(h, dpi), m = Math.round(dpi * 2 / 25.4);
-  const { aspect } = garmentShape(kind);
+  const g = garmentShape(kind), { aspect } = g;
+  // The outline's own box in 0–1: a pair of pants or a sock does not fill its
+  // garment box from side to side, and is scaled by what it really covers.
+  const xs = g.outline.map(p => p[0]), ys = g.outline.map(p => p[1]);
+  const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
+  const shape = aspect * (bx1 - bx0) / Math.max(0.01, by1 - by0);   // the outline's width over its height
   const rule = band + FLAG_LIFT + 8;                              // under the black column, which ends at band + FLAG_LIFT + 4
   const x0 = m, x1 = w - m, y0 = rule + 2 + 8, y1 = h - m;
   const W = x1 - x0, H = y1 - y0, gap = Math.round(dpi * 0.05);
   const cap = Math.max(14, Math.round(dpi * 0.1)), capGap = 4;
   const fitIn = (pw, ph) => {                                     // the biggest drawing in one panel
     const rw = pw - OUTLINE_DOTS, rh = ph - cap - capGap - OUTLINE_DOTS;
-    const dh = Math.max(0, Math.min(rh, rw / aspect));
-    return { dw: dh * aspect, dh, rw, rh };
+    const sh = Math.max(0, Math.min(rh, rw / shape));
+    return { sw: sh * shape, sh, rw, rh };
   };
   const stacked = fitIn(W, Math.floor((H - gap) / 2)), beside = fitIn(Math.floor((W - gap) / 2), H);
-  const across = beside.dh > stacked.dh;
+  const across = beside.sh > stacked.sh;
   const pw = across ? Math.floor((W - gap) / 2) : W, ph = across ? H : Math.floor((H - gap) / 2);
-  const { dw, dh, rw, rh } = across ? beside : stacked;
+  const { sw, sh, rw, rh } = across ? beside : stacked;
+  // The garment's whole 0–1 box in dots (dx, dy, dw, dh), placed so that the
+  // outline itself is centred across its panel; side by side it sits right
+  // under its caption, stacked it is centred down its panel too. A point
+  // [x, y] of the garment is at [dx + x·dw, dy + y·dh], spots included.
+  const dh = sh / Math.max(0.01, by1 - by0), dw = dh * aspect;
   const panel = i => {
     const x = x0 + (across ? i * (pw + gap) : 0), y = y0 + (across ? 0 : i * (ph + gap));
-    return { x, y, w: pw, h: ph, cap,
-      dx: Math.round(x + (rw - dw) / 2), dy: Math.round(y + cap + capGap + (rh - dh) / 2), dw: Math.floor(dw), dh: Math.floor(dh) };
+    const top = y + cap + capGap + (across ? 0 : (rh - sh) / 2);
+    return { x, y, w: pw, h: ph, cap, capGap,
+      dx: Math.round(x + (rw - sw) / 2 - bx0 * dw), dy: Math.round(top - by0 * dh), dw: Math.floor(dw), dh: Math.floor(dh) };
   };
   return { rule, margin: m, across, panels: { front: panel(0), back: panel(1) } };
 }
@@ -331,7 +344,8 @@ function garmentZPL(l, size) {
     spots.forEach((s, i) => {
       if (s.side !== side) return;
       const r = Math.ceil(ring / 2), [sx, sy] = at([s.x, s.y]);
-      const cx = Math.max(p.x + r, Math.min(p.x + p.w - r, sx)), cy = Math.max(p.y + r, Math.min(p.y + p.h - r, sy));
+      // Kept in its panel, under the caption (a spot on a collar would cover the words).
+      const cx = Math.max(p.x + r, Math.min(p.x + p.w - r, sx)), cy = Math.max(p.y + p.cap + p.capGap + r, Math.min(p.y + p.h - r, sy));
       const d0 = Math.round(dot / 2);
       out.push(`^FO${cx - r},${cy - r}^GC${ring},2,B^FS`);
       out.push(`^FO${cx - d0},${cy - d0}^GC${dot},${dot},B^FS`);
@@ -369,13 +383,17 @@ export function binLabels(roster, binMap, { orderNumber = "", boxes = null } = {
 // On a tall roll a box label or a count label is laid out in a band at the
 // top, at most BAND_OF_WIDTH times as tall as the label is wide (1.25 in on a
 // 2 in roll), so it looks like today's 2 x 1 in label with blank under it.
-// Labels no taller than that (2 x 1, 2.25 x 1.25, the sticker roll) are
-// laid out on their whole height, as before.
+// Every other roll (2 x 1, 2.25 x 1.25, the sticker roll, any roll that is
+// neither a tall ticket nor holds two list pages) is laid out on its whole
+// height, as before.
 const BAND_OF_WIDTH = 0.625;
-const bandOf = (h, full) => Math.min(h, Math.round(full * BAND_OF_WIDTH));
+// Only on a tall roll (a tall ticket, or one holding several list pages):
+// every other roll, an odd one too, is laid out on its whole height as before.
+const tallRoll = size => isTallTicket(size) || pagesPerLabel(size) > 1;
+const bandOf = size => (tallRoll(size) ? Math.min(size.h, Math.round(size.w * BAND_OF_WIDTH)) : size.h);
 export function binLabelZPL(l, size = labelSize()) {
   const { w: full, h: label, top = 0, dpi = 203 } = size;
-  const h = bandOf(label, full);
+  const h = bandOf(size);
   const wide  = full >= 300;
   const side  = wide ? Math.round(dpi * 2 / 25.4) : 0;
   const w     = full - 2 * side;
@@ -456,7 +474,7 @@ export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "t
 // BOX 5.1 label inside.
 function binCountZPL(l, size) {
   const { w: full, h: label, top = 0, dpi = 203 } = size;
-  const h = bandOf(label, full);                                  // a band at the top of a tall roll
+  const h = bandOf(size);                                  // a band at the top of a tall roll
   const side  = full >= 300 ? Math.round(dpi * 2 / 25.4) : 0;
   const w     = full - 2 * side;
   const a     = h - top;
@@ -568,7 +586,7 @@ export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
 // come one after another, become fewer, longer pages, still printed last page
 // first with the count label last, and `page` / `pages` are counted again.
 // One page per label (the 2 x 1 in roll): the labels exactly as they came.
-export const pagesPerLabel = size => Math.max(1, Math.floor((Number(size?.h) || 0) / (Number(size?.dpi) || 203)));
+export const pagesPerLabel = size => Math.max(1, Math.floor((Number(size?.h) || 0) / dpiOf(size)));
 export const rowsPerLabel = (size, damaged = false) => (damaged ? DAMAGED_PER_LABEL : BIN_LIST_PER_LABEL) * pagesPerLabel(size);
 export function repageLists(labels, size) {
   const list = Array.isArray(labels) ? labels : [];
@@ -593,6 +611,40 @@ export function repageLists(labels, size) {
     i = j;
   }
   return out;
+}
+
+// The station sends a long run of labels in several requests (the hub takes
+// at most 100 a request). The hub re-pages a list for a tall roll only within
+// one request, so a cut in the middle of a box's list would print it on two
+// half-empty labels with the wrong page count: `listChunks` cuts only between
+// lists. A list is a run of pages of the same list (as repageLists counts
+// them) and, for a box list, the count label that ends it. A single list
+// longer than `max` (over 1,400 jerseys in one box) is cut where it must.
+export function listChunks(labels, max = 100) {
+  const list = Array.isArray(labels) ? labels : [], lists = [];
+  const key = l => (l && typeof l === "object" ? JSON.stringify([!!l.damaged, l.bin ?? null, l.label ?? null, l.head ?? null, l.orderNumber ?? null, l.pages ?? null, l.count ?? null]) : null);
+  for (let i = 0; i < list.length;) {
+    const l = list[i], k = key(l);
+    let j = i + 1;
+    if (l && !l.title && Array.isArray(l.items)) {
+      while (j < list.length && list[j] && !list[j].title && Array.isArray(list[j].items) && key(list[j]) === k) j++;
+      const next = list[j];
+      if (!l.damaged && next?.title && next.bin === l.bin && next.label === l.label && next.orderNumber === l.orderNumber) j++;
+    }
+    lists.push(list.slice(i, j)); i = j;
+  }
+  const chunks = [];
+  let cur = [];
+  for (const one of lists) {
+    if (cur.length && cur.length + one.length > max) { chunks.push(cur); cur = []; }
+    for (let i = 0; i < one.length; i += max) {
+      const part = one.slice(i, i + max);
+      if (cur.length + part.length > max) { chunks.push(cur); cur = []; }
+      cur.push(...part);
+    }
+  }
+  if (cur.length) chunks.push(cur);
+  return chunks;
 }
 
 // Every label of one kind, back to back. `kind`: "bin" (default), "jersey",

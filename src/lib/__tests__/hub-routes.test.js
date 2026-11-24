@@ -319,3 +319,22 @@ describe("box answers on the hub", () => {
     expect((await call("POST", "/boxes", { counts: { nonsense: 3 }, box: "small" })).status).toBe(400);
   });
 });
+
+describe("the order's garment on a sent roster", () => {
+  it("is kept and returned (the list and the roster itself); an unknown one is dropped", async () => {
+    const { call } = makeHub();
+    const { body: { id } } = await call("POST", "/rosters", { orderNumber: "1", rows, jerseyType: "sublimated", garment: "pants" });
+    expect((await call("GET", "/rosters")).body.rosters[0]).toMatchObject({ garment: "pants", jerseyType: "sublimated" });
+    expect((await call("GET", `/rosters/${id}`)).body).toMatchObject({ garment: "pants" });
+    const { body: { id: other } } = await call("POST", "/rosters", { orderNumber: "2", rows, garment: "__proto__" });
+    expect((await call("GET", `/rosters/${other}`)).body.garment).toBe("");
+    const { body: { id: none } } = await call("POST", "/rosters", { orderNumber: "3", rows });
+    expect((await call("GET", `/rosters/${none}`)).body.garment).toBe("");
+  });
+  it("a station's report keeps the order's garment on its record", async () => {
+    const { call } = makeHub();
+    await call("POST", "/stations/st-a", report("264247", 1000, 2, { garment: "socks" }));
+    const led = (await call("GET", "/ledger")).body;
+    expect(Object.values(led.orders || {})[0] ?? (led.orders || [])[0]).toMatchObject({ garment: "socks" });
+  });
+});
