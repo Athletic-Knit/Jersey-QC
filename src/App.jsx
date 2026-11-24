@@ -1541,7 +1541,6 @@ function SupervisorPanel({ operatorName, onSignOut }) {
 // one, the Navigate key (or ↑↓) moves the highlight. The first option is always
 // the safe default, so the Select key pressed again and again keeps the rhythm and a bad photo can always be
 // retried without writing a record.
-const HEADLINE_FIELDS = ["number", "name"];
 
 // Two columns, filled row by row, when there are
 // more than three rows; the list uses the whole panel and scrolls only when
@@ -1560,37 +1559,59 @@ function twoColumns(n) {
 const hintSt = (on, accent, gap = 12) => ({ fontSize: 20, color: accent, fontWeight: 700, whiteSpace: "nowrap", marginLeft: gap, visibility: on ? "visible" : "hidden" });
 const liftSt = on => ({ transform: on ? "scale(1.012)" : "none", transition: "transform 90ms ease-out", position: "relative", zIndex: on ? 1 : 0 });
 
-// A tile of the pick list. The SIZE sits on the right as big as the number:
-// on a by-team order the same number comes up on several teams and sizes, and
-// the size tag is all the operator checks (the owner, 19 Nov 2026). The team
-// and the rest go small under the number.
+// A tile of the pick list: ONE line (the owner, 24 Nov 2026, after two
+// mockups: on a by-team order every row had the same number, so the team had
+// become the big line and "#2" sat small and grey, and operators were lost; a
+// tile with number, name, team and size all big was "a lot of information").
+//   left    the NUMBER, always, as big as the SIZE box, white, on a fixed width
+//           so the middles of the tiles line up ("—" for a jersey with no number);
+//   middle  the name and the team on one modest line, "LEACH · 10U"; a row with
+//           no name (a 500-jersey order was numbers only) is just the team. What
+//           tells the rows apart (`diff`, differingFields) is amber, the number
+//           never is. Extra columns small after it; the Flagged / Already passed
+//           badge on the same line; a came-back row gets a small line above it;
+//   right   the SIZE box, as big as the number: on a by-team order the size tag
+//           is all the operator checks (the owner, 19 Nov 2026), then the arrow.
 // `big`: a one-column list (three rows or fewer) draws its text a fifth
 // bigger — the tiles are narrower there and the room is to spare (23 Nov 2026).
-function CandidateRow({ c, primary, secondary, extraCols, selected, disabled, accent, big = false, onClick, onHover }) {
-  const head = primary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")).filter(Boolean).join(" · ");
-  const sub  = [...secondary.map(f => f === "number" ? `#${c.number}` : (c[f] || "")), ...extraCols.map(k => c[k] ? `${cap(k)}: ${c[k]}` : "")].filter(Boolean).join(" · ");
-  const size = String(c.size || "").trim();
-  const px = n => Math.round(n * (big ? 1.2 : 1));
+// Exported for its test (src/__tests__/candidate-row.test.jsx).
+export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled, accent, big = false, onClick, onHover }) {
+  const number = String(c.number ?? "").trim();
+  const name   = String(c.name ?? "").trim();
+  const team   = String(c.team ?? "").trim();
+  const extras = extraCols.filter(k => c[k]);
+  const size   = String(c.size || "").trim();
+  const px  = n => Math.round(n * (big ? 1.2 : 1));
+  // Amber on what tells the rows apart: the team when the teams differ (on a
+  // by-team list the names differ too, some rows having none, and the team is
+  // the one that matters); the name only when the teams are the same.
+  const hue = f => disabled ? "#64748b" : diff.includes(f) && !(f === "name" && diff.includes("team")) ? accent : undefined;
   // Back from repair, or found after it was marked missing (the owner, 20 Nov 2026: two #35 on the list,
   // one not scanned and one back from repair, and nothing told them apart): a blue bar and a line.
   const back = !disabled && c.cameBack ? c.cameBack : null;
+  const bigFont = big ? "clamp(41px, 4.3vw, 62px)" : "clamp(34px, 3.6vw, 52px)";   // the number and the size box
   return (
     <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover} data-sel={selected ? "1" : undefined}
-      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: big ? "12px 16px 12px 20px" : "10px 14px 10px 18px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...(back ? { boxShadow: "inset 10px 0 0 #38bdf8", paddingLeft: 26 } : {}), ...liftSt(selected && !disabled) }}>
-      <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-        {back && <span style={{ fontSize: px(19), fontWeight: 900, color: "#7dd3fc", lineHeight: 1.1 }}>{back.was === "flag" ? `🔧 Back from repair${back.reason ? " — was: " + back.reason : ""}` : "✓ Was marked missing — found"}</span>}
-        <span data-head={big ? "1" : undefined} style={{ fontFamily: FONT_DISPLAY, fontSize: big ? "clamp(34px, 3.6vw, 50px)" : "clamp(28px, 3vw, 42px)", fontWeight: 800, lineHeight: 1, color: disabled ? "#64748b" : "#fff", overflowWrap: "anywhere", ...(big ? { whiteSpace: "nowrap", overflow: "hidden" } : {}) }}>{head || "—"}</span>{/* big: one line, so the list's measurement can tell when the name no longer fits (ScanOverlay drops `big` then) */}
-        {(sub || disabled) && (
-          <span style={{ fontSize: px(21), color: "#cbd5e1", lineHeight: 1.1, fontWeight: 700 }}>
-            {sub}
+      style={{ display: "flex", alignItems: "center", gap: 12, padding: big ? "8px 16px 8px 18px" : "6px 14px 6px 16px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...(back ? { boxShadow: "inset 10px 0 0 #38bdf8", paddingLeft: 24 } : {}), ...liftSt(selected && !disabled) }}>
+      <span style={{ fontFamily: FONT_DISPLAY, fontSize: bigFont, fontWeight: 900, lineHeight: 1, color: disabled || !number ? "#64748b" : "#fff", whiteSpace: "nowrap", minWidth: "1.4em", flexShrink: 0 }}>{/* 1.4em holds "#22", so the middles of two-digit tiles line up; a three-digit number widens its own zone (the middle is narrow beside the camera, so no room is kept for digits that are not there) */}
+        {number ? <><span style={{ fontSize: "0.6em", fontWeight: 800, opacity: 0.7 }}>#</span>{number}</> : "—"}
+      </span>
+      <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 2 }}>
+        {back && <span style={{ fontSize: px(17), fontWeight: 900, color: "#7dd3fc", lineHeight: 1.1 }}>{back.was === "flag" ? `🔧 Back from repair${back.reason ? " — was: " + back.reason : ""}` : "✓ Was marked missing — found"}</span>}
+        {(name || team || extras.length > 0 || disabled) && (
+          <span data-head={big ? "1" : undefined} style={{ fontSize: big ? "clamp(22px, 2vw, 29px)" : "clamp(18px, 1.7vw, 24px)", fontWeight: 700, lineHeight: 1.1, color: disabled ? "#64748b" : "#e2e8f0", ...(big ? { whiteSpace: "nowrap", overflow: "hidden" } : { overflowWrap: "anywhere" }) }}>{/* beside the camera a two-column tile leaves the middle ~150 px: a long name then wraps at the dot, the team under it. big: one line, so the list's measurement can tell when the text no longer fits (ScanOverlay drops `big` then) */}
+            {name && <span style={{ color: hue("name") }}>{name}</span>}
+            {name && team && " · "}
+            {team && <span style={{ color: hue("team") }}>{team}</span>}
+            {extras.map(k => <span key={k} style={{ fontSize: px(16), color: hue(k) || "#cbd5e1", marginLeft: name || team ? 10 : 0 }}>{cap(k)}: {c[k]}</span>)}
             {disabled && (c.scanned === "flag"
-              ? <span style={{ fontSize: px(17), color: "#f87171", marginLeft: sub ? 12 : 0 }}>🚩 Flagged</span>
-              : <span style={{ fontSize: px(17), color: "#22c55e", marginLeft: sub ? 12 : 0 }}>✓ Already passed</span>)}
+              ? <span style={{ fontSize: px(17), color: "#f87171", marginLeft: name || team ? 12 : 0 }}>🚩 Flagged</span>
+              : <span style={{ fontSize: px(17), color: "#22c55e", marginLeft: name || team ? 12 : 0 }}>✓ Already passed</span>)}
           </span>
         )}
       </div>
       {size && (
-        <span style={{ fontFamily: FONT_DISPLAY, fontSize: big ? "clamp(41px, 4.3vw, 62px)" : "clamp(34px, 3.6vw, 52px)", fontWeight: 900, lineHeight: 1, letterSpacing: 1, whiteSpace: "nowrap", padding: "6px 14px", borderRadius: 12, border: `3px solid ${disabled ? "rgba(255,255,255,0.1)" : "rgba(245,158,11,0.75)"}`, background: disabled ? "transparent" : "rgba(245,158,11,0.14)", color: disabled ? "#64748b" : "#fff", flexShrink: 0 }}>{size}</span>
+        <span style={{ fontFamily: FONT_DISPLAY, fontSize: bigFont, fontWeight: 900, lineHeight: 1, letterSpacing: 1, whiteSpace: "nowrap", padding: "6px 14px", borderRadius: 12, border: `3px solid ${disabled ? "rgba(255,255,255,0.1)" : "rgba(245,158,11,0.75)"}`, background: disabled ? "transparent" : "rgba(245,158,11,0.14)", color: disabled ? "#64748b" : "#fff", flexShrink: 0 }}>{size}</span>
       )}
       {!disabled && <span style={hintSt(selected, accent, 0)} aria-hidden="true">←</span>}
     </div>
@@ -1687,11 +1708,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const actionsRef = useRef(actions);
   useEffect(() => { actionsRef.current = actions; }, [actions]);
 
-  // Adaptive headline: whatever differs between the candidates becomes the big text.
-  const fields  = useMemo(() => [...CORE_COLUMNS.filter(f => f !== "size"), ...extraCols], [extraCols]);   // the size has its own place on every tile
-  const diff    = useMemo(() => differingFields(candidates, fields), [candidates, fields]);
-  const primary = diff.length && !diff.some(f => HEADLINE_FIELDS.includes(f)) ? diff : HEADLINE_FIELDS;
-  const secondary = fields.filter(f => !primary.includes(f) && !extraCols.includes(f));
+  // What tells the rows apart (the team on a by-team order, the name when two
+  // names share a number, an extra column): the tile draws it amber and the line
+  // under the header names it. The number is the big text on every tile (the
+  // owner, 24 Nov 2026; before, whatever differed became the big text).
+  const fields = useMemo(() => [...CORE_COLUMNS.filter(f => f !== "size"), ...extraCols], [extraCols]);   // the size has its own place on every tile
+  const diff   = useMemo(() => differingFields(candidates, fields), [candidates, fields]);
 
   const options = useMemo(() => {
     const retry    = { id: "retry",    label: "↻ Retry scan",    run: actions.retry };
@@ -1944,7 +1966,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             {state.typed ? `Typed: #${state.typed.number || "?"}${state.typed.name ? " · " + state.typed.name : ""}` : <>
             Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}{detected?.jersey_colour ? ` · ${detected.jersey_colour} jersey` : ""}
             </>}
-            {primary !== HEADLINE_FIELDS && <span style={{ marginLeft: 12, color: accent }}>· differs by {primary.map(cap).join(" and ")}</span>}
+            {diff.length > 0 && !diff.includes("number") && !diff.includes("name") && <span style={{ marginLeft: 12, color: accent }}>· differs by {diff.map(cap).join(" and ")}</span>}{/* a list that differs by number or name is plain to see on the tiles */}
           </div>
           <div ref={listRef} style={{ width: candidates.length > 3 ? "100%" : "calc(50% + 20px)", maxWidth: candidates.length > 3 ? 1600 : 820, padding: "0 24px", boxSizing: "border-box", flex: "0 1 auto", minHeight: 0, overflowY: "auto" }}>{/* the list takes all the room left on the screen (a 27 in panel shows far more than half), and scrolls only past that. One column (three rows or fewer) is exactly as wide as one column of the two-column list (half the panel less the gap: 50% + 20px of padding), centred, and its tiles' text is bigger (the owner, 23 Nov 2026: the one-column tiles were nearly twice as wide; three rows still fit without scrolling) */}
             {candidates.length === 0 && (
@@ -1955,8 +1977,8 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             )}
             <div style={twoColumns(candidates.length)}>
               {options.map((o, i) => o.candidate && (
-                <CandidateRow key={o.id} c={o.candidate} primary={primary} secondary={secondary} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent} big={oneColBig}
-                  onClick={() => fire(o)} onHover={() => hover(i)} confirmKey={confirmKey} />
+                <CandidateRow key={o.id} c={o.candidate} diff={diff} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent} big={oneColBig}
+                  onClick={() => fire(o)} onHover={() => hover(i)} />
               ))}
             </div>
           </div>

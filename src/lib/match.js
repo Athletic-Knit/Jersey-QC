@@ -530,8 +530,8 @@ function findMatchesInner(roster, name, number, read = {}) {
   return { type: "none" };
 }
 
-// Which of `fields` differ among the candidates — drives the adaptive headline
-// (when name and number are identical, the size or colour becomes the big text).
+// Which of `fields` differ among the candidates — the pick list colours those
+// fields amber on each tile and names them under the header ("differs by Team").
 export function differingFields(candidates, fields) {
   return fields.filter(f => new Set(candidates.map(c => String(c[f] ?? "").trim().toLowerCase())).size > 1);
 }
