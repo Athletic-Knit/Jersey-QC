@@ -224,6 +224,13 @@ describe("second review, 24 Nov 2026", () => {
     const nine = binListZPL(notInBoxJobs(p, "2.1", "Lightning")[0]).split("\n").find(l => l.includes("NOT IN BOX"));
     expect(nine).toContain("^FDNOT IN BOX 2.1 Lightning^FS");
     expect(parseInt(nine.match(/\^A0N,(\d+)/)[1], 10)).toBeGreaterThanOrEqual(14);
+    // Whatever the title's length, a cut one prints at the floor or above (the fourth check, 24 Nov 2026: the
+    // test skipped the printer's flooring of the width setting and most cut titles came out at 12 dots).
+    for (const team of ["Wolverine Ladies Wolverine Ladies", "Mississauga North Stars Peewee AA", "Thunder Bay Lakehead Lightning U13 AA Girls", "ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJ"]) {
+      const hl = binListZPL(notInBoxJobs(p, "2.1", team)[0]).split("\n").find(l => l.includes("NOT IN BOX"));
+      expect(parseInt(hl.match(/\^A0N,(\d+)/)[1], 10), team).toBeGreaterThanOrEqual(14);
+      expect(hl, team).toMatch(/…\^FS$/);
+    }
   });
 });
 

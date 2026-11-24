@@ -442,7 +442,10 @@ function damagedListZPL(l, size) {
   // (the third check, 24 Nov 2026: tested against lw * 0.7, titles that fit were cut).
   let left = `${l.head || "DAMAGED"}${l.orderNumber ? "  Order " + l.orderNumber : ""}`;
   const floor = Math.max(12, Math.round(head * 0.65));
-  while (left.length > 8 && fit(left, lw / 0.7, head) < floor) left = left.replace(/…$/, "").slice(0, -1).trimEnd() + "…";
+  // The height tight() will print `t` at, step for step (the width setting is floored first; the
+  // fourth check, 24 Nov 2026: `fit(left, lw / 0.7, head)` skipped that and most cut titles came out at 12).
+  const heightOf = t => Math.max(10, Math.min(head, Math.floor(Math.max(8, Math.min(head, Math.floor(lw / textUnits(t)))) / 0.7)));
+  while (left.length > 8 && heightOf(left) < floor) left = left.replace(/…$/, "").slice(0, -1).trimEnd() + "…";
   const y0 = top + pad + head + 5, rowH = Math.floor((h - pad - y0) / DAMAGED_PER_LABEL);
   return ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", "^LT0",
     tight(x0, top + pad, head, lw, left),
