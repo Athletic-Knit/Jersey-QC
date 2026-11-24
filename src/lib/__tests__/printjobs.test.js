@@ -109,7 +109,7 @@ describe("GET /orders: an order by its number", () => {
 });
 
 // ── The order summary and what is NOT in a box (the owner, 24 Nov 2026) ─────
-import { orderSummary, summaryJobs, notInBox, notInBoxJobs, isLastBox } from "../printjobs.js";
+import { orderSummary, summaryJobs, notInBox, notInBoxJobs, isLastBox, finishNotInBoxJobs, damagedItems } from "../printjobs.js";
 import { binListZPL } from "../labels.js";
 
 describe("the order summary", () => {
@@ -216,9 +216,55 @@ describe("second review, 24 Nov 2026", () => {
     const p = { ...pack, roster: roster.map((x, i) => i === 6 ? { ...x, scanned: "missing" } : x), binMap: { ...pack.binMap } };
     const z = binListZPL(notInBoxJobs(p, "2.1", "Thunder Bay Lakehead Lightning U13 AA")[0]);
     const headLine = z.split("\n").find(l => l.includes("NOT IN BOX"));
-    expect(parseInt(headLine.match(/\^A0N,(\d+)/)[1], 10)).toBeGreaterThanOrEqual(16);
+    expect(parseInt(headLine.match(/\^A0N,(\d+)/)[1], 10)).toBeGreaterThanOrEqual(14);   // about two thirds of the 22-dot header
     expect(headLine).toMatch(/…\^FS$/);
     const short = binListZPL(notInBoxJobs(p, "2.1", "Red")[0]).split("\n").find(l => l.includes("NOT IN BOX"));
     expect(short).toContain("^FDNOT IN BOX 2.1 Red^FS");
+    // A title that fits at that height once the letters are squeezed is not cut (the third check, 24 Nov 2026).
+    const nine = binListZPL(notInBoxJobs(p, "2.1", "Lightning")[0]).split("\n").find(l => l.includes("NOT IN BOX"));
+    expect(nine).toContain("^FDNOT IN BOX 2.1 Lightning^FS");
+    expect(parseInt(nine.match(/\^A0N,(\d+)/)[1], 10)).toBeGreaterThanOrEqual(14);
+  });
+});
+
+describe("third check, 24 Nov 2026", () => {
+  // Navy: #1, #2 passed and in 1.1, closed with nothing left to scan (so 1.2 is open and empty);
+  // #3 flagged. Red: #4 flagged, #5 marked missing: nothing ever went in a box, 2.1 is open and empty.
+  const rows = [row(0), row(1), row(2, { scanned: "flag" }), row(3, { team: "Red", scanned: "flag" }), row(4, { team: "Red", scanned: "missing" })];
+  const map  = buildBinMap(rows, {}, "team");
+  const c    = closeBin(rows, map, [], "1.1", 1000);
+  const flags = [{ id: 1, match: rows[2], reason: "Hole or snag", timestamp: "2026-11-24 09:00:00" }, { id: 2, match: rows[3], reason: "Twill peeling", timestamp: "2026-11-24 09:01:00" }];
+  const p = (notIn) => ({ orderNumber: "5", roster: rows, binMap: c.binMap, closedBins: c.closed.map(x => notIn === undefined ? x : { ...x, notIn }), flags });
+  const heads = labels => labels.map(l => l.title ? "count" : l.head || "rows");
+  it("Finish order: an empty box after a closed one prints nothing when Box full printed the same list", () => {
+    expect(c.newBin).toBe("1.2");
+    expect(finishNotInBoxJobs(p([2]), "1.2", "Navy", 0)).toEqual([]);
+  });
+  it("…and the whole list again, under the CLOSED box's name, when it changed since or was never printed", () => {
+    expect(heads(finishNotInBoxJobs(p([]), "1.2", "Navy", 0))).toEqual(["NOT IN BOX 1.1 Navy"]);   // #3 was flagged after 1.1 closed with nothing short
+    expect(finishNotInBoxJobs(p([]), "1.2", "Navy", 0)[0].items.map(i => i.text)).toEqual(["#3 P2 Navy A-L: flagged — Hole or snag"]);
+    expect(heads(finishNotInBoxJobs(p(undefined), "1.2", "Navy", 0))).toEqual(["NOT IN BOX 1.1 Navy"]);   // closed before the record existed
+    expect(finishNotInBoxJobs(p([2]), "1.2", "Navy", 0)).toEqual([]);
+  });
+  it("an empty open box with no closed box before it lists its team under its own name; a box with jerseys in it is the last box", () => {
+    expect(heads(finishNotInBoxJobs(p([2]), "2.1", "Red", 0))).toEqual(["NOT IN BOX 2.1 Red"]);
+    expect(finishNotInBoxJobs(p([2]), "2.1", "Red", 0)[0].count).toBe(2);
+    expect(heads(finishNotInBoxJobs(pack, "2.1", "Red", 1))).toEqual(["NOT IN BOX 2.1 Red"]);   // the fixture's Red box has #5 in it
+  });
+  it("the Print menu agrees: every box list names the closed last box and the lone empty box, never the empty next box", () => {
+    expect(heads(boxListJobs(p([2])))).toEqual(["NOT IN BOX 1.1 Navy", "rows", "count", "NOT IN BOX 2.1 Red"]);
+    expect(heads(boxListJobs(p([2]), "1.2"))).toEqual([]);
+    expect(heads(boxListJobs(p([2]), "2.1"))).toEqual(["NOT IN BOX 2.1 Red"]);
+  });
+  it("a duplicate copy stays in the DAMAGED box and the summary when its row is later flagged itself", () => {
+    const r = [row(0), row(1, { scanned: "flag" })];
+    const q = { orderNumber: "1", roster: r, binMap: null, closedBins: [], flags: [
+      { id: 7, match: r[1], reason: "Duplicate — scanned again after passing", timestamp: "2026-11-24 09:00:00" },
+      { id: 8, match: r[1], reason: "Hole or snag", timestamp: "2026-11-24 10:00:00" }] };
+    expect(damagedItems(q).map(x => [x._id, x.reason])).toEqual([[1, "Hole or snag"], [undefined, "Duplicate — scanned again after passing"]]);
+    const s = orderSummary(q);
+    expect(s.failed.map(x => x.reason)).toEqual(["Hole or snag"]);
+    expect(s.extra.map(x => x.reason)).toEqual(["Duplicate — scanned again after passing"]);
+    expect(s.counts).toMatchObject({ failed: 1, extra: 1 });
   });
 });

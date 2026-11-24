@@ -44,7 +44,7 @@ import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel
 import { duplicateOptions } from "./lib/dupoptions.js";
 import { matchRead, screenFor } from "./lib/scanpolicy.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
-import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBoxJobs, isLastBox } from "./lib/printjobs.js";
+import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG } from "./config.js";
 
 
@@ -3839,7 +3839,7 @@ export default function App() {
   // NOT IN BOX list (the open box is the group's last), the DAMAGED list, and the order summary
   // (count label, FAILED, MISSING; the owner, 24 Nov 2026: "print on request and after every order is finished").
   const finishLists = useMemo(() => !settings.binLists || !binMap ? []
-    : [...openBins.flatMap(b => [...notInBoxJobs(packNow, b.bin, b.label), ...(b.count > 0 ? listOf(b.bin, b.label) : [])]),   // an empty open box still says what its team lacks (review, 24 Nov 2026: a team flagged or marked missing after its last full box)
+    : [...openBins.flatMap(b => [...finishNotInBoxJobs(packNow, b.bin, b.label, b.count), ...(b.count > 0 ? listOf(b.bin, b.label) : [])]),   // an empty open box: what its team lacks, under the name of the box on the floor, only when Box full did not print it already (printjobs.js; the third check, 24 Nov 2026). Before: an empty open box still says what its team lacks (review, 24 Nov 2026: a team flagged or marked missing after its last full box)
        ...damagedListJobs(packNow),   // and what is in the DAMAGED box
        ...summaryJobs(packNow, { station: stationLabel(stationId()), date: localDateStamp() })],
   [settings.binLists, binMap, openBins, packNow, listOf]);
@@ -3871,7 +3871,11 @@ export default function App() {
       .then(res => { if (res?.model) { setBoxModel(res.model); try { localStorage.setItem("jerseyqc.boxmodel", JSON.stringify(res.model)); } catch { /* private window */ } } })
       .catch(() => {});   // the hub is away: the bin is closed all the same, this one answer is not learnt
     // The group's last box (nothing of it left to scan) carries what is NOT in it and why (the owner, 24 Nov 2026).
-    const notIn = left === 0 ? notInBoxJobs({ orderNumber, roster, binMap: r.binMap, closedBins: r.closed, flags: log.filter(l => l.status === S_FLAGGED) }, bin, r.entry.label) : [];
+    // The closed entry keeps the rows that list named (`notIn`) once it has printed, so Finish order prints
+    // it again only when it changed since (finishNotInBoxJobs in printjobs.js; the third check, 24 Nov 2026).
+    const packAfter = { orderNumber, roster, binMap: r.binMap, closedBins: r.closed, flags: log.filter(l => l.status === S_FLAGGED) };
+    const notInIds = left === 0 ? notInBox(packAfter, bin).map(x => x.row._id) : null;
+    const notIn = left === 0 ? notInBoxJobs(packAfter, bin, r.entry.label) : [];
     const lists = [...notIn, ...binListLabels(rows, { bin, label: r.entry.label, orderNumber: ordersIn(bin), by: binFieldOf(binMap), of: carriedIn(bin).length ? 0 : groupSize(roster, binMap, rows) })];
     const what  = `Box ${bin} closed with ${rows.length} ${rows.length === 1 ? "jersey" : "jerseys"}${carriedIn(bin).length ? ` (${carriedIn(bin).length} from order ${[...new Set(carriedIn(bin).map(x => x.order))].join(", ")})` : ""}. ${left ? `${r.entry.label} now goes in Box ${r.newBin}` : `Nothing of ${r.entry.label} is left to scan`}`;
     if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Box lists are switched off in Settings.` }); return; }
@@ -3883,7 +3887,10 @@ export default function App() {
     printOnTicketRoll(lists, "binlist")
       .then(res => !fresh ? res : hub.printLabels([{ bin: r.newBin, label: r.entry.label, by: binFieldOf(r.binMap), count: 0, orderNumber: String(orderNumber || "") }], { kind: "binticket", station: stationId() })
         .then(res2 => { setBoxLabelled(prev => [...new Set([...prev, r.newBin])]); return res2; }))
-      .then(res => setBinPrint({ status: "done", text: `${what}. Printed ${lists.length} list ${lists.length === 1 ? "label" : "labels"} for Box ${bin}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` }))
+      .then(res => {
+        if (notInIds) setClosedBins(prev => prev.map(c => c.bin === bin ? { ...c, notIn: notInIds } : c));   // printed: Finish order need not print it again unless it changes
+        setBinPrint({ status: "done", text: `${what}. Printed ${lists.length} list ${lists.length === 1 ? "label" : "labels"} for Box ${bin}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` });
+      })
       .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
   }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, stitched, boxLabelled, carriedIn, ordersIn, log]);
   const reprintBinList = useCallback(bin => {
@@ -5054,7 +5061,7 @@ export default function App() {
           onFlag={l => { setShowHistory(false); actions.reopen(l); }} />
       )}
       {showRosterComplete && (
-        <RosterCompleteModal roster={roster} offRosterFlags={offRosterFlags} canExport={canSupervise}
+        <RosterCompleteModal roster={roster} offRosterFlags={summaryNow.counts.extra} canExport={canSupervise}
           onExport={() => { exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf); closeDialog(() => setShowRosterComplete(false)); }}
           onDismiss={() => closeDialog(() => setShowRosterComplete(false))} onFinish={askFinish} />
       )}
@@ -5074,7 +5081,7 @@ export default function App() {
         <PrintModal current={printPack} tagOf={flagTag} onClose={() => closeDialog(() => setShowPrint(false))} />
       )}
       {showFinish && (
-        <FinishOrderModal orderNumber={orderNumber} roster={roster} offRosterFlags={offRosterFlags} scans={log.length} binLists={finishLists.length} bins={binSummary.filter(b => b.count > 0)} short={shortList} shipWith={shipWith}
+        <FinishOrderModal orderNumber={orderNumber} roster={roster} offRosterFlags={summaryNow.counts.extra} scans={log.length} binLists={finishLists.length} bins={binSummary.filter(b => b.count > 0)} short={shortList} shipWith={shipWith}
           onConfirm={finishOrder} onCancel={() => closeDialog(() => setShowFinish(false))} onSummary={() => { setShowFinish(false); setShowSummary(true); }} />
       )}
 

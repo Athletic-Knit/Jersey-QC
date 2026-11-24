@@ -434,12 +434,15 @@ function damagedListZPL(l, size) {
   const unit  = l.unit === "box" ? (l.count === 1 ? "box" : "boxes") : (l.count === 1 ? "pc" : "pcs");
   const right = `${l.count} ${unit}${l.pages > 1 ? `  ${l.page}/${l.pages}` : ""}`;
   const rw = Math.round(fullW * 0.3), lw = fullW - rw;
-  // The header never goes below two thirds of its height (16 dots on the 2 x 1 in
-  // roll): a long title ("NOT IN BOX 1.1 Thunder Bay Lakehead Lightning U13 AA")
-  // is cut with "…" to what fits at that size instead (review, 24 Nov 2026).
+  // The header never goes below about two thirds of its height (14 dots on the
+  // 2 x 1 in roll): a long title ("NOT IN BOX 1.1 Thunder Bay Lakehead Lightning
+  // U13 AA") is cut with "…" to what fits at that size instead (review, 24 Nov 2026).
+  // tight() squeezes the letters to 70% width before it makes them smaller, so a
+  // text whose natural width is within lw / 0.7 still prints at full height
+  // (the third check, 24 Nov 2026: tested against lw * 0.7, titles that fit were cut).
   let left = `${l.head || "DAMAGED"}${l.orderNumber ? "  Order " + l.orderNumber : ""}`;
   const floor = Math.max(12, Math.round(head * 0.65));
-  while (left.length > 8 && fit(left, lw * 0.7, head) < floor) left = left.replace(/…$/, "").slice(0, -1).trimEnd() + "…";   // tight() squeezes to 70% width before it shrinks: fit against that
+  while (left.length > 8 && fit(left, lw / 0.7, head) < floor) left = left.replace(/…$/, "").slice(0, -1).trimEnd() + "…";
   const y0 = top + pad + head + 5, rowH = Math.floor((h - pad - y0) / DAMAGED_PER_LABEL);
   return ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", "^LT0",
     tight(x0, top + pad, head, lw, left),

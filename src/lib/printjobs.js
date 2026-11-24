@@ -49,11 +49,42 @@ export function boxLabelJobs(pack, bin) {
 // group's last box gets its NOT IN BOX list too (below), printed first so the
 // strip reads count label, the rows, then what is not there.
 export function boxListJobs(pack, bin) {
-  return packBoxes(pack).filter(b => b.count > 0 && (bin === undefined || b.bin === bin))
+  const boxes = packBoxes(pack);
+  // An empty open box with no closed box before it: the whole team is flagged or missing, and only
+  // its NOT IN BOX list says so (the third check, 24 Nov 2026: Finish order printed it, the Print
+  // menu did not). An empty box AFTER a closed one is where a jersey that comes back would go; its
+  // group's last box is the closed one, which carries the NOT IN BOX list.
+  const alone = b => b.open && b.count === 0 && !boxes.some(x => !x.open && boxParts(x.bin)[0] === boxParts(b.bin)[0]);
+  return boxes.filter(b => (b.count > 0 || alone(b)) && (bin === undefined || b.bin === bin))
     .flatMap(b => [
       ...(isLastBox(pack, b.bin) ? notInBoxJobs(pack, b.bin, b.label) : []),
-      ...binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: ordersInBox(pack, b.bin, b.rows), by: binFieldOf(pack?.binMap), of: b.rows.some(r => r.carried) ? 0 : groupSize(pack?.roster, pack?.binMap, b.rows) }),
+      ...(b.count > 0 ? binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: ordersInBox(pack, b.bin, b.rows), by: binFieldOf(pack?.binMap), of: b.rows.some(r => r.carried) ? 0 : groupSize(pack?.roster, pack?.binMap, b.rows) }) : []),
     ]);
+}
+// What Finish order prints for an OPEN box, before its own list (the third
+// check, 24 Nov 2026: Box full always opens the next box, 1.1 → 1.2, so that a
+// jersey that comes back — un-checked and scanned again, back from repair on a
+// picked-up order — has a box to go in; with nothing left to scan that box
+// stays empty and unlabelled, and Finish printed a second NOT IN BOX list under
+// its name, the same jerseys as the one Box full printed for 1.1).
+//   with jerseys in it        it is the group's last box: its NOT IN BOX list;
+//   empty, no closed box      the whole team is flagged or missing: the list under this name;
+//   empty after a closed box  the group's last box on the floor is the CLOSED one. Box full printed
+//                             its NOT IN BOX list when nothing was left to scan and the closed entry
+//                             keeps what was on it (`notIn`, the row ids): nothing prints again
+//                             unless that changed since — a jersey flagged or un-checked after the
+//                             box closed — and then the whole list again under the closed box's
+//                             name. An entry with no record (closed before this, or closed with
+//                             jerseys still to scan) prints the list.
+export function finishNotInBoxJobs(pack, bin, label = "", count = 0) {
+  if (count > 0) return notInBoxJobs(pack, bin, label);
+  const g = boxParts(bin)[0];
+  const last = (pack?.closedBins || []).filter(c => boxParts(c.bin)[0] === g).sort((a, b) => binOrder(b.bin, a.bin))[0];
+  if (!last) return notInBoxJobs(pack, bin, label);
+  const now = notInBox(pack, last.bin).map(x => String(x.row._id));
+  const was = Array.isArray(last.notIn) ? last.notIn.map(String) : null;
+  if (was && was.length === now.length && now.every(id => was.includes(id))) return [];
+  return notInBoxJobs(pack, last.bin, last.label || label);
 }
 
 // ── What is NOT in a box, and why (the owner, 24 Nov 2026) ─────────────────
@@ -173,7 +204,9 @@ export function damagedItems(pack) {
     // A duplicate flagged from the ALREADY DONE screen carries the PASSED row it was a copy of: the
     // second jersey is in the DAMAGED box with its ticket while the row stays passed, so it counts
     // as a jersey with no row of its own (review, 24 Nov 2026), like a duplicate flagged from a list.
-    const copy = row && row.scanned !== "flag" && /^Duplicate\b/.test(e.reason || "");
+    // The reason alone says so: the row's own state is beside the point (the third check, 24 Nov
+    // 2026: a copy was lost from the box when its row was later flagged for damage itself).
+    const copy = /^Duplicate\b/.test(e.reason || "");
     if (row && row.scanned !== "flag" && !copy) return;
     if (!row && e.resolution) return;
     if (copy && e.resolution) return;
