@@ -8,8 +8,8 @@
 // hub's flag events turned into the same shape); `planLabels` are the box
 // labels the station expects the order to need (the open order only).
 // Nothing here prints: each function returns the labels for hub.printLabels.
-import { binContents, binEntries, binFieldOf, binOfRow, binOrder, inBin, groupSize } from "./roster.js";
-import { binListLabels, jerseyLabel, flagLabel, damagedListLabels } from "./labels.js";
+import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, boxParts, inBin, groupSize } from "./roster.js";
+import { binListLabels, jerseyLabel, flagLabel, damagedListLabels, listLabels } from "./labels.js";
 
 // Every box of the order, closed and open, in box order, with the rows in it.
 // A box an earlier ship-with order left open (`pack.carried`, the owner, 20 Nov 2026) holds that
@@ -45,10 +45,75 @@ export function boxLabelJobs(pack, bin) {
 }
 
 // The list of what is in a box (kind "binlist"): one box, or every box with
-// something in it. Each box's labels come in print order (labels.js).
+// something in it. Each box's labels come in print order (labels.js); the
+// group's last box gets its NOT IN BOX list too (below), printed first so the
+// strip reads count label, the rows, then what is not there.
 export function boxListJobs(pack, bin) {
   return packBoxes(pack).filter(b => b.count > 0 && (bin === undefined || b.bin === bin))
-    .flatMap(b => binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: ordersInBox(pack, b.bin, b.rows), by: binFieldOf(pack?.binMap), of: b.rows.some(r => r.carried) ? 0 : groupSize(pack?.roster, pack?.binMap, b.rows) }));
+    .flatMap(b => [
+      ...(isLastBox(pack, b.bin) ? notInBoxJobs(pack, b.bin, b.label) : []),
+      ...binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: ordersInBox(pack, b.bin, b.rows), by: binFieldOf(pack?.binMap), of: b.rows.some(r => r.carried) ? 0 : groupSize(pack?.roster, pack?.binMap, b.rows) }),
+    ]);
+}
+
+// ── What is NOT in a box, and why (the owner, 24 Nov 2026) ─────────────────
+// "Each box should have what's there, and what isn't there and why": for a
+// box, the jerseys of its team or size that are in no box — flagged (with the
+// reason of the newest flag), marked missing, or not scanned yet — one line
+// each. It goes with the group's LAST box (the open one, or the box closed
+// when nothing of the group was left to scan): the earlier boxes were full,
+// not short. → [{ row, why }] in jersey-number order.
+export function notInBox(pack, bin) {
+  const roster = pack?.roster || [], binMap = pack?.binMap, closed = pack?.closedBins || [];
+  if (!binMap) return [];
+  const key = Object.entries(binMap).find(([k, v]) => k !== "__by" && v === bin)?.[0] ?? closed.find(c => c.bin === bin)?.key;
+  if (key === undefined) return [];
+  const open = binMap[key];   // binFor gives the group's open box for any row of the group
+  const reason = new Map(damagedItems(pack).filter(x => x._id !== undefined).map(x => [x._id, x.reason]));
+  const why = r => r.scanned === "flag" ? `flagged${reason.get(r._id) ? " — " + reason.get(r._id) : ""}` : r.scanned === "missing" || r.scanned === "short" ? "marked missing" : "not scanned";
+  return roster.filter(r => !inBin(r) && binFor(binMap, r) === open).sort(byNumber).map(r => ({ row: r, why: why(r) }));
+}
+// Its labels (kind "binlist"): "NOT IN BOX 5.1 Navy" and one line a jersey.
+export function notInBoxJobs(pack, bin, label = "") {
+  return listLabels(notInBox(pack, bin).map(x => `${who(x.row)}: ${x.why}`), { title: `NOT IN BOX ${bin}${label ? " " + label : ""}`, orderNumber: pack?.orderNumber });
+}
+// Is `bin` the last box of its team or size: no later box of the group has anything in it.
+export function isLastBox(pack, bin) {
+  const g = boxParts(bin)[0];
+  return !packBoxes(pack).some(x => boxParts(x.bin)[0] === g && binOrder(x.bin, bin) > 0 && x.count > 0);
+}
+
+// ── The order summary (the owner, 24 Nov 2026) ─────────────────────────────
+// "Which jerseys are there and passed, which are there and failed, which are
+// missing." From a pack, so the Print menu gives it for a past order too.
+//   passed   every jersey in a box, with the box it is in;
+//   failed   every jersey flagged right now, with the reason of its newest flag
+//            (damagedItems: the roster rows, then the off-roster flags);
+//   missing  marked missing by the operator, and not scanned yet, side by side.
+const byNumber = (a, b) => { const n = x => { const v = parseInt(String(x.number ?? "").replace(/\D/g, ""), 10); return Number.isFinite(v) ? v : 1e9; }; return n(a) - n(b) || String(a.name ?? "").localeCompare(String(b.name ?? "")); };
+// "#7 SMITH White A-L": a jersey on one line of a label.
+const who = x => [String(x?.number ?? "").trim() ? `#${String(x.number).trim()}` : "", x?.name, x?.team, x?.size].map(v => String(v ?? "").trim()).filter(Boolean).join(" ") || "Jersey";
+export function orderSummary(pack) {
+  const roster = pack?.roster || [], binMap = pack?.binMap || null, closed = pack?.closedBins || [];
+  const passed = roster.filter(inBin).sort(byNumber).map(row => ({ row, bin: binMap ? binOfRow(binMap, closed, row) : null }));
+  const failed = damagedItems(pack);
+  const marked = roster.filter(r => r.scanned === "missing" || r.scanned === "short").sort(byNumber);
+  const notScanned = roster.filter(r => !r.scanned).sort(byNumber);
+  return { passed, failed, missing: { marked, notScanned },
+    counts: { total: roster.length, passed: passed.length, failed: failed.length, missing: marked.length + notScanned.length, marked: marked.length, notScanned: notScanned.length } };
+}
+// The summary's labels (kind "binlist"), in print order: the PASSED list (only
+// `withPassed`: on a 500-jersey order it is 70 labels by itself, and the box
+// lists carry every passed jersey), the MISSING list, the FAILED list, then the
+// count label — so the strip off the printer reads count label, FAILED,
+// MISSING, PASSED. Finish order prints it without the passed list; the Print
+// menu and the summary screen print it on request.
+export function summaryJobs(pack, { withPassed = false, station = "", date = "" } = {}) {
+  const s = orderSummary(pack), o = pack?.orderNumber;
+  const passed  = withPassed ? listLabels(s.passed.map(p => `${who(p.row)}${p.bin ? "  Box " + p.bin : ""}`), { title: "PASSED", orderNumber: o }) : [];
+  const missing = listLabels([...s.missing.marked.map(r => `${who(r)}: marked missing`), ...s.missing.notScanned.map(r => `${who(r)}: not scanned`)], { title: "MISSING", orderNumber: o });
+  const failed  = listLabels(s.failed.map(x => `${who(x)}: ${x.reason || "flagged"}`), { title: "FAILED", orderNumber: o });
+  return [...passed, ...missing, ...failed, { summary: true, orderNumber: String(o || ""), station: String(station || ""), date: String(date || ""), counts: s.counts }];
 }
 
 // The jerseys that have a sticker: passed by the camera or by hand.
@@ -85,7 +150,7 @@ export function damagedItems(pack) {
     const key = row ? "r" + id : "e" + e.id;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ number: row?.number ?? e.match?.number ?? e.detected?.number ?? "", name: row?.name ?? e.match?.name ?? e.detected?.name ?? "", team: row?.team ?? e.match?.team ?? "", reason: e.reason || "" });
+    out.push({ _id: row?._id, number: row?.number ?? e.match?.number ?? e.detected?.number ?? "", name: row?.name ?? e.match?.name ?? e.detected?.name ?? "", team: row?.team ?? e.match?.team ?? "", size: row?.size ?? e.match?.size ?? "", reason: e.reason || "" });   // _id and size for the order summary and the NOT IN BOX list (24 Nov 2026)
   });
   const num = x => { const n = parseInt(String(x.number).replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : 1e9; };
   return out.sort((a, b) => num(a) - num(b) || String(a.name).localeCompare(String(b.name)));

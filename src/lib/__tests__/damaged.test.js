@@ -19,7 +19,7 @@ const pack = {
 
 describe("what is in the DAMAGED box", () => {
   it("every jersey flagged right now, with its newest reason, in number order", () => {
-    expect(damagedItems(pack)).toEqual([
+    expect(damagedItems(pack).map(({ number, name, team, reason }) => ({ number, name, team, reason }))).toEqual([   // _id and size come along too (the order summary, 24 Nov 2026)
       { number: "7", name: "SMITH", team: "Navy", reason: "Twill peeling — found after it passed" },
       { number: "21", name: "LEACH", team: "Red", reason: "Hole or snag" },
       { number: "88", name: "STRAY", team: "", reason: "Not on the roster" },

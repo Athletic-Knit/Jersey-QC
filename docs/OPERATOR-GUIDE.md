@@ -175,9 +175,9 @@ To find a jersey in a long roster, tap **Number or name** above the table and ty
 ### Finish the order
 
 1. Tap **🏁 Finish order** in the header. (This is a click only: the pedal never finishes an order.)
-2. Check the counts: passed, open, not scanned, and the amber list of jerseys that are in no box.
+2. Check the counts: passed, open, not scanned, and the amber list of jerseys that are in no box. **📋 See the summary first** opens the order summary: every jersey that passed (with its box), every one that failed (with why), and the missing ones, marked missing beside not scanned yet. The same screen is behind the **📋 Summary** button at the bottom of the station at any time; its **🖨 Print summary** prints the count label, the FAILED list and the MISSING list, and **With the passed list** adds every passed jersey.
 3. If the order **ships with** other orders, choose for each box **Leave open** (it waits for the next order of the group) or **Full — close it**.
-4. Press **✓ Finish order**. The lists of every open box print (and the DAMAGED box's list).
+4. Press **✓ Finish order**. The lists of every open box print (each with a NOT IN BOX label when something of its team is flagged, missing or not scanned), the DAMAGED box's list, and the order summary.
 5. The **"Order N is done"** screen stays up. From here:
    - **🖨 Print the box lists again**,
    - **🖨 Print something else…** (the Print menu),

@@ -107,3 +107,56 @@ describe("GET /orders: an order by its number", () => {
     expect((await call("GET", "/orders?q=6424")).body.orders.length).toBe(1);
   });
 });
+
+// ── The order summary and what is NOT in a box (the owner, 24 Nov 2026) ─────
+import { orderSummary, summaryJobs, notInBox, notInBoxJobs, isLastBox } from "../printjobs.js";
+import { binListZPL } from "../labels.js";
+
+describe("the order summary", () => {
+  // Navy: 4 passed (3 in 1.1 closed, 1 in 1.2). Red: #6 passed, #6b flagged, #7 to scan, #8 marked missing.
+  const roster2 = [...roster, row(7, { team: "Red", scanned: "missing" })];
+  const pack2 = { ...pack, roster: roster2 };
+  it("passed with their box, failed with the reason, missing split in two", () => {
+    const s = orderSummary(pack2);
+    expect(s.passed.map(p => [p.row.number, p.bin])).toEqual([["1", "1.1"], ["2", "1.1"], ["3", "1.1"], ["4", "1.2"], ["5", "2.1"]]);
+    expect(s.failed.map(f => [f.number, f.size, f.reason])).toEqual([["6", "A-L", "Loose thread"]]);
+    expect(s.missing.marked.map(r => r.number)).toEqual(["8"]);
+    expect(s.missing.notScanned.map(r => r.number)).toEqual(["7"]);
+    expect(s.counts).toEqual({ total: 8, passed: 5, failed: 1, missing: 2, marked: 1, notScanned: 1 });
+  });
+  it("its labels: FAILED and MISSING pages then the count label; the PASSED list only on request", () => {
+    const jobs = summaryJobs(pack2, { station: "Station 1", date: "2026-11-24" });
+    expect(jobs.map(l => l.summary ? "count" : l.head)).toEqual(["MISSING", "FAILED", "count"]);
+    expect(jobs[0].items.map(i => i.text)).toEqual(["#8 P7 Red A-L: marked missing", "#7 P6 Red A-L: not scanned"]);
+    expect(jobs[1].items.map(i => i.text)).toEqual(["#6 P5 Red A-L: Loose thread"]);
+    expect(jobs[2]).toMatchObject({ summary: true, orderNumber: "264247", station: "Station 1", date: "2026-11-24", counts: { total: 8, passed: 5, failed: 1, missing: 2 } });
+    const withPassed = summaryJobs(pack2, { withPassed: true });
+    expect(withPassed.map(l => l.summary ? "count" : l.head)).toEqual(["PASSED", "MISSING", "FAILED", "count"]);
+    expect(withPassed[0].items[0].text).toBe("#1 P0 Navy A-L  Box 1.1");
+    const z = binListZPL(jobs[2]);
+    expect(z).toContain("^FDOrder 264247^FS");
+    expect(z).toContain("^FD5 passed   1 failed   2 missing^FS");
+    expect(z).toContain("^FDStation 1   2026-11-24^FS");
+  });
+});
+
+describe("what is NOT in a box", () => {
+  const roster2 = [...roster, row(7, { team: "Red", scanned: "missing" })];
+  const pack2 = { ...pack, roster: roster2 };
+  it("the jerseys of the box's team that are in no box, with why", () => {
+    expect(notInBox(pack2, "2.1").map(x => [x.row.number, x.why])).toEqual([["6", "flagged — Loose thread"], ["7", "not scanned"], ["8", "marked missing"]]);
+    expect(notInBox(pack2, "1.2")).toEqual([]);                       // Navy is complete
+    expect(notInBox(pack2, "1.1")).toEqual([]);                       // a closed box of a complete team
+    expect(notInBox({ ...pack2, binMap: null }, "2.1")).toEqual([]);
+  });
+  it("goes with the group's last box only, printed before the box's own list", () => {
+    expect(isLastBox(pack2, "1.1")).toBe(false);                      // 1.2 has a jersey after it
+    expect(isLastBox(pack2, "1.2")).toBe(true);
+    expect(isLastBox(pack2, "2.1")).toBe(true);
+    const labels = notInBoxJobs(pack2, "2.1", "Red");
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toMatchObject({ head: "NOT IN BOX 2.1 Red", count: 3, orderNumber: "264247" });
+    expect(boxListJobs(pack2, "2.1").map(l => l.title ? "count" : l.head || "rows")).toEqual(["NOT IN BOX 2.1 Red", "rows", "count"]);
+    expect(boxListJobs(pack2, "1.1").map(l => l.title ? "count" : l.head || "rows")).toEqual(["rows", "count"]);
+  });
+});

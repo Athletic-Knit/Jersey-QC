@@ -383,14 +383,45 @@ export function damagedListLabels(entries, { orderNumber = "" } = {}) {
 // their team complete) or the ones that are not, a line a box — "Box 1.1  10U A
 // 17 pcs" — seven to a 2 x 1 in label, drawn like the DAMAGED list. `lines`:
 // the text of each line. → the labels in print order, the last page first.
-export function boxesListLabels(lines, { title = "BOXES", orderNumber = "" } = {}) {
+export function boxesListLabels(lines, { title = "BOXES", orderNumber = "" } = {}) { return listLabels(lines, { title, orderNumber, unit: "box" }); }
+// Any list of lines under a title, seven to a 2 x 1 in label, drawn like the
+// DAMAGED list: the FAILED, MISSING and PASSED lists of the order summary and a
+// box's NOT IN BOX list (the owner, 24 Nov 2026). `unit`: "pc" (default) or
+// "box", for the count in the header. → the labels in print order, the last page first.
+export function listLabels(lines, { title = "LIST", orderNumber = "", unit = "pc" } = {}) {
   const items = (lines || []).map(t => ({ text: String(t) }));
   if (!items.length) return [];
   const pages = Math.ceil(items.length / DAMAGED_PER_LABEL);
   return Array.from({ length: pages }, (_, i) => ({
-    damaged: true, head: String(title), unit: "box", bin: String(title), orderNumber: String(orderNumber || ""), page: i + 1, pages, count: items.length,
+    damaged: true, head: String(title), unit, bin: String(title), orderNumber: String(orderNumber || ""), page: i + 1, pages, count: items.length,
     items: items.slice(i * DAMAGED_PER_LABEL, (i + 1) * DAMAGED_PER_LABEL),
   })).reverse();
+}
+
+// The order summary's count label (the owner, 24 Nov 2026): the order number
+// big, SUMMARY and how many jerseys, then passed · failed · missing, the
+// station and the day small at the bottom. It prints last, so the strip off
+// the printer reads it first, then FAILED, MISSING and (on request) PASSED.
+// `l`: { summary: true, orderNumber, station, date, counts: { total, passed, failed, missing } }.
+function summaryCountZPL(l, size) {
+  const { w: full, h, top = 0, dpi = 203 } = size;
+  const side  = full >= 300 ? Math.round(dpi * 2 / 25.4) : 0;
+  const w     = full - 2 * side;
+  const a     = h - top;
+  const pad   = Math.round(a * 0.03);
+  const big   = Math.round(a * 0.3), mid = Math.round(a * 0.17), small = Math.max(12, Math.round(a * 0.12));
+  const c     = l.counts || {};
+  const head  = l.orderNumber ? `Order ${l.orderNumber}` : "Order";
+  const what  = `SUMMARY   ${c.total ?? 0} ${c.total === 1 ? "jersey" : "jerseys"}`;
+  const tally = `${c.passed ?? 0} passed   ${c.failed ?? 0} failed   ${c.missing ?? 0} missing`;
+  const foot  = [l.station, l.date].filter(Boolean).join("   ");
+  const out = ["^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
+    line(side, top + pad, fit(head, w, big), w, "C", head),
+    line(side, top + pad + big + 4, fit(what, w, mid), w, "C", what),
+    line(side, top + pad + big + mid + 8, fit(tally, w, mid), w, "C", tally)];
+  if (foot) out.push(line(side, h - small - pad, fit(foot, w, small), w, "C", foot));
+  out.push("^PQ1", "^XZ");
+  return out.join("\n");
 }
 
 function damagedListZPL(l, size) {
@@ -417,6 +448,7 @@ function damagedListZPL(l, size) {
 // (`title`), or a page of a box list's rows in two columns.
 export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   if (l.damaged) return damagedListZPL(l, size);
+  if (l.summary) return summaryCountZPL(l, size);
   if (l.title) return binCountZPL(l, size);
   const { w, h, top = 0 } = size;
   const a    = h - top;                                           // the printable height
