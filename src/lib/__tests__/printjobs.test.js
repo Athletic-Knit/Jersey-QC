@@ -160,3 +160,13 @@ describe("what is NOT in a box", () => {
     expect(boxListJobs(pack2, "1.1").map(l => l.title ? "count" : l.head || "rows")).toEqual(["rows", "count"]);
   });
 });
+
+describe("NOT IN BOX labels carry their box (review, 24 Nov 2026)", () => {
+  it("so Finish order can hold them back with a box kept open for a ship-with order", () => {
+    const roster2 = [...roster, row(7, { team: "Red", scanned: "missing" })];
+    const labels = notInBoxJobs({ ...pack, roster: roster2 }, "2.1", "Red");
+    expect(labels.map(l => [l.box, l.bin])).toEqual([["2.1", "NOT IN BOX 2.1 Red"]]);
+    const kept = new Set(["2.1"]);
+    expect([...labels, ...boxListJobs({ ...pack, roster: roster2 }, "1.1")].filter(l => !kept.has(String(l.box ?? l.bin))).map(l => l.bin)).toEqual(["1.1", "1.1"]);
+  });
+});

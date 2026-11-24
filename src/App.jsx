@@ -2892,7 +2892,7 @@ function OrderSummaryModal({ orderNumber, summary, status, onPrint, onFinish, on
   );
   const colour = { printing: "#94a3b8", done: "#4ade80", error: "#f87171", off: "#fbbf24" }[status?.status] || "#94a3b8";
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2400, display: "flex", alignItems: "center", justifyContent: "center" }}>{/* above the done screen (2300), which opens it; below the Print menu (2500) (review, 24 Nov 2026) */}
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 30, maxWidth: 1400, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ fontSize: 30, fontWeight: 900, color: "#60a5fa", whiteSpace: "nowrap" }}>📋 Order {orderNumber || "—"}</div>
@@ -3815,6 +3815,7 @@ export default function App() {
     setSessionStarted(false); setResumeDecided(true); setPickedUp(null); setOrderRole("");
     setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setFinishedAt(null); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setClosedBins([]); setShipWith([]); setCarried([]); keptOpen.current = new Set(); setBoxLabelled([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
+    setShowSummary(false); setSummaryPrint(null);   // a summary opened on the done screen must not come back over the next order (review, 24 Nov 2026)
     waitPedalRef.current = false; setWaitPedal(false);
   }, []);
 
@@ -3897,7 +3898,7 @@ export default function App() {
   // Boxes left open at Finish order for a ship-with order: their lists do not print (they are not full).
   const keptOpen = useRef(new Set());
   const printFinishLists = useCallback((note = "") => {
-    const lists = finishLists.filter(l => !keptOpen.current.has(String(l.bin)));
+    const lists = finishLists.filter(l => !keptOpen.current.has(String(l.box ?? l.bin)));   // a box kept open for the ship-with order: neither its list nor its NOT IN BOX list (review, 24 Nov 2026)
     const n = lists.length, pre = note ? note + " " : "";
     if (!n) { setFinished({ status: "none", text: pre + (settings.binLists ? "No other box has anything in it: no list to print." : "Box lists are switched off in Settings.") }); return; }
     setFinished({ status: "printing", text: `${pre}Printing the box lists: ${n} ${n === 1 ? "label" : "labels"}…` });

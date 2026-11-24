@@ -74,8 +74,12 @@ export function notInBox(pack, bin) {
   return roster.filter(r => !inBin(r) && binFor(binMap, r) === open).sort(byNumber).map(r => ({ row: r, why: why(r) }));
 }
 // Its labels (kind "binlist"): "NOT IN BOX 5.1 Navy" and one line a jersey.
+// `box` names the box they belong to (`bin` on a list label is its title), so
+// Finish order can hold them back with the box's own list when the box stays
+// open for a ship-with order (review, 24 Nov 2026).
 export function notInBoxJobs(pack, bin, label = "") {
-  return listLabels(notInBox(pack, bin).map(x => `${who(x.row)}: ${x.why}`), { title: `NOT IN BOX ${bin}${label ? " " + label : ""}`, orderNumber: pack?.orderNumber });
+  return listLabels(notInBox(pack, bin).map(x => `${who(x.row)}: ${x.why}`), { title: `NOT IN BOX ${bin}${label ? " " + label : ""}`, orderNumber: pack?.orderNumber })
+    .map(l => ({ ...l, box: String(bin) }));
 }
 // Is `bin` the last box of its team or size: no later box of the group has anything in it.
 export function isLastBox(pack, bin) {
