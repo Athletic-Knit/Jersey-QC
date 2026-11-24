@@ -115,8 +115,9 @@ export function orderSummary(pack) {
   const passed = roster.filter(inBin).sort(byNumber).map(row => ({ row, bin: binMap ? binOfRow(binMap, closed, row) : null }));
   // Failed comes from the ROSTER (every row flagged right now), with the reason of its newest flag
   // from the log; a flagged row with no flag entry (a past order with its events gone) still counts
-  // (review, 24 Nov 2026). The flags with no row — not on the roster, a duplicate, no size tag —
-  // are `extra`: in the DAMAGED box, but not among the order's jerseys, so they are counted apart.
+  // (review, 24 Nov 2026). The flags with no row of their own — not on the roster, a duplicate
+  // (from a list, or a second copy of a passed row), no size tag — are `extra`: in the DAMAGED box,
+  // but not among the order's jerseys, so they are counted apart.
   const dmg = damagedItems(pack), reasonOf = new Map(dmg.filter(x => x._id !== undefined).map(x => [x._id, x.reason]));
   const failed = roster.filter(r => r.scanned === "flag").sort(byNumber).map(r => ({ _id: r._id, number: r.number, name: r.name, team: r.team, size: r.size, reason: reasonOf.get(r._id) || "flagged" }));
   const extra  = dmg.filter(x => x._id === undefined);
@@ -135,7 +136,7 @@ export function summaryJobs(pack, { withPassed = false, station = "", date = "" 
   const s = orderSummary(pack), o = pack?.orderNumber;
   const passed  = withPassed ? listLabels(s.passed.map(p => `${who(p.row)}${p.bin ? "  Box " + p.bin : ""}`), { title: "PASSED", orderNumber: o }) : [];
   const missing = listLabels([...s.missing.marked.map(r => `${who(r)}: marked missing`), ...s.missing.notScanned.map(r => `${who(r)}: not scanned`)], { title: "MISSING", orderNumber: o });
-  const failed  = listLabels([...s.failed.map(x => `${who(x)}: ${x.reason || "flagged"}`), ...s.extra.map(x => `${who(x)}: ${x.reason || "flagged"} (not on the roster)`)], { title: "FAILED", orderNumber: o });
+  const failed  = listLabels([...s.failed, ...s.extra].map(x => `${who(x)}: ${x.reason || "flagged"}`), { title: "FAILED", orderNumber: o });   // the extras' reasons say what they are (Duplicate, Not on the roster, No size tag): no suffix
   return [...passed, ...missing, ...failed, { summary: true, orderNumber: String(o || ""), station: String(station || ""), date: String(date || ""), counts: s.counts }];
 }
 
@@ -167,13 +168,21 @@ export function damagedItems(pack) {
   const roster = pack?.roster || [], seen = new Set(), out = [];
   const newestFirst = [...(pack?.flags || [])].sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")) || (Number(b.id) || 0) - (Number(a.id) || 0));
   newestFirst.forEach(e => {
-    const id = e.match?._id, row = id !== undefined ? roster.find(r => r._id === id) : null;
-    if (row && row.scanned !== "flag") return;
+    const id = e.match?._id;
+    let row = id !== undefined ? roster.find(r => r._id === id) : null;
+    // A duplicate flagged from the ALREADY DONE screen carries the PASSED row it was a copy of: the
+    // second jersey is in the DAMAGED box with its ticket while the row stays passed, so it counts
+    // as a jersey with no row of its own (review, 24 Nov 2026), like a duplicate flagged from a list.
+    const copy = row && row.scanned !== "flag" && /^Duplicate\b/.test(e.reason || "");
+    if (row && row.scanned !== "flag" && !copy) return;
     if (!row && e.resolution) return;
-    const key = row ? "r" + id : "e" + e.id;
+    if (copy && e.resolution) return;
+    const key = row && !copy ? "r" + id : "e" + e.id;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ _id: row?._id, number: row?.number ?? e.match?.number ?? e.detected?.number ?? "", name: row?.name ?? e.match?.name ?? e.detected?.name ?? "", team: row?.team ?? e.match?.team ?? "", size: row?.size ?? e.match?.size ?? "", reason: e.reason || "" });   // _id and size for the order summary and the NOT IN BOX list (24 Nov 2026)
+    const from = row || e.match || {};
+    if (copy) row = null;
+    out.push({ _id: row?._id, number: from.number ?? e.detected?.number ?? "", name: from.name ?? e.detected?.name ?? "", team: from.team ?? "", size: from.size ?? "", reason: e.reason || "" });   // _id and size for the order summary and the NOT IN BOX list (24 Nov 2026)
   });
   const num = x => { const n = parseInt(String(x.number).replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : 1e9; };
   return out.sort((a, b) => num(a) - num(b) || String(a.name).localeCompare(String(b.name)));

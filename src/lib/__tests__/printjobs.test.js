@@ -196,7 +196,29 @@ describe("review of 24 Nov 2026: the last box and the failed list", () => {
     expect(s.extra.map(f => f.number)).toEqual(["99"]);
     expect(s.counts).toMatchObject({ total: 2, passed: 1, failed: 1, extra: 1, missing: 0 });
     const jobs = summaryJobs(p);
-    expect(jobs[0].items.map(i => i.text)).toEqual(["#2 P1 Navy A-L: flagged", "#99 STRAY A-M: Not on the roster — #99 A-M (not on the roster)"]);
-    expect(binListZPL(jobs[1])).toContain("^FD1 passed   1 failed   0 missing   +1 extra^FS");
+    expect(jobs[0].items.map(i => i.text)).toEqual(["#2 P1 Navy A-L: flagged", "#99 STRAY A-M: Not on the roster — #99 A-M"]);
+    expect(binListZPL(jobs[1])).toContain("^FDSUMMARY   2 jerseys   +1 extra^FS");   // the extra on the SUMMARY line, so the tally keeps its size
+    expect(binListZPL(jobs[1])).toContain("^FD1 passed   1 failed   0 missing^FS");
+  });
+});
+
+describe("second review, 24 Nov 2026", () => {
+  it("a duplicate flagged from the ALREADY DONE screen is an extra: its row stays passed", () => {
+    const p = { orderNumber: "1", roster: [row(0), row(1)], binMap: null, closedBins: [],
+      flags: [{ id: 7, match: row(1), reason: "Duplicate — scanned again after passing", timestamp: "2026-11-24 09:00:00" }] };
+    const s = orderSummary(p);
+    expect(s.failed).toEqual([]);
+    expect(s.extra.map(x => [x.number, x.name, x.size, x.reason])).toEqual([["2", "P1", "A-L", "Duplicate — scanned again after passing"]]);
+    expect(s.counts).toMatchObject({ passed: 2, failed: 0, extra: 1 });
+    expect(orderSummary({ ...p, flags: [{ ...p.flags[0], resolution: "ok" }] }).extra).toEqual([]);   // resolved by the supervisor: out
+  });
+  it("a long NOT IN BOX title is cut with … rather than shrunk below two thirds of the header", () => {
+    const p = { ...pack, roster: roster.map((x, i) => i === 6 ? { ...x, scanned: "missing" } : x), binMap: { ...pack.binMap } };
+    const z = binListZPL(notInBoxJobs(p, "2.1", "Thunder Bay Lakehead Lightning U13 AA")[0]);
+    const headLine = z.split("\n").find(l => l.includes("NOT IN BOX"));
+    expect(parseInt(headLine.match(/\^A0N,(\d+)/)[1], 10)).toBeGreaterThanOrEqual(16);
+    expect(headLine).toMatch(/…\^FS$/);
+    const short = binListZPL(notInBoxJobs(p, "2.1", "Red")[0]).split("\n").find(l => l.includes("NOT IN BOX"));
+    expect(short).toContain("^FDNOT IN BOX 2.1 Red^FS");
   });
 });

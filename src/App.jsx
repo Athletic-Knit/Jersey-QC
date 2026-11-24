@@ -2896,7 +2896,7 @@ function OrderSummaryModal({ orderNumber, summary, status, labels = { summary: 0
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 30, maxWidth: 1400, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ fontSize: 30, fontWeight: 900, color: "#60a5fa", whiteSpace: "nowrap" }}>📋 Order {orderNumber || "—"}</div>
-          <div style={{ fontSize: 17, color: "#cbd5e1", flex: 1 }}>{c.total} {c.total === 1 ? "jersey" : "jerseys"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} missing</span>{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} not on the roster</span>}</div>
+          <div style={{ fontSize: 17, color: "#cbd5e1", flex: 1 }}>{c.total} {c.total === 1 ? "jersey" : "jerseys"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} missing</span>{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} with no roster row</span>}</div>
           <button onClick={() => onPrint(false)} disabled={status?.status === "printing"} title="The count label, the FAILED list and the MISSING list, on the 2 x 1 in roll" style={{ ...btnPri, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap", background: "#3b82f6", color: "#0d1117" }}>🖨 Print summary · {labels.summary} {labels.summary === 1 ? "label" : "labels"}</button>
           <button onClick={() => onPrint(true)} disabled={status?.status === "printing"} title="The same, plus every passed jersey with its box" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>🖨 With the passed list · {labels.withPassed}</button>
           {onFinish && <button onClick={onFinish} style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap", borderColor: "#22c55e", color: "#86efac" }}>🏁 Finish order…</button>}
@@ -2908,7 +2908,7 @@ function OrderSummaryModal({ orderNumber, summary, status, labels = { summary: 0
           {col(`Failed · ${c.failed}`, "#f87171", summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca")), "Nothing is flagged.", c.extra > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca"))}
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#94a3b8", margin: "6px 0 2px" }}>Not on the roster · {c.extra}</div>{/* in the DAMAGED box, not among the order's jerseys */}
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#94a3b8", margin: "6px 0 2px" }}>No roster row · {c.extra}</div>{/* not on the roster, a duplicate, no size tag: in the DAMAGED box, not among the order's jerseys */}
               {summary.extra.map((f, i) => line("x" + i, f, f.reason || "flagged", "#fecaca"))}
             </div>
           ) : null)}
@@ -3839,7 +3839,7 @@ export default function App() {
   // NOT IN BOX list (the open box is the group's last), the DAMAGED list, and the order summary
   // (count label, FAILED, MISSING; the owner, 24 Nov 2026: "print on request and after every order is finished").
   const finishLists = useMemo(() => !settings.binLists || !binMap ? []
-    : [...openBins.filter(b => b.count > 0).flatMap(b => [...notInBoxJobs(packNow, b.bin, b.label), ...listOf(b.bin, b.label)]),
+    : [...openBins.flatMap(b => [...notInBoxJobs(packNow, b.bin, b.label), ...(b.count > 0 ? listOf(b.bin, b.label) : [])]),   // an empty open box still says what its team lacks (review, 24 Nov 2026: a team flagged or marked missing after its last full box)
        ...damagedListJobs(packNow),   // and what is in the DAMAGED box
        ...summaryJobs(packNow, { station: stationLabel(stationId()), date: localDateStamp() })],
   [settings.binLists, binMap, openBins, packNow, listOf]);

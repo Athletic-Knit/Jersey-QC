@@ -412,8 +412,8 @@ function summaryCountZPL(l, size) {
   const big   = Math.round(a * 0.3), mid = Math.round(a * 0.17), small = Math.max(12, Math.round(a * 0.12));
   const c     = l.counts || {};
   const head  = l.orderNumber ? `Order ${l.orderNumber}` : "Order";
-  const what  = `SUMMARY   ${c.total ?? 0} ${c.total === 1 ? "jersey" : "jerseys"}`;
-  const tally = `${c.passed ?? 0} passed   ${c.failed ?? 0} failed   ${c.missing ?? 0} missing${c.extra ? `   +${c.extra} extra` : ""}`;   // extra: flags with no roster row (not on the roster, a duplicate), apart from the order's count
+  const what  = `SUMMARY   ${c.total ?? 0} ${c.total === 1 ? "jersey" : "jerseys"}${c.extra ? `   +${c.extra} extra` : ""}`;   // extra: flags with no roster row (not on the roster, a duplicate), apart from the order's count; on this line so the tally keeps its size (review, 24 Nov 2026)
+  const tally = `${c.passed ?? 0} passed   ${c.failed ?? 0} failed   ${c.missing ?? 0} missing`;
   const foot  = [l.station, l.date].filter(Boolean).join("   ");
   const out = ["^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
     line(side, top + pad, fit(head, w, big), w, "C", head),
@@ -431,10 +431,15 @@ function damagedListZPL(l, size) {
   const head = Math.max(12, Math.round(a * 0.12));
   const x0   = Math.round((size.dpi || 203) * BIN_LIST_LEFT_MM / 25.4) + pad;
   const fullW = w - x0 - pad;
-  const left  = `${l.head || "DAMAGED"}${l.orderNumber ? "  Order " + l.orderNumber : ""}`;
   const unit  = l.unit === "box" ? (l.count === 1 ? "box" : "boxes") : (l.count === 1 ? "pc" : "pcs");
   const right = `${l.count} ${unit}${l.pages > 1 ? `  ${l.page}/${l.pages}` : ""}`;
   const rw = Math.round(fullW * 0.3), lw = fullW - rw;
+  // The header never goes below two thirds of its height (16 dots on the 2 x 1 in
+  // roll): a long title ("NOT IN BOX 1.1 Thunder Bay Lakehead Lightning U13 AA")
+  // is cut with "…" to what fits at that size instead (review, 24 Nov 2026).
+  let left = `${l.head || "DAMAGED"}${l.orderNumber ? "  Order " + l.orderNumber : ""}`;
+  const floor = Math.max(12, Math.round(head * 0.65));
+  while (left.length > 8 && fit(left, lw * 0.7, head) < floor) left = left.replace(/…$/, "").slice(0, -1).trimEnd() + "…";   // tight() squeezes to 70% width before it shrinks: fit against that
   const y0 = top + pad + head + 5, rowH = Math.floor((h - pad - y0) / DAMAGED_PER_LABEL);
   return ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", "^LT0",
     tight(x0, top + pad, head, lw, left),
