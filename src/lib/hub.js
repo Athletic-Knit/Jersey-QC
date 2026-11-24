@@ -1,6 +1,8 @@
 // ── Hub client: progress up, rosters down ─────────────────────────────────────
 // The hub is optional: every call fails quietly if it is not there, and the
 // station keeps working from files.
+import { cleanSpots } from "./labels.js";
+
 const STATION_KEY = "jerseyqc.station.v1";
 const BROWSER_KEY = "jerseyqc.browser.v1";
 
@@ -95,6 +97,8 @@ export const hub = {
 // operator took); the hub keeps a photo once it has seen it, so older flags
 // keep theirs without being re-sent every 5 s.
 const PHOTOS_PER_REPORT = 6;   // the newest log entries that carry their photo in each 5-second report
+// A flag's garment and damage spots, as the hub keeps them: only what is there.
+const marksOf = l => ({ ...(l.garment ? { garment: l.garment } : {}), ...(cleanSpots(l.spots).length ? { spots: cleanSpots(l.spots) } : {}) });
 export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", garment = "", rosterFile, roster, log, lastConfirmed, binMap, closedBins = [], binSummary = [], idleSpells = [], awaySpells = [], finishedAt = null }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
@@ -134,11 +138,15 @@ export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, note
         ...(l.typed ? { typed: `#${l.typed.number || "?"}${l.typed.name ? " " + l.typed.name : ""}` } : {}),
         read: l.detected ? `#${l.detected.number || "?"}${l.detected.number_complete === false ? "?" : ""}${l.detected.name ? " " + l.detected.name : ""}${l.detected.laid_flat === false ? " [not flat]" : ""}` : "",
       };
+      // Where the damage is (24 Nov 2026): the garment and the spots, on every flag and in
+      // every report (a few bytes, not tied to the photos). A flag still being marked
+      // (`locating`) waits for its spots: the hub keeps the newest that are not empty.
+      if (l.status === "flagged" && !l.locating) Object.assign(ev, marksOf(l));
       if (l.status === "flagged" && i < PHOTOS_PER_REPORT) { if (l.photo) ev.photo = l.photo; if (l.damagePhotos?.length) ev.damagePhotos = l.damagePhotos; }
       return ev;
     }),
     // Open items first, then the resolved ones: on a big order the newest 25
     // could be all Missing marks and push every open flag off the board.
-    attention: (a => [...a.filter(l => !l.resolution), ...a.filter(l => l.resolution)])(log.filter(l => l.status === "flagged" || l.status === "manual" || l.status === "missing" || l.status === "short")).slice(0, 100).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(i < 3 && l.photo ? { photo: l.photo } : {}), ...(i < 3 && l.damagePhotos?.length ? { damagePhotos: l.damagePhotos } : {}) })),
+    attention: (a => [...a.filter(l => !l.resolution), ...a.filter(l => l.resolution)])(log.filter(l => l.status === "flagged" || l.status === "manual" || l.status === "missing" || l.status === "short")).slice(0, 100).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(l.status === "flagged" && !l.locating ? marksOf(l) : {}), ...(i < 3 && l.photo ? { photo: l.photo } : {}), ...(i < 3 && l.damagePhotos?.length ? { damagePhotos: l.damagePhotos } : {}) })),
   };
 }

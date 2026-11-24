@@ -650,7 +650,13 @@ export function listChunks(labels, max = 100) {
 // Every label of one kind, back to back. `kind`: "bin" (default), "jersey",
 // "flag", "binlist" (what is in a box, the DAMAGED list, a list of boxes; on a
 // tall roll re-paged first) or "binticket" (a box label on the ticket roll).
-export function labelsZPL(labels, size = labelSize(), kind = "bin") {
+export function labelsZPL(labels, size = labelSize(), kind = "bin") { return printJob(labels, size, kind).zpl; }
+// The same, with how many labels come out: on a tall roll a list prints on
+// fewer labels than the station sent (repageLists), so the hub answers the
+// station with this count (POST /print). A flag ticket counts once: the
+// printer makes its second copy (FLAG_COPIES).
+export function printJob(labels, size = labelSize(), kind = "bin") {
   const one = kind === "jersey" ? jerseyLabelZPL : kind === "flag" ? flagLabelZPL : kind === "binlist" ? binListZPL : binLabelZPL;
-  return (kind === "binlist" ? repageLists(labels, size) : labels).map(l => one(l, size)).join("\n") + "\n";
+  const list = kind === "binlist" ? repageLists(labels, size) : (Array.isArray(labels) ? labels : []);
+  return { zpl: list.map(l => one(l, size)).join("\n") + "\n", count: list.length };
 }

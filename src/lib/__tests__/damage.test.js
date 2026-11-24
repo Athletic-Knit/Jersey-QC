@@ -30,7 +30,7 @@ describe("damage report rows", () => {
     expect(rows[1]).toMatchObject({ order: "41", operator: "Sam", name: "RINE", team: "green", photo: "data:image/jpeg;base64,BBB" });
   });
   it("has a column for every field", () => {
-    expect(DAMAGE_COLUMNS.length).toBe(15);
+    expect(DAMAGE_COLUMNS.length).toBe(17);   // "Where" and "Garment" since 24 Nov 2026
   });
   it("carries the damage photos the operator took, from a ledger event or a station log entry", () => {
     const rows = buildDamageRows([

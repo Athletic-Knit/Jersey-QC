@@ -42,7 +42,7 @@ import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./l
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { duplicateOptions } from "./lib/dupoptions.js";
 import { matchRead, screenFor } from "./lib/scanpolicy.js";
-import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels, listChunks, cleanSpots } from "./lib/labels.js";
+import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels, listChunks, cleanSpots, repageLists, labelSize as labelDots, DEFAULT_FLAG_LABEL_SIZE } from "./lib/labels.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel } from "./lib/printjobs.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG, GARMENT_MENU, DEFAULT_ORDER_GARMENT } from "./config.js";
 import { garment as garmentShape, garmentOf, garmentView, toView, fromView, spotAt, spotWords, rosterGarment, orderGarmentOf, SIDES, SIDE_LABELS, MAX_SPOTS } from "./lib/garments.js";
@@ -938,6 +938,14 @@ function ManualEntryForm({ detected, initial = null, teams, onSubmit, onBack }) 
 // and for ones still running, without touching the station.
 // The photos a flag carries: the scan (what the camera read) and the damage
 // photos the operator took after flagging (red frame). Click to enlarge.
+// Where the damage was marked (24 Nov 2026), beside a flag's photos on the
+// board: the garment small, front and back, the spots numbered, read only; the
+// words when the pointer rests on it. Nothing when no spot was marked.
+function FlagMarks({ item, height = 40 }) {
+  if (!Array.isArray(item?.spots) || !item.spots.length) return null;
+  const words = spotWords(item.garment, item.spots);
+  return <div data-flag-marks="" style={{ flexShrink: 0 }}><GarmentMap kind={item.garment} spots={item.spots} height={height} captions={false} title={words ? `Where: ${words}` : "Where the damage was marked"} /></div>;
+}
 function PhotoThumbs({ photo, damagePhotos = [], w = 80, h = 60, onOpen }) {
   const pics = [...(photo ? [{ src: photo, damage: false }] : []), ...(damagePhotos || []).filter(Boolean).map(src => ({ src, damage: true }))];
   if (!pics.length) return null;
@@ -1025,7 +1033,7 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
                       <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Box ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
                       <td style={{ ...td, color: "#cbd5e1" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                       <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
-                      {tab === "problems" && <td style={td}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} /></td>}
+                      {tab === "problems" && <td style={td}><div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} />{e?.status === "flagged" && <FlagMarks item={e} />}</div></td>}
                     </tr>
                   );
                 })}
@@ -1035,7 +1043,7 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
                     <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{e.size || ""}</td><td style={td}></td>
                     <td style={{ ...td, color: "#cbd5e1" }}><RouteTag item={e} /> {e.reason}{e.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                     <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
-                    <td style={td}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} /></td>
+                    <td style={td}><div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} /><FlagMarks item={e} /></div></td>
                   </tr>
                 ))}
                 {tab === "problems" && flaggedRows.length + byHandRows.length + offRoster.length === 0 && <tr><td colSpan={9} style={{ ...td, color: "#22c55e", padding: 18 }}>No problems on this order — nothing went to the supervisor and nothing was entered by hand.</td></tr>}
@@ -1482,6 +1490,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                     {s.attention.slice().sort(bySeverity).slice(0, 3).map((a, i) => (
                       <div key={i} style={{ fontSize: 12, marginBottom: 3, display: "flex", gap: 8, alignItems: "flex-start" }}>
                         <PhotoThumbs photo={a.photo} damagePhotos={a.damagePhotos} w={56} h={42} onOpen={setBigPhoto} />
+                        {a.status === "flagged" && <FlagMarks item={a} height={36} />}
                         <div>
                           <RouteTag item={a} /> <span style={{ color: attnColour(a.status), fontWeight: 700 }}>{attnIcon(a.status)} {a.jersey}</span>
                           <span style={{ color: "#94a3b8" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
@@ -3119,6 +3128,14 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const [keys,   setKeys]   = useState(null);   // which box the on-screen keys are under: "order" | "pick" | null (no keyboard at a station)
   const leave = () => document.activeElement?.blur?.();
   const pack = past || current;
+  // This station's ticket roll (GET /print): a tall roll prints a list on fewer
+  // labels, so the counts on the list buttons come from it; none until the hub answers.
+  const [roll, setRoll] = useState(null);
+  useEffect(() => {
+    let on = true;
+    hub.printStatus(stationId()).then(r => { if (on) setRoll(labelDots(r?.flagLabelSize || DEFAULT_FLAG_LABEL_SIZE)); }).catch(() => {});
+    return () => { on = false; };
+  }, []);
   useEffect(() => {
     const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
     window.addEventListener("keydown", h, true);
@@ -3132,8 +3149,9 @@ function PrintModal({ current = null, tagOf, onClose }) {
     const chunks = parts.flatMap(([labels, kind]) => kind === "binlist"   // a list is never cut in two: the hub re-pages it whole for a tall roll
       ? listChunks(labels, 50).map(c => [c, kind])
       : Array.from({ length: Math.ceil(labels.length / 50) }, (_, i) => [labels.slice(i * 50, i * 50 + 50), kind]));
-    chunks.reduce((pr, [labels, kind]) => pr.then(() => hub.printLabels(labels, { kind, station: stationId() })), Promise.resolve(null))
-      .then(r => setStatus({ kind: "done", text: `Printed ${what}: ${n} ${n === 1 ? "label" : "labels"} on ${r.printer}` }))
+    // The count is the hub's: the labels that came out (a tall roll's lists are re-paged).
+    chunks.reduce((pr, [labels, kind]) => pr.then(t => hub.printLabels(labels, { kind, station: stationId() }).then(r => ({ printer: r?.printer, count: t.count + (Number.isFinite(r?.count) ? r.count : labels.length) }))), Promise.resolve({ count: 0 }))
+      .then(r => setStatus({ kind: "done", text: `Printed ${what}: ${r.count} ${r.count === 1 ? "label" : "labels"} on ${r.printer}` }))
       .catch(e => setStatus({ kind: "error", text: `${what} NOT printed: ${e.status === 503 ? "no label printer for this station" : e.status ? e.message : "could not reach the server"}` }));
   };
   const search = () => {
@@ -3149,6 +3167,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const needle   = pick.trim().toLowerCase();
   const picked   = needle ? stickers.filter(r => rosterMatches(r, pick)).slice(0, 8) : [];   // the same search as the roster table's
   const allLabels = pack ? boxLabelJobs(pack) : [], allLists = pack ? boxListJobs(pack) : [];
+  const listCount = roll ? repageLists(allLists, roll).length : null;   // the list labels that come out on this station's roll
+  const listN = listCount ?? allLists.length, countOf = n => (listCount === null ? "" : ` · ${n}`);
   const many = (n, what) => n <= 30 || window.confirm(`Print ${n} ${what}?`);
   const secSt  = { fontSize: 14, fontWeight: 800, color: "#94a3b8", letterSpacing: 1, textTransform: "uppercase", margin: "20px 0 8px" };
   const rowSt  = { display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", borderRadius: 10, background: "#1e293b", border: "1px solid #3f4b5c" };
@@ -3195,8 +3215,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
             <div style={secSt}>The whole order</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button style={bigBtn} onClick={() => many(allLabels.length, "box labels") && send([[allLabels, "binticket"]], "every box label")}>Box labels · {allLabels.length}</button>
-              <button style={bigBtn} onClick={() => many(allLists.length, "list labels") && send([[allLists, "binlist"]], "every box list")}>Box lists · {allLists.length}</button>
-              <button style={bigBtn} onClick={() => many(allLabels.length + allLists.length, "labels") && send([[allLists, "binlist"], [allLabels, "binticket"]], "every box label and list")}>Both · {allLabels.length + allLists.length}</button>
+              <button style={bigBtn} onClick={() => many(listN, "list labels") && send([[allLists, "binlist"]], "every box list")}>Box lists{countOf(listN)}</button>
+              <button style={bigBtn} onClick={() => many(allLabels.length + listN, "labels") && send([[allLists, "binlist"], [allLabels, "binticket"]], "every box label and list")}>Both{countOf(allLabels.length + listN)}</button>
             </div>
             <div style={secSt}>One box</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -3295,7 +3315,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
             ? `${remaining} ${remaining === 1 ? "jersey is" : "jerseys are"} not scanned yet. You can finish anyway; the supervisor keeps this order's record and sheets.`
             : "Every jersey is scanned. The supervisor keeps this order's record and sheets."}
           {scans === 0 ? " Nothing was scanned on it." : ""}
-          {shipWith.length ? ` Ships with order ${shipWith.join(", ")}: a box that is not full stays open for it.` : binLists > 0 ? ` Every open box is closed and its list prints: ${binLists} ${binLists === 1 ? "label" : "labels"}.` : ""}
+          {shipWith.length ? ` Ships with order ${shipWith.join(", ")}: a box that is not full stays open for it.` : binLists > 0 ? " Every open box is closed and its list prints." : ""}
         </div>
         </div>
         <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", margin: "0 -8px", padding: "0 8px" }}>
@@ -3907,7 +3927,10 @@ export default function App() {
   // cut between lists only, so the hub can re-page a whole list for a tall roll (listChunks).
   const printOnTicketRoll = useCallback((labels, kind) => {
     const chunks = kind === "binlist" ? listChunks(labels, 100) : Array.from({ length: Math.ceil(labels.length / 100) }, (_, i) => labels.slice(i * 100, i * 100 + 100));
-    return chunks.reduce((p, c) => p.then(() => hub.printLabels(c, { kind, station: stationId() })), Promise.resolve(null));
+    if (!chunks.length) return Promise.reject(new Error("nothing to print"));
+    // → { printer, count }: `count` is the hub's, the labels that really came out
+    // (on a tall roll a list prints on fewer labels than were sent).
+    return chunks.reduce((p, c) => p.then(t => hub.printLabels(c, { kind, station: stationId() }).then(r => ({ ...r, count: t.count + (Number.isFinite(r?.count) ? r.count : c.length) }))), Promise.resolve({ count: 0 }));
   }, []);
   // What Finish order prints: the list of every bin still open with something in it.
   const finishLists = useMemo(() => !settings.binLists || !binMap ? []
@@ -3938,8 +3961,8 @@ export default function App() {
     const fresh = left > 0 && !boxLabelled.includes(r.newBin);
     printOnTicketRoll(lists, "binlist")
       .then(res => !fresh ? res : hub.printLabels([{ bin: r.newBin, label: r.entry.label, by: binFieldOf(r.binMap), count: 0, orderNumber: String(orderNumber || "") }], { kind: "binticket", station: stationId() })
-        .then(res2 => { setBoxLabelled(prev => [...new Set([...prev, r.newBin])]); return res2; }))
-      .then(res => setBinPrint({ status: "done", text: `${what}. Printed ${lists.length} list ${lists.length === 1 ? "label" : "labels"} for Box ${bin}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` }))
+        .then(res2 => { setBoxLabelled(prev => [...new Set([...prev, r.newBin])]); return { ...res2, count: res.count }; }))
+      .then(res => setBinPrint({ status: "done", text: `${what}. Printed ${res.count} list ${res.count === 1 ? "label" : "labels"} for Box ${bin}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` }))
       .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
   }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, stitched, boxLabelled, carriedIn, ordersIn]);
   const reprintBinList = useCallback(bin => {
@@ -3948,7 +3971,7 @@ export default function App() {
     if (!lists.length) return;
     setBinPrint({ status: "printing", text: `Box ${bin} list` });
     printOnTicketRoll(lists, "binlist")
-      .then(res => setBinPrint({ status: "done", text: `Box ${bin} list printed again: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .then(res => setBinPrint({ status: "done", text: `Box ${bin} list printed again: ${res.count} ${res.count === 1 ? "label" : "labels"} on ${res.printer}` }))
       .catch(e => setBinPrint({ status: "error", text: `Box ${bin} list. ${printProblem(e)}` }));
   }, [closedBins, listOf, printOnTicketRoll]);
 
@@ -3974,9 +3997,9 @@ export default function App() {
     const lists = finishLists.filter(l => !keptOpen.current.has(String(l.bin)));
     const n = lists.length, pre = note ? note + " " : "";
     if (!n) { setFinished({ status: "none", text: pre + (settings.binLists ? "No other box has anything in it: no list to print." : "Box lists are switched off in Settings.") }); return; }
-    setFinished({ status: "printing", text: `${pre}Printing the box lists: ${n} ${n === 1 ? "label" : "labels"}…` });
+    setFinished({ status: "printing", text: `${pre}Printing the box lists…` });
     printOnTicketRoll(lists, "binlist")
-      .then(r => setFinished({ status: "done", text: `${pre}Box lists printed: ${n} ${n === 1 ? "label" : "labels"} on ${r.printer}` }))
+      .then(r => setFinished({ status: "done", text: `${pre}Box lists printed: ${r.count} ${r.count === 1 ? "label" : "labels"} on ${r.printer}` }))
       .catch(e => setFinished({ status: "error", text: `${pre}The box lists were NOT printed. ${printProblem(e)}. Fix the printer and print them again.` }));
   }, [finishLists, settings.binLists, printOnTicketRoll]);
   // `keep`: the boxes the operator left open for the ship-with order. They go to the hub
@@ -4083,8 +4106,8 @@ export default function App() {
   }, [resumeSession, role, operatorName]);
   // The order on this station, as the Print menu takes it (printjobs.js).
   const printPack = useMemo(() => !sessionStarted || !roster.length ? null
-    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels },
-  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels]);
+    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels, garment: orderGarment },
+  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels, orderGarment]);
   const flagTag = useCallback(reason => severityOf(reason).tag, []);
   // The list of what is in the DAMAGED box, whenever the inspector asks for it.
   // The list of boxes that are done (full, or their team complete) and the list
@@ -4105,7 +4128,7 @@ export default function App() {
     if (!labels.length) { setBinPrint({ status: "off", text: `${what}: none.` }); return; }
     setBinPrint({ status: "printing", text: what });
     printOnTicketRoll(labels, "binlist")
-      .then(res => setBinPrint({ status: "done", text: `${what} list printed: ${list.length} ${list.length === 1 ? "box" : "boxes"}, ${labels.length} ${labels.length === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .then(res => setBinPrint({ status: "done", text: `${what} list printed: ${list.length} ${list.length === 1 ? "box" : "boxes"}, ${res.count} ${res.count === 1 ? "label" : "labels"} on ${res.printer}` }))
       .catch(e => setBinPrint({ status: "error", text: `${what} list. ${printProblem(e)}` }));
   }, [boxesDone, boxesNotDone, orderNumber, printOnTicketRoll]);
   const printDamagedList = useCallback(() => {
@@ -4113,7 +4136,7 @@ export default function App() {
     if (!lists.length) { setBinPrint({ status: "off", text: "Nothing is in the DAMAGED box." }); return; }
     setBinPrint({ status: "printing", text: "DAMAGED box list" });
     printOnTicketRoll(lists, "binlist")
-      .then(res => setBinPrint({ status: "done", text: `DAMAGED box list printed: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .then(res => setBinPrint({ status: "done", text: `DAMAGED box list printed: ${res.count} ${res.count === 1 ? "label" : "labels"} on ${res.printer}` }))
       .catch(e => setBinPrint({ status: "error", text: `DAMAGED box list. ${printProblem(e)}` }));
   }, [printPack, printOnTicketRoll]);
 

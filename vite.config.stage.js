@@ -15,7 +15,7 @@ import replayPlugin from './replay-plugin.js'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { printerEnv, anthropicProxy } from './vite.config.js'
+import { printerEnv, anthropicProxy } from './vite.config.js'   // printerEnv: the printers and rolls, per station too (JERSEY_FLAG_LABEL_SIZE_STATION1 …)
 
 export const STAGES = {
   development: { port: 5174, data: 'hub-test.json' },

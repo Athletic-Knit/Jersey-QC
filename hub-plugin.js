@@ -32,20 +32,37 @@
 //   DELETE /api/hub/openboxes/:id       the supervisor (or a station) gives the box up
 //   GET    /api/hub/boxes               { model, answers } — the box model (src/lib/boxmodel.js) fitted to every answer so far
 //   POST   /api/hub/boxes               { counts, box, station, order, bin, suggested } — a bin was closed and went in this box; → { model, answers }
-//   GET    /api/hub/print?station=…     { printer, printers, labelSize, flagPrinter, flagLabelSize } — the label printer for that station (JERSEY_PRINTER_<STATION>), else the hub's (JERSEY_PRINTER, else the first Zebra queue); the flag-ticket printer likewise (JERSEY_FLAG_PRINTER_<STATION>, JERSEY_FLAG_PRINTER), else the label printer
-//   POST   /api/hub/print               { labels, kind, station } — prints one label per entry (labels.js: kind "jersey" = the sticker on a pass, "flag" = the ticket on a flag, on the flag printer and its 2 x 1 in roll, "bin" = a bin label); 503 when there is no label printer
+//   GET    /api/hub/print?station=…     { printer, printers, labelSize, flagPrinter, flagLabelSize } — the label printer for that station (JERSEY_PRINTER_<STATION>), else the hub's (JERSEY_PRINTER, else the first Zebra queue); the flag-ticket printer likewise (JERSEY_FLAG_PRINTER_<STATION>, JERSEY_FLAG_PRINTER), else the label printer; the ticket roll JERSEY_FLAG_LABEL_SIZE_<STATION>, else JERSEY_FLAG_LABEL_SIZE
+//   POST   /api/hub/print               { labels, kind, station } — prints one label per entry (labels.js: kind "jersey" = the sticker on a pass, "flag" = the ticket on a flag, on the flag printer and the station's ticket roll, "bin" = a bin label) → { ok, printer, count } (count: the labels that came out, after a tall roll's lists were re-paged); 503 when there is no label printer
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Buffer } from "node:buffer";
-import { labelsZPL, labelSize as labelDots, DEFAULT_LABEL_SIZE, DEFAULT_FLAG_LABEL_SIZE } from "./src/lib/labels.js";
+import { printJob, labelSize as labelDots, cleanSpots, DEFAULT_LABEL_SIZE, DEFAULT_FLAG_LABEL_SIZE } from "./src/lib/labels.js";
 import { GARMENT_IDS } from "./src/lib/garments.js";
 import { PRIOR as BOX_PRIOR, FEATURES as BOX_FEATURES, BOXES, MORE, fitBoxModel } from "./src/lib/boxmodel.js";
 // The garment an order is (the outline of the "where is the damage" step):
 // one of garments.js's kinds, or "" (the station then draws a hockey jersey).
 const knownGarment = g => (typeof g === "string" && GARMENT_IDS.includes(g) ? g : "");
+// Where the damage is on a flag (24 Nov 2026): the garment and up to three
+// spots ride on the flag's event. Like a photo, the newest spots that are not
+// empty win, and a re-send without them never wipes them (an older station, or
+// a report sent while the operator was still marking). The garment goes with
+// the spots it was marked on. The event comes back with `garment` and `spots`
+// only when it has them, cleaned (a known kind; at most 3 spots, each
+// { side, x, y }).
+export function withMarks(ev, old) {
+  const out = { ...ev };
+  delete out.garment; delete out.spots;
+  const spots = cleanSpots(ev?.spots), before = cleanSpots(old?.spots);
+  const [mine, other] = spots.length || !before.length ? [ev, old] : [old, ev];
+  const garment = knownGarment(mine?.garment) || knownGarment(other?.garment);
+  if (garment) out.garment = garment;
+  if (spots.length) out.spots = spots; else if (before.length) out.spots = before;
+  return out;
+}
 
 // ── Bin labels: the Zebra on the hub PC ──────────────────────────────────────
 // The ZPL goes to a Windows print queue as raw bytes through tools/print-raw.ps1
@@ -118,7 +135,7 @@ export function fileEvent(led, ev, station, today) {
   const day = (led[eventDay(ev, today)] ||= { events: {}, orders: {} });
   const events = (day.events ||= {});
   const k = eventKey(ev, station), old = events[k];
-  events[k] = { ...ev, station: old?.station || ev.station || station,
+  events[k] = { ...withMarks(ev, old), station: old?.station || ev.station || station,
     ...(ev.photo ? {} : old?.photo ? { photo: old.photo } : {}),
     ...(ev.damagePhotos?.length ? {} : old?.damagePhotos?.length ? { damagePhotos: old.damagePhotos } : {}) };
   return !old;
@@ -136,7 +153,7 @@ export function normaliseLedger(led) {
       const k = eventKey(ev), have = all.get(k);
       if (!have) { all.set(k, { ev, date }); continue; }
       copies++;
-      all.set(k, { date: have.date, ev: { ...have.ev, ...ev, station: have.ev.station || ev.station,
+      all.set(k, { date: have.date, ev: { ...have.ev, ...withMarks(ev, have.ev), station: have.ev.station || ev.station,
         ...(ev.photo || !have.ev.photo ? {} : { photo: have.ev.photo }),
         ...(ev.damagePhotos?.length || !have.ev.damagePhotos?.length ? {} : { damagePhotos: have.ev.damagePhotos }) } });
     }
@@ -148,7 +165,7 @@ export function normaliseLedger(led) {
 
 // The hub for one data file: its state, its routes (`handle`) and its writes.
 // The options name the file, the clock and the printers (tests pass their own).
-export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", printers: stationPrinters = {}, labelSize = "", flagPrinter = "", flagPrinters: stationFlagPrinters = {}, flagLabelSize = "", print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
+export function createHub({ file = path.resolve("data/hub.json"), now = () => Date.now(), printer = "", printers: stationPrinters = {}, labelSize = "", flagPrinter = "", flagPrinters: stationFlagPrinters = {}, flagLabelSize = "", flagLabelSizes: stationFlagSizes = {}, print = printRawWindows, listPrinters = listPrintersWindows } = {}) {
   // One hub per data file (code review M20). Saving hub-plugin.js or a file it imports makes
   // Vite load this module again and create a new hub in the same process, while the old one
   // may still hold changes it has not written (writes wait 1.5 s) and its server may still
@@ -237,6 +254,18 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
   const flagName = String(flagPrinter || "").trim(), flagSpec = String(flagLabelSize || "").trim() || DEFAULT_FLAG_LABEL_SIZE;
   const byStation = map => Object.fromEntries(Object.entries(map || {}).filter(([, v]) => String(v || "").trim()).map(([k, v]) => [String(k).trim().toLowerCase(), String(v).trim()]));
   const perStation = byStation(stationPrinters), perStationFlag = byStation(stationFlagPrinters);
+  // The ticket roll of each station (JERSEY_FLAG_LABEL_SIZE_STATION1 …, else
+  // JERSEY_FLAG_LABEL_SIZE), so the stations can move to the 2 x 4 in roll one
+  // at a time (24 Nov 2026). It lays out the flag tickets, the box labels and the lists.
+  // A size that is not W x H inches ("2by4") would be laid out as the sticker
+  // roll (labelSize's fallback): it is left out, the station keeps the hub's
+  // roll, and the server log says which variable to put right.
+  const perStationFlagSize = Object.fromEntries(Object.entries(byStation(stationFlagSizes)).filter(([k, v]) => {
+    if (/^\s*[\d.]+\s*[x×]\s*[\d.]+\s*$/i.test(v)) return true;
+    console.error(`[hub] JERSEY_FLAG_LABEL_SIZE_${k.replace(/^st-/, "").toUpperCase()}="${v}" is not a size like 2x4: that station uses ${flagSpec}`);
+    return false;
+  }));
+  const flagSpecOf = station => perStationFlagSize[String(station || "").trim().toLowerCase()] || flagSpec;
   let printers = { at: -Infinity, list: [], ok: false };
   const printerList = async () => {
     if (now_() - printers.at < (printers.ok ? 60000 : 5000)) return printers.list;
@@ -496,7 +525,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
               if ((o.run && ev.run ? ev.run !== o.run : (ev.station !== o.station || (ev.run || 0) !== (o.run || 0))) || String(ev.order) !== String(o.order) || ev.status !== "flagged") return;
               const slim = { ...ev }; delete slim.photo; delete slim.damagePhotos; flags[ev.id] = slim;
             });
-            found[k] = { date, exact: n === q, station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", firstSeen: before?.firstSeen ?? o.firstSeen, lastSeen: o.lastSeen, counts: o.counts || null, jerseyType: o.jerseyType || "", rows: o.rows || [], bins: o.bins || null, closedBins: o.closedBins || [], flagsById: flags };
+            found[k] = { date, exact: n === q, station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", firstSeen: before?.firstSeen ?? o.firstSeen, lastSeen: o.lastSeen, counts: o.counts || null, jerseyType: o.jerseyType || "", garment: o.garment || before?.garment || "", rows: o.rows || [], bins: o.bins || null, closedBins: o.closedBins || [], flagsById: flags };
           }
         }
         const orders = Object.values(found).sort((a, b) => (b.exact - a.exact) || ((b.lastSeen || 0) - (a.lastSeen || 0))).slice(0, 10)
@@ -748,22 +777,29 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
         }
       }
       if (kind === "print" && !id) {
-        if (req.method === "GET") { const station = new URL(req.url, "http://hub").searchParams.get("station"); return json(res, 200, { printer: await labelPrinter(station), printers: await printerList(), labelSize: labelSpec, flagPrinter: await ticketPrinter(station), flagLabelSize: flagSpec }); }
+        if (req.method === "GET") { const station = new URL(req.url, "http://hub").searchParams.get("station"); return json(res, 200, { printer: await labelPrinter(station), printers: await printerList(), labelSize: labelSpec, flagPrinter: await ticketPrinter(station), flagLabelSize: flagSpecOf(station) }); }
         if (req.method === "POST") {
           const body = await readBody(req);
-          const labels = Array.isArray(body.labels) ? body.labels.slice(0, 100) : [];
+          // A label that is not an object is dropped before the job is built (nothing
+          // can be printed from it); none left is a 400.
+          const labels = Array.isArray(body.labels) ? body.labels.slice(0, 100).filter(l => l && typeof l === "object") : [];
           if (!labels.length) return json(res, 400, { error: "labels required" });
           const kind = ["jersey", "flag", "binlist", "binticket"].includes(body.kind) ? body.kind : "bin";
           const onTicketRoll = kind === "flag" || kind === "binlist" || kind === "binticket";   // the 2 x 1 in roll: flag tickets, bin lists, the label of a bin opened mid-order
           const name = await (onTicketRoll ? ticketPrinter : labelPrinter)(body.station); if (!name) return json(res, 503, { error: "no label printer" });
-          try { await print(name, labelsZPL(labels, labelDots(onTicketRoll ? flagSpec : labelSpec), kind)); }
+          // `count`: the labels that really come out. On a tall roll the lists are
+          // re-paged (repageLists) onto fewer labels than were sent; the station
+          // says this number, not its own.
+          const spec = onTicketRoll ? flagSpecOf(body.station) : labelSpec;
+          const job = printJob(labels, labelDots(spec), kind), n = job.count;
+          try { await print(name, job.zpl); }
           catch (e) { console.error(`[hub] print on ${name} failed: ${e.message}`); return json(res, 502, { error: `print failed: ${e.message}` }); }
-          const what = kind === "jersey" ? (labels.length === 1 ? `sticker bin ${labels[0].bin || "—"} ${labels[0].value || ""}` : `${labels.length} stickers`)
-            : kind === "flag" ? (labels.length === 1 ? `flag ticket #${labels[0].number || "?"} ${labels[0].tag || ""}` : `${labels.length} flag tickets`)
-            : kind === "binlist" ? `${labels.length} bin list label${labels.length === 1 ? "" : "s"} (bin ${[...new Set(labels.map(l => l.bin))].join(", ")})`
-            : `${labels.length} bin label${labels.length === 1 ? "" : "s"}`;
-          console.log(`[hub] ${new Date().toLocaleTimeString()} ${body.station ? body.station + ": " : ""}printed ${what} on ${name}${labels[0]?.orderNumber ? ` for order ${labels[0].orderNumber}` : ""}`);
-          return json(res, 200, { ok: true, printer: name, count: labels.length });
+          const what = kind === "jersey" ? (n === 1 ? `sticker bin ${labels[0].bin || "—"} ${labels[0].value || ""}` : `${n} stickers`)
+            : kind === "flag" ? (n === 1 ? `flag ticket #${labels[0].number || "?"} ${labels[0].tag || ""}${labels[0].spots?.length ? ` (${labels[0].spots.length} marked)` : ""}` : `${n} flag tickets`)
+            : kind === "binlist" ? `${n} bin list label${n === 1 ? "" : "s"} (bin ${[...new Set(labels.map(l => l.bin))].join(", ")})`
+            : `${n} bin label${n === 1 ? "" : "s"}`;
+          console.log(`[hub] ${new Date().toLocaleTimeString()} ${body.station ? body.station + ": " : ""}printed ${what} on ${name}${onTicketRoll ? ` (${spec} in)` : ""}${labels[0]?.orderNumber ? ` for order ${labels[0].orderNumber}` : ""}`);
+          return json(res, 200, { ok: true, printer: name, count: n });
         }
       }
       return json(res, 404, { error: "unknown hub route" });
