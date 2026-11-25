@@ -268,8 +268,16 @@ export function binLabelZPL(l, size = labelSize()) {
     : [l.orderNumber ? `Order ${l.orderNumber}` : ""]).filter(Boolean).join("   ");
   return [
     "^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
-    line(side, top + pad, fit(l.title || `BOX ${l.bin}`, w, big), w, "C", l.title || `BOX ${l.bin}`),
-    line(side, top + pad + big + Math.round(a * 0.01), fit(l.label, w, mid), w, "C", l.label),
+    // A by-size box is found by its size: the size gets the big room and the box number the middle one (owner, 25 Nov 2026).
+    ...(l.by === "size" && !l.title
+      ? [
+          line(side, top + pad, fit(l.label, w, big), w, "C", l.label),
+          line(side, top + pad + big + Math.round(a * 0.01), fit(`BOX ${l.bin}`, w, mid), w, "C", `BOX ${l.bin}`),
+        ]
+      : [
+          line(side, top + pad, fit(l.title || `BOX ${l.bin}`, w, big), w, "C", l.title || `BOX ${l.bin}`),
+          line(side, top + pad + big + Math.round(a * 0.01), fit(l.label, w, mid), w, "C", l.label),
+        ]),
     ...(footer ? [line(side, h - small - pad, fit(footer, w, small), w, "C", footer)] : []),
     "^PQ1", "^XZ",
   ].join("\n");

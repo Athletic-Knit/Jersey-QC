@@ -72,6 +72,19 @@ describe("ZPL", () => {
     expect(z).not.toContain("garment");
     expect(z).not.toContain("Order");
   });
+  it("by size the size is the biggest text and the box number is under it; by team and DAMAGED are as before", () => {
+    const size2x1 = labelSize("2x1");
+    const fonts = z => [...z.matchAll(/\^A0N,(\d+)/g)].map(m => parseInt(m[1], 10));
+    const sized = binLabelZPL({ bin: "6.1", label: "A-2XL", by: "size", count: 1, orderNumber: "264247" }, size2x1);
+    const [first, second] = fonts(sized);
+    expect(sized.indexOf("^FDA-2XL^FS")).toBeLessThan(sized.indexOf("^FDBOX 6.1^FS"));
+    expect(first).toBeGreaterThan(second);
+    const team = binLabelZPL({ bin: "5.1", label: "Navy", by: "team", count: 1, orderNumber: "264247" }, size2x1);
+    expect(team.indexOf("^FDBOX 5.1^FS")).toBeLessThan(team.indexOf("^FDNavy^FS"));
+    expect(fonts(team)[0]).toBeGreaterThan(fonts(team)[1]);
+    const damaged = binLabelZPL({ bin: "", title: "DAMAGED", label: "Flagged garments", by: "size", orderNumber: "1" }, size2x1);
+    expect(damaged.indexOf("^FDDAMAGED^FS")).toBeLessThan(damaged.indexOf("^FDFlagged garments^FS"));
+  });
   it("on the small roll the footer is just the order number", () => {
     const z = binLabelZPL(label, labelSize("1x0.5"));
     expect(z).toContain("^PW203");

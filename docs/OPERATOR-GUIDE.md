@@ -45,7 +45,7 @@ An order the supervisor sent can only be open on one station at a time. If anoth
 When the order starts, the **Set out N boxes** screen lists each team (or size) and how many boxes it should fill. Press **Print box labels** to print one 2 x 1 in label for each box and stick one inside each box. (They print by themselves only on a station whose Settings → Label printer has "Box labels print by themselves when an order starts" ticked.)
 
 1. Line up the boxes at the station.
-2. Stick each label inside its box (BOX 5.1, BOX 5.2 …).
+2. Stick each label inside its box (BOX 5.1, BOX 5.2 …). On an order sorted by size the size is the big line and the box number is under it.
 3. Close the screen.
 
 If a box label did not print, press the print button on that screen to print them again. Later, the **Box labels** button on the Packing screen opens this screen again.

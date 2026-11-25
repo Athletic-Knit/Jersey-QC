@@ -476,3 +476,10 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests:** printjobs (the UNSCANNED and MISSING lists, the tally, an old label's word), the board's order-view summary, roster-sort, short-size.
 - **Checks:** lint clean; 593 tests pass. Not clicked through in a browser.
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · The size biggest on a by-size box label (5c)
+- **Asked for:** the owner, 25 Nov 2026: on a box sorted by size the size is what the packer looks for, so it should be the biggest text on the label.
+- **What changed:** `binLabelZPL` draws a by-size label with the size in the big line (fitted to the width, so A-2XL fits) and "BOX 6.1" in the middle line under it; a by-team label and the DAMAGED label are as before. The footer is unchanged.
+- **Tests:** labels.test.js: by size the size field is drawn first and larger than the box field; by team and DAMAGED keep their order.
+- **Checks:** lint clean; 594 tests pass. Not printed on the Zebra.
+- **Branch:** `feature/result-screens`.
