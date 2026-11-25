@@ -7,7 +7,7 @@ import process from "node:process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { labelSize, printJob, repageLists, listChunks, textUnits } from "../labels.js";
-import { packListLabel, packListZPL, boxFaceZPL, signoffZPL, packListLayout, LIST_COPIES } from "../packlabels.js";
+import { packListLabel, packListZPL, boxFaceZPL, layoutBoxFace, signoffZPL, packListLayout, LIST_COPIES } from "../packlabels.js";
 import { buildBinMap, closeBin } from "../roster.js";
 import { packBoxes, boxFaceLabel, boxFaceJobs, boxListJobs, signoffLabel, signoffJobs, packFromRecord } from "../printjobs.js";
 import { WALK, walkBox, walkRoster } from "./walk-order.js";
@@ -165,13 +165,8 @@ describe("the outside label (kind boxface)", () => {
       sizes: [{ size: "A-S", inBox: 5, ofOrder: 5 }, { size: "A-M", inBox: 3, ofOrder: 4 }, { size: "A-L", inBox: 2, ofOrder: 2 }] });
     const z = boxFaceZPL(l, roll);
     same("boxface-walk-box1.zpl", z);
-    expect(z).toContain("^FDORDER^FS"); expect(z).toContain("^FD123456^FS"); expect(z).toContain("^FDSOURCE FOR SPORTS^FS");
-    expect(z).toContain("^FDU11 TIGERS^FS"); expect(z).toContain("^FD10/11^FS"); expect(z).toContain("^FDA-S 5   A-M 3   A-L 2^FS");
-    expect(z).not.toContain("Not in this box"); expect(z).not.toContain("flagged");
-    expect(z).toContain("^FDBox 1 of 2^FS"); expect(z).toContain("^FDWEIGHT^FS"); expect(z).toContain("^FDCUSTOMER^FS");
-    expect(z).not.toContain("^A0N");   // every field is turned: the label is read as a landscape page
-    expect(z).not.toContain("LEACH");   // no garment names on the outside
-    expect(z).toContain("^PQ1");
+    expect(pages(z)).toHaveLength(2);   // the detail label, then the ID label (details in the pair test below)
+    expect(z).toContain("^FD123456^FS"); expect(z).toContain("^FD10/11^FS"); expect(z).toContain("^FDBox 1 of 2^FS");
   });
   it("box 2 of the walk-through: #44 is missing and the outside says nothing about it", () => {
     const l = boxFaceLabel(pack, box("2.1"));
@@ -197,55 +192,81 @@ describe("the outside label (kind boxface)", () => {
     const later = { ...pack, roster: r0.map(x => x.scanned ? x : { ...x, scanned: "pass" }), binMap: c2.binMap, closedBins: c2.closed };
     expect(["2.1", "1.1", "1.2"].map(b => no(later, b))).toEqual([1, 2, 3]);
   });
-  // The landscape page: lx runs along the roll (y of the field), so a field's lx is its ^FO y.
-  const field = (z, text) => { const m = z.match(new RegExp(`\\^FO(\\d+),(\\d+)\\^A0R,(\\d+),(\\d+)\\^FD${text}\\^FS`)); return m && { lx: Number(m[2]), fh: Number(m[3]), fw: Number(m[4]) }; };
-  const weightLx = z => Number(z.match(/\^FO\d+,(\d+)\^GB84,164,3\^FS/)[1]);
-  it("the rule above 'Box 1 of 2' stops before the WEIGHT box, and so does every line beside it", () => {
-    for (const [r, W] of [[roll, 609], [tall4, 812]]) {
-      const z = boxFaceZPL(boxFaceLabel(pack, box("1.1")), r), wx = weightLx(z);
-      expect(wx).toBe(W - 173);
-      const rules = [...z.matchAll(/\^FO\d+,(\d+)\^GB3,(\d+),3\^FS/g)].map(m => [Number(m[1]), Number(m[2])]);
-      expect(rules).toHaveLength(3);
-      expect(rules[2]).toEqual([20, W - 209]);   // 400 of 570 on the 2 x 3 in roll
-      expect(20 + rules[2][1]).toBeLessThan(wx);
-      expect(rules[0]).toEqual([20, W - 39]); expect(rules[1]).toEqual([20, W - 39]);
-      const bx = field(z, "Box 1 of 2"), sz = field(z, "A-S 5   A-M 3   A-L 2");
-      expect(bx.lx + Math.ceil(textUnits("Box 1 of 2") * bx.fw * 0.85)).toBeLessThan(wx);
-      expect(sz.lx + Math.ceil(textUnits("A-S 5   A-M 3   A-L 2") * sz.fw * 0.85)).toBeLessThan(wx);
-    }
+  // The pair as laid out: boxes in the page as it is read (lx along the roll, ly down from its top edge).
+  const face = (over = {}, r = roll) => layoutBoxFace({ ...boxFaceLabel(pack, box("1.1")), ...over }, r);
+  const tx = (pg, text) => pg.boxes.find(b => b.kind === "text" && b.text === text);
+  const mkTeams = n => Array.from({ length: n }, (_, i) => ({ team: `Team ${i + 1}`, inBox: i + 1, ofOrder: 40 }));
+  const mkSizes = n => ["Y-S", "Y-M", "Y-L", "A-XS", "A-S", "A-M", "A-L", "A-XL", "A-2XL", "A-3XL", "A-4XL", "OSFA", "5XL", "6XL"].slice(0, n).map((size, i) => ({ size, inBox: 5 + i, ofOrder: 20 }));
+  it("the outside label is a PAIR: the detail label first, the ID label last (on top of the strip), both landscape", () => {
+    const l = boxFaceLabel(pack, box("1.1")), job = layoutBoxFace(l, roll), [detail, id] = job.pages;
+    expect(pages(job.zpl)).toHaveLength(2);
+    expect(job.zpl.indexOf("^FDORDER 123456^FS")).toBeLessThan(job.zpl.indexOf("^FDWEIGHT^FS"));   // detail, then ID
+    expect(job.zpl).not.toContain("^A0N"); expect(job.zpl.match(/\^PQ1/g)).toHaveLength(2);
+    expect(job.zpl).not.toContain("LEACH"); expect(job.zpl).not.toContain("Not in this box"); expect(job.zpl).not.toContain("flagged");
+    // the ID label: ORDER, the number, the customer in capitals, Box 1 of 2 and the WEIGHT box; nothing else
+    expect(id.boxes.filter(b => b.kind === "text").map(b => b.text)).toEqual(["ORDER", "123456", "SOURCE FOR SPORTS", "Box 1 of 2", "WEIGHT"]);
+    expect(tx(id, "123456")).toMatchObject({ lx: 20, ly: 38, h: 110, fw: 92 });
+    expect(tx(id, "SOURCE FOR SPORTS")).toMatchObject({ h: 100 });   // one line when it fits
+    expect(tx(id, "Box 1 of 2")).toMatchObject({ lx: 20, h: 52 });
+    // the detail label: order and box on top, the customer, the teams, the sizes; no weight
+    const t = detail.boxes.filter(b => b.kind === "text").map(b => b.text);
+    expect(t).toEqual(expect.arrayContaining(["ORDER 123456", "BOX 1 of 2", "SOURCE FOR SPORTS", "TEAMS", "U11 TIGERS", "10/11", "SIZES", "A-S 5/5", "A-M 3/4", "A-L 2/2"]));
+    expect(t).not.toContain("WEIGHT"); expect(detail.boxes.some(b => b.kind === "frame")).toBe(false);
+    expect(job.zpl).toContain("^FO374,20^A0R,24,22^FDORDER 123456^FS");   // landscape (lx, ly) -> ^FO406-ly-fh,lx
   });
-  it("the customer is the biggest line, squeezed for a long name and then cut with an ellipsis; the order number stays clear of CUSTOMER", () => {
-    const l = boxFaceLabel(pack, box("1.1"));
-    const z = boxFaceZPL(l, roll), c = field(z, "SOURCE FOR SPORTS");
-    expect(c).toMatchObject({ lx: 20, fh: 78, fw: 54 });
-    const long = "Thunder Bay Lakehead Lightning Minor Hockey Association";
-    const sq = boxFaceZPL({ ...l, customer: long }, roll).match(/\^A0R,78,(\d+)\^FD([^^]+)\^FS/);
-    expect(Number(sq[1])).toBeGreaterThanOrEqual(36); expect(Number(sq[1])).toBeLessThan(54);
-    expect(Math.ceil(textUnits(sq[2]) * Number(sq[1]) * 0.85)).toBeLessThanOrEqual(569);
-    const cut = boxFaceZPL({ ...l, customer: long + " " + long }, roll).match(/\^A0R,78,(\d+)\^FD([^^]+)\^FS/);
-    expect(Number(cut[1])).toBe(36); expect(cut[2].endsWith("…")).toBe(true);
-    const o = field(z, "123456");
-    expect(o).toMatchObject({ fh: 70, fw: 60 });
-    expect(o.lx + Math.ceil(textUnits("123456") * 60 * 0.85)).toBeLessThan(field(z, "CUSTOMER").lx);
+  it("the customer: one line at 100 high when it fits, two lines at 80 split at the last word that fits, then the second line cut", () => {
+    const one = face({ customer: "Lakehead Lightning" }).pages[1].boxes.filter(b => b.kind === "text" && b.h === 100);
+    expect(one).toHaveLength(1); expect(one[0].fw).toBeGreaterThanOrEqual(44);
+    const two = face({ customer: "Mississauga Minor Hockey Association" }).pages[1].boxes.filter(b => b.kind === "text" && b.h === 80);
+    expect(two.map(b => b.text)).toEqual(["MISSISSAUGA MINOR", "HOCKEY ASSOCIATION"]);
+    expect(two[0].ly + 80).toBeLessThan(two[1].ly);
+    const cut = face({ customer: "Thunder Bay Lakehead Lightning Minor Hockey Association Of Northern Ontario Region" }).pages[1].boxes.filter(b => b.kind === "text" && b.h === 80);
+    expect(cut).toHaveLength(2); expect(cut[1].text.endsWith("…")).toBe(true);
+    for (const b of cut) expect(b.lx + b.w).toBeLessThanOrEqual(609 - 20);
+    expect(face({ customer: "" }).pages[1].boxes.some(b => b.text === "U11 TIGERS")).toBe(false);   // (boxFaceLabel puts the teams there; the layout itself prints what it is given)
   });
-  it("many sizes squeeze, then wrap to a second line; many teams get closer rows, then '+N'", () => {
-    const l = boxFaceLabel(pack, box("1.1"));
-    const sizes = ["Y-S", "Y-M", "Y-L", "A-XS", "A-S", "A-M", "A-L", "A-XL", "A-2XL", "A-3XL"].map(size => ({ size, inBox: 12, ofOrder: 12 }));
-    const z = boxFaceZPL({ ...l, sizes }, roll), wx = weightLx(z);
-    const lines = [...z.matchAll(/\^A0R,40,(\d+)\^FD((?:[YA]-\w+ 12(?: {3})?)+)\^FS/g)];
-    expect(lines.length).toBeGreaterThanOrEqual(1);
-    for (const m of lines) expect(20 + Math.ceil(textUnits(m[2]) * Number(m[1]) * 0.85)).toBeLessThan(wx);
-    const teams = Array.from({ length: 8 }, (_, i) => ({ team: `Team ${i}`, inBox: 1, ofOrder: 2 }));
-    const z2 = boxFaceZPL({ ...l, teams }, roll);
-    expect(z2).toMatch(/\^FDTEAM \d \+\d\^FS/);
-    expect(z2).not.toContain("^FDTEAM 7^FS");
+  it("the WEIGHT box takes the room right of the order number; a long number leaves under 120 and it goes beside Box N of M", () => {
+    const id = face().pages[1], fr = id.boxes.find(b => b.kind === "frame"), n = tx(id, "123456");
+    expect(fr).toMatchObject({ ly: 38, h: 110 });
+    expect(fr.lx).toBeGreaterThanOrEqual(n.lx + n.w + 24); expect(fr.lx + fr.w).toBe(609 - 20);
+    const long = face({ orderNumber: "123456789012345" }).pages[1], f2 = long.boxes.find(b => b.kind === "frame"), bx = tx(long, "Box 1 of 2");
+    expect(f2.ly).toBe(350); expect(f2.lx).toBeGreaterThanOrEqual(bx.lx + bx.w + 24);
+    expect(tx(long, "123456789012345").fw).toBeLessThan(92);   // squeezed
+    const wide = face({}, tall4).pages[1].boxes.find(b => b.kind === "frame");
+    expect(wide.lx + wide.w).toBe(812 - 20); expect(wide.w).toBe(220);
   });
-  it("the 2 x 4 in roll is the same page, wider; the 2 x 1 in roll keeps the compact portrait label", () => {
-    const l = boxFaceLabel(pack, box("1.1")), z = boxFaceZPL(l, tall4);
-    expect(z).toContain("^PW406"); expect(z).toContain("^LL812");
-    expect(field(z, "CUSTOMER").lx).toBe(812 - 309); expect(field(z, "10/11").lx).toBe(812 - 279);
+  it("the teams: 1-2 in one column at 40 high, 3-4 in two columns at 36, 5-8 at 28, more at 24 with '+N more'; the count right-aligned in its cell", () => {
+    const h = n => face({ teams: mkTeams(n) }).pages[0].boxes.find(b => b.text === "TEAM 1")?.h;
+    expect([1, 2, 3, 4, 5, 8, 9].map(h)).toEqual([40, 40, 36, 36, 28, 28, 24]);
+    const d = face({ teams: mkTeams(4) }).pages[0], a = tx(d, "TEAM 1"), b = tx(d, "TEAM 2");
+    expect(b.lx).toBeGreaterThan(a.lx + 200); expect(tx(d, "TEAM 3").lx).toBe(a.lx);   // two columns, a row of two
+    const c = tx(d, "1/40"); expect(c.lx + c.w).toBeLessThan(b.lx);   // the count ends inside its cell
+    expect(face({ teams: mkTeams(1) }).pages[0].boxes.find(x => x.text === "1/40").lx + 1).toBeGreaterThan(400);   // one column: right edge of the page
+    const many = face({ teams: mkTeams(12) }).pages[0].boxes.map(x => x.text);
+    expect(many).toContain("+5 more"); expect(many).not.toContain("TEAM 8");
+    const cutTeam = face({ teams: [{ team: "Mississauga Minor Hockey Association Of Greater Toronto", inBox: 10, ofOrder: 30 }, { team: "B", inBox: 1, ofOrder: 2 }, { team: "C", inBox: 1, ofOrder: 2 }] }).pages[0];
+    expect(cutTeam.boxes.some(x => x.text?.endsWith("…"))).toBe(true); expect(tx(cutTeam, "10/30")).toBeTruthy();
+  });
+  it("the sizes: three columns, four past nine, the largest height at which they fit, '+N more' past twelve", () => {
+    const sz = n => face({ sizes: mkSizes(n) }).pages[0].boxes.filter(b => b.kind === "text" && /^(\w|-)+ \d+\/20$/.test(b.text));
+    const six = sz(6); expect(new Set(six.map(b => b.lx)).size).toBe(3); expect(six[0].h).toBeGreaterThanOrEqual(34);
+    expect(new Set(sz(12).map(b => b.lx)).size).toBe(4);
+    const big = sz(14); expect(big).toHaveLength(11);
+    expect(face({ sizes: mkSizes(14) }).pages[0].boxes.some(b => b.text === "+3 more")).toBe(true);
+    // fewer sizes, bigger letters
+    expect(sz(2)[0].h).toBeGreaterThanOrEqual(sz(12)[0].h);
+    for (const b of face({ sizes: mkSizes(12), teams: mkTeams(8) }).pages[0].boxes) expect(b.ly + b.h).toBeLessThanOrEqual(406);
+    // cells never touch: 10 dots between them across a row
+    const row = six.filter(b => b.ly === six[0].ly).sort((a, b) => a.lx - b.lx);
+    expect(row[1].lx - (row[0].lx + row[0].w)).toBeGreaterThanOrEqual(10);
+  });
+  it("the 2 x 4 in roll is the same pair, wider (812 x 406); the 2 x 1 in roll keeps the compact portrait label", () => {
+    const l = boxFaceLabel(pack, box("1.1")), job = layoutBoxFace(l, tall4);
+    expect(job.zpl.match(/\^PW406/g)).toHaveLength(2); expect(job.zpl.match(/\^LL812/g)).toHaveLength(2);
+    expect(job.pages.map(p => p.PAGE_W)).toEqual([812, 812]);
+    expect(tx(job.pages[0], "BOX 1 of 2").lx + tx(job.pages[0], "BOX 1 of 2").w).toBe(812 - 20);
     const s = boxFaceZPL(l, labelSize("2x1"));
-    expect(s).toContain("^A0N"); expect(s).not.toContain("^A0R"); expect(s).toContain("^FDBox 1 of 2^FS");
+    expect(pages(s)).toHaveLength(1); expect(s).toContain("^A0N"); expect(s).not.toContain("^A0R"); expect(s).toContain("^FDBox 1 of 2^FS");
     expect(s).not.toContain("flagged");
   });
   it("the box lists of a tall roll end with the outside label, the Print menu can print it alone, and a short roll gets none", () => {
@@ -254,10 +275,11 @@ describe("the outside label (kind boxface)", () => {
     expect(boxFaceJobs(pack).map(l => l.bin)).toEqual(["1.1", "2.1"]);
     expect(boxListJobs(pack, "1.1").some(l => l.kind === "boxface")).toBe(false);
   });
-  it("the hub counts it as one label and lays a short roll out as one compact label", () => {
+  it("the hub counts the pair as two labels and lays a short roll out as one compact label", () => {
     const l = boxFaceLabel(pack, box("1.1"));
     const job = printJob([l], roll, "binlist");
-    expect(job.count).toBe(1); expect(job.zpl).toContain("Box 1 of 2");
+    expect(job.count).toBe(2); expect(job.zpl).toContain("Box 1 of 2");
+    expect(printJob([l], labelSize("2x1"), "binlist").count).toBe(1);
     expect(printJob([l], labelSize("2x1"), "binlist").zpl).toContain("^FDBox 1 of 2^FS");
   });
 });
