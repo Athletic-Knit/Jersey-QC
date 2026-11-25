@@ -3870,12 +3870,15 @@ export default function App() {
   // What Finish order prints: the list of every bin still open with something in it, each with its
   // NOT IN BOX list (the open box is the group's last), the DAMAGED list, and the order summary
   // (count label, FAILED, MISSING; the owner, 24 Nov 2026: "print on request and after every order is finished").
-  const finishLists = useMemo(() => !settings.binLists || !binMap ? []
-    : [...openBins.flatMap(b => b.count > 0 && listUnchanged(listPrinted[b.bin], listIdsOf(b.bin, true)) ? []   // printed from the Packing screen and nothing on it changed since, its NOT IN BOX list included: not again (the owner, 25 Nov 2026)
+  // `again` (the done screen's "Print the box lists again"): every list, the ones printed from Packing too
+  // (the Fable check, 25 Nov 2026: "again" went through the skip and left those boxes out).
+  const finishListsOf = useCallback(again => !settings.binLists || !binMap ? []
+    : [...openBins.flatMap(b => !again && b.count > 0 && listUnchanged(listPrinted[b.bin], listIdsOf(b.bin, true)) ? []   // printed from the Packing screen and nothing on it changed since, its NOT IN BOX list included: not again (the owner, 25 Nov 2026)
          : [...finishNotInBoxJobs(packNow, b.bin, b.label, b.count), ...(b.count > 0 ? listOf(b.bin, b.label) : [])]),   // an empty open box: what its team lacks, under the name of the box on the floor, only when Box full did not print it already (printjobs.js; the third check, 24 Nov 2026). Before: an empty open box still says what its team lacks (review, 24 Nov 2026: a team flagged or marked missing after its last full box)
        ...damagedListJobs(packNow),   // and what is in the DAMAGED box
        ...summaryJobs(packNow, { station: stationLabel(stationId()), date: localDateStamp() })],
   [settings.binLists, binMap, openBins, packNow, listOf, listPrinted, listIdsOf]);
+  const finishLists = useMemo(() => finishListsOf(false), [finishListsOf]);
   // The summary on the Packing screen and its printing.
   const summaryNow = useMemo(() => orderSummary(packNow), [packNow]);
   // Pass rate, flag rate and pace, as the order sheet's Summary has them. From the station's
@@ -3982,15 +3985,15 @@ export default function App() {
   const askFinish    = useCallback(() => { setShowRosterComplete(false); setShowFinish(true); }, []);
   // Boxes left open at Finish order for a ship-with order: their lists do not print (they are not full).
   const keptOpen = useRef(new Set());
-  const printFinishLists = useCallback((note = "") => {
-    const lists = finishLists.filter(l => !keptOpen.current.has(String(l.box ?? l.bin)));   // a box kept open for the ship-with order: neither its list nor its NOT IN BOX list (review, 24 Nov 2026)
+  const printFinishLists = useCallback((note = "", again = false) => {
+    const lists = (again ? finishListsOf(true) : finishLists).filter(l => !keptOpen.current.has(String(l.box ?? l.bin)));   // a box kept open for the ship-with order: neither its list nor its NOT IN BOX list (review, 24 Nov 2026)
     const n = lists.length, pre = note ? note + " " : "";
     if (!n) { setFinished({ status: "none", text: pre + (settings.binLists ? "No other box has anything in it: no list to print." : "Box lists are switched off in Settings.") }); return; }
     setFinished({ status: "printing", text: `${pre}Printing the box lists: ${n} ${n === 1 ? "label" : "labels"}…` });
     printOnTicketRoll(lists, "binlist")
       .then(r => setFinished({ status: "done", text: `${pre}Box lists printed: ${n} ${n === 1 ? "label" : "labels"} on ${r.printer}` }))
       .catch(e => setFinished({ status: "error", text: `${pre}The box lists were NOT printed. ${printProblem(e)}. Fix the printer and print them again.` }));
-  }, [finishLists, settings.binLists, printOnTicketRoll]);
+  }, [finishLists, finishListsOf, settings.binLists, printOnTicketRoll]);
   // `keep`: the boxes the operator left open for the ship-with order. They go to the hub
   // with everything in them (this order's and what they carried) and the orders they serve.
   const finishOrder  = useCallback(async (keep = []) => {
@@ -5118,7 +5121,7 @@ export default function App() {
           onDismiss={() => closeDialog(() => setShowRosterComplete(false))} onFinish={askFinish} />
       )}
       {finished && (
-        <FinishedModal orderNumber={orderNumber} status={finished} onReprint={() => printFinishLists()} onPrint={() => setShowPrint(true)} onPacking={() => setShowPacking(true)} onNew={() => newOrder()} onNewAnyway={() => newOrder(true)} unsent={unsent} sendingLast={sendingLast} onBack={() => closeDialog(() => { setFinished(null); setFinishedAt(null); setUnsent(""); })} />
+        <FinishedModal orderNumber={orderNumber} status={finished} onReprint={() => printFinishLists("", true)} onPrint={() => setShowPrint(true)} onPacking={() => setShowPacking(true)} onNew={() => newOrder()} onNewAnyway={() => newOrder(true)} unsent={unsent} sendingLast={sendingLast} onBack={() => closeDialog(() => { setFinished(null); setFinishedAt(null); setUnsent(""); })} />
       )}
       {showBlanks && blanks.length > 0 && !overlay && (
         <BlanksModal groups={blanks} boxOf={binOf} scanKey={scanKey} last={lastConfirmed && isBlank(lastConfirmed.match) ? lastConfirmed : null}
