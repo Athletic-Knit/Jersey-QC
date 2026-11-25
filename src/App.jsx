@@ -1550,7 +1550,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                 {s.lastScan && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Now at: {s.lastScan.text} · {s.lastScan.time.slice(11)}</div>}
                 {s.attention?.length > 0 && (
                   <div style={{ marginTop: 10, borderTop: "1px solid #21262d", paddingTop: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#f87171", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Needs you ({s.attention.length})</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#f87171", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Needs you ({s.attention.filter(a => !a.resolution).length || s.attention.length})</div>{/* open items; with none open (all accepted or fixed at the station) the number of items shown (review, 25 Nov 2026) */}
                     {s.attention.length > 3 && <div style={{ fontSize: 11, color: "#64748b", marginBottom: 3 }}>the three that weigh most — the rest are in the order</div>}
                     {s.attention.slice().sort(bySeverity).slice(0, 3).map((a, i) => (
                       <div key={i} style={{ fontSize: 12, marginBottom: 3, display: "flex", gap: 8, alignItems: "flex-start" }}>
@@ -1754,7 +1754,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
   const isRed   = mode === "flag" || mode === "duplicate" || mode === "supervisor";
   const isMenu  = mode === "reasons" || mode === "reasonText";
   const isManual = mode === "manual";
-  const isClean = mode === "clean";   // "Dirt or mark", "Loose thread": fixed at the station, not flagged
+  const isClean = mode === "clean";   // "Dirt or mark", "Loose thread": fixed at the station, a flag resolved at once
   const fixIn = state.fixing?.inPlace;   // the words of that reason's screen (config.js `inPlace`); set whenever the mode is "clean"
 
   const bg     = isGreen ? "#052e16" : (isList || isManual || isSizePick) ? "#1c1a06" : isMenu ? "#1a1033" : isClean ? "#082f49" : "#450a0a";
@@ -2151,7 +2151,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
         </>
       )}
 
-      {/* ── CLEAN IT NOW / CUT IT NOW: dirt wiped off, a loose thread cut, at the station; not flagged ── */}
+      {/* ── CLEAN IT NOW / CUT IT NOW: dirt wiped off, a loose thread cut, at the station; the garment stays passed, the flag is on the record ── */}
       {isClean && (
         <>
           <div style={{ fontSize: 80, lineHeight: 1, marginBottom: 4 }}>{fixIn?.emoji}</div>
@@ -2162,7 +2162,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
             </div>
           )}
           <div style={{ fontSize: 26, color: "#e0f2fe", marginTop: 14, textAlign: "center", padding: "0 40px", maxWidth: 820, lineHeight: 1.4 }}>
-            {fixIn?.text} The garment is <strong>not flagged</strong>.
+            {fixIn?.text} It <strong>stays passed</strong>; the record keeps the flag.{/* fixed at the station is still a flag, resolved at once (the owner, 25 Nov 2026) */}
           </div>
           <div style={{ marginTop: 28, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
             {options.map((o, i) => optionButton(o, i))}
@@ -4612,7 +4612,7 @@ export default function App() {
     chooseReason(r) {
       const o = overlay; if (!o) return;
       if (!r.custom) { inspectRef.current.defect(REASON_CHECK[r.id]); syncInspect(); }
-      // Dirt or a mark is cleaned at the station, not flagged: say so, and ask.
+      // Dirt or a mark is cleaned at the station (a flag resolved at once, 5j): say so, and ask.
       // (Before 17 Nov 2026 the menu just closed, and nobody could tell what had happened.)
       if (r.inPlace) { setOverlay({ mode: "clean", fixing: r, scan: o.scan, match: o.match || null, returnTo: o.returnTo || null, reopened: !!o.reopened, late: o.late }); return; }
       if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it

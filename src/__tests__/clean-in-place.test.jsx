@@ -22,7 +22,7 @@ describe("the fix-it-here screen", () => {
     draw("mark", { cleaned: vi.fn(), cleanFailed: vi.fn(), back: vi.fn() });
     expect(screen.getByText("CLEAN IT NOW")).toBeTruthy();
     expect(screen.getByText(/Wipe the dirt or mark off\./)).toBeTruthy();
-    expect(screen.getByText("not flagged").tagName).toBe("STRONG");
+    expect(screen.getByText("stays passed").tagName).toBe("STRONG");
     expect(screen.getByText(/It is clean now/)).toBeTruthy();
     expect(screen.getByText(/It will not come out/)).toBeTruthy();
   });

@@ -138,10 +138,10 @@ Garments with no name and no number cannot be read by the camera. When the roste
    | Twill peeling | Stitched orders only: twill lifting or peeling |
    | Sublimation error | Sublimated orders only: a print or colour fault |
    | Stitching or seam | Loose or broken stitching, a seam or hem |
-   | Loose thread | See below: this is cut off, not flagged |
+   | Loose thread | See below: this is cut off at the station; the garment stays passed and the record keeps the flag |
    | Holes | A hole or snag in the fabric |
    | Size label | The size label is wrong or missing |
-   | Dirt or mark | See below: this is cleaned, not flagged |
+   | Dirt or mark | See below: this is cleaned at the station; the garment stays passed and the record keeps the flag |
    | Others | Anything else |
 
 3. The **FLAGGED** screen shows the garment and the reason. Two flag tickets print (a black column with the garment in white, and the reason).

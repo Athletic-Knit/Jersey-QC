@@ -53,7 +53,7 @@ export const THREAD_STAYS = { id: "thread_stays", label: "Loose thread — to th
 // weighs it, routeOfReason); every reason flags the jersey (the FLAGGED
 // screen) but the two fixed at the station, which carry their screen in
 // `inPlace` (the owner, 25 Nov 2026; Dirt or mark alone before): its emoji,
-// title and words ("The garment is not flagged." is added on the screen), the
+// title and words ("It stays passed; the record keeps the flag." is added on the screen), the
 // two buttons, the note left on the green, and `stays`, the flag when the fix
 // does not work.
 // One short menu for every order (17 Nov 2026, after the demo to the manager:
@@ -68,11 +68,11 @@ export const REASONS = [
   { id: "twill",     label: "Twill peeling",     route: "Supervisor → pink slip → decoration", cat: "Decoration", only: "stitched" },
   { id: "print",     label: "Sublimation error", route: "Supervisor → full remake",            cat: "Artwork",    only: "sublimated" },   // the floor's word for a print or colour fault (it read "Print or colour" for a day, 17 Nov 2026)
   { id: "stitching", label: "Stitching or seam", route: "Supervisor → stitcher",               cat: "Sewing" },
-  { id: "loose_thread", label: "Loose thread",   route: "Fix in place", cat: "Sewing",          // cut at the station, not flagged: the "Cut it now" screen (the owner, 25 Nov 2026)
+  { id: "loose_thread", label: "Loose thread",   route: "Fix in place", cat: "Sewing",          // cut at the station, a flag resolved at once: the "Cut it now" screen (the owner, 25 Nov 2026)
     inPlace: { emoji: "✂️", title: "CUT IT NOW", text: "Cut the loose thread off.", done: "✓ It is cut now", fail: "🚩 It needs the stitcher", note: "Loose thread, cut at the station", stays: THREAD_STAYS } },
   { id: "fabric",    label: "Holes",             route: "Supervisor → full remake",            cat: "Fabric" },
   { id: "label",     label: "Size label",        route: "Supervisor → stitcher",               cat: "Label" },
-  { id: "mark",      label: "Dirt or mark",      route: "Clean in place", cat: "Cleaning",       // cleaned at the station, not flagged: the "Clean it now" screen
+  { id: "mark",      label: "Dirt or mark",      route: "Clean in place", cat: "Cleaning",       // cleaned at the station, a flag resolved at once: the "Clean it now" screen
     inPlace: { emoji: "🧽", title: "CLEAN IT NOW", text: "Wipe the dirt or mark off.", done: "✓ It is clean now", fail: "🚩 It will not come out", note: "Dirt or mark, cleaned at the station", stays: MARK_STAYS } },
   { id: "other",     label: "Others",            route: "Supervisor decides",                  cat: "Other" },      // flags at once, nothing to type (the owner, 17 Nov 2026; it was "Something else" with a text box)
 ];
