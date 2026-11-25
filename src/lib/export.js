@@ -29,9 +29,13 @@ export function localTimeStamp(d = new Date()) { return `${localDateStamp(d)} ${
 
 // A roster row's status as the sheet shows it ("manual" is a by-hand entry kept from older orders).
 export const STATUS_LABEL = { pass: "PASS", flag: "FLAGGED", manual: "MANUAL", missing: "MISSING", short: "SHORT-SHIPPED" };
-export function rosterStatusLabel(r) { return STATUS_LABEL[r.scanned] || "NOT SCANNED"; }
+export function rosterStatusLabel(r) { return STATUS_LABEL[r.scanned] || "UNSCANNED"; }
 
 // Latest log entry per roster row, for reason / resolution / operator columns.
+// The Status column comes from the roster row (rosterStatusLabel), not from this
+// entry: a garment fixed at the station after it passed reads PASS beside "Dirt or
+// mark" / "Fixed at the station", which is meant (the owner, 25 Nov 2026: "it should
+// be flagged even if it is resolved").
 function latestByRow(log) {
   const m = new Map();
   [...log].reverse().forEach(l => { if (l.match?._id !== undefined) m.set(l.match._id, l); });
@@ -47,7 +51,7 @@ export function buildRosterSheet(roster, log, meta, columns, binOf = () => null)
     ["Order Number", meta.orderNumber || "—"],
     ["Operator",     meta.operatorName || "—"],
     ["Export Date",  localTimeStamp()],
-    ["Jersey Type",  meta.jerseyType || ""],
+    ["Garment Type",  meta.jerseyType || ""],
     ["Order Notes",  meta.notes || ""],
     [],
     ["Status", ...columns.map(cap), "Box", "Reason", "Resolution", "Inspected By", "Time"],
@@ -59,11 +63,11 @@ export function buildRosterSheet(roster, log, meta, columns, binOf = () => null)
 }
 
 // One line per bin of the order, for packing: what it holds, how many
-// jerseys, the box it goes in, and when it was closed. `bins`:
+// garments, the box it goes in, and when it was closed. `bins`:
 // [{ bin, label, count, box, open, closedAt }].
 export function buildBinsSheet(bins = [], stamp = t => localTimeStamp(new Date(t))) {
   return [
-    ["Box", "Holds", "Jerseys", "Box size", "State", "Closed at"],
+    ["Box", "Holds", "Garments", "Box size", "State", "Closed at"],
     ...bins.map(b => [b.bin, b.label || "", b.count || 0, b.box || "", b.open ? "Open" : "Closed (full)", b.closedAt ? stamp(b.closedAt) : ""]),
     [],
     ["Total", "", bins.reduce((t, b) => t + (b.count || 0), 0)],
@@ -107,7 +111,7 @@ export function exportLogCSV(log, orderNumber, binOf) {
 
 // ── Day sheet: one workbook for the whole day, every station ─────────────────
 // Built from the hub's ledger (every scan event + every order seen today).
-// The question it answers: is the app helping — how many jerseys, how fast,
+// The question it answers: is the app helping — how many garments, how fast,
 // how many needed a retry, a hand entry or the supervisor, and when.
 const tsMs = t => { const d = new Date(String(t).replace(" ", "T")); return isNaN(d) ? null : d.getTime(); };
 const minutes = ms => Math.round(ms / 60000);
@@ -134,7 +138,7 @@ export const undidPass = e => e.status === "undo"
   && !/^Taken back\b/i.test(String(e.reason || ""))
   && !/^Un-checked — was (?!passed\b)/i.test(String(e.reason || ""));
 
-function summarise(events) {
+export function summarise(events) {
   const times = events.map(e => tsMs(e.t));
   const passTimes = events.filter(e => e.status === "pass").map(e => tsMs(e.t)).filter(x => x !== null).sort((a, b) => a - b);
   const gaps = passTimes.slice(1).map((t, i) => (t - passTimes[i]) / 1000).filter(g => g > 0 && g <= 600);
@@ -151,7 +155,7 @@ function summarise(events) {
     activeMin: minutes(active),
     perHour: active >= 2 * 60000 ? Math.round(Math.max(0, passed) / (active / 3600000)) : null,   // blank until two active minutes: seconds of scanning give silly rates
     medianSec: median(gaps) === null ? null : Math.round(median(gaps)),
-    // Of the jerseys inspected (passed, entered by hand, or sent to the
+    // Of the garments inspected (passed, entered by hand, or sent to the
     // supervisor), the share that went to the supervisor and the share that
     // passed on the camera's read. One decimal; blank with nothing inspected.
     ...rates(Math.max(0, passed), events.filter(e => e.status === "manual").length, events.filter(e => e.status === "flagged").length),
@@ -179,11 +183,11 @@ export function buildDefectsSheet(events, categoryOf = () => "Other") {
   });
   const order = Object.entries(cats).sort((a, b) => b[1] - a[1]);
   return [
-    ["Category", "Jerseys", "Share of flags %"],
+    ["Category", "Garments", "Share of flags %"],
     ...order.map(([c, n]) => [c, n, pct(n, flags.length)]),
     ["All flags", flags.length, flags.length ? 100 : ""],
     [],
-    ["Category", "Reason", "Jerseys"],
+    ["Category", "Reason", "Garments"],
     ...order.flatMap(([c]) => Object.entries(reasons[c]).sort((a, b) => b[1] - a[1]).map(([r, n]) => [c, r, n])),
   ];
 }
@@ -192,9 +196,13 @@ export function buildDefectsSheet(events, categoryOf = () => "Other") {
 // The first sheet a supervisor wants at the end of an order: how many passed,
 // what went to the supervisor and why, what is missing, and how long it took.
 // `log` is the station's log (or the hub's events turned into that shape).
+const logEvents = log => (log || []).map(l => ({ t: l.timestamp ?? l.t, status: l.status, reason: l.reason, offRoster: !!(l.match?.offRoster || l.offRoster), operator: l.operator }));
+// summarise() of a station's log: the station's summary screen shows the same
+// rates and pace as this sheet (25 Nov 2026).
+export const summariseLog = log => summarise(logEvents(log));
 export function buildOrderSummarySheet(roster, log, meta = {}, categoryOf = () => "Other") {
   const count = st => roster.filter(r => r.scanned === st).length;
-  const events = (log || []).map(l => ({ t: l.timestamp ?? l.t, status: l.status, reason: l.reason, offRoster: !!(l.match?.offRoster || l.offRoster), operator: l.operator }));
+  const events = logEvents(log);
   const sum = summarise(events);
   const total = roster.length, pass = count("pass"), manual = count("manual"), flag = count("flag"), missing = count("missing") + count("short");
   const offRoster = events.filter(e => e.status === "flagged" && e.offRoster).length;
@@ -204,30 +212,30 @@ export function buildOrderSummarySheet(roster, log, meta = {}, categoryOf = () =
   const notIn = roster.filter(x => x.scanned !== "pass" && x.scanned !== "manual");
   return [
     ["Order", meta.orderNumber || "—"],
-    ["Jersey type", meta.jerseyType || ""],
+    ["Garment type", meta.jerseyType || ""],
     ["Made", localTimeStamp()],
     [],
-    ["Jerseys on the order", total],
+    ["Garments on the order", total],
     ["Passed", pass],
     ["Entered by hand", manual],
     ["Sent to the supervisor", flag + offRoster, offRoster ? `${offRoster} of them not on the roster` : ""],
     ["Marked missing", missing],
-    ["Not scanned", todo],
+    ["Unscanned", todo],
     [],
-    ["Pass rate %", r.passRate, "of the jerseys inspected"],
-    ["Flag rate %", r.flagRate, "of the jerseys inspected"],
+    ["Pass rate %", r.passRate, "of the garments inspected"],
+    ["Flag rate %", r.flagRate, "of the garments inspected"],
     ["Active minutes", sum.activeMin, "gaps over 10 minutes left out"],
-    ["Jerseys per active hour", sum.perHour ?? ""],
-    ["Median seconds per jersey", sum.medianSec ?? ""],
+    ["Garments per active hour", sum.perHour ?? ""],
+    ["Median seconds per garment", sum.medianSec ?? ""],
     ["Operators", uniq(events.map(e => e.operator)).join(", ") || meta.operatorName || ""],
     [],
     ["Defects by category"],
     ...buildDefectsSheet(events, categoryOf),
     [],
-    [`Not in a box: ${notIn.length}`, "", "", "the jerseys below were not passed, so they are in no box"],
-    ["Status", "Jersey", "Team", "Size"],
+    [`Not in a box: ${notIn.length}`, "", "", "the garments below were not passed, so they are in no box"],
+    ["Status", "Garment", "Team", "Size"],
     ...notIn.map(x => [rosterStatusLabel(x), who(x), x.team ?? "", x.size ?? ""]),
-    ...(notIn.length ? [] : [["", "every jersey on the order is in a box"]]),
+    ...(notIn.length ? [] : [["", "every garment on the order is in a box"]]),
   ];
 }
 
@@ -245,9 +253,9 @@ export function buildDaySheets(ledger, stationLabel = id => id, { categoryOf = (
   const summary = [
     ["Jersey QC — day sheet", ledger.date || localDateStamp()],
     ["Made", localTimeStamp()],
-    ["Stations", Object.keys(byStation).length, "Orders", orders.length, "Jerseys passed", all.passed, "By hand", all.byHand, "To supervisor", all.flagged + all.offRoster],
+    ["Stations", Object.keys(byStation).length, "Orders", orders.length, "Garments passed", all.passed, "By hand", all.byHand, "To supervisor", all.flagged + all.offRoster],
     [],
-    ["Station", "Operators", "Orders", "Passed", "By hand", "To supervisor", "Not on roster", "Un-checked", "First scan", "Last scan", "Active minutes", "Jerseys per active hour", "Median seconds per jersey", "Flag rate %", "Pass rate %"],
+    ["Station", "Operators", "Orders", "Passed", "By hand", "To supervisor", "Not on roster", "Un-checked", "First scan", "Last scan", "Active minutes", "Garments per active hour", "Median seconds per garment", "Flag rate %", "Pass rate %"],
     ...Object.entries(byStation).sort(([a], [b]) => stationLabel(a).localeCompare(stationLabel(b), undefined, { numeric: true })).map(([id, evs]) => {
       const s = summarise(evs);
       return [stationLabel(id), uniq(evs.map(e => e.operator)).join(", "), uniq(evs.map(e => e.order)).join(", "), s.passed, s.byHand, s.flagged, s.offRoster, s.undone, hhmm(s.first), hhmm(s.last), s.activeMin, s.perHour ?? "", s.medianSec ?? "", s.flagRate, s.passRate];
@@ -255,7 +263,7 @@ export function buildDaySheets(ledger, stationLabel = id => id, { categoryOf = (
     [],
     ["All stations", uniq(events.map(e => e.operator)).join(", "), uniq(events.map(e => e.order)).join(", "), all.passed, all.byHand, all.flagged, all.offRoster, all.undone, hhmm(all.first), hhmm(all.last), all.activeMin, all.perHour ?? "", all.medianSec ?? "", all.flagRate, all.passRate],
     [],
-    ["How to read it", "Active minutes leave out gaps longer than 10 minutes (breaks). Jerseys per active hour = passed / active hours. Median seconds per jersey = typical time between two confirmed jerseys. Compare with how long the same order took by hand."],
+    ["How to read it", "Active minutes leave out gaps longer than 10 minutes (breaks). Garments per active hour = passed / active hours. Median seconds per garment = typical time between two confirmed garments. Compare with how long the same order took by hand."],
   ];
   const orderRows = orders.map(o => {
     // This station's scans of this run of the order: the same number started twice is two runs,
@@ -265,11 +273,11 @@ export function buildDaySheets(ledger, stationLabel = id => id, { categoryOf = (
     const awayMin = o.away ? Math.round((o.away.seconds || 0) / 60 * 10) / 10 : "";
     return [stationLabel(o.station), o.order, o.jerseyType || "", o.operator || "", c.total ?? "", s.passed, s.byHand, s.flagged + s.offRoster, c.remaining ?? "", hhmm(s.first), hhmm(s.last), s.activeMin, s.perHour ?? "", o.idle ? o.idle.count : "", o.away ? `${o.away.count}${o.away.count ? " · " + awayMin + " min" : ""}` : "", o.rosterFile || "", s.flagRate, s.passRate, s.medianSec ?? ""];
   });
-  const ordersSheet = [["Station", "Order", "Jersey type", "Operator", "Jerseys in order", "Passed", "By hand", "To supervisor", "Still remaining", "First scan", "Last scan", "Active minutes", "Jerseys per active hour", "Idle spells", "Screen left (times · minutes)", "Roster file", "Flag rate %", "Pass rate %", "Median seconds per jersey"], ...orderRows];
+  const ordersSheet = [["Station", "Order", "Garment type", "Operator", "Garments in order", "Passed", "By hand", "To supervisor", "Still remaining", "First scan", "Last scan", "Active minutes", "Garments per active hour", "Idle spells", "Screen left (times · minutes)", "Roster file", "Flag rate %", "Pass rate %", "Median seconds per garment"], ...orderRows];
   const operators = operatorRows(events, stationLabel);
   const reasons = {};
   events.filter(e => e.status === "flagged").forEach(e => { const k = e.offRoster ? "Not on the roster" : (e.reason || "—"); reasons[k] = (reasons[k] || 0) + 1; });
-  const flagsSheet = [["Reason", "Jerseys"], ...Object.entries(reasons).sort((a, b) => b[1] - a[1]), [], ["Time", "Station", "Operator", "Order", "Jersey", "Reason", "Resolution"],
+  const flagsSheet = [["Reason", "Garments"], ...Object.entries(reasons).sort((a, b) => b[1] - a[1]), [], ["Time", "Station", "Operator", "Order", "Garment", "Reason", "Resolution"],
     ...events.filter(e => e.status === "flagged" || e.status === "manual" || e.status === "missing" || e.status === "short").map(e => [e.t, stationLabel(e.station), e.operator, e.order, `#${e.number}${e.name ? " " + e.name : ""}`, e.reason, e.resolution])];
   const eventsSheet = [["Time", "Station", "Operator", "Order", "Status", "Number", "Name", "Size", "Team", "Camera read", "Reason", "Resolution"],
     ...events.map(e => [e.t, stationLabel(e.station), e.operator, e.order, e.status, e.number, e.name, e.size, e.team, e.read || "", e.reason, e.resolution])];
@@ -282,7 +290,7 @@ function operatorRows(events, stationLabel = id => id) {
   const by = {};
   events.forEach(e => (by[e.operator || "—"] ||= []).push(e));
   return [
-    ["Operator", "Stations", "Orders", "Passed", "By hand", "To supervisor", "Not on roster", "Flag rate %", "Pass rate %", "First scan", "Last scan", "Active minutes", "Jerseys per active hour", "Median seconds per jersey"],
+    ["Operator", "Stations", "Orders", "Passed", "By hand", "To supervisor", "Not on roster", "Flag rate %", "Pass rate %", "First scan", "Last scan", "Active minutes", "Garments per active hour", "Median seconds per garment"],
     ...Object.entries(by).sort(([a], [b]) => a.localeCompare(b)).map(([name, evs]) => {
       const s = summarise(evs);
       return [name, uniq(evs.map(e => stationLabel(e.station))).join(", "), uniq(evs.map(e => e.order)).join(", "), s.passed, s.byHand, s.flagged, s.offRoster, s.flagRate, s.passRate, hhmm(s.first), hhmm(s.last), s.activeMin, s.perHour ?? "", s.medianSec ?? ""];
@@ -298,7 +306,7 @@ function operatorRows(events, stationLabel = id => id) {
 // times are known: before noon, noon to 6 pm, after 6 pm.
 const PARTS = ["Before noon", "Noon to 6 pm", "After 6 pm"];
 const partOf = t => { const ms = tsMs(t); if (ms === null) return null; const h = new Date(ms).getHours(); return h < 12 ? PARTS[0] : h < 18 ? PARTS[1] : PARTS[2]; };
-const PACE_HEAD = ["Passed", "By hand", "To supervisor", "Flag rate %", "Pass rate %", "Active minutes", "Jerseys per active hour", "Median seconds per jersey"];
+const PACE_HEAD = ["Passed", "By hand", "To supervisor", "Flag rate %", "Pass rate %", "Active minutes", "Garments per active hour", "Median seconds per garment"];
 const paceCells = s => [s.passed, s.byHand, s.flagged + s.offRoster, s.flagRate, s.passRate, s.activeMin, s.perHour ?? "", s.medianSec ?? ""];
 // The Compare days sheets described above, from the days the hub sent.
 export function buildCompareSheets(days, stationLabel = id => id, { categoryOf = () => "Other" } = {}) {

@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  labelSize, labelsZPL, flagLabelZPL, flagPanels, binLabelZPL, binListZPL, binListLabels, damagedListLabels, boxesListLabels,
+  labelSize, labelsZPL, flagLabelZPL, flagPanels, binLabelZPL, binListZPL, binListLabels, damagedListLabels, listLabels,
   repageLists, rowsPerLabel, pagesPerLabel, isTallTicket, textUnits, FLAG_LIFT, listChunks,
 } from "../labels.js";
 import { GARMENT_IDS, garment } from "../garments.js";
@@ -163,6 +163,13 @@ describe("box label on a tall roll: turned a quarter turn, filling the label (th
     const z = binLabelZPL({ title: "DAMAGED", label: "Flagged jerseys", by: "", orderNumber: "5" }, labelSize("2x3"));
     expect(turned(z).map(x => x.text)).toEqual(["DAMAGED", "Flagged jerseys", "Order 5"]);
   });
+  it("by size the size is the big line and BOX 6.1 the one under it, as on the 2 x 1 in label (the merge, 25 Nov 2026)", () => {
+    for (const spec of ["2x3", "2x4"]) {
+      const f = turned(binLabelZPL({ bin: "6.1", label: "A-2XL", by: "size", orderNumber: "264247" }, labelSize(spec)));
+      expect(f.map(x => x.text)).toEqual(["A-2XL", "BOX 6.1", "Order 264247   by size"]);
+      expect(f[0].fh).toBeGreaterThan(f[1].fh);
+    }
+  });
   it("a count label alone (no rows) keeps its band at the top", () => {
     const size = labelSize("2x4");
     const count = binListLabels([{ number: "7", name: "SMITH", size: "A-L", team: "Navy" }], { bin: "5.1", label: "Navy", orderNumber: "264247" }).at(-1);
@@ -188,6 +195,24 @@ describe("lists on a tall roll", () => {
     expect(out[0].items.at(-1)).toBe("70-P70-AL");
     expect([...out[1].items, ...out[0].items]).toEqual(rows(70).map(r => `${r.number}-${r.name}-AL`));
   });
+  it("a numbers-only list (cols: 3) keeps its three columns on a tall roll: 21 an inch, 84 on 2 x 4 (the merge, 25 Nov 2026)", () => {
+    const size = labelSize("2x4");
+    const nums = n => Array.from({ length: n }, (_, i) => ({ number: String(i + 1), name: "", size: "A-L", team: "Navy" }));
+    expect(rowsPerLabel(size, false, 3)).toBe(84);
+    expect(rowsPerLabel(labelSize("2x1"), false, 3)).toBe(21);
+    const out = repageLists(binListLabels(nums(100), { bin: "1.1", label: "Navy", orderNumber: "1" }), size);
+    // the count label's inch, then 63 under it; the rest on the next label; `cols` carried through
+    expect(out.map(l => [l.page, l.pages, l.items.length, !!l.title, l.cols])).toEqual([[2, 2, 37, false, 3], [1, 2, 63, true, 3]]);
+    expect(listChunks(binListLabels(nums(100), { bin: "1.1", label: "Navy" }), 100)).toHaveLength(1);
+    // three columns of 28 on a page of rows: the 29th row starts the second column, the 57th the third
+    const z = binListZPL({ ...out[0], items: nums(84).map(r => `${r.number}-AL`) }, size);
+    const at = t => z.split("\n").find(l => l.endsWith(`^FD${t}^FS`)).match(/^\^FO(\d+),(\d+)/).slice(1).map(Number);
+    expect(at("29-AL")[1]).toBe(at("1-AL")[1]);
+    expect(at("57-AL")[1]).toBe(at("1-AL")[1]);
+    expect(at("1-AL")[0]).toBeLessThan(at("29-AL")[0]);
+    expect(at("29-AL")[0]).toBeLessThan(at("57-AL")[0]);
+    expect(at("84-AL")[0]).toBe(at("57-AL")[0]);
+  });
   it("on 2 x 3 the count label takes 28 under it, then 42 a label", () => {
     const out = repageLists(binListLabels(rows(100), { bin: "1.1", label: "Navy" }), labelSize("2x3"));
     expect(out.map(l => [l.page, l.items.length, !!l.title])).toEqual([[3, 30, false], [2, 42, false], [1, 28, true]]);
@@ -197,13 +222,15 @@ describe("lists on a tall roll", () => {
     const a = binListLabels(rows(30), { bin: "1.1", label: "Navy", orderNumber: "1" });
     const b = binListLabels(rows(3), { bin: "2.1", label: "Red", orderNumber: "1" });
     const d = damagedListLabels(rows(30).map(r => ({ ...r, reason: "Holes" })), { orderNumber: "1" });
-    const x = boxesListLabels(rows(9).map(r => `Box ${r.number}`), { title: "DONE BOXES" });
+    // A seven-line list of its own (the order summary's FAILED list; the DONE BOXES list this
+    // used went with the Packing screen, feature/result-screens, 25 Nov 2026).
+    const x = listLabels(rows(9).map(r => `#${r.number} Holes`), { title: "FAILED" });
     const out = repageLists([...a, ...b, ...d, ...x], size);
     expect(out.map(l => [l.bin, l.page, l.pages, l.items.length, !!l.title])).toEqual([
       ["1.1", 1, 1, 30, true],
       ["2.1", 1, 1, 3, true],
       ["DAMAGED", 2, 2, 2, false], ["DAMAGED", 1, 2, 28, false],
-      ["DONE BOXES", 1, 1, 9, false],
+      ["FAILED", 1, 1, 9, false],
     ]);
   });
   it("labelsZPL: 30 jerseys are ONE label, the count label on top and the rows right under it, as tall as on the 2 x 1 in roll", () => {

@@ -1,5 +1,5 @@
 {
- "note": "Frozen output of labels.js at commit c10678f for the 2 x 1 in and 1 x 0.5 in rolls. The tall-roll work must leave these byte-identical. Do not regenerate. Updated 25 Nov 2026 for one case only (lists 1x0.5): development's list-header trim (a header under two thirds of its height is cut with …) changes that header on the sticker roll.",
+ "note": "Frozen output of labels.js at commit c10678f for the 2 x 1 in and 1 x 0.5 in rolls. The tall-roll work must leave these byte-identical. Do not regenerate. Updated 25 Nov 2026 for one case only (lists 1x0.5): development's list-header trim (a header under two thirds of its height is cut with …) changes that header on the sticker roll. Updated 25 Nov 2026 for the by-size label of the two box label cases (the merge of feature/result-screens): by size the size takes the big line and \"BOX 12.3\" the one under it (the owner); the by-team labels are unchanged.",
  "cases": [
   {
    "name": "flag 2x1",
@@ -80,7 +80,7 @@
      "orderNumber": "264247"
     }
    ],
-   "zpl": "^XA\n^CI28\n^PW406\n^LL203\n^LH0,0\n^LT0\n^FO16,23^A0N,89,89^FB374,1,0,C^FDBOX 1.1^FS\n^FO16,119^A0N,50,50^FB374,1,0,C^FDNavy^FS\n^FO16,174^A0N,22,22^FB374,1,0,C^FDOrder 264247   by team^FS\n^PQ1\n^XZ\n^XA\n^CI28\n^PW406\n^LL203\n^LH0,0\n^LT0\n^FO16,23^A0N,78,78^FB374,1,0,C^FDBOX 12.3^FS\n^FO16,119^A0N,20,20^FB374,1,0,C^FDBlue Jays Home Long Team Name^FS\n^FO16,174^A0N,22,22^FB374,1,0,C^FDby size^FS\n^PQ1\n^XZ\n^XA\n^CI28\n^PW406\n^LL203\n^LH0,0\n^LT0\n^FO16,23^A0N,70,70^FB374,1,0,C^FDDAMAGED^FS\n^FO16,119^A0N,45,45^FB374,1,0,C^FDFlagged jerseys^FS\n^FO16,174^A0N,22,22^FB374,1,0,C^FDOrder 264247^FS\n^PQ1\n^XZ\n"
+   "zpl": "^XA\n^CI28\n^PW406\n^LL203\n^LH0,0\n^LT0\n^FO16,23^A0N,89,89^FB374,1,0,C^FDBOX 1.1^FS\n^FO16,119^A0N,50,50^FB374,1,0,C^FDNavy^FS\n^FO16,174^A0N,22,22^FB374,1,0,C^FDOrder 264247   by team^FS\n^PQ1\n^XZ\n^XA\n^CI28\n^PW406\n^LL203\n^LH0,0\n^LT0\n^FO16,23^A0N,20,20^FB374,1,0,C^FDBlue Jays Home Long Team Name^FS\n^FO16,119^A0N,50,50^FB374,1,0,C^FDBOX 12.3^FS\n^FO16,174^A0N,22,22^FB374,1,0,C^FDby size^FS\n^PQ1\n^XZ\n^XA\n^CI28\n^PW406\n^LL203\n^LH0,0\n^LT0\n^FO16,23^A0N,70,70^FB374,1,0,C^FDDAMAGED^FS\n^FO16,119^A0N,45,45^FB374,1,0,C^FDFlagged jerseys^FS\n^FO16,174^A0N,22,22^FB374,1,0,C^FDOrder 264247^FS\n^PQ1\n^XZ\n"
   },
   {
    "name": "lists 2x1",
@@ -456,7 +456,7 @@
      "orderNumber": "264247"
     }
    ],
-   "zpl": "^XA\n^CI28\n^PW203\n^LL102\n^LH0,0\n^LT0\n^FO0,19^A0N,43,43^FB203,1,0,C^FDBOX 1.1^FS\n^FO0,63^A0N,23,23^FB203,1,0,C^FDNavy^FS\n^FO0,87^A0N,12,12^FB203,1,0,C^FDOrder 264247^FS\n^PQ1\n^XZ\n^XA\n^CI28\n^PW203\n^LL102\n^LH0,0\n^LT0\n^FO0,19^A0N,42,42^FB203,1,0,C^FDBOX 12.3^FS\n^FO0,63^A0N,11,11^FB203,1,0,C^FDBlue Jays Home Long Team Name^FS\n^PQ1\n^XZ\n^XA\n^CI28\n^PW203\n^LL102\n^LH0,0\n^LT0\n^FO0,19^A0N,38,38^FB203,1,0,C^FDDAMAGED^FS\n^FO0,63^A0N,23,23^FB203,1,0,C^FDFlagged jerseys^FS\n^FO0,87^A0N,12,12^FB203,1,0,C^FDOrder 264247^FS\n^PQ1\n^XZ\n"
+   "zpl": "^XA\n^CI28\n^PW203\n^LL102\n^LH0,0\n^LT0\n^FO0,19^A0N,43,43^FB203,1,0,C^FDBOX 1.1^FS\n^FO0,63^A0N,23,23^FB203,1,0,C^FDNavy^FS\n^FO0,87^A0N,12,12^FB203,1,0,C^FDOrder 264247^FS\n^PQ1\n^XZ\n^XA\n^CI28\n^PW203\n^LL102\n^LH0,0\n^LT0\n^FO0,19^A0N,11,11^FB203,1,0,C^FDBlue Jays Home Long Team Name^FS\n^FO0,63^A0N,23,23^FB203,1,0,C^FDBOX 12.3^FS\n^PQ1\n^XZ\n^XA\n^CI28\n^PW203\n^LL102\n^LH0,0\n^LT0\n^FO0,19^A0N,38,38^FB203,1,0,C^FDDAMAGED^FS\n^FO0,63^A0N,23,23^FB203,1,0,C^FDFlagged jerseys^FS\n^FO0,87^A0N,12,12^FB203,1,0,C^FDOrder 264247^FS\n^PQ1\n^XZ\n"
   },
   {
    "name": "lists 1x0.5",

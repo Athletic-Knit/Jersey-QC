@@ -11,8 +11,10 @@ import { GARMENTS, spotWords } from "./garments.js";
 // "Where" is where the operator marked the damage on the garment (24 Nov
 // 2026): "Front: left sleeve · Back: lower middle", "Not marked" for a flag
 // that was asked and skipped, empty for a reason that is not asked (or a flag
-// from before the step). "Garment" is the outline it was marked on.
-export const DAMAGE_COLUMNS = ["Date", "Time", "Station", "Order", "Jersey type", "Operator", "Number", "Name", "Team / colour", "Size", "Status", "Reason", "Where", "Garment", "Resolution", "Photo", "Damage photo"];
+// from before the step). "Garment" is the outline it was marked on (hockey
+// jersey, hoodie …); "Garment type" is the order's construction (ECHL,
+// ECHL replica, Sublimated), "Jersey type" before 25 Nov 2026.
+export const DAMAGE_COLUMNS = ["Date", "Time", "Station", "Order", "Garment type", "Operator", "Number", "Name", "Team / colour", "Size", "Status", "Reason", "Where", "Garment", "Resolution", "Photo", "Damage photo"];
 // The words for where a flag's damage is. A flag that was asked carries its
 // garment (the station puts it on with the step); with no spots it was skipped.
 export function whereOf(e) {
@@ -97,7 +99,7 @@ export function buildDamageWorkbook(rows, { title = "Damage report" } = {}, XL) 
   const most = rows.reduce((n, r) => Math.max(n, (r.damagePhotos || []).length), 0);
   const cols = [...DAMAGE_COLUMNS, ...Array.from({ length: Math.max(0, most - 1) }, (_, i) => `Damage photo ${i + 2}`)];
   const PHOTO_COL = DAMAGE_COLUMNS.length - 2;   // 0-based column of the scan photo; the damage photos follow it
-  ws.addRow([title + (rows.length ? ` — ${rows.length} flagged ${rows.length === 1 ? "jersey" : "jerseys"}` : " — nothing flagged"), ...Array(cols.length - 1).fill("")]);
+  ws.addRow([title + (rows.length ? ` — ${rows.length} flagged ${rows.length === 1 ? "garment" : "garments"}` : " — nothing flagged"), ...Array(cols.length - 1).fill("")]);
   ws.getRow(1).font = { bold: true, size: 13 };
   ws.addRow(cols);
   ws.getRow(2).font = { bold: true };

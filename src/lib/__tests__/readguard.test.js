@@ -394,8 +394,9 @@ describe("the camera doubts its read", () => {
     const m = findMatches(r, "", "6", { orientation: "upside_down" });
     expect(m.type).toBe("pick"); expect(ids(m)).toEqual([0, 1]); expect(m.reason).toMatch(/#9/);
     expect(findMatches(r, "", "6", { orientation: "rotated_left" }).type).toBe("pick");
-    expect(findMatches(r, "", "6", { orientation: "upright" })).toMatchObject({ type: "exact", match: { _id: 0 } });
-    expect(findMatches(r, "", "6", {})).toMatchObject({ type: "exact", match: { _id: 0 } });
+    // upright is no longer green (the owner, 25 Nov 2026): a 6 and a 9 both open are both listed, whatever the orientation
+    expect(ids(findMatches(r, "", "6", { orientation: "upright" }))).toEqual([0, 1]);
+    expect(ids(findMatches(r, "", "6", {}))).toEqual([0, 1]);
     // the 9 has passed: the 6 is the only one it can be
     const done = r.map(x => x._id === 1 ? { ...x, scanned: "pass" } : x);
     expect(findMatches(done, "", "6", { orientation: "upside_down" })).toMatchObject({ type: "exact", match: { _id: 0 } });
@@ -405,6 +406,31 @@ describe("the camera doubts its read", () => {
     // a "name" that is on no row (a badge, a sponsor) anchors nothing: still a question
     expect(findMatches(r, "AK", "6", { orientation: "upside_down" }).type).toBe("pick");
     expect(findMatches([row(0, "Seach", "6"), row(1, "Walker", "9")], "AK", "6", { orientation: "upside_down" }).type).toBe("pick");
+  });
+  it("6 and 9 (and 18/81, 66/99) are both on the list whatever the orientation, the number read first (the owner, 25 Nov 2026)", () => {
+    const r = [row(0, "", "6"), row(1, "", "9"), row(2, "", "18"), row(3, "", "81"), row(4, "", "23")];
+    const six = findMatches(r, "", "6");
+    expect(six).toMatchObject({ type: "pick", soft: true, twins: true, twinOf: "9" });
+    expect(ids(six)).toEqual([0, 1]);
+    expect(six.doubtful).toBeFalsy();
+    expect(six.reason).toBe("Read #6 — it could be #9 turned round. Which is it?");
+    expect(ids(findMatches(r, "", "9", { orientation: "upright" }))).toEqual([1, 0]);
+    expect(ids(findMatches(r, "", "18"))).toEqual([2, 3]);
+    expect(ids(findMatches(r, "", "81"))).toEqual([3, 2]);
+    expect(findMatches(r, "", "6", { orientation: "upside_down" })).toMatchObject({ type: "pick", twinOf: "9" });   // a turned read still lists both
+    // turned, the 6 passed: only the 9 is on the list, so no "6 or 9? both are listed" line
+    const turnedNo6 = findMatches(r.map(x => x._id === 0 ? { ...x, scanned: "pass" } : x), "", "6", { orientation: "upside_down" });
+    expect(ids(turnedNo6)).toEqual([1]); expect(turnedNo6.twinOf).toBeUndefined();
+    // a self-twin (11, 69, 88) lists nothing extra
+    expect(findMatches([row(0, "", "69"), row(1, "", "96")], "", "69")).toMatchObject({ type: "exact", match: { _id: 0 } });
+    // no open 9: as before, the 6 is green
+    const no9 = r.map(x => x._id === 1 ? { ...x, scanned: "pass" } : x);
+    expect(findMatches(no9, "", "6")).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches(r.filter(x => x._id !== 1), "", "6")).toMatchObject({ type: "exact", match: { _id: 0 } });
+    // typed: the operator's word stands
+    expect(findMatches(r, "", "6", { typed: true })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    // a name anchoring a row is not asked about
+    expect(findMatches([row(0, "Seach", "6"), row(1, "Walker", "9")], "SEACH", "6")).toMatchObject({ type: "exact", match: { _id: 0 } });
   });
   it("rotated180: 6↔9, 18↔81, 66↔99, 69→69, 60↔09 (a leading zero counts since 07 ≠ 7, N2); nothing for 2 3 4 5 7", () => {
     expect(rotated180("6")).toBe("9"); expect(rotated180("18")).toBe("81"); expect(rotated180("66")).toBe("99"); expect(rotated180("69")).toBe("69");

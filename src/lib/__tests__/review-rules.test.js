@@ -103,13 +103,20 @@ describe("N5: a team's name never decides a green", () => {
 });
 
 describe("NN: a name read where the roster row has no name is yellow", () => {
-  it("on a roster with no names at all", () => {
+  it("on a roster with no names at all the name is noise (5h, 25 Nov 2026): one open row of the number is green", () => {
     const r = [row(0, "", "5"), row(1, "", "23")];
-    const m = findMatches(r, "ZHANG", "5");
-    expect(m.type).toBe("pick");
-    expect(ids(m)).toEqual([0]);
-    expect(m.reason).toMatch(/no name/);
+    expect(findMatches(r, "ZHANG", "5")).toMatchObject({ type: "exact", match: { _id: 0 } });
     expect(findMatches(r, "", "5")).toMatchObject({ type: "exact", match: { _id: 0 } });   // no name on the jersey: green as before
+  });
+  it("5h: but a doubtful read, two open rows of the number, or a typed entry are not made green by it", () => {
+    const r = [row(0, "", "5"), row(1, "", "23"), row(2, "", "23")];
+    expect(findMatches(r, "ZHANG", "5", { numberComplete: false }).type).toBe("pick");      // the number may be covered
+    expect(findMatches(r, "ZHANG", "5", { laidFlat: false }).type).toBe("pick");            // a one-digit number on a jersey not laid flat
+    expect(findMatches(r, "ZHANG", "23").type).toBe("pick");                                // two open #23
+    const done = [row(0, "", "23"), { ...row(1, "", "23"), scanned: "pass" }];
+    expect(findMatches(done, "ZHANG", "23")).toMatchObject({ type: "exact", match: { _id: 0 } });   // one open, the other passed
+    expect(findMatches([{ ...row(0, "", "23"), scanned: "pass" }], "ZHANG", "23").type).toBe("duplicate");
+    expect(findMatches(r, "ZHANG", "99").type).not.toBe("exact");                          // not on the roster
   });
   it("on a roster where only that row has no name", () => {
     const r = [row(0, "", "5"), row(1, "Nguyen", "23")];

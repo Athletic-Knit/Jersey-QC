@@ -4,10 +4,10 @@ How to use the Jersey QC Scanner, task by task. The first part is for the operat
 
 A few words used throughout:
 
-- **Roster**: the list of every jersey in the order (name, number, team, size).
-- **Pedal**: the foot pedal at the station. It sends the Enter key. One press scans a jersey when no screen is open, and picks the highlighted button when a screen is open.
+- **Roster**: the list of every garment in the order (name, number, team, size).
+- **Pedal**: the foot pedal at the station. It sends the Enter key. One press scans a garment when no screen is open, and picks the highlighted button when a screen is open.
 - **Box**: a packing box at the station. A box has a two-number name: `5.2` is the second box of team (or size) 5.
-- **Flag**: marking a jersey as faulty so it goes to the supervisor instead of into a box.
+- **Flag**: marking a garment as faulty so it goes to the supervisor instead of into a box.
 
 ---
 
@@ -17,7 +17,7 @@ A few words used throughout:
 
 1. Open the station (on the floor, the station PC opens it by itself in full screen).
 2. Pick your **role**:
-   - **Inspector**: checks every jersey and packs it.
+   - **Inspector**: checks every garment and packs it.
    - **Sorter**: sorts only. No inspection checklist, no damage photos. A sorter can only flag "No size tag", "Duplicate" and "Not on the roster".
    - **Packer** is shown but greyed out: it is not built yet.
    - **Supervisor** opens the supervisor board (Part 2).
@@ -33,9 +33,9 @@ The station goes full screen. **Sign out** (top right) ends your shift at this s
    - tap **📥 Assigned orders** and pick an order the supervisor sent (it shows as a green line, with **Change** to pick another), or
    - tap **Roster file** and pick a CSV or Excel file.
 2. Check the **order number**. It is usually filled in from the roster. Tap the box to type it on the keypad.
-3. **Ships with**: if this order ships together with other orders, type their numbers (the comma goes in by itself after every six digits). Leave it empty if it ships alone.
-4. **Jersey type**: ECHL, ECHL replica (stitched) or Sublimated (printed). This decides which flag reasons you are offered. Leave it unset to be offered every reason.
-5. **Garment**: what the order is (Hockey jersey, Short-sleeve jersey, Long-sleeve shirt, Button jersey, Tank / singlet, Football jersey, Hoodie, Zip jacket, Shorts, Pants, Socks). This is the outline you tap when you flag a jersey to show where the damage is. **Hockey jersey** is chosen to begin with. When the roster file has a Style column, the app picks the garment from it by itself; change it if it is wrong. A jersey whose style the app knows always gets its own outline (socks on a hockey order are drawn as socks).
+3. **Ships with**: if this order ships together with other orders, type their numbers (the comma goes in by itself after every six digits; **Next number** ends a shorter one). Each number shows as a chip: tap its **✕** to take it out. Leave it empty if it ships alone.
+4. **Garment type**: ECHL, ECHL replica (stitched) or Sublimated (printed). This decides which flag reasons you are offered. Leave it unset to be offered every reason.
+5. **Garment**: what the order is (Hockey jersey, Short-sleeve jersey, Long-sleeve shirt, Button jersey, Tank / singlet, Football jersey, Hoodie, Zip jacket, Shorts, Pants, Socks). This is the outline you tap when you flag a garment to show where the damage is. **Hockey jersey** is chosen to begin with. When the roster file has a Style column, the app picks the garment from it by itself; change it if it is wrong. A garment whose style the app knows always gets its own outline (socks on a hockey order are drawn as socks).
 6. **Boxes, how the order is sorted**: **By team**, **By size**, or **Not sorted** (the whole order in one run of boxes). If the supervisor already chose, it says "set by the supervisor".
 7. Press **Start order →**.
 
@@ -43,73 +43,75 @@ An order the supervisor sent can only be open on one station at a time. If anoth
 
 ### Set out the boxes
 
-When the order starts, the **Set out N boxes** screen lists each team (or size) and how many boxes it should fill. One box label prints for each box by itself.
+When the order starts, the **Set out N boxes** screen lists each team (or size) and how many boxes it should fill. Press **Print box labels** to print one box label for each box and stick one inside each box. (They print by themselves only on a station whose Settings → Label printer has "Box labels print by themselves when an order starts" ticked.)
 
 1. Line up the boxes at the station.
-2. Stick each label inside its box (BOX 5.1, BOX 5.2 …).
+2. Stick each label inside its box (BOX 5.1, BOX 5.2 …). On an order sorted by size the size is the big line and the box number is under it.
 3. Close the screen.
 
-If a box label did not print, press the print button on that screen to print them again. Later, the **Box labels** button in the Boxes dialog opens this screen again.
+If a box label did not print, press the print button on that screen to print them again. Later, the **Box labels** button on the Packing screen opens this screen again.
 
-### Scan a jersey
+### Scan a garment
 
 1. Press **Start camera** once at the start of the order.
-2. Lay the jersey flat under the camera, back up.
+2. Lay the garment flat under the camera, back up.
 3. Press the **pedal** (or the **⚡ SCAN** button).
-4. The app reads the jersey and shows a green, yellow or red screen (below).
+4. The app reads the garment and shows a green, yellow or red screen (below).
 
-**Hands-free.** After the first jersey you confirm, the app scans by itself: when you take one jersey away and the next lies still under the camera, it scans. After each confirm it waits 3 seconds (set in Settings, "Wait after a confirm") so you can put the jersey away. The **⏸ Pause scan** / **▶ Hands-free** button beside SCAN turns it off and on; the pedal always works.
+**Hands-free.** After the first garment you confirm, the app scans by itself: when you take one garment away and the next lies still under the camera, it scans. After each confirm it waits 3 seconds (set in Settings, "Wait after a confirm") so you can put the garment away. The **⏸ Pause scan** / **▶ Hands-free** button beside SCAN turns it off and on; the pedal always works.
 
-After a **flag**, hands-free waits: the flagged jersey is usually still under the camera. Press the pedal to scan the next jersey and hands-free comes back.
+After a **flag**, hands-free waits: the flagged garment is usually still under the camera. Press the pedal to scan the next garment and hands-free comes back.
 
-**"No jersey in view"** or **"No name or number in view"** is a short yellow notice, not an error. The camera saw an empty table or no lettering. Nothing is recorded. Lay the jersey flat and scan again.
+**"No garment in view"** or **"No name or number in view"** is a short yellow notice, not an error. The camera saw an empty table or no lettering. Nothing is recorded. Lay the garment flat and scan again.
 
-**Retry.** The **R** key, or **↻ Retry scan** on a screen, takes the picture again. Nothing is recorded. On the green screen, Retry is a mouse click only, so a stray key press can never pass a jersey. After a retry, an amber strip says "#N is NOT checked — no sticker, no bin" until the next scan. **No sticker, no box.**
+**Retry.** The **R** key, or **↻ Retry scan** on a screen, takes the picture again. Nothing is recorded. On the green screen, Retry is a mouse click only, so a stray key press can never pass a garment. After a retry, an amber strip says "#N is NOT checked — no sticker, no bin" until the next scan. **No sticker, no box.**
 
-### The green screen: one jersey fits
+### The green screen: one garment fits
 
 The screen shows the number, name and team on the left, and the **SIZE** and **BOX** on the right.
 
-1. Check the jersey. The pill in the header says which look you are on:
-   - **Inspect fully** (the first 5 jerseys of an order, the 5 after a flag for "Others", and a spot check after every 10): every check is a button you tick: Decoration, Size tag, Fabric damage, Holes, Thread damage.
-   - **Quick look** (the rest): nothing to tick. "Look at: Decoration · Size tag" shows big, the other three small. After a flag, the check that goes with it (a wrong name or number → Decoration, a missing size label → Size tag, a hole → Holes …) is a tick button on the next 5 jerseys.
+1. Check the garment. The pill in the header says which look you are on:
+   - **Inspect fully** (the first 5 garments of an order, the 5 after a flag for "Others", and a spot check after every 10): every check is a button you tick: Decoration, Size tag, Fabric damage, Holes, Thread damage.
+   - **Quick look** (the rest): nothing to tick. "Look at: Decoration · Size tag" shows big, the other three small. After a flag, the check that goes with it (a wrong name or number → Decoration, a missing size label → Size tag, a hole → Holes …) is a tick button on the next 5 garments.
 2. Press the pedal once per tick button: it ticks the next one (yellow outline). Or tap any check.
 3. When every tick button is ticked (on a quick look there is usually none), **✓ Confirm** unlocks. Press the pedal (or tap Confirm).
-4. Put the jersey in the box shown.
+4. Put the garment in the box shown.
 
-If the jersey is not right, press **🚩 Flag** (see "Flag a jersey").
+If the garment is not right, press **🚩 Flag** (see "Flag a garment").
 
-After you correct the app (you type over a green, the right jersey was not on a list, and so on), the next 5 jerseys are read twice and must agree before a green. The header shows **Checking · N**. This is normal.
+After you correct the app (you type over a green, the right garment was not on a list, and so on), the next 5 garments are read twice and must agree before a green. The header shows **Checking · N**. This is normal.
 
-### The yellow screen: pick the jersey
+### The yellow screen: pick the garment
 
-The camera was unsure, or more than one jersey fits (for example two #23s on different teams). The number read is at the top ("#23 · NAME"; a **?** means the camera doubted it). The list is sorted by size. Every row is one line: the number big on the left, the name and team in the middle (the one that tells the rows apart is in amber), and the size big on the right.
+The camera was unsure, or more than one garment fits (for example two #23s on different teams). The number read is at the top ("#23 · NAME"; a **?** means the camera doubted it). The list is sorted by size, but the size of the garment you passed last comes first (then the sizes of the same kind), so a bundle of one size is one press of Enter each; a grey line under the number says so. On an order sorted by size the size is the biggest thing on each row. Every row is one line: the number big on the left, the name and team in the middle (the one that tells the rows apart is in amber), and the size big on the right.
 
-1. Find the row that matches the jersey's **size tag** and name.
+A 6 and a 9 look alike from the other side (so do 18 and 81, 66 and 99). When the camera reads one of them and the other is still open on the roster, both are listed, the number read first, under a grey line such as "6 or 9? both are listed · #6 first". Check the garment's size tag and pick.
+
+1. Find the row that matches the garment's **size tag** and name.
 2. Tap it, or move the highlight with **A** / **↑** and press the pedal.
-3. You go to the green screen for that jersey. If you picked the wrong row, press **← Back to the list**.
+3. You go to the green screen for that garment. If you picked the wrong row, press **← Back to the list**.
 
-If the jersey is not on the list:
+If the garment is not on the list:
 
 - **↻ Retry scan**: if the photo was bad (a fold, a hand in the way).
 - **🚩 Flag**, then:
-  - **No size tag**: the jersey has no size tag.
-  - **Duplicate**: this jersey has already passed once. Pick its size.
-  - **Not on the roster**: the number, name or size is not in this order. Pick its size (tick "Goalie jersey" if it is one).
+  - **No size tag**: the garment has no size tag.
+  - **Duplicate**: this garment has already passed once. Pick its size.
+  - **Not on the roster**: the number, name or size is not in this order. Pick its size (tick "Goalie garment" if it is one).
 
-A row with a **blue bar** on its left side is a jersey coming back: "🔧 Back from repair" or "✓ Was marked missing — found".
+A row with a **blue bar** on its left side is a garment coming back: "🔧 Back from repair" or "✓ Was marked missing — found".
 
 ### The red screens
 
-- **NOT FOUND** or **COULD NOT READ**: press **↻ Retry scan**. If it still fails, press **🚩 Flag** (No size tag, Duplicate, Not on the roster) or type the jersey in with **By hand**.
+- **NOT FOUND** or **COULD NOT READ**: press **↻ Retry scan**. If it still fails, press **🚩 Flag** (No size tag, Duplicate, Not on the roster) or type the garment in with **By hand**.
 - **SCAN FAILED**: the model did not answer (the network or the server). Retry. If it keeps failing, see "When something goes wrong".
-- **ALREADY DONE**: this jersey has been scanned before.
-  - If it **passed** before: **Skip** (it was scanned twice by mistake), **Retry**, or **Duplicate** (there really are two of this jersey: it is flagged).
-  - If it was **flagged** before: **Skip** is first, so the pedal skips. If it really is back from repair, tap **🔧 Back from repair — pass it** with the mouse. The pedal never passes a flagged jersey.
+- **ALREADY DONE**: this garment has been scanned before.
+  - If it **passed** before: **Skip** (it was scanned twice by mistake), **Retry**, or **Duplicate** (there really are two of this garment: it is flagged).
+  - If it was **flagged** before: **Skip** is first, so the pedal skips. If it really is back from repair, tap **🔧 Back from repair — pass it** with the mouse. The pedal never passes a flagged garment.
 
-### Type a jersey by hand
+### Type a garment by hand
 
-Use this when the camera cannot read a jersey.
+Use this when the camera cannot read a garment.
 
 1. Press **⌨ By hand** (or the **W** key).
 2. Type the number, and the name and team if you can, on the keys on the screen.
@@ -118,16 +120,16 @@ Use this when the camera cannot read a jersey.
    - **Several rows fit**: a list, as on the yellow screen.
    - **No row has that number**: "#88 is not on the roster — check the number". **← Back** (the pedal) returns to the form to fix a typo. If the number is right, press "#88 — not on the roster", then **🚩 Flag**.
 
-### Blank jerseys
+### Blank garments
 
-Jerseys with no name and no number cannot be read by the camera. When the roster has them, a green **Blanks · N** button appears beside By hand.
+Garments with no name and no number cannot be read by the camera. When the roster has them, a green **Blanks · N** button appears beside By hand.
 
 1. Tap **Blanks**. Each line is a team, size and style.
-2. Tap **Count one** for each good jersey (or press the pedal to count one more of the last kind). **Flag one** for a faulty one. **Undo** takes back the last count.
+2. Tap **Count one** for each good garment (or press the pedal to count one more of the last kind). **Flag one** for a faulty one. **Undo** takes back the last count.
 
-### Flag a jersey
+### Flag a garment
 
-1. On the green screen, press **🚩 Flag**. (For a jersey that already passed: **🚩 Flag it** on the "Last passed" bar, or **🕘 History** → Flag it, or the roster row's Mark menu → Flag / damage.)
+1. On the green screen, press **🚩 Flag**. (For a garment that already passed: **🚩 Flag it** on the "Last passed" bar, or **🕘 History** → Flag it, or the roster row's Mark menu → Flag / damage.)
 2. Pick the reason:
 
    | Reason | When |
@@ -137,14 +139,15 @@ Jerseys with no name and no number cannot be read by the camera. When the roster
    | Twill peeling | Stitched orders only: twill lifting or peeling |
    | Sublimation error | Sublimated orders only: a print or colour fault |
    | Stitching or seam | Loose or broken stitching, a seam or hem |
+   | Loose thread | See below: this is cut off at the station; the garment stays passed and the record keeps the flag |
    | Holes | A hole or snag in the fabric |
    | Size label | The size label is wrong or missing |
-   | Dirt or mark | See below: this is cleaned, not flagged |
+   | Dirt or mark | See below: this is cleaned at the station; the garment stays passed and the record keeps the flag |
    | Others | Anything else |
 
-3. For a fault you can point to (Name or number, Logo or crest, Twill peeling, Sublimation error, Stitching or seam, Holes, Dirt that will not come out) the app asks **where the damage is** (below). Size label and Others go straight on.
-4. The **FLAGGED** screen shows the jersey and the reason, and the garment with your marks. Two flag tickets print (a black column with the jersey in white, and the reason; on the tall labels also the garment with your marks).
-5. Stick a ticket on the jersey and put it in the **DAMAGED** box.
+3. For a fault you can point to (Name or number, Logo or crest, Twill peeling, Sublimation error, Stitching or seam, Holes, Dirt that will not come out, Loose thread that needs the stitcher) the app asks **where the damage is** (below). Size label and Others go straight on.
+4. The **FLAGGED** screen shows the garment and the reason, and the outline with your marks. Two flag tickets print (a black column with the garment in white, and the reason; on the tall labels also the outline with your marks).
+5. Stick a ticket on the garment and put it in the **DAMAGED** box.
 6. Press **Continue**.
 
 **Where is the damage.** The screen shows the garment from the **FRONT** and from the **BACK**, side by side.
@@ -154,45 +157,60 @@ Jerseys with no name and no number cannot be read by the camera. When the roster
 3. Tapped the wrong place? Tap the spot to take it off, or press **↶ Undo last mark**.
 4. Press **✓ Done · N marked**. The tickets print with the spots.
 
-**Skip — no mark** (or Esc) flags the jersey with no marks (on the tall labels the tickets print an empty garment and "Not marked"). Esc is Skip also when spots are on: they are dropped. The pedal cannot tap the garment, so with nothing marked the pedal presses Skip; once a spot is on, the pedal presses Done. While this screen is up, Finish order, Finish later and By hand are greyed: finish the flag first.
+**Skip — no mark** (or Esc) flags the garment with no marks (on the tall labels the tickets print an empty garment and "Not marked"). Esc is Skip also when spots are on: they are dropped. The pedal cannot tap the garment, so with nothing marked the pedal presses Skip; once a spot is on, the pedal presses Done. While this screen is up, Finish order, Finish later and By hand are greyed: finish the flag first.
 
-The same step comes up when you flag a jersey after it passed (Last passed, History, the roster's Mark menu) and when you flag a blank jersey.
+The same step comes up when you flag a garment after it passed (Last passed, History, the roster's Mark menu) and when you flag a blank garment.
 
-**Dirt or mark** opens a blue **CLEAN IT NOW** screen. Wipe the mark off.
+**Dirt or mark** opens a blue **CLEAN IT NOW** screen first (it does not ask where). Wipe the mark off.
 
-- **It is clean now**: the jersey is not flagged. It goes back to the green screen (or stays passed).
+- **It is clean now**: the garment is not put in the DAMAGED box and no ticket prints. It goes back to the green screen (or stays passed). It is still written down as a flag, marked "Fixed at the station", so the reports count it.
 - **It will not come out**: it is flagged as "Dirt that will not come out", and the app asks where the mark is.
 
-**Damage photo.** On the FLAGGED screen, press **Photo of the damage**. For a defect (logo, twill, stitching, holes, dirt that will not come out) the pedal takes the photo too; for Name or number, Not on the roster, Duplicate and No size tag the pedal presses **Continue** instead. Hold the damaged part under the camera: it counts 3-2-1 and takes the photo. **Retake** or **Take another** as needed. The photos go to the supervisor and into the damage report.
+**Loose thread** works the same way: a blue **CUT IT NOW** screen. Cut the thread off.
+
+- **It is cut now**: no ticket, no DAMAGED box; the garment carries on as it was. It is written down as a flag marked "Fixed at the station", the same as dirt.
+- **It needs the stitcher**: it is flagged as "Loose thread — to the stitcher".
+
+**Damage photo.** On the FLAGGED screen, press **Photo of the damage**. For a defect (logo, twill, stitching, holes, dirt that will not come out) the pedal takes the photo too; for Name or number, Not on the roster, Duplicate and No size tag the pedal presses **Continue** instead. Set the damaged part under the camera, then press **Enter**: the photo is taken at once (no countdown), so set the garment first. **Retake** or **Take another** as needed. The photos go to the supervisor and into the damage report.
 
 **The DAMAGED box.** Every station has one, besides the team and size boxes. Its label does not print by itself: it is the same box all day. Print it from **🖨 Print → DAMAGED → Its label**. The Boxes dialog lists what is in it and has **🖨 Print its list**.
 
-**What the repair department sees.** On the 2 x 1 in labels the ticket is as it always was: the jersey in white on black, the reason, the station and the order number. On the tall labels (2 x 3 in or 2 x 4 in) that same ticket is the top inch, and under it the garment is drawn from the FRONT and the BACK with the numbered spots where you tapped. A ticket you skipped says "Not marked". The supervisor's board and the damage report show the same marks, in words too.
+**What the repair department sees.** On the 2 x 1 in labels the ticket is as it always was: the garment in white on black, the reason, the station and the order number. On the tall labels (2 x 3 in or 2 x 4 in) that same ticket is the top inch, and under it the garment is drawn from the FRONT and the BACK with the numbered spots where you tapped. A ticket you skipped says "Not marked". The supervisor's board and the damage report show the same marks, in words too.
 
 **Wrong size picked** on a "Not on the roster" or "Duplicate" flag: press **← Back · wrong size**. The flag is taken back. Throw away the tickets that printed, and pick the right size.
 
-### Box full
+### Packing: the one screen for the boxes and the summary
 
-1. When a box is full (by room or by weight: your judgement), tap **📦 Packing** (bottom left, beside History).
-2. On the team's (or size's) row press **📦 Box 5.1 full**. (Or **📦 All boxes**, then **Box full** on that box's row.)
-3. Answer "What size is Box 5.1?" (small, medium, large). The suggested one is marked. Your answer teaches the app how many jerseys fit in each box.
-4. The box's list prints: a count label first, then the jersey lists. Tape the box and stick the labels on it.
-5. That team carries on in the next box (5.2). Its label prints if it was not printed before.
+Tap **📦 Packing** (bottom left, beside History; it is also the main button when the last garment passes, and on the "Order is done" screen). The green strip at the top says what to do **now**, with the one button that does it:
 
-The Boxes dialog warns **⚠ Short** when jerseys of a box's team or size are in no box yet (not scanned, flagged or missing). Check before you seal.
+- **Now: keep scanning · N to go**: garments are still to scan. Close, and carry on.
+- **Now: print the box lists and seal the boxes**: every garment is accounted for. **🖨 Print every list** prints the list of each open box that has garments. Nothing is closed.
+- **Now: finish the order**: every list is printed. **🏁 Finish order** opens the confirm.
+- **The order is finished**: you opened Packing from the "Order is done" screen. Reprint a box's list from its row if you need it.
 
-### Mark a jersey missing
+Under the sentence: "39 of 41 passed · 2 with the supervisor · 0 unscanned" (and "· 1 marked missing" when you marked one Missing). The pedal (Enter) does nothing on this screen: touch the button.
+
+Each box has a row: its name, the team or size, "12 scanned · 3 to scan", and the box it is expected to fill (→ Medium).
+
+- **🖨 Print list** prints what is in the box now and leaves the box **open**. It asks "What box is it in?" (small, medium, large; the suggested one is marked; **Just print** skips the answer). Your answer teaches the app how many garments fit in each box. The row then says **✓ List printed · 12 pcs** and the button reads **Print again**. If more garments go in afterwards, or a garment of its team is flagged or marked missing, it reads **Print list (changed)**. Finish order does not print a list that is already printed and unchanged.
+- **Box full** closes the box: answer "What size is Box 5.1?", its list prints, tape the box and stick the labels on it. That team carries on in the next box (5.2); its label prints if it was not printed before.
+
+A closed box has **Print list again**. The DAMAGED box has its own **Print list**. A row warns **⚠ Short** when garments of its team or size are in no box yet (unscanned, flagged or missing). Check before you seal.
+
+**Summary ▸** (folded) opens every garment that passed (with its box), every one that failed (with why) and the ones not in a box: unscanned (not scanned yet) and marked missing, each with its count. **⬇ Excel** (supervisors) and **🖨 Print summary** (the count label, the FAILED list, the MISSING list and the UNSCANNED list) are beside it.
+
+### Mark a garment missing
 
 In the roster table, open the row's **Mark** menu and choose **Missing**. On a passed row the Mark menu offers **Un-check** (scan it again) and **🚩 Flag / damage**.
 
-To find a jersey in a long roster, tap **Number or name** above the table and type on the screen's keys. The **Filters** button narrows the table by box, done or to do, size and team.
+To find a garment in a long roster, tap **Number or name** above the table and type on the screen's keys. The **Filters** button narrows the table by box, done or to do, size and team.
 
 ### Finish the order
 
 1. Tap **🏁 Finish order** in the header. (This is a click only: the pedal never finishes an order.)
-2. Check the counts: passed, open, not scanned, and the amber list of jerseys that are in no box. **📋 See the summary first** opens the order summary: every jersey that passed (with its box), every one that failed (with why), and the missing ones, marked missing beside not scanned yet. The same screen is behind the **📋 Summary** button at the bottom of the station at any time; its **🖨 Print summary** prints the count label, the FAILED list and the MISSING list, and **With the passed list** adds every passed jersey.
+2. Check the counts: passed, open, unscanned, and the amber list of garments that are in no box. **📋 See the summary first** opens the Packing screen (the boxes, their lists and the summary). It is behind **📦 Packing** at the bottom of the station at any time. The summary's **With the passed list** (every passed garment) is in the **🖨 Print** menu.
 3. If the order **ships with** other orders, choose for each box **Leave open** (it waits for the next order of the group) or **Full — close it**.
-4. Press **✓ Finish order**. The lists of every open box print (each with a NOT IN BOX label when something of its team is flagged, missing or not scanned), the DAMAGED box's list, and the order summary.
+4. Press **✓ Finish order**. The lists of every open box print (each with a NOT IN BOX label when something of its team is flagged, missing or unscanned), except a box whose list you already printed from Packing and that has not changed since; the DAMAGED box's list, and the order summary.
 5. The **"Order N is done"** screen stays up. From here:
    - **🖨 Print the box lists again**,
    - **🖨 Print something else…** (the Print menu),
@@ -203,10 +221,10 @@ If the server does not answer when you press New order, the screen keeps the ord
 
 ### Finish later, and unfinished orders
 
-When an order cannot be finished today (jerseys out for repair, missing, not yet scanned):
+When an order cannot be finished today (garments out for repair, missing, unscanned):
 
 1. Tap **⏸ Finish later** in the header.
-2. Read the summary: "N of M jerseys are done", and what is still out.
+2. Read the summary: "N of M garments are done", and what is still out.
 3. Confirm. The whole order is saved on the server, and the station is free.
 
 To pick it up again, on any station:
@@ -216,18 +234,18 @@ To pick it up again, on any station:
 
 On a picked-up order:
 
-- Scan a jersey that came back as usual. The green screen says **🔧 Back from repair — check it is fixed** or **✓ Found — it was marked missing**. Check it and confirm.
-- **🔧 Still out · N** lists what the order still waits for: back from repair, missing, extra jerseys with the supervisor, not scanned yet. **Pass it** passes one without the camera (tap twice to be sure).
+- Scan a garment that came back as usual. The green screen says **🔧 Back from repair — check it is fixed** or **✓ Found — it was marked missing**. Check it and confirm.
+- **🔧 Still out · N** lists what the order still waits for: back from repair, missing, extra garments with the supervisor, unscanned. **Pass it** passes one without the camera (tap twice to be sure).
 
 ### The Print menu
 
-**🖨 Print** (in the header, on the order screen and on the done screen) prints any label again: every box label, every box list, one box's label or list, a jersey's sticker (search by number or name), or a flag ticket (with its marks). **Another order** finds an order done before by its number. Labels always print on this station's printer.
+**🖨 Print** (in the header, on the order screen and on the done screen) prints any label again: every box label, every box list, one box's label or list, a garment's sticker (search by number or name), or a flag ticket (with its marks). **Another order** finds an order done before by its number. Labels always print on this station's printer.
 
 ### Other buttons
 
-- **🕘 History**: every jersey scanned in this order, newest first. Flag one after the fact.
-- **↶ Undo** on the "Last passed" bar: un-checks the last jersey (scan it again).
-- **Missing · Dup · Flag** (beside History): the lists of missing, duplicate and flagged jerseys.
+- **🕘 History**: every garment scanned in this order, newest first. Flag one after the fact.
+- **↶ Undo** on the "Last passed" bar: un-checks the last garment (scan it again).
+- **Missing · Dup · Flag** (beside History): the lists of missing, duplicate and flagged garments.
 - **⚙ Settings**: keys, camera and its rotation, the wait after a confirm, the pick list's order, the label printer switches (stickers, flag tickets, box lists), packing.
 
 ### When something goes wrong
@@ -235,9 +253,9 @@ On a picked-up order:
 | What you see | What to do |
 |---|---|
 | **"No label printer for this station"**, or a printer error | Check the Zebra is on, has labels and is not paused. Press **Reprint** when it is back. Tell the supervisor: IT checks the printer from the server PC. Scanning carries on without labels |
-| **"Board offline"** pill | The supervisor's board cannot be reached. Keep working. If jerseys stop being read too (SCAN FAILED each time), the server is down: stop and fetch the supervisor |
+| **"Board offline"** pill | The supervisor's board cannot be reached. Keep working. If garments stop being read too (SCAN FAILED each time), the server is down: stop and fetch the supervisor |
 | **The hub is not saving anything** (a message from the server) | The server cannot read its data file. Stop and fetch the supervisor; IT must fix it (see `docs/DEPLOY.md`) |
-| **A green you should not have passed** | Press **↶ Undo** on the "Last passed" bar (scan it again) or **🚩 Flag it**. For an older jersey: **🕘 History** → Flag it, or its roster row's Mark menu → Un-check. Take the sticker off and take it out of the box |
+| **A green you should not have passed** | Press **↶ Undo** on the "Last passed" bar (scan it again) or **🚩 Flag it**. For an older garment: **🕘 History** → Flag it, or its roster row's Mark menu → Un-check. Take the sticker off and take it out of the box |
 | **⚠ NOT SAVING — tell the supervisor** pill | The station's browser storage is full: a reload or crash would lose the work since. Do **not** reload or close the page. Tell the supervisor. **⏸ Finish later** puts the whole order on the server |
 | **The page reloaded** | Press **▶ Resume** to carry on with the saved order |
 | **The camera shows nothing** | Press **■** to stop the camera and **Start camera** again. Check the camera in Settings |
@@ -252,11 +270,11 @@ Sign in as **Supervisor** with the supervisor's PIN. The supervisor's sign-in is
 
 One card per station, always showing now:
 
-- the operator, the order, how many jerseys are done, the pace and the time left;
-- **Now at**: the last jersey scanned;
-- **Needs you**: the open problems of this order, the three that weigh most first. Each has a tag for where it goes (REMAKE, DECORATION, STITCHER, CLEANING, CHECK ORDER, SIGN OFF, DECIDE), its photos (click to enlarge) and, when the operator marked it, a small garment with the spots (rest the pointer on it for the words);
+- the operator, the order, how many garments are done, the pace and the time left;
+- **Now at**: the last garment scanned;
+- **Needs you**: the open problems of this order, the three that weigh most first. Each has a tag for where it goes (REMAKE, DECORATION, STITCHER, CLEANING, CHECK ORDER, SIGN OFF, DECIDE), its photos (click to enlarge: the wheel or a pinch zooms, drag moves the picture, double-click toggles fit / 2x, the arrow keys or ‹ › show the next photo of the same garment, Esc closes) and, when the operator marked it, a small outline of the garment with the spots (rest the pointer on it for the words);
 - **Still open from earlier orders**, each with **Done** when it has been dealt with;
-- **Open order**, and **Remove** to take a card off the board.
+- **Open order**, and **Remove** to take a card off the board. An open order starts on its **Summary** tab, the same summary the operator sees: pass rate, flag rate and pace, the boxes, and the garments Passed (with their box), Failed (with the reason) and Missing; Roster, Problems and Log are the next tabs.
 
 A station that has signed out shows "signed out". A station silent for over 2 hours moves into a "Not reporting" strip.
 
@@ -265,7 +283,7 @@ The board sends no pop-ups, sounds or desktop notifications: the header count an
 ### Send a roster to a station
 
 1. In **Send a roster**, choose **Send to** (any station, or one station).
-2. Fill in the order number, order notes (from the order paper), jersey type, **garment** (the outline the station marks damage on; Hockey jersey to begin with, picked from the file's Style column when it has one), how the boxes are sorted, and ships with.
+2. Fill in the order number, order notes (from the order paper), garment type, **garment** (the outline the station marks damage on; Hockey jersey to begin with, picked from the file's Style column when it has one), how the boxes are sorted, and ships with.
 3. Choose the roster file and press **Send to stations**.
 
 **Rosters sent** lists the rosters waiting or in progress, with who has each. **Release** lets another station take it; **Remove** takes it off the list.
@@ -273,10 +291,10 @@ The board sends no pop-ups, sounds or desktop notifications: the header count an
 ### Orders and reports
 
 - **Today**, **Pick a date…** or **A range of dates…** picks which day the orders list shows. The hub keeps 90 days; photos only for the newest 14.
-- **Open order**: every jersey with its status, what was flagged and why, and the log.
+- **Open order**: every garment with its status, what was flagged and why, and the log.
 - **⬇ Order sheet**: the order's Excel workbook (results, summary, boxes, attention).
-- **Damage report**: every flagged jersey with its photos, as Excel (per order, or for the whole day). **Where** says where the damage was marked ("Not marked" when the operator skipped), **Garment** which outline it was marked on.
-- **⬇ Day sheet (Excel)**: the whole day, every station: jerseys per hour, time per jersey, flag rate, each operator, defects by category, every scan.
+- **Damage report**: every flagged garment with its photos, as Excel (per order, or for the whole day). **Where** says where the damage was marked ("Not marked" when the operator skipped), **Garment** which outline it was marked on (**Garment type** is the order's ECHL / ECHL replica / Sublimated).
+- **⬇ Day sheet (Excel)**: the whole day, every station: garments per hour, time per garment, flag rate, each operator, defects by category, every scan.
 - **⬇ Compare days (Excel)**: one workbook over a range of dates: by day, by operator, by station, by part of the day, defects by day.
 
 ### The Unfinished pile
@@ -285,10 +303,10 @@ The board sends no pop-ups, sounds or desktop notifications: the header count an
 
 - **Search** by order number.
 - **→ Station 1 / 2 / 3** gives an order to that station (tap again to take it back). **Free it** frees an order a station left open.
-- **✓ Settle…**: tick the jerseys still out, then:
+- **✓ Settle…**: tick the garments still out, then:
   - **✓ Back and good**: they count as passed ("checked off by supervisor");
   - **📦 Ship short**: the order goes without them.
-  Extra jerseys are closed either way. When nothing is left out, the entry closes. Settling is refused while a station has the order open.
+  Extra garments are closed either way. When nothing is left out, the entry closes. Settling is refused while a station has the order open.
 
 ### Wall view
 

@@ -39,11 +39,25 @@ export const REASON_CHECK = {
   wrong_decoration: "decoration", logo: "decoration", print: "decoration",   // the name, the number, a logo or crest, sublimated graphics: all decoration
   label: "size", no_size_tag: "size",
   mark: "fabric", mark_stays: "fabric", fabric: "holes", twill: "thread", stitching: "thread",
+  loose_thread: "thread", thread_stays: "thread",
 };
 
+// The resolution of the flag written when dirt or a loose thread is dealt with at the
+// station: still a flag, resolved at once (the owner, 25 Nov 2026).
+export const FIXED_AT_STATION = "Fixed at the station";
+// "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
+// Both "stays" flags are physical defects, so they are asked where (`where: true`).
+export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning", where: true };
+// "Loose thread" is cut at the station. This is the flag when it needs the stitcher.
+export const THREAD_STAYS = { id: "thread_stays", label: "Loose thread — to the stitcher", route: "Supervisor → stitcher", cat: "Sewing", where: true };
+
 // One tap on the "not right" menu. `route` is where the jersey goes (the board
-// weighs it, routeOfReason); every reason but "mark" flags the jersey (the
-// FLAGGED screen), and "mark" opens the Clean it now screen.
+// weighs it, routeOfReason); every reason flags the jersey (the FLAGGED
+// screen) but the two fixed at the station, which carry their screen in
+// `inPlace` (the owner, 25 Nov 2026; Dirt or mark alone before): its emoji,
+// title and words ("It stays passed; the record keeps the flag." is added on the screen), the
+// two buttons, the note left on the green, and `stays`, the flag when the fix
+// does not work.
 // One short menu for every order (17 Nov 2026, after the demo to the manager:
 // the old menu showed near-twins side by side, "Missing or wrong logo" beside
 // "Missing, wrong or crooked crest or logo", and its labels were sentences).
@@ -59,13 +73,14 @@ export const REASONS = [
   { id: "twill",     label: "Twill peeling",     route: "Supervisor → pink slip → decoration", cat: "Decoration", where: true, only: "stitched" },
   { id: "print",     label: "Sublimation error", route: "Supervisor → full remake",            cat: "Artwork",    where: true, only: "sublimated" },   // the floor's word for a print or colour fault (it read "Print or colour" for a day, 17 Nov 2026)
   { id: "stitching", label: "Stitching or seam", route: "Supervisor → stitcher",               cat: "Sewing", where: true },
+  { id: "loose_thread", label: "Loose thread",   route: "Fix in place", cat: "Sewing",          // cut at the station, a flag resolved at once: the "Cut it now" screen (the owner, 25 Nov 2026); not asked where (fixed in place), its `stays` flag is
+    inPlace: { emoji: "✂️", title: "CUT IT NOW", text: "Cut the loose thread off.", done: "✓ It is cut now", fail: "🚩 It needs the stitcher", note: "Loose thread, cut at the station", stays: THREAD_STAYS } },
   { id: "fabric",    label: "Holes",             route: "Supervisor → full remake",            cat: "Fabric", where: true },
   { id: "label",     label: "Size label",        route: "Supervisor → stitcher",               cat: "Label" },
-  { id: "mark",      label: "Dirt or mark",      route: "Clean in place", inPlace: true,       cat: "Cleaning" },   // cleaned at the station, not flagged: the "Clean it now" screen
+  { id: "mark",      label: "Dirt or mark",      route: "Clean in place", cat: "Cleaning",       // cleaned at the station, a flag resolved at once: the "Clean it now" screen
+    inPlace: { emoji: "🧽", title: "CLEAN IT NOW", text: "Wipe the dirt or mark off.", done: "✓ It is clean now", fail: "🚩 It will not come out", note: "Dirt or mark, cleaned at the station", stays: MARK_STAYS } },
   { id: "other",     label: "Others",            route: "Supervisor decides",                  cat: "Other" },      // flags at once, nothing to type (the owner, 17 Nov 2026; it was "Something else" with a text box)
 ];
-// "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
-export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning", where: true };
 // A jersey with no size tag, flagged from the pick list (the owner, 19 Nov
 // 2026): with no size to read there is no row to pick, so it is flagged as it
 // is — the number read, no row — and goes to the stitcher for a tag.
@@ -152,6 +167,7 @@ export const DEFAULT_SETTINGS = {
   stickerRoll: "2x4",     // stickers on passed jerseys
   flagRoll: "2x4",        // flag tickets
   boxRoll: "2x4",         // box labels, box lists, count labels, the DAMAGED list
+  boxAutoPrint: false,    // the set-out screen prints the box labels by itself when an order starts. Off: only its button prints them (the owner, 25 Nov 2026)
   boxWeights: false,      // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station
   boxWeightCap: 45,       // lb: no box heavier than this, when boxWeights is on (src/lib/boxmodel.js)
   listSort: "size",       // the pick list's order: "size" | "team" | "number" (LIST_SORTS in roster.js; the owner, 19 Nov 2026: by size, the tag is all the operator checks)
@@ -184,7 +200,7 @@ const OLD_REASONS = [
   ["Something else", "Supervisor decides", "Other"],              // the last item of the menu that day, with a text box
   ["Hole or snag", "Supervisor → full remake", "Fabric"],         // renamed "Holes" 20 Nov 2026
 ].map(([label, route, cat]) => ({ label, route, cat }));
-const ALL_REASONS = [...REASONS, MARK_STAYS, NO_SIZE_TAG, ...OLD_REASONS];
+const ALL_REASONS = [...REASONS, MARK_STAYS, THREAD_STAYS, NO_SIZE_TAG, ...OLD_REASONS];
 // The defect category of a flag, from its reason's label, for the reports'
 // breakdown. A reason typed by the operator is "Other"; a jersey that is not
 // on the roster, or a duplicate, is an order problem, not a defect.

@@ -43,7 +43,7 @@ describe("roster sheet", () => {
     const log = [{ match: { _id: 1 }, reason: "Stitching", resolution: "Rejected — sent back", operator: "Cooper", timestamp: "t1" }];
     const sheet = buildRosterSheet(roster, log, { orderNumber: "25" }, ["name", "number", "team", "size"], () => 1);
     const body = sheet.slice(7);   // 5 meta rows (incl. Jersey Type), a blank, the header
-    expect(body.map(r => r[0])).toEqual(["PASS", "FLAGGED", "MISSING", "NOT SCANNED"]);
+    expect(body.map(r => r[0])).toEqual(["PASS", "FLAGGED", "MISSING", "UNSCANNED"]);
     expect(body[1].slice(6, 9)).toEqual(["Stitching", "Rejected — sent back", "Cooper"]);
   });
 });
@@ -69,8 +69,8 @@ describe("day sheet", () => {
     expect(col("To supervisor")).toBe(1);
     expect(col("Un-checked")).toBe(1);
     expect(col("Active minutes")).toBe(2);
-    expect(col("Jerseys per active hour")).toBe(60);
-    expect(col("Median seconds per jersey")).toBe(45);
+    expect(col("Garments per active hour")).toBe(60);
+    expect(col("Median seconds per garment")).toBe(45);
     expect(s.flags[1]).toEqual(["Stitching or seam", 1]);
     expect(s.orders[1][0]).toBe("Line 1");
     expect(s.events).toHaveLength(6);

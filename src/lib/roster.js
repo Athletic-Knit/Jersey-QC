@@ -83,6 +83,38 @@ const SHIP_WITH_HEADER = /^ship(?:s|ping)?\s*(?:with|w\/)/i;
 // nothing between is that many orders.
 export const orderList = text => [...new Set((String(text ?? "").match(/\d{3,}/g) || []).flatMap(n => (n.length > 6 && n.length % 6 === 0 ? n.match(/\d{6}/g) : [n])))];
 
+// The ship-with field as the person sees it: the numbers already finished (chips)
+// and the one being typed. A number is finished when a separator follows it.
+export function shipParts(text) {
+  const v = String(text ?? "");
+  const runs = v.match(/\d+/g) || [];
+  const typing = runs.length && !/\D$/.test(v);
+  return { done: typing ? runs.slice(0, -1) : runs, cur: typing ? runs[runs.length - 1] : "" };
+}
+export const shipJoin = (done, cur) => done.map(n => n + ", ").join("") + cur;
+// What the text becomes after typing: only digits and separators, a run longer than six
+// digits split into orders (as orderList reads it), and a comma after every full six
+// digits and after a number the "Next number" key or a typed comma ended.
+export function shipNorm(text) {
+  const v = String(text ?? "").replace(/[^\d,;\s]/g, "");
+  const chunks = (v.match(/\d+/g) || []).flatMap(r => r.match(/\d{1,6}/g));
+  if (!chunks.length) return "";
+  const ended = /\D$/.test(v) || chunks[chunks.length - 1].length === 6;
+  return chunks.join(", ") + (ended ? ", " : "");
+}
+// A key of the ship-with keypad: a digit, "," (next number) or "⌫".
+export function shipPress(text, k) {
+  const v = String(text ?? "");
+  if (k === "⌫") return /\D$/.test(v) ? v.replace(/\D+$/, "") : v.slice(0, -1);
+  if (k === ",") return /\d$/.test(v) ? shipNorm(v + ",") : v;
+  return shipNorm(v + k);
+}
+// Take number `i` out of the chips; what is being typed stays.
+export function shipRemove(text, i) {
+  const { done, cur } = shipParts(text);
+  return shipJoin(done.filter((_, j) => j !== i), cur);
+}
+
 // rows: array of arrays of cell strings. Finds the header row (first row that
 // looks like one, within the first 15) so title rows above it are skipped.
 // The order number, when the file carries one (an "order" column, or a title
@@ -353,6 +385,23 @@ export function sizeRank(size) {
   const i = SIZE_ORDER.indexOf(m?.[2] || k);
   return [group, i < 0 ? 99 : i, k];
 }
+// A size as it is shown and printed, in the short form whatever the roster file says (the
+// owner, 25 Nov 2026): "Ladies-S", "Ladies S" and "ladies small" are L-S, "Youth M" is Y-M,
+// "Adult 2XL" is A-2XL. A size already short (A-M, L-S), one with no family (XL, OSFA, "")
+// and one that cannot be read are returned as they are. Only for the eye and the printer:
+// matching and the stored row keep the file's own spelling (`sameSize` reads both).
+const SIZE_WORDS = { small: "s", medium: "m", large: "l", xlarge: "xl", extralarge: "xl", xxlarge: "2xl", "2xlarge": "2xl", xxxlarge: "3xl", "3xlarge": "3xl" };
+export function shortSize(size) {
+  const s = String(size ?? "");
+  const k = teamKey(s).replace(/[\s._]+/g, "").replace(/[-/]+/g, "-");
+  // A short form in lower case ("l-s", "w-m" for women) comes out upper, as the rack writes it (the Fable check, 25 Nov 2026).
+  const m = k.match(/^(youth|adult|ladies|lady|womens|women|y|a|l|w)-?(.+)$/);
+  if (!m) return s;
+  const rest = SIZE_WORDS[m[2].replace(/^-/, "")] || m[2].replace(/^-/, "");
+  if (SIZE_ORDER.indexOf(rest) < 0) return s;
+  const letter = /^y/.test(m[1]) ? "Y" : /^a/.test(m[1]) ? "A" : "L";
+  return `${letter}-${rest.toUpperCase()}`;
+}
 // Two sizes in rack order (for sort).
 export const bySize = (a, b) => { const x = sizeRank(a), y = sizeRank(b); return (x[0] - y[0]) || (x[1] - y[1]) || x[2].localeCompare(y[2]); };
 
@@ -384,15 +433,36 @@ export const sizeChoices = roster => sizeChoiceGroups(roster).flatMap(g => g.siz
 // can choose team or number instead (Settings → Pick list). Ties keep the
 // matcher's order (Array.prototype.sort is stable).
 export const LIST_SORTS = [{ id: "size", label: "Size" }, { id: "team", label: "Team" }, { id: "number", label: "Number" }];
-// The list's rows in a new array, sorted by `by` ("size", "team" or "number").
-export function sortCandidates(rows, by = "size") {
+// The same size, written either way ("l-s" and "L-S", "A - M" and "A-M").
+export const sameSize = (a, b) => sizeRank(a || "")[2] === sizeRank(b || "")[2];
+// `lastSize` (the owner, 25 Nov 2026: jerseys come in bundles of one size, and
+// on a numbers-only roster the list for #12 has every size's #12): before the
+// chosen order, the rows of the last confirmed jersey's size come first, then
+// its family (youth, adult or ladies, `sizeRank`'s group: L-S, then L-M, L-L),
+// then the rest; within a rank the order is as chosen. A size with no family
+// (XL, OSFA) only brings its own rows up.
+// Where a row's size stands to the last confirmed jersey's: 0 the same size,
+// 1 the same family, 2 neither (or no last size). `lastSizeLetter` names the
+// family for the line under the list's header as the short form writes it
+// ("L- sizes first", the owner, 25 Nov 2026; it said "Ladies" before), "" when it has none.
+export const lastSizeRank = (size, lastSize) => {
+  if (!lastSize) return 0;
+  const fam = sizeRank(lastSize)[0];
+  return sameSize(size, lastSize) ? 0 : fam < 3 && sizeRank(size || "")[0] === fam ? 1 : 2;
+};
+export const lastSizeLetter = lastSize => { const g = SIZE_GROUPS[sizeRank(lastSize || "")[0]]; return g ? `${g.key}-` : ""; };
+// `after` (a row test): those rows come after all the others, each part in the
+// order above — a 6/9 list keeps the number read first and its upside-down
+// twin after it (the owner, 25 Nov 2026).
+export function sortCandidates(rows, by = "size", { lastSize = "", after = null } = {}) {
+  const rank = r => (after && after(r) ? 3 : 0) + lastSizeRank(r.size, lastSize);
   const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
   const team = (a, b) => String(a.team || "").localeCompare(String(b.team || ""), undefined, { sensitivity: "base", numeric: true });
   const size = (a, b) => bySize(a.size || "", b.size || "");
   const cmp = by === "team"   ? (a, b) => team(a, b) || size(a, b) || num(a) - num(b)
             : by === "number" ? (a, b) => num(a) - num(b) || size(a, b) || team(a, b)
             :                   (a, b) => size(a, b) || team(a, b) || num(a) - num(b);
-  return [...rows].sort(cmp);
+  return [...rows].sort((a, b) => rank(a) - rank(b) || cmp(a, b));
 }
 
 // ── The roster table's sort ──────────────────────────────────────────────────
@@ -545,7 +615,7 @@ export function shortages(roster, binMap, closed = []) {
 // "#5, #12, #40 and 2 more": the jerseys of a shortage, for a screen line. A
 // jersey with no number goes by its name; a blank one by its size.
 export const jerseyList = (rows, max = 6) => {
-  const one = r => { const n = String(r.number ?? "").trim(), name = String(r.name ?? "").trim(), size = String(r.size ?? "").trim(); return n ? `#${n}` : name || (size ? `${size} blank` : "blank"); };
+  const one = r => { const n = String(r.number ?? "").trim(), name = String(r.name ?? "").trim(), size = shortSize(String(r.size ?? "").trim()); return n ? `#${n}` : name || (size ? `${size} blank` : "blank"); };
   return rows.slice(0, max).map(one).join(", ") + (rows.length > max ? ` and ${rows.length - max} more` : "");
 };
 
@@ -567,7 +637,7 @@ export function binEntries(roster, binMap) {
   if (!binMap) return [];
   const field = binFieldOf(binMap), label = {};
   roster.forEach(r => { const k = teamKey(r[field]); if (k && !label[k]) label[k] = String(r[field]).trim(); });
-  return Object.entries(binMap).filter(([k]) => k !== "__by").map(([k, bin]) => ({ label: field === "all" ? ALL_LABEL : k === BLANK_KEY ? blankLabel(field) : label[k] || k, bin })).sort((a, b) => binOrder(a.bin, b.bin));
+  return Object.entries(binMap).filter(([k]) => k !== "__by").map(([k, bin]) => ({ label: field === "all" ? ALL_LABEL : k === BLANK_KEY ? blankLabel(field) : field === "size" ? shortSize(label[k] || k) : label[k] || k, bin })).sort((a, b) => binOrder(a.bin, b.bin));
 }
 
 // Columns to show in the roster table (everything the file had, minus state).

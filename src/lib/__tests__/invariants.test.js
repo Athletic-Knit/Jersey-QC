@@ -21,7 +21,7 @@
 // row containing the digit is open"; it was dropped on 19 Nov 2026 and N1
 // replaced it with the stricter rule above.)
 import { describe, it, expect } from "vitest";
-import { findMatches } from "../match.js";
+import { findMatches, rotated180 } from "../match.js";
 import { normNum, nameMatches, norm } from "../text.js";
 import { colourFamilies } from "../colour.js";
 
@@ -71,6 +71,7 @@ const related = (c, read, roster) => {
   const rn = normNum(c.number), nNum = normNum(read.number), nName = norm(read.name);
   if (nNum && rn === nNum) return true;
   if (nNum && nNum.length === 1 && rn.includes(nNum)) return true;
+  if (nNum && rn && rotated180(nNum) === rn) return true;   // the number read turned round (6 for 9): listed beside it whatever the orientation (the owner, 25 Nov 2026); `rn &&`: rotated180 is "" for 2-5 and 7, which a numberless row would equal
   if (nName && c.name && (nameMatches(nName, c.name) || norm(c.name).startsWith(nName) || c.name.toLowerCase().split(/[^a-z0-9]+/).some(w => w && w.startsWith(nName)))) return true;
   if (nName && c.name && nName.length >= 3) { const a = norm(c.name); if (Math.abs(a.length - nName.length) <= 2) return true; }   // near names (edit distance ≤ 2 is offered)
   const onRoster = roster.some(x => normNum(x.number) === nNum);
@@ -112,7 +113,9 @@ describe("matcher invariants over random rosters and reads", () => {
         expect(g.scanned, "1 open row: " + ctx).toBeFalsy();
         expect(doubtful(read), "4 a doubtful read went green: " + ctx).toBe(false);
         if (g.name) expect(nameMatches(read.name, g.name) && read.flags.nameComplete !== false, "2 named row needs its whole name: " + ctx).toBe(true);
-        else expect(norm(read.name), "8 a name was read but the row has none: " + ctx).toBe("");
+        // 8, narrowed by 5h (the owner, 25 Nov 2026): a name read on a nameless row is allowed only on a
+        // roster with no names at all, and only when the number has exactly one open row.
+        else if (norm(read.name)) expect(roster.every(x => !x.name) && roster.filter(x => !x.scanned && normNum(x.number) === normNum(g.number)).length === 1, "8 a name was read but the row has none: " + ctx).toBe(true);
         expect(normNum(g.number), "3 the number read, digit for digit: " + ctx).toBe(normNum(read.number));
         const twins = roster.filter(x => !x.scanned && x !== g && normNum(x.number) === normNum(g.number) && (!g.name || nameMatches(read.name, x.name)));
         if (twins.length) {

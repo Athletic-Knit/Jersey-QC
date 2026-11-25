@@ -8,7 +8,7 @@
 // hub's flag events turned into the same shape); `planLabels` are the box
 // labels the station expects the order to need (the open order only).
 // Nothing here prints: each function returns the labels for hub.printLabels.
-import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, boxParts, inBin, groupSize } from "./roster.js";
+import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, boxParts, inBin, groupSize, shortSize } from "./roster.js";
 import { binListLabels, jerseyLabel, flagLabel, damagedListLabels, listLabels } from "./labels.js";
 import { garmentOf } from "./garments.js";
 
@@ -102,7 +102,7 @@ export function notInBox(pack, bin) {
   if (key === undefined) return [];
   const open = binMap[key];   // binFor gives the group's open box for any row of the group
   const reason = new Map(damagedItems(pack).filter(x => x._id !== undefined).map(x => [x._id, x.reason]));
-  const why = r => r.scanned === "flag" ? `flagged${reason.get(r._id) ? " — " + reason.get(r._id) : ""}` : r.scanned === "missing" || r.scanned === "short" ? "marked missing" : "not scanned";
+  const why = r => r.scanned === "flag" ? `flagged${reason.get(r._id) ? " — " + reason.get(r._id) : ""}` : r.scanned === "missing" || r.scanned === "short" ? "marked missing" : "unscanned";
   return roster.filter(r => !inBin(r) && binFor(binMap, r) === open).sort(byNumber).map(r => ({ row: r, why: why(r) }));
 }
 // Its labels (kind "binlist"): "NOT IN BOX 5.1 Navy" and one line a jersey.
@@ -141,7 +141,7 @@ export function isLastBox(pack, bin) {
 //   missing  marked missing by the operator, and not scanned yet, side by side.
 const byNumber = (a, b) => { const n = x => { const v = parseInt(String(x.number ?? "").replace(/\D/g, ""), 10); return Number.isFinite(v) ? v : 1e9; }; return n(a) - n(b) || String(a.name ?? "").localeCompare(String(b.name ?? "")); };
 // "#7 SMITH White A-L": a jersey on one line of a label.
-const who = x => [String(x?.number ?? "").trim() ? `#${String(x.number).trim()}` : "", x?.name, x?.team, x?.size].map(v => String(v ?? "").trim()).filter(Boolean).join(" ") || "Jersey";
+const who = x => [String(x?.number ?? "").trim() ? `#${String(x.number).trim()}` : "", x?.name, x?.team, shortSize(x?.size)].map(v => String(v ?? "").trim()).filter(Boolean).join(" ") || "Garment";
 export function orderSummary(pack) {
   const roster = pack?.roster || [], binMap = pack?.binMap || null, closed = pack?.closedBins || [];
   const passed = roster.filter(inBin).sort(byNumber).map(row => ({ row, bin: binMap ? binOfRow(binMap, closed, row) : null }));
@@ -160,16 +160,19 @@ export function orderSummary(pack) {
 }
 // The summary's labels (kind "binlist"), in print order: the PASSED list (only
 // `withPassed`: on a 500-jersey order it is 70 labels by itself, and the box
-// lists carry every passed jersey), the MISSING list, the FAILED list, then the
-// count label — so the strip off the printer reads count label, FAILED,
-// MISSING, PASSED. Finish order prints it without the passed list; the Print
-// menu and the summary screen print it on request.
+// lists carry every passed jersey), the UNSCANNED list, the MISSING list, the
+// FAILED list, then the count label — so the strip off the printer reads count
+// label, FAILED, MISSING, UNSCANNED, PASSED. Unscanned (not scanned yet) and
+// Missing (the operator's mark) are two lists (the owner, 25 Nov 2026). Finish
+// order prints it without the passed list; the Print menu and the summary
+// screen print it on request.
 export function summaryJobs(pack, { withPassed = false, station = "", date = "" } = {}) {
   const s = orderSummary(pack), o = pack?.orderNumber;
-  const passed  = withPassed ? listLabels(s.passed.map(p => `${who(p.row)}${p.bin ? "  Box " + p.bin : ""}`), { title: "PASSED", orderNumber: o }) : [];
-  const missing = listLabels([...s.missing.marked.map(r => `${who(r)}: marked missing`), ...s.missing.notScanned.map(r => `${who(r)}: not scanned`)], { title: "MISSING", orderNumber: o });
-  const failed  = listLabels([...s.failed, ...s.extra].map(x => `${who(x)}: ${x.reason || "flagged"}`), { title: "FAILED", orderNumber: o });   // the extras' reasons say what they are (Duplicate, Not on the roster, No size tag): no suffix
-  return [...passed, ...missing, ...failed, { summary: true, orderNumber: String(o || ""), station: String(station || ""), date: String(date || ""), counts: s.counts }];
+  const passed    = withPassed ? listLabels(s.passed.map(p => `${who(p.row)}${p.bin ? "  Box " + p.bin : ""}`), { title: "PASSED", orderNumber: o }) : [];
+  const unscanned = listLabels(s.missing.notScanned.map(who), { title: "UNSCANNED", orderNumber: o });
+  const missing   = listLabels(s.missing.marked.map(who), { title: "MISSING", orderNumber: o });
+  const failed    = listLabels([...s.failed, ...s.extra].map(x => `${who(x)}: ${x.reason || "flagged"}`), { title: "FAILED", orderNumber: o });   // the extras' reasons say what they are (Duplicate, Not on the roster, No size tag): no suffix
+  return [...passed, ...unscanned, ...missing, ...failed, { summary: true, orderNumber: String(o || ""), station: String(station || ""), date: String(date || ""), counts: s.counts }];
 }
 
 // The jerseys that have a sticker: passed by the camera or by hand.
@@ -227,7 +230,7 @@ export function damagedItems(pack) {
 // Its list (kind "binlist") and its own label (kind "binticket").
 export function damagedListJobs(pack) { return damagedListLabels(damagedItems(pack), { orderNumber: pack?.orderNumber }); }
 // The DAMAGED box's label: printed with the order's first flag, once an order.
-export const damagedBoxLabel = pack => ({ bin: "DAMAGED", title: "DAMAGED", label: "Flagged jerseys", by: "", count: 0, orderNumber: String(pack?.orderNumber || "") });
+export const damagedBoxLabel = pack => ({ bin: "DAMAGED", title: "DAMAGED", label: "Flagged garments", by: "", count: 0, orderNumber: String(pack?.orderNumber || "") });
 
 // One of the hub's order records (GET /api/hub/orders) → a pack. Its box
 // names are left as they were recorded: an order from before the boxes had

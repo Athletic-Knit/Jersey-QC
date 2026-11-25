@@ -30,6 +30,15 @@ describe("CandidateRow", () => {
     expect(screen.getByText("SMITH").style.color).toBe("rgb(245, 158, 11)");
     expect(screen.getByText("Navy").style.color).toBe("");
   });
+  it("on a by-size order the size box is bigger than the number; on a by-team order they are equal", () => {
+    const c = { _id: 6, number: "12", name: "", team: "", size: "L-S" };
+    const px = el => el.style.fontSize;
+    const by = tile(c, [], { sizeBig: true });
+    expect(px(by.children[2])).not.toBe(px(by.children[0]));
+    cleanup();
+    const team = tile(c);
+    expect(px(team.children[2])).toBe(px(team.children[0]));
+  });
   it("a passed row is grey with its badge, nothing amber; no number shows a dash", () => {
     const el = tile({ _id: 3, number: "100", name: "", team: "Navy", size: "A-M", scanned: "pass" }, ["team"], { disabled: true });
     expect(el.children[1].textContent).toContain("Already passed");

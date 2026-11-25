@@ -27,7 +27,7 @@
 // label keep today's look at the top; the lists put several of today's pages
 // on one label (repageLists). On the 2 x 1 in and sticker rolls every label
 // is exactly as before.
-import { binEntries, binFieldOf, binFor, boxParts, bySize } from "./roster.js";
+import { binEntries, binFieldOf, binFor, boxParts, bySize, shortSize } from "./roster.js";
 import { GARMENTS, MAX_SPOTS, SIDES, garment as garmentShape } from "./garments.js";
 
 // "1x0.5" (inches, width x height) → dots at the printer's resolution.
@@ -85,7 +85,8 @@ export function jerseyLabel(row, binMap, { orderNumber = "" } = {}) {
   const bin = binFor(binMap, row);
   let by = binFieldOf(binMap);
   if (!binMap || by === "all") by = String(row?.team ?? "").trim() ? "team" : "size";   // one bin for the whole order: still say the team or the size
-  return { bin: bin === null ? "" : bin, by, value: String(row?.[by] ?? "").trim(), orderNumber: String(orderNumber || "") };
+  const value = String(row?.[by] ?? "").trim();
+  return { bin: bin === null ? "" : bin, by, value: by === "size" ? shortSize(value) : value, orderNumber: String(orderNumber || "") };
 }
 
 // 1 x 0.5 in: a BIN column on the left with the number as big as the label
@@ -142,7 +143,7 @@ export function flagLabel(entry, binMap, { orderNumber = "", station = "", tag =
     tag:    String(tag || "DECIDE"),
     reason: String(entry?.reason || "").replace(/ — found after it passed$/, "").trim(),
     team:   String(row?.team ?? "").trim(),
-    size:   String(row?.size ?? "").trim(),
+    size:   shortSize(String(row?.size ?? "").trim()),
     bin:    bin === null ? "" : bin,
     orderNumber: String(orderNumber || ""),
     station: stationShort(station),
@@ -372,7 +373,7 @@ export function binLabels(roster, binMap, { orderNumber = "", boxes = null } = {
 }
 
 // "BOX 5.1" (or its `title`, "DAMAGED") as big as the label allows (half its
-// height), the team or size under it, a small footer with the order number and
+// height), the team under it (by size the other way round), a small footer with the order number and
 // "by team" / "by size" (just the order number on a small label). No jersey
 // count: nobody knows how many will go in before the box is full. It is read
 // from across the table, so the box and what it holds take the room and the
@@ -401,15 +402,20 @@ export function binLabelZPL(l, size = labelSize()) {
   const a     = h - top;                                          // the printable height
   const pad   = Math.round(a * 0.04);
   const small = Math.max(12, Math.round(a * 0.12));              // the footer
-  const big   = Math.round(a * 0.5);                              // "BOX 5.1"
-  const mid   = Math.round(a * 0.27);                             // the team or size
+  const big   = Math.round(a * 0.5);                              // "BOX 5.1" (by size: the size)
+  const mid   = Math.round(a * 0.27);                             // the team (by size: "BOX 5.1")
   const footer = (wide
     ? [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : l.by === "team" ? "by team" : ""]
     : [l.orderNumber ? `Order ${l.orderNumber}` : ""]).filter(Boolean).join("   ");
+  // A by-size box is found by its size: the size takes the big line and
+  // "BOX 6.1" the one under it (the owner, 25 Nov 2026). By team, and the
+  // DAMAGED box, the box first.
+  const box = l.title || `BOX ${l.bin}`;
+  const [head, sub] = l.by === "size" && !l.title ? [l.label, box] : [box, l.label];
   return [
     "^XA", "^CI28", `^PW${full}`, `^LL${label}`, "^LH0,0", "^LT0",
-    line(side, top + pad, fit(l.title || `BOX ${l.bin}`, w, big), w, "C", l.title || `BOX ${l.bin}`),
-    line(side, top + pad + big + Math.round(a * 0.01), fit(l.label, w, mid), w, "C", l.label),
+    line(side, top + pad, fit(head, w, big), w, "C", head),
+    line(side, top + pad + big + Math.round(a * 0.01), fit(sub, w, mid), w, "C", sub),
     ...(footer ? [line(side, h - small - pad, fit(footer, w, small), w, "C", footer)] : []),
     "^PQ1", "^XZ",
   ].join("\n");
@@ -433,12 +439,14 @@ function binLabelTurnedZPL(l, size) {
   const { w: S, h: L, dpi = 203 } = size;
   const m = Math.round(dpi * 2 / 25.4);                           // 2 mm clear of each edge
   const len = L - 2 * m, across = S - 2 * m;
-  const title = l.title || `BOX ${l.bin}`;
+  const box = l.title || `BOX ${l.bin}`;
+  // By size the size takes the big line and "BOX 6.1" the one under it, as on the 2 x 1 in label.
+  const [head, sub] = l.by === "size" && !l.title && l.label ? [l.label, box] : [box, l.label || ""];
   const footer = [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : l.by === "team" ? "by team" : ""].filter(Boolean).join("   ");
   // The heights, each as big as its share of the width across and its text's length allow.
   const lines = [
-    { text: title, h: fit(title, len, Math.round(across * 0.48)) },
-    { text: l.label || "", h: l.label ? fit(l.label, len, Math.round(across * 0.3)) : 0 },
+    { text: head, h: fit(head, len, Math.round(across * 0.48)) },
+    { text: sub, h: sub ? fit(sub, len, Math.round(across * 0.3)) : 0 },
     { text: footer, h: footer ? fit(footer, len, Math.round(across * 0.13)) : 0 },
   ].filter(x => x.h > 0);
   // Spread them evenly over the width across: the room left over goes in equal gaps.
@@ -466,10 +474,15 @@ function binLabelTurnedZPL(l, size) {
 // The rows start 2 mm in from the left edge: the ZD411 cut that much off the
 // left of the 2 x 1 in roll (seen on the floor, 10 Nov 2026).
 export const BIN_LIST_PER_LABEL = 14;
+// A list in which no row has a name is only numbers and sizes ("23-AXL"): short, so three
+// columns of seven fit a label, 21 a label (the owner, 25 Nov 2026: a 15-garment numbers-only
+// box was two labels).
+export const BIN_LIST_PER_LABEL_NUMBERS = 21;
+const BIN_LIST_ROWS = 7;
 export const BIN_LIST_LEFT_MM = 2;
 const squash = s => String(s ?? "").trim().replace(/[\s-]+/g, "");
 export function binListItem(row) {
-  return [String(row?.number ?? "").trim(), String(row?.name ?? "").trim(), squash(row?.size)].filter(Boolean).join("-");
+  return [String(row?.number ?? "").trim(), String(row?.name ?? "").trim(), squash(shortSize(row?.size))].filter(Boolean).join("-");
 }
 // Jersey-number order: 2 before 10; a number that is not a number goes last;
 // the same number by name.
@@ -485,18 +498,20 @@ const byNumber = (a, b) => {
 export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "team", of = 0 } = {}) {
   const items = [...(rows || [])].sort(byNumber).map(binListItem);
   if (!items.length) return [];
-  const pages = Math.ceil(items.length / BIN_LIST_PER_LABEL);
+  const per = (rows || []).some(r => String(r?.name ?? "").trim()) ? BIN_LIST_PER_LABEL : BIN_LIST_PER_LABEL_NUMBERS;
+  const cols = per / BIN_LIST_ROWS;                                 // no name on any row: three columns of seven
+  const pages = Math.ceil(items.length / per);
   // What the customer checks the box against: how many of each size (or, in
   // an order sorted by size, of each team). "Y-M 4   A-L 12   A-XL 8".
   const other = by === "size" ? "team" : "size", tally = new Map();
   (rows || []).forEach(r => {   // "Navy" and "navy " are one team, as they are one box: counted together under the first spelling met
-    const shown = String(r?.[other] ?? "").trim(); if (!shown) return;
+    const raw = String(r?.[other] ?? "").trim(), shown = other === "size" ? shortSize(raw) : raw; if (!shown) return;   // sizes in the short form: "Ladies-S" and "L-S" are one count
     const k = shown.toLowerCase(), t = tally.get(k) || { shown, n: 0 };
     t.n++; tally.set(k, t);
   });
   const mix = [...tally.values()].sort((a, b) => (other === "size" ? bySize(a.shown, b.shown) : a.shown.localeCompare(b.shown, undefined, { sensitivity: "base" }))).map(t => `${t.shown} ${t.n}`).join("   ");
-  const base  = { bin, label: String(label || ""), orderNumber: String(orderNumber || ""), pages, count: items.length, by, mix, of: Number(of) || 0 };
-  const lists = Array.from({ length: pages }, (_, i) => ({ ...base, page: i + 1, items: items.slice(i * BIN_LIST_PER_LABEL, (i + 1) * BIN_LIST_PER_LABEL) }));
+  const base  = { bin, label: String(label || ""), orderNumber: String(orderNumber || ""), pages, count: items.length, by, mix, of: Number(of) || 0, cols };
+  const lists = Array.from({ length: pages }, (_, i) => ({ ...base, page: i + 1, items: items.slice(i * per, (i + 1) * per) }));
   return [...lists.reverse(), { ...base, title: true, page: 0, items: [] }];
 }
 
@@ -547,7 +562,7 @@ function binCountZPL(l, size, band = bandOf(size), { open = false } = {}) {
 export const DAMAGED_PER_LABEL = 7;
 export function damagedListLabels(entries, { orderNumber = "" } = {}) {
   const items = (entries || []).map(e => ({
-    who: [String(e.number ?? "").trim() ? `#${String(e.number).trim()}` : "", String(e.name ?? "").trim(), String(e.team ?? "").trim()].filter(Boolean).join(" ") || "Jersey",
+    who: [String(e.number ?? "").trim() ? `#${String(e.number).trim()}` : "", String(e.name ?? "").trim(), String(e.team ?? "").trim()].filter(Boolean).join(" ") || "Garment",
     reason: String(e.reason || "").replace(/ — found after it passed$/, "").trim() || "Flagged",
   }));
   if (!items.length) return [];
@@ -557,30 +572,25 @@ export function damagedListLabels(entries, { orderNumber = "" } = {}) {
     items: items.slice(i * DAMAGED_PER_LABEL, (i + 1) * DAMAGED_PER_LABEL),
   })).reverse();
 }
-// A list of boxes (the owner, 19 Nov 2026): the boxes that are done (full or
-// their team complete) or the ones that are not, a line a box — "Box 1.1  10U A
-// 17 pcs" — seven to a 2 x 1 in label, drawn like the DAMAGED list. `lines`:
-// the text of each line. → the labels in print order, the last page first.
-export function boxesListLabels(lines, { title = "BOXES", orderNumber = "" } = {}) { return listLabels(lines, { title, orderNumber, unit: "box" }); }
 // Any list of lines under a title, seven to a 2 x 1 in label, drawn like the
-// DAMAGED list: the FAILED, MISSING and PASSED lists of the order summary and a
-// box's NOT IN BOX list (the owner, 24 Nov 2026). `unit`: "pc" (default) or
-// "box", for the count in the header. → the labels in print order, the last page first.
-export function listLabels(lines, { title = "LIST", orderNumber = "", unit = "pc" } = {}) {
+// DAMAGED list: the FAILED, UNSCANNED, MISSING and PASSED lists of the order summary and a
+// box's NOT IN BOX list (the owner, 24 Nov 2026). → the labels in print order,
+// the last page first.
+export function listLabels(lines, { title = "LIST", orderNumber = "" } = {}) {
   const items = (lines || []).map(t => ({ text: String(t) }));
   if (!items.length) return [];
   const pages = Math.ceil(items.length / DAMAGED_PER_LABEL);
   return Array.from({ length: pages }, (_, i) => ({
-    damaged: true, head: String(title), unit, bin: String(title), orderNumber: String(orderNumber || ""), page: i + 1, pages, count: items.length,
+    damaged: true, head: String(title), bin: String(title), orderNumber: String(orderNumber || ""), page: i + 1, pages, count: items.length,
     items: items.slice(i * DAMAGED_PER_LABEL, (i + 1) * DAMAGED_PER_LABEL),
   })).reverse();
 }
 
 // The order summary's count label (the owner, 24 Nov 2026): the order number
-// big, SUMMARY and how many jerseys, then passed · failed · missing, the
-// station and the day small at the bottom. It prints last, so the strip off
-// the printer reads it first, then FAILED, MISSING and (on request) PASSED.
-// `l`: { summary: true, orderNumber, station, date, counts: { total, passed, failed, missing } }.
+// big, SUMMARY and how many jerseys, then passed · failed · unscanned · missing,
+// the station and the day small at the bottom. It prints last, so the strip off
+// the printer reads it first, then FAILED, UNSCANNED, MISSING and (on request) PASSED.
+// `l`: { summary: true, orderNumber, station, date, counts: { total, passed, failed, notScanned, marked } }.
 function summaryCountZPL(l, size) {
   const { w: full, h, top = 0, dpi = 203 } = size;
   const side  = full >= 300 ? Math.round(dpi * 2 / 25.4) : 0;
@@ -590,8 +600,11 @@ function summaryCountZPL(l, size) {
   const big   = Math.round(a * 0.3), mid = Math.round(a * 0.17), small = Math.max(12, Math.round(a * 0.12));
   const c     = l.counts || {};
   const head  = l.orderNumber ? `Order ${l.orderNumber}` : "Order";
-  const what  = `SUMMARY   ${c.total ?? 0} ${c.total === 1 ? "jersey" : "jerseys"}${c.extra ? `   +${c.extra} extra` : ""}`;   // extra: flags with no roster row (not on the roster, a duplicate), apart from the order's count; on this line so the tally keeps its size (review, 24 Nov 2026)
-  const tally = `${c.passed ?? 0} passed   ${c.failed ?? 0} failed   ${c.missing ?? 0} missing`;
+  const what  = `SUMMARY   ${c.total ?? 0} ${c.total === 1 ? "garment" : "garments"}${c.extra ? `   +${c.extra} extra` : ""}`;   // extra: flags with no roster row (not on the roster, a duplicate), apart from the order's count; on this line so the tally keeps its size (review, 24 Nov 2026)
+  // Unscanned (not scanned yet) and Missing (the operator's mark) are two counts (the owner, 25 Nov 2026);
+  // a station page loaded before that sends only `missing`, both together, and keeps its old word.
+  const left  = c.notScanned === undefined ? [`${c.missing ?? 0} missing`] : [`${c.notScanned} unscanned`, ...(c.marked ? [`${c.marked} missing`] : [])];
+  const tally = [`${c.passed ?? 0} passed`, `${c.failed ?? 0} failed`, ...left].join("   ");
   const foot  = [l.station, l.date].filter(Boolean).join("   ");
   const out = ["^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
     line(side, top + pad, fit(head, w, big), w, "C", head),
@@ -610,6 +623,8 @@ function damagedListZPL(l, size) {
   const head = Math.max(12, Math.round(a * 0.12));
   const x0   = Math.round((size.dpi || 203) * BIN_LIST_LEFT_MM / 25.4) + pad;
   const fullW = w - x0 - pad;
+  // `unit: "box"` comes only from a station page loaded before 25 Nov 2026 and not reloaded since (its
+  // Done / Not done boxes lists, removed with the Packing screen): the hub builds the ZPL it sends.
   const unit  = l.unit === "box" ? (l.count === 1 ? "box" : "boxes") : (l.count === 1 ? "pc" : "pcs");
   const right = `${l.count} ${unit}${l.pages > 1 ? `  ${l.page}/${l.pages}` : ""}`;
   const rw = Math.round(fullW * 0.3), lw = fullW - rw;
@@ -644,31 +659,34 @@ export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   // repageLists): the count label in the top inch, as on the 2 x 1 in roll.
   if (l.title && l.items?.length) {
     const out = binCountZPL(l, size, dpi, { open: true });
-    out.push(...listRows(l.items, size, dpi, pagesPerLabel(size) - 1));
+    out.push(...listRows(l.items, size, dpi, pagesPerLabel(size) - 1, l.cols));
     out.push("^PQ1", "^XZ");
     return out.join("\n");
   }
   if (l.title) return binCountZPL(l, size);
   const out = ["^XA", "^CI28", `^PW${size.w}`, `^LL${size.h}`, "^LH0,0", "^LT0"];
-  out.push(...listRows(l.items, size, 0, pagesPerLabel(size)), "^PQ1", "^XZ");
+  out.push(...listRows(l.items, size, 0, pagesPerLabel(size), l.cols), "^PQ1", "^XZ");
   return out.join("\n");
 }
 // The rows of a box list from `from` dots down, `k` inches of them (on the
-// 2 x 1 in roll the whole label): 14 an inch in two columns, read down the left
-// column and then down the right, each row as tall as on the 2 x 1 in roll.
-function listRows(items, size, from, k) {
+// 2 x 1 in roll the whole label): 14 an inch in two columns (21 in three when
+// no row has a name, `cols: 3`), read down the left column and then down the
+// next, each row as tall as on the 2 x 1 in roll.
+const listCols = cols => (cols === 3 ? 3 : 2);
+function listRows(items, size, from, k, cols = 2) {
   const { w, h, top = 0 } = size;
   if (k < 1) return [];
   const one  = pagesPerLabel(size) === 1;
   const hb   = one ? h : (size.dpi || 203);                       // on a tall roll the rows keep their 2 x 1 in height
   const a    = hb - top;                                          // the printable height of one inch
   const pad  = Math.max(3, Math.round(a * 0.03));
-  const rows = BIN_LIST_PER_LABEL / 2 * k;                        // in each column
+  const c    = listCols(cols);                                    // three columns when no row has a name
+  const rows = BIN_LIST_ROWS * k;                                 // in each column
   const y0   = from + (from ? pad : top + pad);
-  const rowH = Math.floor((hb - pad - top - pad) / (BIN_LIST_PER_LABEL / 2));
+  const rowH = Math.floor((hb - pad - top - pad) / BIN_LIST_ROWS);
   const x0   = Math.round((size.dpi || 203) * BIN_LIST_LEFT_MM / 25.4) + pad;   // where the rows start
-  const colW = Math.floor((w - x0 - pad - pad) / 2);
-  return (items || []).slice(0, BIN_LIST_PER_LABEL * k).map((text, i) => {
+  const colW = Math.floor((w - x0 - c * pad) / c);
+  return (items || []).slice(0, rows * c).map((text, i) => {
     const col = Math.floor(i / rows), row = i % rows;            // down the left column, then down the right
     return tight(x0 + col * (colW + pad), y0 + row * rowH, Math.max(10, rowH - 3), colW, text);
   });
@@ -683,7 +701,10 @@ function listRows(items, size, from, k) {
 // first with the count label last, and `page` / `pages` are counted again.
 // One page per label (the 2 x 1 in roll): the labels exactly as they came.
 export const pagesPerLabel = size => Math.max(1, Math.floor((Number(size?.h) || 0) / dpiOf(size)));
-export const rowsPerLabel = (size, damaged = false) => (damaged ? DAMAGED_PER_LABEL : BIN_LIST_PER_LABEL) * pagesPerLabel(size);
+// The rows of one inch of a list: 7 lines of a DAMAGED list, 14 of a box list,
+// 21 of a box list in three columns (`cols: 3`, no row has a name).
+const rowsPerInch = (damaged = false, cols = 2) => (damaged ? DAMAGED_PER_LABEL : listCols(cols) === 3 ? BIN_LIST_PER_LABEL_NUMBERS : BIN_LIST_PER_LABEL);
+export const rowsPerLabel = (size, damaged = false, cols = 2) => rowsPerInch(damaged, cols) * pagesPerLabel(size);
 export function repageLists(labels, size) {
   const list = Array.isArray(labels) ? labels : [];
   if (pagesPerLabel(size) === 1) return list;
@@ -694,12 +715,12 @@ export function repageLists(labels, size) {
     // The run of pages of this list: same kind, box, title, order and count,
     // each page number once (the same list printed twice is two runs).
     const same = m => !!m && !m.title && Array.isArray(m.items) && !!m.damaged === !!l.damaged && m.bin === l.bin && m.label === l.label
-      && m.head === l.head && m.orderNumber === l.orderNumber && m.pages === l.pages && m.count === l.count;
+      && m.head === l.head && m.orderNumber === l.orderNumber && m.pages === l.pages && m.count === l.count && m.cols === l.cols;
     const seen = new Set();
     let j = i;
     while (j < list.length && same(list[j]) && !seen.has(list[j].page)) seen.add(list[j++].page);
     const items = list.slice(i, j).sort((a, b) => (a.page || 0) - (b.page || 0)).flatMap(p => p.items);
-    const per = rowsPerLabel(size, !!l.damaged);
+    const per = rowsPerLabel(size, !!l.damaged, l.cols);
     const { items: _items, page: _page, ...base } = l;
     const next = list[j];
     if (!l.damaged && next?.title && next.bin === l.bin && next.label === l.label && next.orderNumber === l.orderNumber) {
@@ -707,7 +728,7 @@ export function repageLists(labels, size) {
       // starts right under it (the co-op, 25 Nov 2026: the bottom of the count
       // label was left empty). That label is printed last, as the count label
       // was, so the strip still starts with it.
-      const first = per - BIN_LIST_PER_LABEL, rest = items.slice(first);
+      const first = per - rowsPerInch(false, l.cols), rest = items.slice(first);
       const pages = 1 + Math.ceil(rest.length / per);
       out.push(...Array.from({ length: pages - 1 }, (_, p) => ({ ...base, pages, page: p + 2, items: rest.slice(p * per, (p + 1) * per) })).reverse());
       out.push({ ...next, pages, page: 1, items: items.slice(0, first) });
@@ -730,7 +751,7 @@ export function repageLists(labels, size) {
 // longer than `max` (over 1,400 jerseys in one box) is cut where it must.
 export function listChunks(labels, max = 100) {
   const list = Array.isArray(labels) ? labels : [], lists = [];
-  const key = l => (l && typeof l === "object" ? JSON.stringify([!!l.damaged, l.bin ?? null, l.label ?? null, l.head ?? null, l.orderNumber ?? null, l.pages ?? null, l.count ?? null]) : null);
+  const key = l => (l && typeof l === "object" ? JSON.stringify([!!l.damaged, l.bin ?? null, l.label ?? null, l.head ?? null, l.orderNumber ?? null, l.pages ?? null, l.count ?? null, l.cols ?? null]) : null);
   for (let i = 0; i < list.length;) {
     const l = list[i], k = key(l);
     let j = i + 1;

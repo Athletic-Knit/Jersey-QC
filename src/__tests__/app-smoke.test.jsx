@@ -94,6 +94,74 @@ describe("the station screen", () => {
     await screen.findByText(/Set up the order/);
     expect(hubCalls.filter(c => c.url.includes("/api/hub/stations/")).length).toBeGreaterThan(reportsBefore);   // the last report went first (M16)
   });
+
+  // The Packing screen (the owner, 25 Nov 2026): the Now strip, Print list without closing, no second list at Finish.
+  it("Packing: keep scanning, then Print list leaves the box open, says List printed and Finish prints no second list", async () => {
+    await resumeOrder({ roster: [{ ...roster[0], scanned: "pass" }, roster[1]] });
+    fireEvent.click(screen.getByRole("button", { name: /📦 Packing/ }));
+    await screen.findByText(/Now: keep scanning · 1 to go/);
+    pressEnter();   // the pedal does nothing here
+    expect(screen.getByText(/Now: keep scanning/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: /^Close/ })[0]);
+    // Jones passes: every jersey accounted for.
+    cleanup(); hubCalls.length = 0;
+    await resumeOrder({ roster: [{ ...roster[0], scanned: "pass" }, { ...roster[1], scanned: "pass" }] });
+    fireEvent.click(screen.getByRole("button", { name: /📦 Packing/ }));
+    await screen.findByText(/Now: print the box lists and seal the boxes/);
+    fireEvent.click(screen.getByRole("button", { name: /🖨 Print list$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /just print/i }));
+    await screen.findByText(/✓ List printed · 2 pcs/);
+    expect(screen.getByText(/Now: finish the order/)).toBeTruthy();
+    const prints = hubCalls.filter(c => c.url.includes("/api/hub/print"));
+    expect(prints.length).toBe(1);
+    expect(prints[0].body.kind).toBe("binlist");
+    expect(screen.getByRole("button", { name: /🖨 Print again/ })).toBeTruthy();   // the box is still open
+    fireEvent.click(screen.getAllByRole("button", { name: /🏁 Finish order/ })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: /✓ Finish order/ }));
+    await screen.findByText(/Order 999100 is done/);
+    // Finish order printed the summary's count label and nothing of Box 1.1: its list was out already.
+    const later = hubCalls.filter(c => c.url.includes("/api/hub/print")).slice(1).flatMap(c => c.body.labels);
+    expect(later.length).toBeGreaterThan(0);
+    expect(later.every(l => l.summary)).toBe(true);
+  });
+
+  // Fixed at the station is still a flag (the owner, 25 Nov 2026): the flag is written, resolved at once,
+  // the garment stays as it was and no ticket prints.
+  it("Dirt or mark cleaned on a passed jersey: a resolved flag in the log, the row still passed, no ticket", async () => {
+    await resumeOrder({ roster: [{ ...roster[0], scanned: "pass" }, roster[1]] });
+    const sel = screen.getByText("Smith").closest("tr").querySelector("select");
+    fireEvent.change(sel, { target: { value: "flag" } });
+    fireEvent.click(await screen.findByText(/Dirt or mark/));
+    fireEvent.click(await screen.findByText(/It is clean now/));
+    await waitFor(() => expect(screen.queryByText("CLEAN IT NOW")).toBeNull());
+    expect(screen.getByText("Smith").closest("tr").querySelector("select").querySelector('option[value="flag"]')).toBeTruthy();   // still passed: it can still be flagged
+    fireEvent.click(screen.getByRole("button", { name: /history/i }));
+    expect(await screen.findByRole("button", { name: /Flag it/ })).toBeTruthy();   // History lists the garment, still passed
+    expect(hubCalls.filter(c => c.url.includes("/api/hub/print") && c.body?.kind === "flag").length).toBe(0);
+    const rep = hubCalls.filter(c => c.url.includes("/api/hub/stations/") && c.body?.events).pop();
+    expect(rep.body.events.find(e => e.status === "flagged")).toMatchObject({ reason: "Dirt or mark", resolution: "Fixed at the station" });
+    expect(rep.body.rows.find(r => r.number === "12")?.status ?? "pass").toMatch(/pass/);
+  });
+
+  it("Dirt or mark cleaned before the pass: a resolved flag in the log, then the green carries on and passes", async () => {
+    await resumeOrder();
+    reads.push(read("12", "SMITH"));
+    fireEvent.click(screen.getByRole("button", { name: /upload/i }));
+    const input = document.querySelector('input[type="file"][accept="image/*"]');
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "jersey.jpg", { type: "image/jpeg" })] } }); });
+    await screen.findByText(/Confirm · \d+ to check/);
+    fireEvent.click(screen.getByRole("button", { name: /^🚩 Flag$/ }));
+    fireEvent.click(await screen.findByText(/Dirt or mark/));
+    fireEvent.click(await screen.findByText(/It is clean now/));
+    await screen.findByText(/Confirm · \d+ to check/);                                   // back on the green
+    for (let i = 0; i < 10 && screen.queryByText(/to check/); i++) await pressEnter();
+    await pressEnter();
+    await waitFor(() => expect(screen.getAllByText(/^1 Pass$/).length).toBeGreaterThan(0));
+    expect(hubCalls.filter(c => c.url.includes("/api/hub/print") && c.body?.kind === "flag").length).toBe(0);
+    const rep = hubCalls.filter(c => c.url.includes("/api/hub/stations/") && c.body?.events).pop();
+    expect(rep.body.events.filter(e => e.status === "flagged")).toEqual([expect.objectContaining({ reason: "Dirt or mark", resolution: "Fixed at the station" })]);
+    expect(rep.body.events.some(e => e.status === "pass")).toBe(true);
+  });
 });
 
 // ── Where is the damage (the plan, 23 Nov 2026) ──────────────────────────────
