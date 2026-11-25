@@ -513,3 +513,12 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests:** app-smoke (both cases: before the pass, and on a passed garment: the entry with its resolution on the hub report, no ticket, the row still passed); printjobs (`damagedItems` and `orderSummary().failed` leave it out); reports (the Defects sheet and the flag rate count it).
 - **Checks:** lint clean; 603 tests pass. Not clicked through in a browser.
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · 5j clean-up
+- **Ticket skip:** the ticket effect now skips a flag born with a resolution (one check where the ticket is decided) instead of `cleaned()` setting `ticketPrinted` to the new entry. Same result today, but it does not depend on the order of the ref write and the log update, and `ticketPrinted` keeps meaning "the last flag sent to the printer". The app-smoke tests fail without the check.
+- **Print menu:** its flag tickets (one, or All N) leave out a flag fixed at the station: that garment never had a ticket and is in its box, and "All tickets" would have printed one for it.
+- **History:** the dialog already shows one line per garment (its newest entry; a garment fixed after it passed shows its fixed flag there with 🚩 Flag it, as its row is still passed). The History button's count now counts garments too, not log entries, so a cleaned garment does not add one.
+- **Order sheet:** the Status column comes from the roster row (`rosterStatusLabel`), so a garment fixed after it passed reads PASS beside "Dirt or mark" / "Fixed at the station" in the Reason / Resolution columns; kept, with a comment in export.js.
+- **Board:** the order view shows the fixed flag on the garment's row (Roster tab, PASS, "→ Fixed at the station") and in its Log; its Problems tab lists flagged and by-hand rows, so it is not there (the 5j entry above said it was). The station card's list shows it after the open items; the header count and the carried flags leave it out. New test in order-summary-view.test.jsx.
+- **Checks:** lint clean; 604 tests pass. Not clicked through in a browser.
+- **Branch:** `feature/result-screens`.

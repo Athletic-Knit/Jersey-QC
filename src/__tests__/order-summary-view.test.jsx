@@ -3,7 +3,7 @@
 // a Summary tab, first, drawn by the same OrderSummaryBody as the station's
 // summary screen, from the hub's record of the order and its flag events.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import { createElement } from "react";
 
 const rec = {
@@ -42,5 +42,22 @@ describe("the board's order view: Summary tab", () => {
     expect(screen.getAllByText(/Box 1\.1/).length).toBeGreaterThan(0);   // the boxes strip and the passed rows' box
     expect(screen.getByText(/pass rate/)).toBeTruthy();
     expect(screen.getByText(/1 with the supervisor/)).toBeTruthy();
+  });
+  // Dirt wiped off a passed garment is still a flag, resolved at once (the owner, 25 Nov 2026): the order
+  // view shows it on the garment's row, which stays PASS; it is not a problem and not failed.
+  it("a flag fixed at the station: the row stays PASS with the reason and → Fixed at the station; not in Problems or Failed", async () => {
+    const fixed = { id: 4, t: "2026-11-25T09:02:00", station: "st-1", order: "264247", run: 1, status: "flagged", rowId: 1, number: "7", name: "SMITH", reason: "Dirt or mark", resolution: "Fixed at the station" };
+    events.push(fixed);
+    try {
+      render(createElement(OrderView, { station: "st-1", order: "264247", run: 1, stationLabel: s => s, onClose: () => {}, onDownload: () => {} }));
+      await waitFor(() => expect(screen.getByText(/Passed · 2/)).toBeTruthy());
+      expect(screen.getByText(/Failed · 1/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Problems (1)" })).toBeTruthy();   // only JONES
+      fireEvent.click(screen.getByRole("button", { name: /^Roster/ }));
+      const tr = (await screen.findByText("SMITH")).closest("tr");
+      expect(tr.textContent).toMatch(/^PASS/);
+      expect(tr.textContent).toContain("Dirt or mark");
+      expect(tr.textContent).toContain("→ Fixed at the station");
+    } finally { events.pop(); }
   });
 });

@@ -32,6 +32,10 @@ export const STATUS_LABEL = { pass: "PASS", flag: "FLAGGED", manual: "MANUAL", m
 export function rosterStatusLabel(r) { return STATUS_LABEL[r.scanned] || "UNSCANNED"; }
 
 // Latest log entry per roster row, for reason / resolution / operator columns.
+// The Status column comes from the roster row (rosterStatusLabel), not from this
+// entry: a garment fixed at the station after it passed reads PASS beside "Dirt or
+// mark" / "Fixed at the station", which is meant (the owner, 25 Nov 2026: "it should
+// be flagged even if it is resolved").
 function latestByRow(log) {
   const m = new Map();
   [...log].reverse().forEach(l => { if (l.match?._id !== undefined) m.set(l.match._id, l); });

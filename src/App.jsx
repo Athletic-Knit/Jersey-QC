@@ -3167,7 +3167,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
   };
   const boxes    = useMemo(() => packBoxes(pack), [pack]);
   const stickers = useMemo(() => stickerRows(pack), [pack]);
-  const flags    = pack?.flags || [];
+  // A flag fixed at the station never had a ticket and its garment is in its box: no ticket to reprint (25 Nov 2026).
+  const flags    = (pack?.flags || []).filter(f => f.resolution !== FIXED_AT_STATION);
   const inDamaged = useMemo(() => damagedItems(pack), [pack]);
   const needle   = pick.trim().toLowerCase();
   const picked   = needle ? stickers.filter(r => rosterMatches(r, pick)).slice(0, 8) : [];   // the same search as the roster table's
@@ -3268,7 +3269,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
             <div style={secSt}>Flag tickets · {flags.length}</div>
             {flags.length === 0 ? <div style={{ color: "#64748b" }}>No flags on this order.</div> : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {flags.length > 1 && <div><button style={smBtn} onClick={() => many(flags.length, "flag tickets") && send([[flagJobs(pack, null, tagOf), "flag"]], "every flag ticket")}>All {flags.length} tickets</button></div>}
+                {flags.length > 1 && <div><button style={smBtn} onClick={() => many(flags.length, "flag tickets") && send([[flagJobs(pack, flags.map(f => f.id), tagOf), "flag"]], "every flag ticket")}>All {flags.length} tickets</button></div>}
                 {flags.slice(0, 60).map(f => (
                   <div key={f.id} style={rowSt}>
                     <div style={{ flex: 1, fontSize: 16, color: "#e2e8f0" }}><strong>#{f.match?.number ?? f.detected?.number ?? "?"}</strong> {f.match?.name ?? f.detected?.name ?? ""} <span style={{ color: "#fca5a5" }}>{f.reason}</span></div>
@@ -3704,8 +3705,10 @@ export default function App() {
   }, [binMap, orderNumber]);
   const newestEntry = log[0];
   // Each new flag in the log prints its tickets once, when flag tickets are on.
+  // A flag born resolved (fixed at the station, the owner, 25 Nov 2026) prints none:
+  // the garment stays in its box with no ticket.
   useEffect(() => {
-    if (!settings.flagTickets || !newestEntry || newestEntry.status !== S_FLAGGED || ticketPrinted.current === newestEntry.id) return;
+    if (!settings.flagTickets || !newestEntry || newestEntry.status !== S_FLAGGED || newestEntry.resolution || ticketPrinted.current === newestEntry.id) return;
     ticketPrinted.current = newestEntry.id;
     printTicket(newestEntry);
     // No DAMAGED box label on the first flag any more (the owner, 19 Nov 2026): the
@@ -4626,11 +4629,10 @@ export default function App() {
       const o = overlay; if (!o) return;
       // Fixed at the station is still a flag (the owner, 25 Nov 2026: "it should be flagged even
       // if it is resolved"): a flag entry, resolved at once, so the reports count it. The garment
-      // itself stays as it was: its row is not set to flag, no ticket prints (the entry counts as
-      // printed), it stays in its box, and lastConfirmed / lastResult are left alone.
+      // itself stays as it was: its row is not set to flag, no ticket prints (the ticket effect
+      // skips an entry born resolved), it stays in its box, and lastConfirmed / lastResult are left alone.
       if (o.fixing) {
         const f = o.fixing, entry = { id: Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: o.match || null, status: S_FLAGGED, reason: f.label, reasonId: f.id, resolution: FIXED_AT_STATION, ...stamp() };
-        ticketPrinted.current = entry.id;
         setLog(prev => [entry, ...prev]);
       }
       if (o.reopened || !o.returnTo) { setOverlay(null); armAutoScan(); return; }
@@ -5387,7 +5389,7 @@ export default function App() {
               {sessionStarted && (
                 <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>{/* one line, short labels, never under the roster (the owner, 19 Nov 2026) */}
                   {pickedUp && stillOut.total > 0 && <button onClick={() => setShowStillOut(true)} title="The garments this order is waiting for: back from repair, missing, extra. Scan one when it comes back, or pass it here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", borderColor: "#38bdf8", color: "#7dd3fc" }}>🔧 Still out · {stillOut.total}</button>}
-                  <button onClick={() => setShowHistory(true)} title="Every garment scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
+                  <button onClick={() => setShowHistory(true)} title="Every garment scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({new Set(log.filter(l => l.match && l.match._id !== undefined && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).map(l => l.match._id)).size})</button>
                   <button onClick={() => setShowPacking(true)} title="Packing: what to do next, each box with its list (Print list, Box full), and the order summary" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#22c55e", color: "#86efac" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Packing"}</button>
                   <button onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: issues.missing.length + issues.dups.length + issues.flagged.length ? "#f59e0b" : "#334155" }}>
                     ⚠ Mis <span style={{ color: "#fbbf24" }}>{issues.missing.length}</span> · Dup <span style={{ color: "#c084fc" }}>{issues.dups.length}</span> · Flag <span style={{ color: "#f87171" }}>{issues.flagged.length}</span>
