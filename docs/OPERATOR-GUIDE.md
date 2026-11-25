@@ -33,7 +33,7 @@ The station goes full screen. **Sign out** (top right) ends your shift at this s
    - tap **📥 Assigned orders** and pick an order the supervisor sent (it shows as a green line, with **Change** to pick another), or
    - tap **Roster file** and pick a CSV or Excel file.
 2. Check the **order number**. It is usually filled in from the roster. Tap the box to type it on the keypad.
-3. **Ships with**: if this order ships together with other orders, type their numbers (the comma goes in by itself after every six digits). Leave it empty if it ships alone.
+3. **Ships with**: if this order ships together with other orders, type their numbers (the comma goes in by itself after every six digits; **Next number** ends a shorter one). Each number shows as a chip: tap its **✕** to take it out. Leave it empty if it ships alone.
 4. **Garment type**: ECHL, ECHL replica (stitched) or Sublimated (printed). This decides which flag reasons you are offered. Leave it unset to be offered every reason.
 5. **Boxes, how the order is sorted**: **By team**, **By size**, or **Not sorted** (the whole order in one run of boxes). If the supervisor already chose, it says "set by the supervisor".
 6. Press **Start order →**.

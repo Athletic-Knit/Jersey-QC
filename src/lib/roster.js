@@ -83,6 +83,38 @@ const SHIP_WITH_HEADER = /^ship(?:s|ping)?\s*(?:with|w\/)/i;
 // nothing between is that many orders.
 export const orderList = text => [...new Set((String(text ?? "").match(/\d{3,}/g) || []).flatMap(n => (n.length > 6 && n.length % 6 === 0 ? n.match(/\d{6}/g) : [n])))];
 
+// The ship-with field as the person sees it: the numbers already finished (chips)
+// and the one being typed. A number is finished when a separator follows it.
+export function shipParts(text) {
+  const v = String(text ?? "");
+  const runs = v.match(/\d+/g) || [];
+  const typing = runs.length && !/\D$/.test(v);
+  return { done: typing ? runs.slice(0, -1) : runs, cur: typing ? runs[runs.length - 1] : "" };
+}
+const shipJoin = (done, cur) => done.map(n => n + ", ").join("") + cur;
+// What the text becomes after typing: only digits and separators, a run longer than six
+// digits split into orders (as orderList reads it), and a comma after every full six
+// digits and after a number the "Next number" key or a typed comma ended.
+export function shipNorm(text) {
+  const v = String(text ?? "").replace(/[^\d,;\s]/g, "");
+  const chunks = (v.match(/\d+/g) || []).flatMap(r => r.match(/\d{1,6}/g));
+  if (!chunks.length) return "";
+  const ended = /\D$/.test(v) || chunks[chunks.length - 1].length === 6;
+  return chunks.join(", ") + (ended ? ", " : "");
+}
+// A key of the ship-with keypad: a digit, "," (next number) or "⌫".
+export function shipPress(text, k) {
+  const v = String(text ?? "");
+  if (k === "⌫") return /\D$/.test(v) ? v.replace(/\D+$/, "") : v.slice(0, -1);
+  if (k === ",") return /\d$/.test(v) ? shipNorm(v + ",") : v;
+  return shipNorm(v + k);
+}
+// Take number `i` out of the chips; what is being typed stays.
+export function shipRemove(text, i) {
+  const { done, cur } = shipParts(text);
+  return shipJoin(done.filter((_, j) => j !== i), cur);
+}
+
 // rows: array of arrays of cell strings. Finds the header row (first row that
 // looks like one, within the first 15) so title rows above it are skipped.
 // The order number, when the file carries one (an "order" column, or a title

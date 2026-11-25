@@ -25,7 +25,7 @@
 //                                    order start and finish, the station layout
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
 import { flushSync } from "react-dom";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeFamily, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeFamily, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, shipParts, shipNorm, shipPress, shipRemove, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum, norm, nameMatches } from "./lib/text.js";
 import { summarise, summariseLog, exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
@@ -121,15 +121,14 @@ function Pill({ color, children, onClick, active = false, title }) {
 const typeKey = (v, k) => (k === "⌫" ? v.slice(0, -1) : k === "⌧" ? "" : k === "␣" ? (v && !v.endsWith(" ") ? v + " " : v) : v + k);
 const KEY_ROWS = {
   digits: [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["⌫", "0", "⏎"]],
-  full:   [["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"], ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], ["A", "S", "D", "F", "G", "H", "J", "K", "L", "-"], ["Z", "X", "C", "V", "B", "N", "M", "⌫", "⏎"]],
+  shipdigits: [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["⌫", "0", ","], ["⏎"]],   // the ship-with field: "," ends a number and starts the next
+  full:  [["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"], ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], ["A", "S", "D", "F", "G", "H", "J", "K", "L", "-"], ["Z", "X", "C", "V", "B", "N", "M", "⌫", "⏎"]],
   search: [["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"], ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], ["A", "S", "D", "F", "G", "H", "J", "K", "L", "-"], ["Z", "X", "C", "V", "B", "N", "M", "⌫"], ["⌧", "␣", "⏎"]],
 };
-const KEY_NAMES = { "␣": "Space", "⌧": "Clear" };
-// Digits typed on the keypad as six-digit order numbers: "264248264249" → "264248, 264249".
-const sixes = digits => (String(digits).match(/\d{1,6}/g) || []).join(", ");
+const KEY_NAMES = { "␣": "Space", "⌧": "Clear", ",": "Next number" };
 function ScreenKeys({ layout = "digits", onKey, onEnter, enterLabel = "OK" }) {
   const rows = KEY_ROWS[layout] || KEY_ROWS.digits;
-  const wide = layout === "digits";
+  const wide = layout === "digits" || layout === "shipdigits";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10, userSelect: "none" }}>
       {rows.map((r, i) => (
@@ -142,6 +141,35 @@ function ScreenKeys({ layout = "digits", onKey, onEnter, enterLabel = "OK" }) {
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+// The "Ships with" field of both order forms (the station's and the supervisor's send-roster): every
+// number is a chip with an ✕, the number being typed is in the box, and the keypad has "Next number"
+// (a comma goes in by itself after every six digits too). `value` is the text, "264248, 264249", that
+// `orderList` reads.
+function ShipWithField({ value, onChange, placeholder }) {
+  const [keys, setKeys] = useState(false);
+  const ref = useRef(null);
+  const { done, cur } = shipParts(value);
+  return (
+    <div>
+      <div style={{ ...inputSt, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", padding: "6px 10px" }}>
+        {done.map((n, i) => (
+          <span key={i + n} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#0c4a6e", color: "#e0f2fe", borderRadius: 14, padding: "3px 4px 3px 11px", fontSize: 16, fontWeight: 700 }}>
+            {n}
+            <button type="button" aria-label={`Remove ${n}`} onMouseDown={e => e.preventDefault()} onClick={() => onChange(shipRemove(value, i))}
+              style={{ border: "none", background: "rgba(255,255,255,0.18)", color: "#fff", borderRadius: "50%", width: 24, height: 24, fontSize: 14, lineHeight: 1, cursor: "pointer", padding: 0 }}>✕</button>
+          </span>
+        ))}
+        <input ref={ref} value={cur} inputMode="numeric" placeholder={done.length ? "next number" : placeholder}
+          onChange={e => onChange(shipNorm(done.map(n => n + ", ").join("") + e.target.value))}
+          onKeyDown={e => { if (e.key === "Backspace" && !cur && done.length) { e.preventDefault(); onChange(shipPress(value, "⌫")); } }}
+          onFocus={() => setKeys(true)} onBlur={() => setKeys(false)}
+          style={{ flex: 1, minWidth: 130, border: "none", outline: "none", background: "transparent", color: "#e2e8f0", fontSize: 17, padding: "5px 2px" }} />
+      </div>
+      {keys && <ScreenKeys layout="shipdigits" onKey={k => onChange(shipPress(value, k))} onEnter={() => ref.current?.blur()} enterLabel="Done" />}
     </div>
   );
 }
@@ -614,8 +642,6 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   const [hubRosters, setHubRosters] = useState([]);
   const [picked,  setPicked]  = useState(null);     // a roster the supervisor sent
   const [shipText, setShipText] = useState("");     // the orders this one ships with ("264248, 264249"), from the order form
-  const [shipKeys, setShipKeys] = useState(false);  // on-screen keys under it
-  const shipRef = useRef(null);
   const fileRef = useRef(null);
   const loadRef = useRef(() => {});   // the roster list refresh, for after a refused start
 
@@ -646,7 +672,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           const n = orderNumberOf(parsed);
           if (n) setOrder(o => o.trim() || n);
           const sw = shipWithOf(parsed);
-          if (sw.length) setShipText(t => t.trim() || sw.join(", "));
+          if (sw.length) setShipText(t => t.trim() || shipNorm(sw.join(", ")));
         } catch { /* the Start button reports a bad file */ }
       })();
     }
@@ -656,7 +682,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   const pickRoster = async (summary) => {
     try {
       const full = await hub.roster(summary.id);
-      setPicked(full); setFile(null); setError(null); setShipText((full.shipWith || []).join(", "));
+      setPicked(full); setFile(null); setError(null); setShipText(shipNorm((full.shipWith || []).join(", ")));
       setOrder(full.orderNumber || ""); setNotes(full.notes || ""); setJerseyType(full.jerseyType || ""); setBinBy(full.binBy || "team");
     } catch (e) { setError("Could not fetch that roster: " + e.message); }
   };
@@ -774,10 +800,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         <div style={{ marginBottom: 12 }}>
           {/* Orders that ship together share boxes (the owner, 20 Nov 2026): a box that is not full is left open at Finish order for them. */}
           <label style={labelSt}>Ships with <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— the other order numbers on the order form; empty when it ships alone</span></label>
-          <input ref={shipRef} value={shipText} onChange={e => setShipText(e.target.value)} placeholder="e.g. 264248, 264249" style={inputSt}
-            onFocus={() => setShipKeys(true)} onBlur={() => setShipKeys(false)} />
-          {/* A number keypad only (the owner, 20 Nov 2026); order numbers are six digits, so a comma goes in by itself after every six. */}
-          {shipKeys && <ScreenKeys layout="digits" onKey={k => setShipText(v => sixes(typeKey(v.replace(/\D/g, ""), k)))} onEnter={() => shipRef.current?.blur()} enterLabel="Done" />}
+          {/* A number keypad only (the owner, 20 Nov 2026); a comma goes in by itself after every six digits, and "Next number" ends a shorter one. Each number is a chip with an ✕ (25 Nov 2026). */}
+          <ShipWithField value={shipText} onChange={setShipText} placeholder="e.g. 264248" />
         </div>
         <div style={{ marginBottom: 12 }}>
           {/* No order-notes box here (the owner, 17 Nov 2026): the notes come with the supervisor's roster, when there are any. */}
@@ -1571,7 +1595,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
             {data.stations.length === 0 && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Stations appear here once they have signed in and started once today.</div>}
           </div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order number</label><input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" style={inputSt} /></div>
-          <div style={{ marginBottom: 10 }}><label style={labelSt}>Ships with <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— other order numbers on the order form; their boxes are filled together</span></label><input value={shipText} onChange={e => setShipText(e.target.value)} placeholder="e.g. 264248, 264249 (read from the file when it says)" style={inputSt} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Ships with <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— other order numbers on the order form; their boxes are filled together</span></label><ShipWithField value={shipText} onChange={setShipText} placeholder="e.g. 264248 (read from the file when it says)" /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Garment type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the station's flag reasons; unset offers every reason</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Boxes — how the station sorts it</label><BinByPicker value={binBy} onChange={setBinBy} /></div>
@@ -1582,7 +1606,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
               const f = e.target.files[0];
               if (f) {
                 setFile(f);
-                (async () => { try { const rows = /\.(xlsx|xls)$/i.test(f.name) ? await parseExcel(f) : parseCSV(await f.text()); const n = orderNumberOf(rows), sw = shipWithOf(rows); if (n) setOrder(o => o.trim() || n); if (sw.length) setShipText(t => t.trim() || sw.join(", ")); } catch { /* Send reports a bad file */ } })();
+                (async () => { try { const rows = /\.(xlsx|xls)$/i.test(f.name) ? await parseExcel(f) : parseCSV(await f.text()); const n = orderNumberOf(rows), sw = shipWithOf(rows); if (n) setOrder(o => o.trim() || n); if (sw.length) setShipText(t => t.trim() || shipNorm(sw.join(", "))); } catch { /* Send reports a bad file */ } })();
               }
               e.target.value = "";
             }} />

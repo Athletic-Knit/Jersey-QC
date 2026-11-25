@@ -421,3 +421,10 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests:** the test strings the rename touches were updated (boxes, damaged, export, printjobs, reports, labels, vigilance); no new tests.
 - **Checks:** lint clean; 573 tests pass. A grep of `jersey` in `App.jsx` shows only comments, `.jersey` fields, `jersey:` keys and `kind: "jersey"`.
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · 5a · The ship-with field: a keypad on the supervisor's form, a Next number key, numbers as chips
+- **Asked for:** the owner, 25 Nov 2026: typing several ship-with numbers.
+- **What changed:** both order forms (the station's and the supervisor's send-roster form, which had a plain box with no keypad) use one `ShipWithField`. Each finished number is a chip with an ✕ that takes it out; the number being typed is in the box; the keypad (`shipdigits`) has digits, ⌫ and a "Next number" key, and a comma still goes in by itself after every six digits. Numbers read from a roster file or a sent roster arrive as chips. The text the field holds, and so what `orderList` reads and what is sent, is the same as before. The helpers (`shipParts`, `shipNorm`, `shipPress`, `shipRemove`) are in roster.js; `sixes` is gone.
+- **Tests:** `ship-with-field.test.js`, 7 tests: six digits make a chip, the number being typed is not one, Next number, three numbers are three chips and `orderList` reads them, backspace, ✕, a pasted text is cleaned.
+- **Checks:** lint clean; all tests pass. Not clicked through in a browser by this session.
+- **Branch:** `feature/result-screens`.
