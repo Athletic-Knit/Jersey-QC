@@ -2,7 +2,7 @@
 // order, by default), its filters' choices, and its search box ("7" is #7
 // exactly, never #70; the owner, 17 Nov 2026).
 import { describe, it, expect } from "vitest";
-import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices, rosterMatches, sortCandidates, sizeFamily } from "../roster.js";
+import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices, rosterMatches, sortCandidates, sameSize } from "../roster.js";
 
 const roster = [
   { _id: 1, name: "ZED",   number: "10", team: "Red",  size: "A-L",  scanned: "pass" },
@@ -93,10 +93,12 @@ describe("the pick list follows the last confirmed jersey's size (25 Nov 2026)",
     expect(sizes("size", { lastSize: "" })).toEqual(plain);
     expect(sizes("size")).toEqual(plain);
   });
-  it("sizeFamily is the part before the hyphen", () => {
-    expect(sizeFamily("L-S")).toBe("L");
-    expect(sizeFamily("XL")).toBe("XL");
-    expect(sizeFamily("")).toBe("");
-    expect(sizeFamily(undefined)).toBe("");
+  it("the size and its family are read as the rack reads them, whatever the spelling", () => {
+    expect(sameSize("l-s", "L-S")).toBe(true);
+    expect(sameSize("A - M", "A-M")).toBe(true);
+    expect(sameSize("L-S", "S")).toBe(false);
+    const odd = [{ _id: 1, size: "Y-S" }, { _id: 2, size: "Youth M" }, { _id: 3, size: "XL" }, { _id: 4, size: "l-s" }, { _id: 5, size: "" }];
+    expect(sortCandidates(odd, "size", { lastSize: "Y-S" }).map(r => r._id)).toEqual([1, 2, 4, 3, 5]);   // "Youth M" is youth
+    expect(sortCandidates(odd, "size", { lastSize: "XL" }).map(r => r._id)[0]).toBe(3);                  // no family: its own rows only
   });
 });

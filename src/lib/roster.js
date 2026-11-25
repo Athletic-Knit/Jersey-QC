@@ -384,17 +384,17 @@ export const sizeChoices = roster => sizeChoiceGroups(roster).flatMap(g => g.siz
 // can choose team or number instead (Settings → Pick list). Ties keep the
 // matcher's order (Array.prototype.sort is stable).
 export const LIST_SORTS = [{ id: "size", label: "Size" }, { id: "team", label: "Team" }, { id: "number", label: "Number" }];
-// A size's family: the part before the hyphen ("L-S" → "L", "A-XL" → "A"); a
-// size without a hyphen is its own family ("XL" → "XL"); "" → "".
-export const sizeFamily = size => { const s = String(size || "").trim().toUpperCase().replace(/\s+/g, ""); return s.split(/[-/]/)[0] || s; };
-const sameSize = (a, b) => String(a || "").trim().toUpperCase().replace(/\s+/g, "") === String(b || "").trim().toUpperCase().replace(/\s+/g, "");
+// The same size, written either way ("l-s" and "L-S", "A - M" and "A-M").
+export const sameSize = (a, b) => sizeRank(a || "")[2] === sizeRank(b || "")[2];
 // `lastSize` (the owner, 25 Nov 2026: jerseys come in bundles of one size, and
 // on a numbers-only roster the list for #12 has every size's #12): before the
 // chosen order, the rows of the last confirmed jersey's size come first, then
-// its family (L-S, L-M, L-L), then the rest; within a rank the order is as chosen.
+// its family (youth, adult or ladies, `sizeRank`'s group: L-S, then L-M, L-L),
+// then the rest; within a rank the order is as chosen. A size with no family
+// (XL, OSFA) only brings its own rows up.
 export function sortCandidates(rows, by = "size", { lastSize = "" } = {}) {
-  const fam  = sizeFamily(lastSize);
-  const rank = r => !fam ? 0 : sameSize(r.size, lastSize) ? 0 : sizeFamily(r.size) === fam && String(r.size || "").trim() ? 1 : 2;
+  const fam  = lastSize ? sizeRank(lastSize)[0] : null;
+  const rank = r => fam === null ? 0 : sameSize(r.size, lastSize) ? 0 : fam < 3 && sizeRank(r.size || "")[0] === fam ? 1 : 2;
   const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
   const team = (a, b) => String(a.team || "").localeCompare(String(b.team || ""), undefined, { sensitivity: "base", numeric: true });
   const size = (a, b) => bySize(a.size || "", b.size || "");

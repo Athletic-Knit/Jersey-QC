@@ -28,4 +28,14 @@ describe("the damage photo", () => {
     fireEvent.keyDown(window, { code: "Enter", key: "Enter" });
     expect(damagePhoto).toHaveBeenCalledTimes(1);
   });
+  it("Retake drops the last photo and takes a new one at once; not while one is on its way", () => {
+    const damagePhoto = vi.fn(() => new Promise(() => {}));
+    const dropDamagePhoto = vi.fn();
+    draw(flagged({ damagePhotos: ["p1.jpg"] }), { damagePhoto, dropDamagePhoto, continueSupervisor: vi.fn() });
+    fireEvent.click(screen.getByText(/Retake/));
+    expect(dropDamagePhoto).toHaveBeenCalledTimes(1);
+    expect(damagePhoto).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText(/Retake/));
+    expect(dropDamagePhoto).toHaveBeenCalledTimes(1);   // the first is still on its way: the photo it replaced is not dropped too
+  });
 });

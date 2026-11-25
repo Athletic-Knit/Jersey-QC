@@ -25,10 +25,10 @@
 //                                    order start and finish, the station layout
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
 import { flushSync } from "react-dom";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sameSize, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum, norm, nameMatches } from "./lib/text.js";
-import { summarise, exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
+import { summarise, summariseLog, exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { createAwayWatch } from "./lib/attention.js";
@@ -44,7 +44,7 @@ import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel
 import { duplicateOptions } from "./lib/dupoptions.js";
 import { matchRead, screenFor } from "./lib/scanpolicy.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
-import { photoSet } from "./lib/photoset.js";
+import { photoSet, photoCaption } from "./lib/photoset.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG } from "./config.js";
 
@@ -899,7 +899,6 @@ function ManualEntryForm({ detected, initial = null, teams, onSubmit, onBack }) 
 // and for ones still running, without touching the station.
 // The photos a flag carries: the scan (what the camera read) and the damage
 // photos the operator took after flagging (red frame). Click to enlarge.
-const logCaption = l => [l.match?.number != null && l.match?.number !== "" ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}` : "", l.reason].filter(Boolean).join(" · ");   // a station log entry's caption
 function PhotoThumbs({ photo, damagePhotos = [], w = 80, h = 60, onOpen, caption = "" }) {
   const set = photoSet(photo, damagePhotos);
   if (!set.pics.length) return null;
@@ -928,23 +927,24 @@ export function PhotoLightbox({ photo, onClose }) {
   const drag = useRef({ moved: false, dist: 0, onImg: false });
   const fit = () => setView({ s: 1, x: 0, y: 0 });
   const go = d => { if (pics.length < 2) return; setIdx(i => (i + d + pics.length) % pics.length); fit(); };
-  // Zoom to `s2` about the point (px, py), given from the stage's centre: the point under the pointer stays under it.
-  const zoomAt = useCallback((s2, px, py) => setView(v => { const s = clampZoom(s2); if (s === 1) return { s: 1, x: 0, y: 0 }; const k = s / v.s; return { s, x: px - (px - v.x) * k, y: py - (py - v.y) * k }; }), []);
-  const centre = e => { const r = stage.current.getBoundingClientRect(); return [e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2]; };
+  // Zoom by `k` about the point (px, py), given from the stage's centre: the point under the pointer stays under it.
+  // From the scale in the state, not the one drawn, so wheel or pinch events that come faster than a render all count.
+  const zoomBy = (k, px = 0, py = 0) => setView(v => { const s = clampZoom(v.s * k); if (s === 1) return { s: 1, x: 0, y: 0 }; const f = s / v.s; return { s, x: px - (px - v.x) * f, y: py - (py - v.y) * f }; });
+  const centre = (x, y) => { const r = stage.current.getBoundingClientRect(); return [x - r.left - r.width / 2, y - r.top - r.height / 2]; };
   useEffect(() => {
     const h = e => {
       if (e.key === "Escape") { e.stopPropagation(); onClose(); }
       else if (e.key === "ArrowLeft")  { e.stopPropagation(); go(-1); }
       else if (e.key === "ArrowRight") { e.stopPropagation(); go(1); }
-      else if (e.key === "+" || e.key === "=") { e.stopPropagation(); zoomAt(view.s * 1.5, 0, 0); }
-      else if (e.key === "-") { e.stopPropagation(); zoomAt(view.s / 1.5, 0, 0); }
+      else if (e.key === "+" || e.key === "=") { e.stopPropagation(); zoomBy(1.5); }
+      else if (e.key === "-") { e.stopPropagation(); zoomBy(1 / 1.5); }
     };
     window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true);
   });
   // The wheel needs a listener that may stop the page scrolling (React's is passive).
   useEffect(() => {
     const el = stage.current; if (!el) return;
-    const w = e => { e.preventDefault(); const [px, py] = centre(e); zoomAt(view.s * Math.exp(-e.deltaY * 0.0015), px, py); };
+    const w = e => { e.preventDefault(); zoomBy(Math.exp(-e.deltaY * 0.0015), ...centre(e.clientX, e.clientY)); };
     el.addEventListener("wheel", w, { passive: false }); return () => el.removeEventListener("wheel", w);
   });
   const down = e => { if (e.target.closest("[data-ctl]")) return; e.currentTarget.setPointerCapture?.(e.pointerId); pointers.current.set(e.pointerId, [e.clientX, e.clientY]); drag.current = { moved: false, dist: 0, onImg: e.target.tagName === "IMG" }; };
@@ -955,18 +955,17 @@ export function PhotoLightbox({ photo, onClose }) {
     if (p.size === 1) {
       const dx = e.clientX - ox, dy = e.clientY - oy;
       if (Math.abs(dx) + Math.abs(dy) > 2) drag.current.moved = true;
-      if (dx || dy) setView(v => ({ ...v, x: v.x + dx, y: v.y + dy }));
+      if (dx || dy) setView(v => v.s > 1 ? { ...v, x: v.x + dx, y: v.y + dy } : v);   // a fitted picture stays fitted
     } else if (p.size === 2) {                                  // a pinch: the distance between the two fingers is the zoom
       const [[ax, ay], [bx, by]] = [...p.values()];
       const after = Math.hypot(ax - bx, ay - by), before = drag.current.dist || after;
       drag.current.dist = after; drag.current.moved = true;
-      const r = stage.current.getBoundingClientRect();
-      zoomAt(view.s * after / before, (ax + bx) / 2 - r.left - r.width / 2, (ay + by) / 2 - r.top - r.height / 2);
+      zoomBy(after / before, ...centre((ax + bx) / 2, (ay + by) / 2));
     }
   };
   const up = e => { pointers.current.delete(e.pointerId); drag.current.dist = 0; };
   const onStageClick = e => { if (e.target.closest("[data-ctl]") || drag.current.onImg) return; if (!drag.current.moved) onClose(); };   // a click on the backdrop closes; one on the picture, or the end of a drag, does not
-  const dbl = e => { if (e.target.closest("[data-ctl]")) return; if (view.s > 1) fit(); else { const [px, py] = centre(e); zoomAt(2, px, py); } };
+  const dbl = e => { if (e.target.closest("[data-ctl]")) return; if (view.s > 1) fit(); else zoomBy(2, ...centre(e.clientX, e.clientY)); };
   const pic = pics[idx];
   if (!pic) return null;
   const btn = { background: "rgba(30,41,59,0.9)", color: "#fff", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 10, fontSize: 22, fontWeight: 800, padding: "8px 16px", cursor: "pointer", minWidth: 48 };
@@ -979,8 +978,8 @@ export function PhotoLightbox({ photo, onClose }) {
         <div style={{ background: "rgba(0,0,0,0.7)", color: "#fff", padding: "8px 16px", borderRadius: 10, fontSize: 18, fontWeight: 700, maxWidth: "70vw" }}>{caption}{pics.length > 1 ? ` · ${idx + 1}/${pics.length}` : ""}</div>
       </div>
       <div data-ctl="1" style={{ position: "absolute", top: 12, right: 12, display: "flex", gap: 8 }}>
-        <button onClick={() => zoomAt(view.s / 1.5, 0, 0)} title="Zoom out (-)" style={btn}>−</button>
-        <button onClick={() => zoomAt(view.s * 1.5, 0, 0)} title="Zoom in (+)" style={btn}>+</button>
+        <button onClick={() => zoomBy(1 / 1.5)} title="Zoom out (-)" style={btn}>−</button>
+        <button onClick={() => zoomBy(1.5)} title="Zoom in (+)" style={btn}>+</button>
         <button onClick={fit} title="Fit the screen" style={{ ...btn, fontSize: 16 }}>Fit</button>
         <button onClick={onClose} title="Close (Esc)" style={btn}>✕</button>
       </div>
@@ -1073,7 +1072,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                       <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Box ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
                       <td style={{ ...td, color: "#cbd5e1" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                       <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
-                      {tab === "problems" && <td style={td}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} caption={[`#${r.number}${r.name ? " " + r.name : ""}`, e?.reason].filter(Boolean).join(" · ")} /></td>}
+                      {tab === "problems" && <td style={td}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} caption={photoCaption(r.number, r.name, e?.reason)} /></td>}
                     </tr>
                   );
                 })}
@@ -1083,7 +1082,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                     <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{e.size || ""}</td><td style={td}></td>
                     <td style={{ ...td, color: "#cbd5e1" }}><RouteTag item={e} /> {e.reason}{e.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                     <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
-                    <td style={td}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} caption={[`#${e.number}${e.name ? " " + e.name : ""}`, e.reason].filter(Boolean).join(" · ")} /></td>
+                    <td style={td}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} caption={photoCaption(e.number, e.name, e.reason)} /></td>
                   </tr>
                 ))}
                 {tab === "problems" && flaggedRows.length + byHandRows.length + offRoster.length === 0 && <tr><td colSpan={9} style={{ ...td, color: "#22c55e", padding: 18 }}>No problems on this order — nothing went to the supervisor and nothing was entered by hand.</td></tr>}
@@ -1734,8 +1733,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
 
   const match      = state.match || state.scan?.match || null;
   const candidates = useMemo(() => sortCandidates(state.candidates || [], listSort, { lastSize }), [state.candidates, listSort, lastSize]);   // by size unless the station says otherwise (Settings → Pick list); the last jersey's size first
-  const lastSizeNorm = String(lastSize || "").trim().toUpperCase();
-  const lastSizeOnList = !!lastSizeNorm && candidates.some(c => String(c.size || "").trim().toUpperCase() === lastSizeNorm);
+  const lastSizeOnList = !!lastSize && candidates.some(c => sameSize(c.size, lastSize));   // says why the list starts where it does
   const detected   = state.scan?.detected;
   // A one-column list (three rows or fewer) is drawn with bigger text, but only
   // while that leaves nothing to scroll (the owner, 23 Nov 2026) and every name
@@ -1760,16 +1758,27 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
   // back, so the operator sets the problem under the camera, presses Enter, and
   // the live frame is kept on the flag for the supervisor at once (the owner,
   // 25 Nov 2026: the 3-2-1 hurried the operator and the photos were poor).
-  // `shootingRef` keeps a second press from taking two while one is on its way.
-  const shootingRef = useRef(false);
   const damagePhotos = state.damagePhotos || [];
   // FLAGGED with a damage photo: the photo takes all the room there is and
   // the words share a line above it and a line below, so the operator can see
   // whether the shot shows the damage and nothing scrolls (the owner, 17 Nov
   // 2026: at a fixed height it was still small and the screen scrolled).
   const compact = mode === "supervisor" && damagePhotos.length > 0;
-  const [shot, setShot] = useState(0);   // each press of "Photo" / "Retake" counts one; the effect below takes the shot
-  const takePhoto = useCallback(() => setShot(n => n + 1), []);
+  // The highlighted option: null until a key, a hover or a shot moves it, and
+  // then the first option that can be picked (below, once the options exist).
+  const [picked, setSelectedIdx] = useState(null);
+  // The shot (Photo, Take another, Retake): the shutter, the live frame kept,
+  // then the highlight back on the first option (Continue). `shooting` keeps a
+  // second press from taking two, or a Retake from dropping one, while a photo
+  // is on its way.
+  const [shooting, setShooting] = useState(false);
+  const takePhoto = useCallback((retake = false) => {
+    if (shooting) return;
+    if (retake) actions.dropDamagePhoto();
+    setShooting(true);
+    playTone("shutter");
+    Promise.resolve(actions.damagePhoto()).finally(() => { setShooting(false); setSelectedIdx(0); });
+  }, [shooting, actions]);
   // The retry pedal on a green: the read is right, there is nothing to retry,
   // and a retry here looks exactly like a confirm from the operator's side
   // (both end on the camera screen) — a jersey went in the bin unchecked that
@@ -1783,8 +1792,6 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
     clearTimeout(nudgeTimer.current); nudgeTimer.current = setTimeout(() => setNudge(""), 5000);
   }, [confirmKey]);
   useEffect(() => () => clearTimeout(nudgeTimer.current), []);
-  const actionsRef = useRef(actions);
-  useEffect(() => { actionsRef.current = actions; }, [actions]);
 
   // What tells the rows apart (the team on a by-team order, the name when two
   // names share a number, an extra column): the tile draws it amber and the line
@@ -1829,8 +1836,8 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
     if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") {
       const cont   = { id: "cont",   label: "✓ Continue", run: actions.continueSupervisor };
-      const photo  = { id: "photo",  label: damagePhotos.length ? "📷 Take another" : "📷 Photo of the damage", hint: damagePhotos.length ? "" : "set the jersey, then press Enter", run: takePhoto };
-      const retake = { id: "retake", label: "↻ Retake", run: () => { actions.dropDamagePhoto(); takePhoto(); } };
+      const photo  = { id: "photo",  label: damagePhotos.length ? "📷 Take another" : "📷 Photo of the damage", hint: damagePhotos.length ? "" : "set the jersey, then press Enter", run: () => takePhoto() };
+      const retake = { id: "retake", label: "↻ Retake", run: () => takePhoto(true) };
       // Flagged from the size screen: Back undoes the flag and asks the size again (the owner,
       // 19 Nov 2026: a wrong size tapped by mistake).
       const sizeBack = state.sizeBack ? [{ id: "sizeback", label: "← Back · wrong size", run: actions.backToSize }] : [];
@@ -1843,16 +1850,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
     return [];
   }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, damagePhotos.length, canPhoto, state.photoFirst, takePhoto, sorter, state.match, state.fromList]);
 
-  const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
-  const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
-  // The shot: the shutter, then the live frame is kept; afterwards the highlight
-  // goes back to the first option (Continue).
-  useEffect(() => {
-    if (!shot || shootingRef.current) return;
-    shootingRef.current = true;
-    playTone("shutter");
-    Promise.resolve(actionsRef.current.damagePhoto()).finally(() => { shootingRef.current = false; setSelectedIdx(0); });
-  }, [shot]);
+  const selectedIdx = picked ?? Math.max(0, options.findIndex(o => !o.disabled));
   const lastKeyRef = useRef(0);
 
   // Auto-dismiss the green flash; the app then arms hands-free scanning.
@@ -2928,15 +2926,12 @@ function IssuesModal({ missing, dups, flagged, binOf, onClose }) {
 // ── Order summary: passed, failed, missing (the owner, 24 Nov 2026) ─────────
 // "Which jerseys are there and passed, which are there and failed, which are
 // missing", the three side by side, the missing split into marked missing and
-// not scanned yet next to each other ("easier to point out that way"). Print
-// summary prints the count label, the FAILED list and the MISSING list; "with
-// the passed list" adds every passed jersey with its box. Finish order prints
-// the summary by itself; this screen is how the operator sees it first (the
-// owner: "have option for operators to see the list before printing").
+// not scanned yet next to each other ("easier to point out that way").
 // The summary's body, shared by the station's summary screen and the board's
-// order view (25 Nov 2026), so the two can never drift: the boxes of the order
-// (`bins`: Box · label · count · box size · open or closed), then Passed with
-// its box, Failed with its reason and Missing.
+// order view (the owner, 25 Nov 2026: "the summary like the operator sees it"),
+// so the two can never drift: the boxes of the order (`bins`: Box · label ·
+// count · box size · open or closed), then Passed with its box, Failed with its
+// reason and Missing.
 function OrderSummaryBody({ summary, bins = [] }) {
   const c = summary.counts;
   const line = (key, j, extra, colour, box = null) => (
@@ -2972,22 +2967,22 @@ function OrderSummaryBody({ summary, bins = [] }) {
           ))}
         </div>
       )}
-  <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start", marginTop: 14 }}>
-    {col(`Passed · ${c.passed}`, "#4ade80", summary.passed.map(p => line("p" + p.row._id, p.row, "", "", p.bin)), "Nothing has passed yet.")}
-    {col(`Failed · ${c.failed}`, "#f87171", summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca")), "Nothing is flagged.", c.extra > 0 ? (
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        {summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca"))}
-        <div style={{ fontSize: 15, fontWeight: 800, color: "#94a3b8", margin: "6px 0 2px" }}>No roster row · {c.extra}</div>{/* not on the roster, a duplicate, no size tag: in the DAMAGED box, not among the order's jerseys */}
-        {summary.extra.map((f, i) => line("x" + i, f, f.reason || "flagged", "#fecaca"))}
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start", marginTop: 14 }}>
+        {col(`Passed · ${c.passed}`, "#4ade80", summary.passed.map(p => line("p" + p.row._id, p.row, "", "", p.bin)), "Nothing has passed yet.")}
+        {col(`Failed · ${c.failed}`, "#f87171", summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca")), "Nothing is flagged.", c.extra > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca"))}
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#94a3b8", margin: "6px 0 2px" }}>No roster row · {c.extra}</div>{/* not on the roster, a duplicate, no size tag: in the DAMAGED box, not among the order's jerseys */}
+            {summary.extra.map((f, i) => line("x" + i, f, f.reason || "flagged", "#fecaca"))}
+          </div>
+        ) : null)}
+        {col(`Missing · ${c.missing}`, "#fbbf24", [], "", (
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {sub(`Marked missing · ${c.marked}`, summary.missing.marked.map(r => line("m" + r._id, r, "", "")), "None.")}
+            {sub(`Not scanned yet · ${c.notScanned}`, summary.missing.notScanned.map(r => line("n" + r._id, r, "", "")), "None.")}
+          </div>
+        ))}
       </div>
-    ) : null)}
-    {col(`Missing · ${c.missing}`, "#fbbf24", [], "", (
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {sub(`Marked missing · ${c.marked}`, summary.missing.marked.map(r => line("m" + r._id, r, "", "")), "None.")}
-        {sub(`Not scanned yet · ${c.notScanned}`, summary.missing.notScanned.map(r => line("n" + r._id, r, "", "")), "None.")}
-      </div>
-    ))}
-  </div>
     </div>
   );
 }
@@ -3013,6 +3008,11 @@ function SummaryCounts({ summary, stats = null }) {
   );
 }
 
+// The station's summary screen: the counts and the body above. Print summary
+// prints the count label, the FAILED list and the MISSING list; "with the
+// passed list" adds every passed jersey with its box. Finish order prints the
+// summary by itself; this screen is how the operator sees it first (the owner,
+// 24 Nov 2026: "have option for operators to see the list before printing").
 function OrderSummaryModal({ orderNumber, summary, bins = [], stats = null, status, labels = { summary: 0, withPassed: 0 }, onPrint, onFinish, onClose }) {
   useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
   const colour = { printing: "#94a3b8", done: "#4ade80", error: "#f87171", off: "#fbbf24" }[status?.status] || "#94a3b8";
@@ -3955,7 +3955,10 @@ export default function App() {
   [settings.binLists, binMap, openBins, packNow, listOf]);
   // The summary screen (OrderSummaryModal) and its printing.
   const summaryNow = useMemo(() => orderSummary(packNow), [packNow]);
-  const summaryStats = useMemo(() => summarise(log.map(l => ({ t: l.timestamp ?? l.t, status: l.status, reason: l.reason, offRoster: !!(l.match?.offRoster || l.offRoster) }))), [log]);   // pass rate, flag rate and pace, as the order sheet's Summary has them
+  // Pass rate, flag rate and pace, as the order sheet's Summary has them. From the station's
+  // own log; the board's order view takes them from the hub's events of the order, which are
+  // this log as the snapshot sent it, so the two agree.
+  const summaryStats = useMemo(() => summariseLog(log), [log]);
   const [summaryPrint, setSummaryPrint] = useState(null);   // { status, text } on the summary screen
   const summaryLabelCounts = useMemo(() => ({ summary: summaryJobs(packNow).length, withPassed: summaryJobs(packNow, { withPassed: true }).length }), [packNow]);
   const printSummary = useCallback(withPassed => {
@@ -5605,8 +5608,8 @@ export default function App() {
                 : log.map(l => (
                   <div key={l.id} style={{ ...card, borderLeft: `3px solid ${statusColor(l.status)}`, padding: "10px 12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                      {(l.photo || l.thumb) && <img src={l.photo || l.thumb} alt="" title={l.photo ? "Photo kept for the supervisor — click to enlarge" : ""} onClick={l.photo ? () => setBigPhoto(photoSet(l.photo, l.damagePhotos, 0, logCaption(l))) : undefined} style={{ width: l.photo ? 72 : 48, height: l.photo ? 54 : 36, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: l.photo ? "zoom-in" : "default", border: l.photo ? "1px solid #ef4444" : "none" }} />}
-                      {(l.damagePhotos || []).map((p, i) => <img key={i} src={p} alt="" title="Damage photo — click to enlarge" onClick={() => setBigPhoto(photoSet(l.photo, l.damagePhotos, (l.photo ? 1 : 0) + i, logCaption(l)))} style={{ width: 72, height: 54, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: "zoom-in", border: "2px solid #ef4444" }} />)}
+                      {(l.photo || l.thumb) && <img src={l.photo || l.thumb} alt="" title={l.photo ? "Photo kept for the supervisor — click to enlarge" : ""} onClick={l.photo ? () => setBigPhoto(photoSet(l.photo, l.damagePhotos, 0, photoCaption(l.match?.number, l.match?.name, l.reason))) : undefined} style={{ width: l.photo ? 72 : 48, height: l.photo ? 54 : 36, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: l.photo ? "zoom-in" : "default", border: l.photo ? "1px solid #ef4444" : "none" }} />}
+                      {(l.damagePhotos || []).map((p, i) => <img key={i} src={p} alt="" title="Damage photo — click to enlarge" onClick={() => setBigPhoto(photoSet(l.photo, l.damagePhotos, (l.photo ? 1 : 0) + i, photoCaption(l.match?.number, l.match?.name, l.reason)))} style={{ width: 72, height: 54, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: "zoom-in", border: "2px solid #ef4444" }} />)}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: statusColor(l.status) }}>{cap(l.status)}</span>
                         <div style={{ fontWeight: 700, fontSize: 18, marginTop: 2 }}>{l.typed ? `Typed: #${l.typed.number || "?"} · ${l.typed.name || "—"}` : `Read: #${l.detected?.number || "?"} · ${l.detected?.name || "—"}`}</div>

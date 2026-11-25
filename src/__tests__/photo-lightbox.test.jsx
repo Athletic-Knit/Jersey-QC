@@ -6,7 +6,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { createElement } from "react";
 import { PhotoLightbox } from "../App.jsx";
-import { photoSet } from "../lib/photoset.js";
+import { photoSet, photoCaption } from "../lib/photoset.js";
 
 afterEach(cleanup);
 const set = (index = 0) => photoSet("scan.jpg", ["d1.jpg", "d2.jpg"], index, "#12 LEACH · Twill peeling");
@@ -52,5 +52,19 @@ describe("the photo lightbox", () => {
   it("a plain src (the station's log) still opens", () => {
     draw("x.jpg");
     expect(img().getAttribute("src")).toBe("x.jpg");
+  });
+  it("a click on the backdrop closes it, a click on the picture does not", () => {
+    const onClose = draw();
+    fireEvent.pointerDown(img()); fireEvent.pointerUp(img()); fireEvent.click(img());
+    expect(onClose).not.toHaveBeenCalled();
+    const stage = img().parentElement;
+    fireEvent.pointerDown(stage); fireEvent.pointerUp(stage); fireEvent.click(stage);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+  it("the caption leaves out what is missing", () => {
+    expect(photoCaption("12", "LEACH", "Twill peeling")).toBe("#12 LEACH · Twill peeling");
+    expect(photoCaption(7, "", "")).toBe("#7");
+    expect(photoCaption("", "SMITH", "Hole or snag")).toBe("SMITH · Hole or snag");
+    expect(photoCaption(undefined, undefined, undefined)).toBe("");
   });
 });

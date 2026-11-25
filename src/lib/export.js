@@ -192,9 +192,13 @@ export function buildDefectsSheet(events, categoryOf = () => "Other") {
 // The first sheet a supervisor wants at the end of an order: how many passed,
 // what went to the supervisor and why, what is missing, and how long it took.
 // `log` is the station's log (or the hub's events turned into that shape).
+const logEvents = log => (log || []).map(l => ({ t: l.timestamp ?? l.t, status: l.status, reason: l.reason, offRoster: !!(l.match?.offRoster || l.offRoster), operator: l.operator }));
+// summarise() of a station's log: the station's summary screen shows the same
+// rates and pace as this sheet (25 Nov 2026).
+export const summariseLog = log => summarise(logEvents(log));
 export function buildOrderSummarySheet(roster, log, meta = {}, categoryOf = () => "Other") {
   const count = st => roster.filter(r => r.scanned === st).length;
-  const events = (log || []).map(l => ({ t: l.timestamp ?? l.t, status: l.status, reason: l.reason, offRoster: !!(l.match?.offRoster || l.offRoster), operator: l.operator }));
+  const events = logEvents(log);
   const sum = summarise(events);
   const total = roster.length, pass = count("pass"), manual = count("manual"), flag = count("flag"), missing = count("missing") + count("short");
   const offRoster = events.filter(e => e.status === "flagged" && e.offRoster).length;
