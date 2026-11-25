@@ -17,6 +17,8 @@ describe("shortSize", () => {
     expect(shortSize("youth-xl")).toBe("Y-XL");
     expect(shortSize("Adult 2XL")).toBe("A-2XL");
     expect(shortSize("Adult-3XL")).toBe("A-3XL");
+    expect(shortSize("l-s")).toBe("L-S");     // a short form in lower case comes out upper
+    expect(shortSize("w-m")).toBe("L-M");
   });
   it("leaves a short size, a size with no family, an empty one and one it cannot read as they are", () => {
     for (const s of ["A-M", "Y-S", "L-S", "XL", "OSFA", "", "2XL", "Youth OSFA", "Ladies petite"]) expect(shortSize(s)).toBe(s);

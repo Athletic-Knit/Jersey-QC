@@ -394,11 +394,12 @@ const SIZE_WORDS = { small: "s", medium: "m", large: "l", xlarge: "xl", extralar
 export function shortSize(size) {
   const s = String(size ?? "");
   const k = teamKey(s).replace(/[\s._]+/g, "").replace(/[-/]+/g, "-");
-  const m = k.match(/^(youth|adult|ladies|lady|womens|women)-?(.+)$/);
+  // A short form in lower case ("l-s", "w-m" for women) comes out upper, as the rack writes it (the Fable check, 25 Nov 2026).
+  const m = k.match(/^(youth|adult|ladies|lady|womens|women|y|a|l|w)-?(.+)$/);
   if (!m) return s;
   const rest = SIZE_WORDS[m[2].replace(/^-/, "")] || m[2].replace(/^-/, "");
   if (SIZE_ORDER.indexOf(rest) < 0) return s;
-  const letter = m[1] === "youth" ? "Y" : m[1] === "adult" ? "A" : "L";
+  const letter = /^y/.test(m[1]) ? "Y" : /^a/.test(m[1]) ? "A" : "L";
   return `${letter}-${rest.toUpperCase()}`;
 }
 // Two sizes in rack order (for sort).
