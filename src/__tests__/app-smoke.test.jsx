@@ -93,4 +93,34 @@ describe("the station screen", () => {
     await screen.findByText(/Set up the order/);
     expect(hubCalls.filter(c => c.url.includes("/api/hub/stations/")).length).toBeGreaterThan(reportsBefore);   // the last report went first (M16)
   });
+
+  // The Packing screen (the owner, 25 Nov 2026): the Now strip, Print list without closing, no second list at Finish.
+  it("Packing: keep scanning, then Print list leaves the box open, says List printed and Finish prints no second list", async () => {
+    await resumeOrder({ roster: [{ ...roster[0], scanned: "pass" }, roster[1]] });
+    fireEvent.click(screen.getByRole("button", { name: /📦 Packing/ }));
+    await screen.findByText(/Now: keep scanning · 1 to go/);
+    pressEnter();   // the pedal does nothing here
+    expect(screen.getByText(/Now: keep scanning/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: /^Close/ })[0]);
+    // Jones passes: every jersey accounted for.
+    cleanup(); hubCalls.length = 0;
+    await resumeOrder({ roster: [{ ...roster[0], scanned: "pass" }, { ...roster[1], scanned: "pass" }] });
+    fireEvent.click(screen.getByRole("button", { name: /📦 Packing/ }));
+    await screen.findByText(/Now: print the box lists and seal the boxes/);
+    fireEvent.click(screen.getByRole("button", { name: /🖨 Print list$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /just print/i }));
+    await screen.findByText(/✓ List printed · 2 pcs/);
+    expect(screen.getByText(/Now: finish the order/)).toBeTruthy();
+    const prints = hubCalls.filter(c => c.url.includes("/api/hub/print"));
+    expect(prints.length).toBe(1);
+    expect(prints[0].body.kind).toBe("binlist");
+    expect(screen.getByRole("button", { name: /🖨 Print again/ })).toBeTruthy();   // the box is still open
+    fireEvent.click(screen.getAllByRole("button", { name: /🏁 Finish order/ })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: /✓ Finish order/ }));
+    await screen.findByText(/Order 999100 is done/);
+    // Finish order printed the summary's count label and nothing of Box 1.1: its list was out already.
+    const later = hubCalls.filter(c => c.url.includes("/api/hub/print")).slice(1).flatMap(c => c.body.labels);
+    expect(later.length).toBeGreaterThan(0);
+    expect(later.every(l => l.summary)).toBe(true);
+  });
 });
