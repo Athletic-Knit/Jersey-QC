@@ -8,12 +8,14 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { labelSize, printJob, repageLists, listChunks } from "../labels.js";
 import { packListLabel, packListZPL, boxFaceZPL, signoffZPL, packListLayout, LIST_COPIES } from "../packlabels.js";
-import { WALK, walkBox } from "./walk-order.js";
+import { buildBinMap } from "../roster.js";
+import { packBoxes, boxFaceLabel, boxFaceJobs, boxListJobs } from "../printjobs.js";
+import { WALK, walkBox, walkRoster } from "./walk-order.js";
 
 const fx = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 const same = (name, zpl) => {
   if (process.env.WRITE_FIXTURES || !existsSync(fx(name))) writeFileSync(fx(name), zpl);
-  expect(zpl).toBe(readFileSync(fx(name), "utf8"));
+  expect(zpl).toBe(readFileSync(fx(name), "utf8").split(String.fromCharCode(13)).join(""));   // git may check the fixture out with CRLF
 };
 const roll = labelSize("2x3"), tall4 = labelSize("2x4");
 const pages = zpl => zpl.split("^XA").slice(1).map(p => "^XA" + p);
@@ -121,9 +123,53 @@ describe("the packing list as a table (kind packlist)", () => {
   });
 });
 
+// The walk-through order at Finish order: U11 Tigers in box 1.1, U12 Bombers in box 2.1.
+const roster = walkRoster();
+const pack = { orderNumber: "123456", customer: "Source for Sports", roster, binMap: buildBinMap(roster, {}, "team"), closedBins: [], carried: [], finished: true };
+const box = bin => packBoxes(pack).find(b => b.bin === bin);
+
 describe("the outside label (kind boxface)", () => {
-  it("is laid out for the 2 x 3 in roll", () => {
-    expect(typeof boxFaceZPL).toBe("function");
-    expect(typeof signoffZPL).toBe("function");
+  it("box 1 of the walk-through: the teams and sizes as in box / of order, what is not in it, Box 1 of 2", () => {
+    const l = boxFaceLabel(pack, box("1.1"));
+    expect(l).toEqual({ kind: "boxface", bin: "1.1", boxNo: 1, boxes: 2, orderNumber: "123456", customer: "Source for Sports",
+      teams: [{ team: "U11 Tigers", inBox: 10, ofOrder: 11 }],
+      sizes: [{ size: "A-S", inBox: 5, ofOrder: 5 }, { size: "A-M", inBox: 3, ofOrder: 4 }, { size: "A-L", inBox: 2, ofOrder: 2 }],
+      notIn: ["#19 A-M flagged"] });
+    const z = boxFaceZPL(l, roll);
+    same("boxface-walk-box1.zpl", z);
+    expect(z).toContain("^FDORDER^FS"); expect(z).toContain("^FD123456^FS"); expect(z).toContain("^FDSource for Sports^FS");
+    expect(z).toContain("^FD10 / 11^FS"); expect(z).toContain("^FDNot in this box: #19 A-M flagged^FS");
+    expect(z).toContain("^FDBox 1 of 2^FS"); expect(z).toContain("^FDWEIGHT^FS");
+    expect(z).not.toContain("LEACH");   // no garment names on the outside
+    expect(z).toContain("^PQ1");
   });
+  it("box 2 of the walk-through: #44 is missing", () => {
+    const l = boxFaceLabel(pack, box("2.1"));
+    expect(l).toMatchObject({ boxNo: 2, boxes: 2, teams: [{ team: "U12 Bombers", inBox: 8, ofOrder: 9 }], notIn: ["#44 A-L missing"] });
+    expect(l.sizes).toEqual([{ size: "A-S", inBox: 1, ofOrder: 1 }, { size: "A-M", inBox: 3, ofOrder: 3 }, { size: "A-L", inBox: 3, ofOrder: 4 }, { size: "A-XL", inBox: 1, ofOrder: 1 }]);
+    same("boxface-walk-box2.zpl", boxFaceZPL(l, roll));
+  });
+  it("no customer: the box's team name; before Finish 'of N' is the plan's count, at least the boxes with garments", () => {
+    const open = { ...pack, customer: "", finished: false, plan: [{ bin: "1.1", boxes: 2, total: 0 }, { bin: "2.1", boxes: 1, total: 0 }] };
+    const l = boxFaceLabel(open, packBoxes(open).find(b => b.bin === "1.1"));
+    expect(l.customer).toBe("U11 Tigers");
+    expect(l.boxes).toBe(3);   // box 1.1 may need a second box; 2.1 one
+    expect(boxFaceLabel({ ...open, plan: [] }, packBoxes(open).find(b => b.bin === "1.1")).boxes).toBe(2);
+  });
+  it("the box lists of a tall roll end with the outside label, the Print menu can print it alone, and a short roll gets none", () => {
+    const jobs = boxListJobs(pack, "1.1", { tall: true });
+    expect(jobs.map(l => l.kind || (l.title ? "count" : "rows"))).toEqual(["rows", "packlist", "count", "boxface"]);   // the NOT IN BOX list first (#19 is out of this team)   // the outside label last: it comes off the printer on top
+    expect(boxFaceJobs(pack).map(l => l.bin)).toEqual(["1.1", "2.1"]);
+    expect(boxListJobs(pack, "1.1").some(l => l.kind === "boxface")).toBe(false);
+  });
+  it("the hub counts it as one label and lays a short roll out as one compact label", () => {
+    const l = boxFaceLabel(pack, box("1.1"));
+    const job = printJob([l], roll, "binlist");
+    expect(job.count).toBe(1); expect(job.zpl).toContain("Box 1 of 2");
+    expect(printJob([l], labelSize("2x1"), "binlist").zpl).toContain("^FDBox 1 of 2^FS");
+  });
+});
+
+describe("the sign-off ticket (kind signoff)", () => {
+  it("is a function", () => { expect(typeof signoffZPL).toBe("function"); });
 });

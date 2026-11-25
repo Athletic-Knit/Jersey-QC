@@ -8,7 +8,7 @@
 // hub's flag events turned into the same shape); `planLabels` are the box
 // labels the station expects the order to need (the open order only).
 // Nothing here prints: each function returns the labels for hub.printLabels.
-import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, boxParts, inBin, groupSize, shortSize } from "./roster.js";
+import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, boxParts, inBin, groupSize, shortSize, bySize, teamKey } from "./roster.js";
 import { binListLabels, jerseyLabel, flagLabel, damagedListLabels, listLabels } from "./labels.js";
 import { packListLabel } from "./packlabels.js";
 import { garmentOf } from "./garments.js";
@@ -53,13 +53,53 @@ export function boxLabelJobs(pack, bin) {
 // What a box's list is made of (the owner, 25 Nov 2026): on a TALL roll the packing list is a table, one
 // label object that the hub lays out in pages, then the count label; on the 2 x 1 in roll and the sticker
 // roll it is today's pages of rows and the count label. `rows` are the garments in the box.
+// The outside label goes with it (printed last, so it comes off the printer on top of the strip).
 export function boxListLabels(pack, b, { tall = false } = {}) {
   if (!b || !b.rows?.length) return [];
   const by = binFieldOf(pack?.binMap), orderNumber = ordersInBox(pack, b.bin, b.rows);
   const of = b.rows.some(r => r.carried) ? 0 : groupSize(pack?.roster, pack?.binMap, b.rows);
   const pages = binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber, by, of });
   if (!tall) return pages;
-  return [packListLabel(b.rows, { bin: b.bin, label: b.label, orderNumber, by }), ...pages.filter(l => l.title)];
+  return [packListLabel(b.rows, { bin: b.bin, label: b.label, orderNumber, by }), ...pages.filter(l => l.title), boxFaceLabel(pack, b)];
+}
+
+// ── The outside label of a box (the owner, 25 Nov 2026) ─────────────────────
+// The shipping face of the box: the order, the customer (the team's name when
+// none was given), the teams and the sizes in it as "in this box / in the whole
+// order" (within the box's own team: see below), what is not in it, and "Box 1 of 3". No garment names: the list with
+// the names goes inside. `pack.plan` (the station's box plan: [{ bin, boxes,
+// total }]) says how many boxes the order is still expected to need, for "of N"
+// before Finish; on a finished order (`pack.finished`, `pack.past`, `pack.final`)
+// N is the number of boxes that have garments in them.
+export function boxFaceLabel(pack, b) {
+  const boxes = packBoxes(pack), roster = pack?.roster || [], by = binFieldOf(pack?.binMap);
+  const rows = b?.rows || [], label = String(b?.label || "");
+  const count = (list, key) => { const m = new Map(); list.forEach(r => { const v = key(r); if (!v.k) return; const t = m.get(v.k) || { name: v.name, n: 0 }; t.n++; m.set(v.k, t); }); return m; };
+  const teamOf = r => { const t = String(r.team ?? "").trim(); return { k: teamKey(t) || teamKey(label), name: t || label }; };
+  const sizeOf = r => { const z = shortSize(String(r.size ?? "").trim()); return { k: teamKey(z), name: z }; };
+  // "Of order" is counted within the box's own team (or size, on a box sorted by size): a box of U11 Tigers reads
+  // "A-M 3 / 4", the Tigers' A-M garments, not the A-M of the other teams (the paper trial of 25 Nov 2026 did the same).
+  const g = rows.length && by !== "all" ? teamKey(rows[0][by]) : null, scope = g === null ? roster : roster.filter(r => teamKey(r[by]) === g);
+  const inTeam = count(rows, teamOf), allTeam = count(scope, teamOf), inSize = count(rows, sizeOf), allSize = count(scope, sizeOf);
+  const teams = [...inTeam].map(([k, t]) => ({ team: t.name, inBox: t.n, ofOrder: allTeam.get(k)?.n ?? t.n })).sort((x, y) => x.team.localeCompare(y.team, undefined, { sensitivity: "base" }));
+  const sizes = [...inSize].map(([k, t]) => ({ size: t.name, inBox: t.n, ofOrder: allSize.get(k)?.n ?? t.n })).sort((x, y) => bySize(x.size, y.size));
+  // The box's place among the order's boxes, and how many there are.
+  const withG = boxes.filter(x => x.count > 0 || x.bin === b?.bin);
+  const boxNo = Math.max(1, withG.findIndex(x => x.bin === b?.bin) + 1);
+  let total = withG.length;
+  if (!(pack?.finished || pack?.past || pack?.final) && Array.isArray(pack?.plan)) {
+    const closed = boxes.filter(x => !x.open && x.count > 0).length;
+    const open = pack.plan.filter(e => e.boxes > 0 && (e.total > 0 || (boxes.find(x => x.bin === e.bin)?.count || 0) > 0 || e.bin === b?.bin)).reduce((n, e) => n + e.boxes, 0);
+    total = Math.max(total, closed + open);
+  }
+  // What the team is missing: only on the group's last box (the earlier ones were full, not short).
+  const why = r => r.scanned === "flag" ? "flagged" : r.scanned === "missing" || r.scanned === "short" ? "missing" : "not scanned";
+  const notIn = b && by !== "all" && isLastBox(pack, b.bin) ? notInBox(pack, b.bin).map(x => `${String(x.row.number ?? "").trim() ? "#" + String(x.row.number).trim() : "Garment"} ${shortSize(x.row.size)} ${why(x.row)}`.replace(/\s+/g, " ").trim()) : [];
+  return { kind: "boxface", bin: b?.bin, boxNo, boxes: total, orderNumber: String(pack?.orderNumber || ""), customer: String(pack?.customer || "").trim() || label, teams, sizes, notIn };
+}
+// The outside label of one box, or of every box with something in it (the Print menu).
+export function boxFaceJobs(pack, bin) {
+  return packBoxes(pack).filter(b => b.count > 0 && (bin === undefined || b.bin === bin)).map(b => boxFaceLabel(pack, b));
 }
 export function boxListJobs(pack, bin, { tall = false } = {}) {
   const boxes = packBoxes(pack);
@@ -250,7 +290,7 @@ export const damagedBoxLabel = pack => ({ bin: "DAMAGED", title: "DAMAGED", labe
 export function packFromRecord(rec) {
   const roster = rec?.rows || [];
   return {
-    orderNumber: String(rec?.order ?? ""), garment: rec?.garment || "", roster, binMap: rec?.bins || null, closedBins: rec?.closedBins || [], station: rec?.station || "",
+    orderNumber: String(rec?.order ?? ""), garment: rec?.garment || "", customer: rec?.customer || "", roster, binMap: rec?.bins || null, closedBins: rec?.closedBins || [], station: rec?.station || "",
     flags: (rec?.flags || []).map(ev => ({
       // `resolution` comes along: without it a past order's DAMAGED list kept the
       // off-roster jerseys the supervisor had already dealt with (code review of

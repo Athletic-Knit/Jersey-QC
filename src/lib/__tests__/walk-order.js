@@ -18,3 +18,13 @@ export const WALK = {
 };
 // The garments that are in the box: the team less its flagged and missing ones.
 export const walkBox = k => WALK[k].rows.filter(x => !WALK[k].flagged.includes(x.number) && !WALK[k].missing.includes(x.number));
+
+// The whole order as the station holds it at Finish order: every garment scanned, #19 flagged, #44 marked missing.
+// Needs the roster helpers, so it is built where it is used.
+export function walkRoster() {
+  let id = 0;
+  return [...WALK.u11.rows.map(x => ({ ...x, k: "u11" })), ...WALK.u12.rows.map(x => ({ ...x, k: "u12" }))].map(x => {
+    const w = WALK[x.k], { k: _k, ...row } = x;
+    return { ...row, _id: id++, scanned: w.flagged.includes(x.number) ? "flag" : w.missing.includes(x.number) ? "missing" : "pass" };
+  });
+}

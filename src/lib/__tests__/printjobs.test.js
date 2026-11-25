@@ -28,7 +28,7 @@ describe("the boxes of an order", () => {
 describe("a box's list on a tall roll (the owner, 25 Nov 2026)", () => {
   it("is one packing list label, then the count label; the 2 x 1 in roll keeps its pages of rows", () => {
     const tall = boxListJobs(pack, "1.1", { tall: true });
-    expect(tall.map(l => l.kind || (l.title ? "count" : "rows"))).toEqual(["packlist", "count"]);
+    expect(tall.map(l => l.kind || (l.title ? "count" : "rows"))).toEqual(["packlist", "count", "boxface"]);   // the outside label goes last (it comes off the printer on top)
     expect(tall[0]).toMatchObject({ kind: "packlist", bin: "1.1", team: "Navy", orderNumber: "264247", pcs: 3, copies: 4 });
     expect(tall[0].groups[0].sizes).toEqual([{ size: "A-L", rows: [{ number: "1", name: "P0" }, { number: "2", name: "P1" }, { number: "3", name: "P2" }] }]);
     expect(boxListJobs(pack, "1.1").some(l => l.kind === "packlist")).toBe(false);

@@ -13,7 +13,7 @@
 //                                            `days` lists every day still kept (90; photos only on the newest 14)
 //   GET    /api/hub/rosters             rosters waiting for stations (summaries)
 //   GET    /api/hub/rosters/:id         one roster, with rows
-//   POST   /api/hub/rosters             { orderNumber, notes, jerseyType, garment, fileName, rows, by }
+//   POST   /api/hub/rosters             { orderNumber, notes, jerseyType, garment, customer, fileName, rows, by } (customer: printed on the box's outside label and the sign-off ticket; the Paragon site will fill it later)
 //   POST   /api/hub/rosters/:id/take    { station, operator } — a station starts it; 409 if another station already has it
 //   POST   /api/hub/rosters/:id/release the supervisor frees it for another station
 //   DELETE /api/hub/rosters/:id         the station finished it, or the supervisor removes it
@@ -390,7 +390,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
         number: j.number, name: j.name, size: j.size, team: j.team, reason: word, resolution: word + (by ? ` (${by})` : ""), operator: by }, u.station, localStamp(at).slice(0, 10));
     });
   };
-  const summary = r => ({ id: r.id, shipWith: r.shipWith || [], orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", garment: r.garment || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
+  const summary = r => ({ id: r.id, shipWith: r.shipWith || [], orderNumber: r.orderNumber, notes: r.notes, jerseyType: r.jerseyType || "", garment: r.garment || "", customer: r.customer || "", binBy: r.binBy || "", fileName: r.fileName, rowCount: r.rows.length, by: r.by, forStation: r.forStation || "", createdAt: r.createdAt, takenBy: r.takenBy || null });
 
   async function handle(req, res) {
     // The whole body first, then the request goes to the NEWEST hub for this file: a request
@@ -471,7 +471,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
             // The order record keeps the latest roster with each jersey's status, so the
             // supervisor can download the order's QC Results sheet at any time.
             const ok = okey(body.orderNumber, body.orderRun); const o = dayLed.orders[ok] || (renamedFrom ? { ...renamedFrom, order: body.orderNumber, run: body.orderRun || 0 } : null) || { station: id, order: body.orderNumber, run: body.orderRun || 0, operator: body.operatorName, firstSeen: now };
-            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", jerseyType: body.jerseyType || o.jerseyType || "", garment: knownGarment(body.garment) || o.garment || "", rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null, closedBins: body.closedBins || o.closedBins || null, binSummary: body.binSummary || o.binSummary || null, idle: body.idle || o.idle || null, away: body.away || o.away || null,
+            dayLed.orders[ok] = { ...o, operator: body.operatorName || o.operator, lastSeen: now, counts: body.counts || o.counts, rosterFile: body.rosterFile || o.rosterFile, notes: body.notes ?? o.notes ?? "", jerseyType: body.jerseyType || o.jerseyType || "", garment: knownGarment(body.garment) || o.garment || "", customer: String(body.customer || o.customer || "").slice(0, 80), rows: rows.length ? rows : (o.rows || []), bins: bins || o.bins || null, closedBins: body.closedBins || o.closedBins || null, binSummary: body.binSummary || o.binSummary || null, idle: body.idle || o.idle || null, away: body.away || o.away || null,
               // When the station pressed Finish order (code review M7: an order finished with jerseys
               // still unscanned showed "in progress" for ever). The station is the judge: "Back to
               // this order" sends null again. A station from before this change sends nothing: kept.
@@ -528,7 +528,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
               if ((o.run && ev.run ? ev.run !== o.run : (ev.station !== o.station || (ev.run || 0) !== (o.run || 0))) || String(ev.order) !== String(o.order) || ev.status !== "flagged") return;
               const slim = { ...ev }; delete slim.photo; delete slim.damagePhotos; flags[ev.id] = slim;
             });
-            found[k] = { date, exact: n === q, station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", firstSeen: before?.firstSeen ?? o.firstSeen, lastSeen: o.lastSeen, counts: o.counts || null, jerseyType: o.jerseyType || "", garment: o.garment || before?.garment || "", rows: o.rows || [], bins: o.bins || null, closedBins: o.closedBins || [], flagsById: flags };
+            found[k] = { date, exact: n === q, station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", firstSeen: before?.firstSeen ?? o.firstSeen, lastSeen: o.lastSeen, counts: o.counts || null, jerseyType: o.jerseyType || "", garment: o.garment || before?.garment || "", customer: o.customer || before?.customer || "", rows: o.rows || [], bins: o.bins || null, closedBins: o.closedBins || [], flagsById: flags };
           }
         }
         const orders = Object.values(found).sort((a, b) => (b.exact - a.exact) || ((b.lastSeen || 0) - (a.lastSeen || 0))).slice(0, 10)
@@ -564,7 +564,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           if (!Array.isArray(body.rows) || body.rows.length === 0) return json(res, 400, { error: "rows required" });
           const newId = now_().toString(36) + Math.random().toString(36).slice(2, 6);
           // forStation: a station id ("st-line1") when the supervisor sends it to one station; "" = any station may take it.
-          state.rosters[newId] = { id: newId, shipWith: (Array.isArray(body.shipWith) ? body.shipWith : []).map(String).filter(Boolean).slice(0, 20), orderNumber: String(body.orderNumber ?? ""), notes: String(body.notes ?? ""), jerseyType: String(body.jerseyType ?? ""), garment: knownGarment(body.garment), binBy: String(body.binBy ?? ""), fileName: String(body.fileName ?? ""), rows: body.rows, by: String(body.by ?? ""), forStation: String(body.forStation ?? ""), createdAt: now_() };
+          state.rosters[newId] = { id: newId, shipWith: (Array.isArray(body.shipWith) ? body.shipWith : []).map(String).filter(Boolean).slice(0, 20), orderNumber: String(body.orderNumber ?? ""), notes: String(body.notes ?? ""), jerseyType: String(body.jerseyType ?? ""), garment: knownGarment(body.garment), customer: String(body.customer ?? "").trim().slice(0, 80), binBy: String(body.binBy ?? ""), fileName: String(body.fileName ?? ""), rows: body.rows, by: String(body.by ?? ""), forStation: String(body.forStation ?? ""), createdAt: now_() };
           save();
           return json(res, 200, { id: newId });
         }

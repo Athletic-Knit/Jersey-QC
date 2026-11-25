@@ -47,7 +47,7 @@ import { binLabels, jerseyLabel, flagLabel, listChunks, cleanSpots, repageLists,
 import { isTallRoll } from "./lib/packlabels.js";
 import { nowStep, listUnchanged, listIds } from "./lib/packing.js";
 import { photoSet, photoCaption } from "./lib/photoset.js";
-import { packBoxes, boxLabelJobs, boxListJobs, boxListLabels,stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
+import { packBoxes, boxLabelJobs, boxListJobs, boxListLabels, boxFaceJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, NO_SIZE_TAG, FIXED_AT_STATION, GARMENT_MENU, DEFAULT_ORDER_GARMENT, LABEL_ROLLS } from "./config.js";
 import { garment as garmentShape, garmentOf, garmentView, toView, fromView, spotAt, spotWords, rosterGarment, orderGarmentOf, SIDES, SIDE_LABELS, MAX_SPOTS } from "./lib/garments.js";
 
@@ -639,6 +639,9 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   const [showReplay, setShowReplay] = useState(false);   // development and testing only: replay a floor order
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
+  const [customer, setCustomer] = useState("");     // printed on the box's outside label and the sign-off ticket; empty: the box's team name
+  const [customerKeys, setCustomerKeys] = useState(false);   // on-screen keys under the customer while the cursor is in it
+  const customerRef = useRef(null);
   const [jerseyType, setJerseyType] = useState("");
   const [garment, setGarment] = useState(DEFAULT_ORDER_GARMENT);   // the outline of "where is the damage"; a roster of known styles picks it
   const garmentByHand = useRef(false);   // picked on the screen: a roster file chosen later leaves it alone
@@ -709,7 +712,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     try {
       const full = await hub.roster(summary.id);
       setPicked(full); setFile(null); setError(null); setShipText(shipNorm((full.shipWith || []).join(", ")));
-      setOrder(full.orderNumber || ""); setNotes(full.notes || ""); setJerseyType(full.jerseyType || ""); setBinBy(full.binBy || "team");
+      setOrder(full.orderNumber || ""); setNotes(full.notes || ""); setCustomer(full.customer || ""); setJerseyType(full.jerseyType || ""); setBinBy(full.binBy || "team");
       setGarment(orderGarmentOf(full.garment || rosterGarment(full.rows)));
     } catch (e) { setError("Could not fetch that roster: " + e.message); }
   };
@@ -735,14 +738,14 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         }
         const rows = normaliseRosterRows(picked.rows), num = order.trim(), shipWith = orderList(shipText).filter(n => n !== num);
         const carried = await takeOpenBoxes({ order: num, shipWith, rows, binBy, station: stationId() });
-        onStart({ roster: rows, orderNumber: num, notes: notes.trim(), jerseyType, garment, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})`, hubRosterId: picked.id, shipWith, carried }); return;
+        onStart({ roster: rows, orderNumber: num, notes: notes.trim(), customer: customer.trim(), jerseyType, garment, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})`, hubRosterId: picked.id, shipWith, carried }); return;
       }
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); starting.current = false; return; }
       const num = order.trim() || orderNumberOf(parsed) || file.name.replace(/\.[^.]+$/, ""), shipWith = orderList(shipText || shipWithOf(parsed).join(" ")).filter(n => n !== num);
       const carried = await takeOpenBoxes({ order: num, shipWith, rows: parsed, binBy, station: stationId() });
-      onStart({ roster: parsed, orderNumber: num, notes: notes.trim(), jerseyType, garment, binBy, rosterFile: file.name, shipWith, carried });
+      onStart({ roster: parsed, orderNumber: num, notes: notes.trim(), customer: customer.trim(), jerseyType, garment, binBy, rosterFile: file.name, shipWith, carried });
     } catch (err) {
       setError("Failed to parse roster: " + err.message);
       setLoading(false); starting.current = false;
@@ -823,6 +826,13 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           <input ref={orderRef} value={order} onChange={e => setOrder(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="From the roster file, or tap to type it" onKeyDown={onEnter} style={inputSt}
             onFocus={() => setOrderKeys(true)} onBlur={() => setOrderKeys(false)} />
           {orderKeys && <ScreenKeys layout="digits" onKey={k => setOrder(v => typeKey(v, k))} onEnter={() => orderRef.current?.blur()} enterLabel="Done" />}   {/* order numbers are digits: a keypad, no letters (the owner, 17 Nov 2026) */}
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          {/* The customer is printed on the box's outside label and the sign-off ticket (the owner, 25 Nov 2026); the supervisor's roster brings it, the Paragon site will fill it later. Empty: the box's team name. */}
+          <label style={labelSt}>Customer <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— on the box's outside label; empty prints the team name{picked?.customer ? <span style={{ color: "#60a5fa" }}> · set by the supervisor</span> : null}</span></label>
+          <input ref={customerRef} value={customer} onChange={e => setCustomer(e.target.value)} placeholder="Tap to type it" onKeyDown={e => { if (e.key === "Enter") customerRef.current?.blur(); }} style={inputSt}
+            onFocus={() => setCustomerKeys(true)} onBlur={() => setCustomerKeys(false)} />
+          {customerKeys && <ScreenKeys layout="search" onKey={k => setCustomer(v => typeKey(v, k))} onEnter={() => customerRef.current?.blur()} enterLabel="Done" />}
         </div>
         <div style={{ marginBottom: 12 }}>
           {/* Orders that ship together share boxes (the owner, 20 Nov 2026): a box that is not full is left open at Finish order for them. */}
@@ -1342,6 +1352,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   }).catch(() => setMsg("Could not fetch that order from the hub."));
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
+  const [customer, setCustomer] = useState("");   // printed on the box's outside label and the sign-off ticket
   const [jerseyType, setJerseyType] = useState("");
   const [garment, setGarment] = useState(DEFAULT_ORDER_GARMENT);   // the outline of "where is the damage" at the station
   const garmentByHand = useRef(false);   // picked on the form: a roster file chosen later leaves it alone
@@ -1381,10 +1392,10 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const rows = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (!rows.length) { setMsg("No valid rows in that file."); return; }
-      await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), jerseyType, garment, binBy, fileName: file.name, rows, by: operatorName, forStation: target, shipWith: orderList(shipText || shipWithOf(rows).join(" ")).filter(n => n !== order.trim()) });
+      await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), customer: customer.trim(), jerseyType, garment, binBy, fileName: file.name, rows, by: operatorName, forStation: target, shipWith: orderList(shipText || shipWithOf(rows).join(" ")).filter(n => n !== order.trim()) });
       const to = target ? `${stationLabel(target)} only` : "every station";
       setMsg(`Sent ${file.name} — ${rows.length} garments for order ${order.trim()} to ${to}. It shows on the order screen there.`);
-      setFile(null); setOrder(""); setNotes(""); setJerseyType(""); setGarment(DEFAULT_ORDER_GARMENT); garmentByHand.current = false; setBinBy("team"); setShipText(""); refresh();
+      setFile(null); setOrder(""); setNotes(""); setCustomer(""); setJerseyType(""); setGarment(DEFAULT_ORDER_GARMENT); garmentByHand.current = false; setBinBy("team"); setShipText(""); refresh();
     } catch (e) { setMsg("Could not send: " + e.message); }
     finally { sending.current = false; }
   };
@@ -1636,6 +1647,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
           </div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order number</label><input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Ships with <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— other order numbers on the order form; their boxes are filled together</span></label><ShipWithField value={shipText} onChange={setShipText} placeholder="e.g. 264248 (read from the file when it says)" /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Customer <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— on the box's outside label and the sign-off ticket; empty prints the team name</span></label><input value={customer} onChange={e => setCustomer(e.target.value)} placeholder="e.g. Source for Sports" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Garment type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the station's flag reasons; unset offers every reason</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Garment <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— the outline the station marks the damage on</span></label><GarmentPicker value={garment} onChange={g => { garmentByHand.current = true; setGarment(g); }} /></div>
@@ -3428,6 +3440,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
                   <button style={smBtn} onClick={() => send([[boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label`)}>Label</button>
                   <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin, { tall }), "binlist"]], `the ${of(b)} list`)}>List</button>
                   <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin, { tall }), "binlist"], [boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label and list`)}>Both</button>
+                  <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} title="The shipping face of the box: order, customer, teams and sizes in it, Box 1 of N, a blank for the weight" onClick={() => send([[boxFaceJobs(pack, b.bin), "binlist"]], `the ${of(b)} outside label`)}>Outside label</button>
                 </div>
               ))}
             </div>
@@ -3684,6 +3697,7 @@ export default function App() {
   const [operatorName,       setOperatorName]       = useState(() => savedSignIn?.name || "");
   const [notes,              setNotes]              = useState("");
   const [jerseyType,         setJerseyType]         = useState("");   // echl | echl_replica | sublimated | "" 
+  const [orderCustomer,      setOrderCustomer]      = useState("");   // the customer, for the box's outside label and the sign-off ticket (empty: the box's team name)
   const [orderGarment,       setOrderGarment]       = useState(DEFAULT_ORDER_GARMENT);   // the order's garment kind (garments.js): the outline of "where is the damage"
   const [cameraOn,           setCameraOn]           = useState(false);
   const [cameras,            setCameras]            = useState([]);
@@ -3852,11 +3866,12 @@ export default function App() {
   // The box lists print as a table on a tall roll (boxRoll 2 x 3 in, 2 x 4 in) and as pages of rows on the others
   // (printjobs.js boxListLabels). Placed after boxPlan: the outside label reads the plan.
   const tallBoxRoll = useMemo(() => isTallRoll(labelDots(settings.boxRoll)), [settings.boxRoll]);
-  const listOf     = useCallback((bin, label) => {
-    const p = { orderNumber, roster, binMap, closedBins, carried };
+  // `final`: Finish order is printing, so the outside label's "of N" is the boxes that have garments, not the plan's.
+  const listOf     = useCallback((bin, label, final = false) => {
+    const p = { orderNumber, roster, binMap, closedBins, carried, customer: orderCustomer, plan: boxPlan, final };
     const b = packBoxes(p).find(x => x.bin === bin) || { bin, label, rows: inBox(bin) };
     return boxListLabels(p, { ...b, label: label ?? b.label }, { tall: tallBoxRoll });
-  }, [orderNumber, roster, binMap, closedBins, carried, inBox, tallBoxRoll]);
+  }, [orderNumber, roster, binMap, closedBins, carried, orderCustomer, boxPlan, inBox, tallBoxRoll]);
   const [boxAuto,     setBoxAuto]     = useState(false);   // the box screen is open for a new order on a station with boxAutoPrint on: its labels print by themselves
   const [showPrint,   setShowPrint]   = useState(false);   // the Print menu
   const [showBlanks,  setShowBlanks]  = useState(false);   // the blank-jersey counting screen
@@ -4011,10 +4026,10 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, garment: orderGarment, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole: orderRole || kindOfRole(role), vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, garment: orderGarment, customer: orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole: orderRole || kindOfRole(role), vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
     const t = setTimeout(() => setSaveOk(prev => (prev === saved ? prev : saved)), 0);   // said in the header when it fails
     return () => clearTimeout(t);
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, orderGarment, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole, checksLeft, inspect]);
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, orderGarment, orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole, checksLeft, inspect]);
 
   // An order with scans in it asks "Leave site?" before the tab closes or reloads.
   useEffect(() => {
@@ -4029,7 +4044,7 @@ export default function App() {
   // board and can be sent one. Supervisors on their own screen do not report.
   // What this station tells the hub, sent now. The 5-second report below uses it, and so does
   // New order, which waits for it to arrive before it clears the order (code review M16).
-  const reportNow = useCallback(() => hub.report(stationId(), snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", orderRun: sessionStarted ? orderRun : 0, notes, jerseyType, garment: orderGarment, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap, closedBins: sessionStarted ? closedBins : [], binSummary: sessionStarted ? binSummary : [], idleSpells, awaySpells, finishedAt: sessionStarted ? finishedAt : null })), [sessionStarted, operatorName, role, orderNumber, orderRun, notes, jerseyType, orderGarment, rosterFile, roster, log, lastConfirmed, binMap, closedBins, binSummary, idleSpells, awaySpells, finishedAt]);
+  const reportNow = useCallback(() => hub.report(stationId(), snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", orderRun: sessionStarted ? orderRun : 0, notes, jerseyType, garment: orderGarment, customer: orderCustomer, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap, closedBins: sessionStarted ? closedBins : [], binSummary: sessionStarted ? binSummary : [], idleSpells, awaySpells, finishedAt: sessionStarted ? finishedAt : null })), [sessionStarted, operatorName, role, orderNumber, orderRun, notes, jerseyType, orderGarment, orderCustomer, rosterFile, roster, log, lastConfirmed, binMap, closedBins, binSummary, idleSpells, awaySpells, finishedAt]);
   useEffect(() => {
     if (!signedIn || (role === "supervisor" && !sessionStarted)) return;
     const send = () => reportNow()
@@ -4084,7 +4099,7 @@ export default function App() {
     const wasLocating = (s.log || []).filter(l => l?.locating).map(l => l.id);
     const loaded = (s.log || []).map(l => { if (!l?.locating) return l; const { locating: _locating, ...rest } = l; return { ...rest, spots: [] }; });
     heldTickets.current = new Set(wasLocating);
-    setLog(loaded); setOrderGarment(orderGarmentOf(s.garment)); setBinMap(modernBins(s.binMap || null)); setClosedBins(s.closedBins || []); setShipWith(s.shipWith || []); setCarried(s.carried || []); setBoxLabelled(s.boxLabelled || []); setListPrinted(s.listPrinted || {}); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
+    setLog(loaded); setOrderGarment(orderGarmentOf(s.garment)); setOrderCustomer(s.customer || ""); setBinMap(modernBins(s.binMap || null)); setClosedBins(s.closedBins || []); setShipWith(s.shipWith || []); setCarried(s.carried || []); setBoxLabelled(s.boxLabelled || []); setListPrinted(s.listPrinted || {}); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
     ticketPrinted.current = new Set((s.log || []).filter(l => l && !l.locating).map(l => l.id));   // printed when they happened
     vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
     inspectRef.current.load(s.inspect); syncInspect();
@@ -4118,7 +4133,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true); setPickedUp(null); setOrderRole("");
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setFinishedAt(null); setHubRosterId(null); setNotes(""); setOrderGarment(DEFAULT_ORDER_GARMENT); setLog([]); setBinMap(null); setClosedBins([]); setShipWith([]); setCarried([]); keptOpen.current = new Set(); setBoxLabelled([]); setListPrinted({}); setBinPrint(null); setShowPacking(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setFinishedAt(null); setHubRosterId(null); setNotes(""); setOrderGarment(DEFAULT_ORDER_GARMENT); setOrderCustomer(""); setLog([]); setBinMap(null); setClosedBins([]); setShipWith([]); setCarried([]); keptOpen.current = new Set(); setBoxLabelled([]); setListPrinted({}); setBinPrint(null); setShowPacking(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
     // the Packing screen, opened on the done screen, must not come back over the next order (review, 24 Nov 2026; setShowPacking above)
     waitPedalRef.current = false; setWaitPedal(false);
@@ -4154,7 +4169,7 @@ export default function App() {
   // (the Fable check, 25 Nov 2026: "again" went through the skip and left those boxes out).
   const finishListsOf = useCallback(again => !settings.binLists || !binMap ? []
     : [...openBins.flatMap(b => !again && b.count > 0 && listUnchanged(listPrinted[b.bin], listIdsOf(b.bin, true)) ? []   // printed from the Packing screen and nothing on it changed since, its NOT IN BOX list included: not again (the owner, 25 Nov 2026)
-         : [...finishNotInBoxJobs(packNow, b.bin, b.label, b.count), ...(b.count > 0 ? listOf(b.bin, b.label) : [])]),   // an empty open box: what its team lacks, under the name of the box on the floor, only when Box full did not print it already (printjobs.js; the third check, 24 Nov 2026). Before: an empty open box still says what its team lacks (review, 24 Nov 2026: a team flagged or marked missing after its last full box)
+         : [...finishNotInBoxJobs(packNow, b.bin, b.label, b.count), ...(b.count > 0 ? listOf(b.bin, b.label, true) : [])]),   // an empty open box: what its team lacks, under the name of the box on the floor, only when Box full did not print it already (printjobs.js; the third check, 24 Nov 2026). Before: an empty open box still says what its team lacks (review, 24 Nov 2026: a team flagged or marked missing after its last full box)
        ...damagedListJobs(packNow),   // and what is in the DAMAGED box
        ...summaryJobs(packNow, { station: stationLabel(stationId()), date: localDateStamp() })],
   [settings.binLists, binMap, openBins, packNow, listOf, listPrinted, listIdsOf]);
@@ -4201,7 +4216,7 @@ export default function App() {
     const packAfter = { orderNumber, roster, binMap: r.binMap, closedBins: r.closed, flags: log.filter(l => l.status === S_FLAGGED) };
     const notInIds = left === 0 ? notInBox(packAfter, bin).map(x => x.row._id) : null;
     const notIn = left === 0 ? notInBoxJobs(packAfter, bin, r.entry.label) : [];
-    const lists = [...notIn, ...boxListLabels({ orderNumber, roster, binMap, closedBins, carried }, { bin, label: r.entry.label, rows }, { tall: tallBoxRoll })];
+    const lists = [...notIn, ...boxListLabels({ orderNumber, roster, binMap, closedBins, carried, customer: orderCustomer, plan: boxPlan }, { bin, label: r.entry.label, rows }, { tall: tallBoxRoll })];
     const what  = `Box ${bin} closed with ${rows.length} ${rows.length === 1 ? "garment" : "garments"}${carriedIn(bin).length ? ` (${carriedIn(bin).length} from order ${[...new Set(carriedIn(bin).map(x => x.order))].join(", ")})` : ""}. ${left ? `${r.entry.label} now goes in Box ${r.newBin}` : `Nothing of ${r.entry.label} is left to scan`}`;
     if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Box lists are switched off in Settings.` }); return; }
     setBinPrint({ status: "printing", text: what });
@@ -4217,7 +4232,7 @@ export default function App() {
         setBinPrint({ status: "done", text: `${what}. Printed ${res.count} list ${res.count === 1 ? "label" : "labels"} for Box ${bin}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` });
       })
       .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
-  }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, teachBox, boxLabelled, carriedIn, carried, tallBoxRoll, log]);
+  }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, teachBox, boxLabelled, carriedIn, carried, tallBoxRoll, orderCustomer, boxPlan, log]);
   // Print list (Packing screen): the list of what is in an OPEN box now, with its NOT IN BOX list when it is
   // the group's last box (as boxListJobs does). Nothing closes and no next label prints. `boxId` is what the
   // operator said the box is in (teaches the model, as Box full does); null: just print. The jerseys it
@@ -4341,7 +4356,7 @@ export default function App() {
   const parkOrder = useCallback(async () => {
     const st = stationId(), summary = outOf(roster);
     const kind = orderRole || kindOfRole(role);
-    const session = { sessionStarted: true, role, orderRole: kind, roster, rosterFile, orderNumber, orderRun, hubRosterId: null, operatorName, notes, jerseyType, garment: orderGarment, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() };
+    const session = { sessionStarted: true, role, orderRole: kind, roster, rosterFile, orderNumber, orderRun, hubRosterId: null, operatorName, notes, jerseyType, garment: orderGarment, customer: orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() };
     setParking(true); setParkErr("");
     try { await hub.parkOrder({ id: pickedUp?.hubId || undefined, station: st, order: orderNumber, run: orderRun, operator: operatorName, jerseyType, kind: kind === "sorter" ? "sorter" : "", ...summary, out: outList(roster, log), session }); }
     catch (e) { setParkErr(`The order could NOT be saved on the server (${e.message}). Nothing was lost: it is still open here. Try again, or call the supervisor.`); return; }
@@ -4350,7 +4365,7 @@ export default function App() {
     if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});
     setShowPark(false); setParkErr("");
     resetOrder();
-  }, [roster, role, orderRole, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, orderGarment, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, resetOrder]);
+  }, [roster, role, orderRole, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, orderGarment, orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, resetOrder]);
   // Pick an unfinished order up again, at any station: the server says this station has it
   // now (another station gets "open on Station N"), then sends the whole order. One put
   // aside before the server kept them is taken from this PC, or rebuilt from the order's record.
@@ -4375,7 +4390,7 @@ export default function App() {
           const o = (r.orders || []).find(x => `${x.station}|${x.order}|${x.run || 0}` === entry.key) || (r.orders || [])[0];
           if (!o) throw new Error("the server has no record of it any more");
           const p = packFromRecord(o);
-          session = { sessionStarted: true, roster: p.roster, rosterFile: o.rosterFile || null, orderNumber: String(o.order), orderRun: o.run || Date.now(), notes: o.notes || "", jerseyType: o.jerseyType || "", garment: o.garment || rosterGarment(p.roster) || "",
+          session = { sessionStarted: true, roster: p.roster, rosterFile: o.rosterFile || null, orderNumber: String(o.order), orderRun: o.run || Date.now(), notes: o.notes || "", jerseyType: o.jerseyType || "", garment: o.garment || rosterGarment(p.roster) || "", customer: o.customer || "",
             log: p.flags.map(f => ({ ...f, status: S_FLAGGED })), binMap: p.binMap, closedBins: p.closedBins, boxLabelled: [], firstScanTime: o.firstSeen || null, idleSpells: [], awaySpells: [] };
         }
       }
@@ -4387,8 +4402,8 @@ export default function App() {
   }, [resumeSession, role, operatorName]);
   // The order on this station, as the Print menu takes it (printjobs.js).
   const printPack = useMemo(() => !sessionStarted || !roster.length ? null
-    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels, finished: !!finishedAt, garment: orderGarment },   // finished: on the done screen a jersey never scanned is short (isLastBox)
-  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels, finishedAt, orderGarment]);
+    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels, plan: boxPlan, finished: !!finishedAt, garment: orderGarment, customer: orderCustomer },   // finished: on the done screen a jersey never scanned is short (isLastBox)
+  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels, boxPlan, finishedAt, orderGarment, orderCustomer]);
   const flagTag = useCallback(reason => severityOf(reason).tag, []);
   // The list of what is in the DAMAGED box, whenever the inspector asks for it.
   const printDamagedList = useCallback(() => {
@@ -5318,11 +5333,11 @@ export default function App() {
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
         <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onPrint={() => setShowPrint(true)} stationLabel={stationLabel} onPickUp={pickUpOrder}
           onReplay={REPLAY_ON ? startReplay : null}
-          onStart={({ roster, orderNumber, notes, jerseyType, garment, binBy, rosterFile, hubRosterId = null, shipWith: sw = [], carried: boxesIn = [] }) => {
+          onStart={({ roster, orderNumber, notes, jerseyType, garment, customer = "", binBy, rosterFile, hubRosterId = null, shipWith: sw = [], carried: boxesIn = [] }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team", carried: boxesIn });
             setShipWith(sw); setCarried(boxesIn);
-            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || ""); setOrderGarment(orderGarmentOf(garment)); setOrderRole(kindOfRole(role));
+            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || ""); setOrderGarment(orderGarmentOf(garment)); setOrderCustomer(String(customer || "").trim()); setOrderRole(kindOfRole(role));
             setSessionStarted(true); setResumeDecided(true);
           }} />
       )}
