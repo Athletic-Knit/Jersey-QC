@@ -10,6 +10,7 @@
 // Nothing here prints: each function returns the labels for hub.printLabels.
 import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, boxParts, inBin, groupSize, shortSize } from "./roster.js";
 import { binListLabels, jerseyLabel, flagLabel, damagedListLabels, listLabels } from "./labels.js";
+import { packListLabel } from "./packlabels.js";
 import { garmentOf } from "./garments.js";
 
 // Every box of the order, closed and open, in box order, with the rows in it.
@@ -49,7 +50,18 @@ export function boxLabelJobs(pack, bin) {
 // something in it. Each box's labels come in print order (labels.js); the
 // group's last box gets its NOT IN BOX list too (below), printed first so the
 // strip reads count label, the rows, then what is not there.
-export function boxListJobs(pack, bin) {
+// What a box's list is made of (the owner, 25 Nov 2026): on a TALL roll the packing list is a table, one
+// label object that the hub lays out in pages, then the count label; on the 2 x 1 in roll and the sticker
+// roll it is today's pages of rows and the count label. `rows` are the garments in the box.
+export function boxListLabels(pack, b, { tall = false } = {}) {
+  if (!b || !b.rows?.length) return [];
+  const by = binFieldOf(pack?.binMap), orderNumber = ordersInBox(pack, b.bin, b.rows);
+  const of = b.rows.some(r => r.carried) ? 0 : groupSize(pack?.roster, pack?.binMap, b.rows);
+  const pages = binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber, by, of });
+  if (!tall) return pages;
+  return [packListLabel(b.rows, { bin: b.bin, label: b.label, orderNumber, by }), ...pages.filter(l => l.title)];
+}
+export function boxListJobs(pack, bin, { tall = false } = {}) {
   const boxes = packBoxes(pack);
   // An empty open box with no closed box before it: the whole team is flagged or missing, and only
   // its NOT IN BOX list says so (the third check, 24 Nov 2026: Finish order printed it, the Print
@@ -59,7 +71,7 @@ export function boxListJobs(pack, bin) {
   return boxes.filter(b => (b.count > 0 || alone(b)) && (bin === undefined || b.bin === bin))
     .flatMap(b => [
       ...(isLastBox(pack, b.bin) ? notInBoxJobs(pack, b.bin, b.label) : []),
-      ...(b.count > 0 ? binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber: ordersInBox(pack, b.bin, b.rows), by: binFieldOf(pack?.binMap), of: b.rows.some(r => r.carried) ? 0 : groupSize(pack?.roster, pack?.binMap, b.rows) }) : []),
+      ...(b.count > 0 ? boxListLabels(pack, b, { tall }) : []),
     ]);
 }
 // What Finish order prints for an OPEN box, before its own list (the third

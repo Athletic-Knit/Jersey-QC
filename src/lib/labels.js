@@ -29,6 +29,7 @@
 // is exactly as before.
 import { binEntries, binFieldOf, binFor, boxParts, bySize, shortSize } from "./roster.js";
 import { GARMENTS, MAX_SPOTS, SIDES, garment as garmentShape } from "./garments.js";
+import { packListZPL, packListRows, boxFaceZPL, signoffZPL, isTallRoll } from "./packlabels.js";
 
 // "1x0.5" (inches, width x height) → dots at the printer's resolution.
 // `top` is where printing starts: the ZD411 begins its label about 2 mm
@@ -486,7 +487,7 @@ export function binListItem(row) {
 }
 // Jersey-number order: 2 before 10; a number that is not a number goes last;
 // the same number by name.
-const byNumber = (a, b) => {
+export const byNumber = (a, b) => {
   const x = parseInt(a.number, 10), y = parseInt(b.number, 10);
   if (Number.isNaN(x) !== Number.isNaN(y)) return Number.isNaN(x) ? 1 : -1;
   return (Number.isNaN(x) ? 0 : x - y) || String(a.number ?? "").localeCompare(String(b.number ?? "")) || String(a.name ?? "").localeCompare(String(b.name ?? ""));
@@ -652,6 +653,11 @@ function damagedListZPL(l, size) {
 // One label of a list, as ZPL: a DAMAGED or boxes list page, the count label
 // (`title`), or a page of a box list's rows in two columns.
 export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
+  // The packing paperwork lays itself out whole (packlabels.js): a packing list is
+  // all its pages (printJob has turned it into rows for a roll that is not tall).
+  if (l.kind === "packlist") return packListZPL(l, size);
+  if (l.kind === "boxface") return boxFaceZPL(l, size);
+  if (l.kind === "signoff") return signoffZPL(l, size);
   if (l.damaged) return damagedListZPL(l, size);
   if (l.summary) return summaryCountZPL(l, size);
   const dpi = size.dpi || 203;
@@ -786,6 +792,14 @@ export function labelsZPL(labels, size = labelSize(), kind = "bin") { return pri
 // printer makes its second copy (FLAG_COPIES).
 export function printJob(labels, size = labelSize(), kind = "bin") {
   const one = kind === "jersey" ? jerseyLabelZPL : kind === "flag" ? flagLabelZPL : kind === "binlist" ? binListZPL : binLabelZPL;
-  const list = kind === "binlist" ? repageLists(labels, size) : (Array.isArray(labels) ? labels : []);
-  return { zpl: list.map(l => one(l, size)).join("\n") + "\n", count: list.length };
+  let list = kind === "binlist" ? repageLists(labels, size) : (Array.isArray(labels) ? labels : []);
+  // A packing list on a roll that is not tall (the station sends it only for a tall one) falls back to
+  // the rows list of the 2 x 1 in roll; a list pages itself on a tall roll, and repageLists leaves it alone.
+  if (kind === "binlist" && !isTallRoll(size) && list.some(l => l?.kind === "packlist")) {
+    list = repageLists(list.flatMap(l => l?.kind === "packlist" ? binListLabels(packListRows(l), { bin: l.bin, label: l.team, orderNumber: l.orderNumber }).filter(x => !x.title) : [l]), size);
+  }
+  const zpls = list.map(l => one(l, size));
+  // The labels that come out: a packing list is one object and several pages (the printer makes its copies, ^PQ).
+  const pages = (l, z) => (kind === "binlist" && (l?.kind === "packlist" || l?.kind === "boxface" || l?.kind === "signoff") ? (z.match(/\^XA/g) || []).length : 1);
+  return { zpl: zpls.join("\n") + "\n", count: list.reduce((n, l, i) => n + pages(l, zpls[i]), 0) };
 }

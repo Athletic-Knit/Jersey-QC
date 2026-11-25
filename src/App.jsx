@@ -25,7 +25,7 @@
 //                                    order start and finish, the station layout
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
 import { flushSync } from "react-dom";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeLetter, shortSize, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, shipParts, shipJoin, shipNorm, shipPress, shipRemove, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeLetter, shortSize, sizeChoiceGroups, LIST_SORTS, shipWithOf, orderList, shipParts, shipJoin, shipNorm, shipPress, shipRemove, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum, norm, nameMatches } from "./lib/text.js";
 import { summarise, summariseLog, exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
@@ -43,10 +43,11 @@ import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./l
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { duplicateOptions } from "./lib/dupoptions.js";
 import { matchRead, screenFor } from "./lib/scanpolicy.js";
-import { binLabels, jerseyLabel, flagLabel, binListLabels, listChunks, cleanSpots, repageLists, labelSize as labelDots, DEFAULT_FLAG_LABEL_SIZE } from "./lib/labels.js";
+import { binLabels, jerseyLabel, flagLabel, listChunks, cleanSpots, repageLists, labelSize as labelDots, DEFAULT_FLAG_LABEL_SIZE } from "./lib/labels.js";
+import { isTallRoll } from "./lib/packlabels.js";
 import { nowStep, listUnchanged, listIds } from "./lib/packing.js";
 import { photoSet, photoCaption } from "./lib/photoset.js";
-import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
+import { packBoxes, boxLabelJobs, boxListJobs, boxListLabels,stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, NO_SIZE_TAG, FIXED_AT_STATION, GARMENT_MENU, DEFAULT_ORDER_GARMENT, LABEL_ROLLS } from "./config.js";
 import { garment as garmentShape, garmentOf, garmentView, toView, fromView, spotAt, spotWords, rosterGarment, orderGarmentOf, SIDES, SIDE_LABELS, MAX_SPOTS } from "./lib/garments.js";
 
@@ -3364,7 +3365,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const inDamaged = useMemo(() => damagedItems(pack), [pack]);
   const needle   = pick.trim().toLowerCase();
   const picked   = needle ? stickers.filter(r => rosterMatches(r, pick)).slice(0, 8) : [];   // the same search as the roster table's
-  const allLabels = pack ? boxLabelJobs(pack) : [], allLists = pack ? boxListJobs(pack) : [];
+  const tall = roll ? isTallRoll(roll) : false;   // a tall roll prints a box's list as a table (printjobs.js boxListLabels)
+  const allLabels = pack ? boxLabelJobs(pack) : [], allLists = pack ? boxListJobs(pack, undefined, { tall }) : [];
   const sum = pack ? orderSummary(pack) : null;
   const listCount = roll ? repageLists(allLists, roll).length : null;   // the list labels that come out on this station's roll
   const listN = listCount ?? allLists.length, countOf = n => (listCount === null ? "" : ` · ${n}`);
@@ -3424,8 +3426,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
                   <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 900, color: b.open ? "#60a5fa" : "#7c8ba1", minWidth: 110, lineHeight: 1, whiteSpace: "nowrap" }}>{of(b)}</div>
                   <div style={{ flex: 1, fontSize: 16, color: "#e2e8f0" }}>{b.label} <span style={{ color: "#94a3b8" }}>· {b.count} {b.count === 1 ? "garment" : "garments"} · {b.open ? "open" : "closed"}</span></div>
                   <button style={smBtn} onClick={() => send([[boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label`)}>Label</button>
-                  <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin), "binlist"]], `the ${of(b)} list`)}>List</button>
-                  <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin), "binlist"], [boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label and list`)}>Both</button>
+                  <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin, { tall }), "binlist"]], `the ${of(b)} list`)}>List</button>
+                  <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin, { tall }), "binlist"], [boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label and list`)}>Both</button>
                 </div>
               ))}
             </div>
@@ -3803,14 +3805,7 @@ export default function App() {
   // A carried box (left open by an earlier ship-with order) holds that order's jerseys too.
   const carriedIn  = useCallback(bin => carried.filter(c => c.bin === bin).flatMap(c => (c.items || []).map(x => ({ ...x, scanned: "pass", carried: true }))), [carried]);
   const inBox      = useCallback(bin => [...binContents(roster, binMap, closedBins, bin), ...carriedIn(bin)], [roster, binMap, closedBins, carriedIn]);
-  // The orders in a box, for its count label: "264247 (12) + 264248 (8)"; this order alone: its number.
-  const ordersIn   = useCallback(bin => {
-    const prev = carriedIn(bin); if (!prev.length) return orderNumber;
-    const n = new Map(); prev.forEach(x => n.set(x.order || "?", (n.get(x.order || "?") || 0) + 1));
-    const own = binContents(roster, binMap, closedBins, bin).length; if (own) n.set(String(orderNumber), (n.get(String(orderNumber)) || 0) + own);
-    return [...n].map(([o, k]) => `${o} (${k})`).join(" + ");
-  }, [carriedIn, roster, binMap, closedBins, orderNumber]);
-  const listOf     = useCallback((bin, label) => { const rows = inBox(bin); return binListLabels(rows, { bin, label, orderNumber: ordersIn(bin), by: binFieldOf(binMap), of: carriedIn(bin).length ? 0 : groupSize(roster, binMap, rows) }); }, [inBox, ordersIn, binMap, carriedIn, roster]);
+  // (The orders in a box, for its count label, "264247 (12) + 264248 (8)", come from printjobs.js ordersInBox.)
   const openBins   = useMemo(() => binEntries(roster, binMap).map(e => { const rows = inBox(e.bin), b = boxOf(rows), from = [...new Set(carried.filter(c => c.bin === e.bin).map(c => c.from))]; return { ...e, count: rows.length, box: b?.label || "", boxId: b?.id || "", weight: b?.weight || 0, heavy: b?.heavy || 0, room: b?.room ?? 0, by: b?.by || "", open: true, from, carriedCount: carriedIn(e.bin).length }; }), [roster, binMap, inBox, boxOf, carried, carriedIn]);
   const closedList = useMemo(() => closedBins.map(c => { const rows = binContents(roster, binMap, closedBins, c.bin), b = boxOf(rows); return { bin: c.bin, label: c.label, count: rows.length, box: c.box || b?.label || "", weight: b?.weight || 0, open: false, closedAt: c.closedAt }; }), [roster, binMap, closedBins, boxOf]);
   const heavyBin   = openBins.find(b => b.heavy >= 0.95) || null;   // an open bin at the weight limit
@@ -3854,6 +3849,14 @@ export default function App() {
   }), [roster, binMap, closedBins, boxOf, carried, carriedIn]);
   // A carried box has its label inside already: only the boxes after it print.
   const boxPlanLabels = useMemo(() => { const has = new Set(carried.map(c => c.bin)); return binLabels(roster, binMap, { orderNumber, boxes: Object.fromEntries(boxPlan.map(e => [e.bin, e.boxes])) }).filter(l => !has.has(String(l.bin))); }, [roster, binMap, orderNumber, boxPlan, carried]);
+  // The box lists print as a table on a tall roll (boxRoll 2 x 3 in, 2 x 4 in) and as pages of rows on the others
+  // (printjobs.js boxListLabels). Placed after boxPlan: the outside label reads the plan.
+  const tallBoxRoll = useMemo(() => isTallRoll(labelDots(settings.boxRoll)), [settings.boxRoll]);
+  const listOf     = useCallback((bin, label) => {
+    const p = { orderNumber, roster, binMap, closedBins, carried };
+    const b = packBoxes(p).find(x => x.bin === bin) || { bin, label, rows: inBox(bin) };
+    return boxListLabels(p, { ...b, label: label ?? b.label }, { tall: tallBoxRoll });
+  }, [orderNumber, roster, binMap, closedBins, carried, inBox, tallBoxRoll]);
   const [boxAuto,     setBoxAuto]     = useState(false);   // the box screen is open for a new order on a station with boxAutoPrint on: its labels print by themselves
   const [showPrint,   setShowPrint]   = useState(false);   // the Print menu
   const [showBlanks,  setShowBlanks]  = useState(false);   // the blank-jersey counting screen
@@ -4198,7 +4201,7 @@ export default function App() {
     const packAfter = { orderNumber, roster, binMap: r.binMap, closedBins: r.closed, flags: log.filter(l => l.status === S_FLAGGED) };
     const notInIds = left === 0 ? notInBox(packAfter, bin).map(x => x.row._id) : null;
     const notIn = left === 0 ? notInBoxJobs(packAfter, bin, r.entry.label) : [];
-    const lists = [...notIn, ...binListLabels(rows, { bin, label: r.entry.label, orderNumber: ordersIn(bin), by: binFieldOf(binMap), of: carriedIn(bin).length ? 0 : groupSize(roster, binMap, rows) })];
+    const lists = [...notIn, ...boxListLabels({ orderNumber, roster, binMap, closedBins, carried }, { bin, label: r.entry.label, rows }, { tall: tallBoxRoll })];
     const what  = `Box ${bin} closed with ${rows.length} ${rows.length === 1 ? "garment" : "garments"}${carriedIn(bin).length ? ` (${carriedIn(bin).length} from order ${[...new Set(carriedIn(bin).map(x => x.order))].join(", ")})` : ""}. ${left ? `${r.entry.label} now goes in Box ${r.newBin}` : `Nothing of ${r.entry.label} is left to scan`}`;
     if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Box lists are switched off in Settings.` }); return; }
     setBinPrint({ status: "printing", text: what });
@@ -4214,7 +4217,7 @@ export default function App() {
         setBinPrint({ status: "done", text: `${what}. Printed ${res.count} list ${res.count === 1 ? "label" : "labels"} for Box ${bin}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` });
       })
       .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
-  }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, teachBox, boxLabelled, carriedIn, ordersIn, log]);
+  }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, teachBox, boxLabelled, carriedIn, carried, tallBoxRoll, log]);
   // Print list (Packing screen): the list of what is in an OPEN box now, with its NOT IN BOX list when it is
   // the group's last box (as boxListJobs does). Nothing closes and no next label prints. `boxId` is what the
   // operator said the box is in (teaches the model, as Box full does); null: just print. The jerseys it
