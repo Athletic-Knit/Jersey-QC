@@ -82,7 +82,7 @@ After you correct the app (you type over a green, the right jersey was not on a 
 
 ### The yellow screen: pick the jersey
 
-The camera was unsure, or more than one jersey fits (for example two #23s on different teams). The number read is at the top ("#23 · NAME"; a **?** means the camera doubted it). The list is sorted by size. Every row is one line: the number big on the left, the name and team in the middle (the one that tells the rows apart is in amber), and the size big on the right.
+The camera was unsure, or more than one jersey fits (for example two #23s on different teams). The number read is at the top ("#23 · NAME"; a **?** means the camera doubted it). The list is sorted by size, but the size of the jersey you passed last comes first (then the sizes of the same kind), so a bundle of one size is one press of Enter each; a grey line under the number says so. On an order sorted by size the size is the biggest thing on each row. Every row is one line: the number big on the left, the name and team in the middle (the one that tells the rows apart is in amber), and the size big on the right.
 
 1. Find the row that matches the jersey's **size tag** and name.
 2. Tap it, or move the highlight with **A** / **↑** and press the pedal.

@@ -2,7 +2,7 @@
 // order, by default), its filters' choices, and its search box ("7" is #7
 // exactly, never #70; the owner, 17 Nov 2026).
 import { describe, it, expect } from "vitest";
-import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices, rosterMatches } from "../roster.js";
+import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices, rosterMatches, sortCandidates, sizeFamily } from "../roster.js";
 
 const roster = [
   { _id: 1, name: "ZED",   number: "10", team: "Red",  size: "A-L",  scanned: "pass" },
@@ -77,5 +77,26 @@ describe("the roster table's search", () => {
     expect(hit("7 red")).toEqual([3]);
     expect(hit("blue 22")).toEqual([4]);
     expect(hit("7 cal")).toEqual([]);
+  });
+});
+
+describe("the pick list follows the last confirmed jersey's size (25 Nov 2026)", () => {
+  const rows = ["Y-S", "Y-M", "A-S", "A-M", "A-L", "L-S", "L-M", "L-L"].map((size, i) => ({ _id: i, number: "12", size, team: "" }));
+  const sizes = (by, opts) => sortCandidates(rows, by, opts).map(r => r.size);
+  it("the same size first, then its family, then the rack order", () => {
+    expect(sizes("size", { lastSize: "L-S" })).toEqual(["L-S", "L-M", "L-L", "Y-S", "Y-M", "A-S", "A-M", "A-L"]);
+    expect(sizes("number", { lastSize: "A-M" }).slice(0, 3)).toEqual(["A-M", "A-S", "A-L"]);   // whatever the chosen sort
+  });
+  it("a size no row has, or none, leaves the order unchanged", () => {
+    const plain = sizes("size");
+    expect(sizes("size", { lastSize: "Z-3XL" })).toEqual(plain);
+    expect(sizes("size", { lastSize: "" })).toEqual(plain);
+    expect(sizes("size")).toEqual(plain);
+  });
+  it("sizeFamily is the part before the hyphen", () => {
+    expect(sizeFamily("L-S")).toBe("L");
+    expect(sizeFamily("XL")).toBe("XL");
+    expect(sizeFamily("")).toBe("");
+    expect(sizeFamily(undefined)).toBe("");
   });
 });

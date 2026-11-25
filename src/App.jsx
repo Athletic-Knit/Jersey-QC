@@ -1575,7 +1575,7 @@ const liftSt = on => ({ transform: on ? "scale(1.012)" : "none", transition: "tr
 // `big`: a one-column list (three rows or fewer) draws its text a fifth
 // bigger — the tiles are narrower there and the room is to spare (23 Nov 2026).
 // Exported for its test (src/__tests__/candidate-row.test.jsx).
-export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled, accent, big = false, onClick, onHover }) {
+export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled, accent, big = false, sizeBig = false, onClick, onHover }) {
   const number = String(c.number ?? "").trim();
   const name   = String(c.name ?? "").trim();
   const team   = String(c.team ?? "").trim();
@@ -1590,6 +1590,8 @@ export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled,
   // one not scanned and one back from repair, and nothing told them apart): a blue bar and a line.
   const back = !disabled && c.cameBack ? c.cameBack : null;
   const bigFont = big ? "clamp(41px, 4.3vw, 62px)" : "clamp(34px, 3.6vw, 52px)";   // the number and the size box
+  // On a by-size order the size is what the operator picks by (the owner, 25 Nov 2026): its box is the biggest thing on the tile.
+  const sizeFont = sizeBig ? (big ? "clamp(55px, 5.8vw, 84px)" : "clamp(46px, 4.9vw, 70px)") : bigFont;
   return (
     <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover} data-sel={selected ? "1" : undefined}
       style={{ display: "flex", alignItems: "center", gap: 12, padding: big ? "8px 16px 8px 18px" : "6px 14px 6px 16px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "rgba(255,255,255,0.08)" : selected ? accent : "rgba(255,255,255,0.12)"}`, background: disabled ? "rgba(255,255,255,0.02)" : selected ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...(back ? { boxShadow: "inset 10px 0 0 #38bdf8", paddingLeft: 24 } : {}), ...liftSt(selected && !disabled) }}>
@@ -1611,7 +1613,7 @@ export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled,
         )}
       </div>
       {size && (
-        <span style={{ fontFamily: FONT_DISPLAY, fontSize: bigFont, fontWeight: 900, lineHeight: 1, letterSpacing: 1, whiteSpace: "nowrap", padding: "6px 14px", borderRadius: 12, border: `3px solid ${disabled ? "rgba(255,255,255,0.1)" : "rgba(245,158,11,0.75)"}`, background: disabled ? "transparent" : "rgba(245,158,11,0.14)", color: disabled ? "#64748b" : "#fff", flexShrink: 0 }}>{size}</span>
+        <span style={{ fontFamily: FONT_DISPLAY, fontSize: sizeFont, fontWeight: 900, lineHeight: 1, letterSpacing: 1, whiteSpace: "nowrap", padding: "6px 14px", borderRadius: 12, border: `3px solid ${disabled ? "rgba(255,255,255,0.1)" : "rgba(245,158,11,0.75)"}`, background: disabled ? "transparent" : "rgba(245,158,11,0.14)", color: disabled ? "#64748b" : "#fff", flexShrink: 0 }}>{size}</span>
       )}
       {!disabled && <span style={hintSt(selected, accent, 0)} aria-hidden="true">←</span>}
     </div>
@@ -1622,7 +1624,7 @@ export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled,
 // checklist, the yellow lists, red, ALREADY DONE, the reasons menu, Clean it
 // now, FLAGGED, the by-hand form and the size picker. It draws and takes keys;
 // what each choice does is in `actions` (App).
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", paused = false }) {
+function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", lastSize = "", paused = false }) {
   const reasons = reasonsFor(jerseyType);
   // Runs an option: a click, the Select key or the pedal.
   const fire = useCallback(o => o?.run(), []);
@@ -1659,7 +1661,9 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const accent = isGreen ? "#22c55e" : (isList || isManual || isSizePick) ? "#f59e0b" : isMenu ? "#a78bfa" : isClean ? "#38bdf8" : "#ef4444";
 
   const match      = state.match || state.scan?.match || null;
-  const candidates = useMemo(() => sortCandidates(state.candidates || [], listSort), [state.candidates, listSort]);   // by size unless the station says otherwise (Settings → Pick list)
+  const candidates = useMemo(() => sortCandidates(state.candidates || [], listSort, { lastSize }), [state.candidates, listSort, lastSize]);   // by size unless the station says otherwise (Settings → Pick list); the last jersey's size first
+  const lastSizeNorm = String(lastSize || "").trim().toUpperCase();
+  const lastSizeOnList = !!lastSizeNorm && candidates.some(c => String(c.size || "").trim().toUpperCase() === lastSizeNorm);
   const detected   = state.scan?.detected;
   // A one-column list (three rows or fewer) is drawn with bigger text, but only
   // while that leaves nothing to scroll (the owner, 23 Nov 2026) and every name
@@ -1961,6 +1965,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
               : `#${detected?.number || "?"}${detected?.number && detected?.number_complete === false ? "?" : ""}${detected?.name ? " · " + detected.name + (detected.name_complete === false ? "…" : "") : ""}`}
           </div>
 
+          {lastSizeOnList && <div style={{ fontSize: 17, color: "#a8a29e", textAlign: "center", marginTop: 4 }}>{lastSize} first · the last jersey</div>}
           <div style={{ fontSize: 20, color: "#d6d3d1", marginBottom: 16, textAlign: "center" }}>
             {/* Typed by hand: what was typed, not the camera's empty read ("Read: #? · no name"; code review, low finding). */}
             {state.typed ? `Typed: #${state.typed.number || "?"}${state.typed.name ? " · " + state.typed.name : ""}` : <>
@@ -1977,7 +1982,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             )}
             <div style={twoColumns(candidates.length)}>
               {options.map((o, i) => o.candidate && (
-                <CandidateRow key={o.id} c={o.candidate} diff={diff} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent} big={oneColBig}
+                <CandidateRow key={o.id} c={o.candidate} diff={diff} extraCols={extraCols} selected={i === selectedIdx} disabled={o.disabled} accent={accent} big={oneColBig} sizeBig={binFieldOf(binMap) === "size"}
                   onClick={() => fire(o)} onHover={() => hover(i)} />
               ))}
             </div>
@@ -5306,7 +5311,7 @@ export default function App() {
         {/* RIGHT: Info panel — the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && (   /* the result screen takes this half, so the camera stays in view: one layout on every PC */
-            <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} listSort={settings.listSort} paused={overlayPaused}
+            <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} listSort={settings.listSort} lastSize={lastConfirmed?.match?.size || ""} paused={overlayPaused}
               stream={null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera" && !sorting} />
           )}
 

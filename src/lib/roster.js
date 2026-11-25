@@ -384,15 +384,24 @@ export const sizeChoices = roster => sizeChoiceGroups(roster).flatMap(g => g.siz
 // can choose team or number instead (Settings → Pick list). Ties keep the
 // matcher's order (Array.prototype.sort is stable).
 export const LIST_SORTS = [{ id: "size", label: "Size" }, { id: "team", label: "Team" }, { id: "number", label: "Number" }];
-// The list's rows in a new array, sorted by `by` ("size", "team" or "number").
-export function sortCandidates(rows, by = "size") {
+// A size's family: the part before the hyphen ("L-S" → "L", "A-XL" → "A"); a
+// size without a hyphen is its own family ("XL" → "XL"); "" → "".
+export const sizeFamily = size => { const s = String(size || "").trim().toUpperCase().replace(/\s+/g, ""); return s.split(/[-/]/)[0] || s; };
+const sameSize = (a, b) => String(a || "").trim().toUpperCase().replace(/\s+/g, "") === String(b || "").trim().toUpperCase().replace(/\s+/g, "");
+// `lastSize` (the owner, 25 Nov 2026: jerseys come in bundles of one size, and
+// on a numbers-only roster the list for #12 has every size's #12): before the
+// chosen order, the rows of the last confirmed jersey's size come first, then
+// its family (L-S, L-M, L-L), then the rest; within a rank the order is as chosen.
+export function sortCandidates(rows, by = "size", { lastSize = "" } = {}) {
+  const fam  = sizeFamily(lastSize);
+  const rank = r => !fam ? 0 : sameSize(r.size, lastSize) ? 0 : sizeFamily(r.size) === fam && String(r.size || "").trim() ? 1 : 2;
   const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
   const team = (a, b) => String(a.team || "").localeCompare(String(b.team || ""), undefined, { sensitivity: "base", numeric: true });
   const size = (a, b) => bySize(a.size || "", b.size || "");
   const cmp = by === "team"   ? (a, b) => team(a, b) || size(a, b) || num(a) - num(b)
             : by === "number" ? (a, b) => num(a) - num(b) || size(a, b) || team(a, b)
             :                   (a, b) => size(a, b) || team(a, b) || num(a) - num(b);
-  return [...rows].sort(cmp);
+  return [...rows].sort((a, b) => rank(a) - rank(b) || cmp(a, b));
 }
 
 // ── The roster table's sort ──────────────────────────────────────────────────
