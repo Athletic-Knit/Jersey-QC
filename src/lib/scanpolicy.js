@@ -52,6 +52,6 @@ export function screenFor({ error = null, read = {}, match = null } = {}) {
     mode: "duplicate", match: m.match, shown: { mode: "duplicate", id: m.match._id }, tone: "flag",
     reason: `${jersey(m.match)}${m.match.scanned === "flag" ? " is flagged — with the supervisor." : " already passed this session."}`,
   };
-  if (m.type === "pick" || m.type === "close") return { mode: m.type, candidates: m.candidates, reason: m.reason, shown: { mode: m.type, ids: m.candidates.map(c => c._id) } };
+  if (m.type === "pick" || m.type === "close") return { mode: m.type, candidates: m.candidates, reason: m.reason, ...(m.twinOf ? { twinOf: m.twinOf } : {}), shown: { mode: m.type, ids: m.candidates.map(c => c._id) } };
   return { mode: "flag", title: "NOT FOUND", reason: `"${read.name || "?"}" #${read.number || "?"} is not on this roster.${m.reason ? ` Camera: ${m.reason}.` : ""}`, shown: { mode: "flag" }, tone: "flag" };
 }

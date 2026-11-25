@@ -2067,6 +2067,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               : `#${detected?.number || "?"}${detected?.number && detected?.number_complete === false ? "?" : ""}${detected?.name ? " · " + detected.name + (detected.name_complete === false ? "…" : "") : ""}`}
           </div>
 
+          {state.twinOf && !state.typed && <div style={{ fontSize: 17, color: "#a8a29e", textAlign: "center", marginTop: 4 }}>{`${detected?.number || "?"} or ${state.twinOf}? both are listed · #${detected?.number || "?"} first`}</div>}
           {lastRank < 2 && <div style={{ fontSize: 17, color: "#a8a29e", textAlign: "center", marginTop: 4 }}>{lastRank === 0 ? `${shortSize(lastSize)} first · the last garment` : `${lastSizeLetter(lastSize)} sizes first · the last garment was ${shortSize(lastSize)}`}</div>}
           <div style={{ fontSize: 20, color: "#d6d3d1", marginBottom: 16, textAlign: "center" }}>
             {/* Typed by hand: what was typed, not the camera's empty read ("Read: #? · no name"; code review, low finding). */}
@@ -4304,7 +4305,7 @@ export default function App() {
     // A jersey reached the screen: one of the owed checks is spent on it (not on a failed read).
     if (!apiError && vigilRef.current.scanDone()) setChecksLeft(vigilRef.current.remaining);
     scanObj.shown = sc.shown;
-    setOverlay({ mode: sc.mode, scan: scanObj, ...(sc.match ? { match: sc.match } : {}), ...(sc.candidates ? { candidates: sc.candidates } : {}), ...(sc.reason !== undefined ? { reason: sc.reason } : {}), ...(sc.title ? { title: sc.title } : {}) });
+    setOverlay({ mode: sc.mode, scan: scanObj, ...(sc.match ? { match: sc.match } : {}), ...(sc.candidates ? { candidates: sc.candidates } : {}), ...(sc.reason !== undefined ? { reason: sc.reason } : {}), ...(sc.twinOf ? { twinOf: sc.twinOf } : {}), ...(sc.title ? { title: sc.title } : {}) });
     if (sc.tone) playTone(sc.tone);
   }, [scanRoster, firstScanTime]);
 

@@ -84,6 +84,8 @@ After you correct the app (you type over a green, the right garment was not on a
 
 The camera was unsure, or more than one garment fits (for example two #23s on different teams). The number read is at the top ("#23 · NAME"; a **?** means the camera doubted it). The list is sorted by size, but the size of the garment you passed last comes first (then the sizes of the same kind), so a bundle of one size is one press of Enter each; a grey line under the number says so. On an order sorted by size the size is the biggest thing on each row. Every row is one line: the number big on the left, the name and team in the middle (the one that tells the rows apart is in amber), and the size big on the right.
 
+A 6 and a 9 look alike from the other side (so do 18 and 81, 66 and 99). When the camera reads one of them and the other is still open on the roster, both are listed, the number read first, under a grey line such as "6 or 9? both are listed · #6 first". Check the garment's size tag and pick.
+
 1. Find the row that matches the garment's **size tag** and name.
 2. Tap it, or move the highlight with **A** / **↑** and press the pedal.
 3. You go to the green screen for that garment. If you picked the wrong row, press **← Back to the list**.

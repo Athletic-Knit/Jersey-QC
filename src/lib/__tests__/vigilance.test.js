@@ -101,7 +101,7 @@ describe("reconcile two reads into one screen", () => {
     const mm = d => findMatches(r, d.name, d.number, { orientation: d.orientation, numberComplete: d.number_complete });
     const first = read("9", "", { orientation: "upside_down" }), up = read("6", "", { orientation: "upright" });
     const s = settleTurned(first, mm(first), up, mm(up));
-    expect(s.agreed).toBe(true); expect(s.read).toBe(up); expect(s.match).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(s.agreed).toBe(true); expect(s.read).toBe(up); expect(s.match).toMatchObject({ type: "pick", twinOf: "9", candidates: [{ _id: 0 }, { _id: 1 }] });   // since 25 Nov 2026 an upright 6 with a 9 open lists both, the 6 first
     // same number both times: also settled
     expect(settleTurned(first, mm(first), read("9", "", { orientation: "upright" }), mm(read("9", "", { orientation: "upright" }))).agreed).toBe(true);
     // the re-read still says it is turned, or is not whole, or changed in a way no turn explains → ask with both

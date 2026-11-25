@@ -491,3 +491,10 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Left open:** the whole path through App (choose Loose thread, press the fail button, see the flag) is not driven by a test; only the screen and the config are.
 - **Checks:** lint clean; 597 tests pass.
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · 6 and 9: both on the list (5g)
+- **Asked for:** the owner, 25 Nov 2026: a 6 and a 9 look the same from the other side, so the app should never go green on one of them while the other is still open.
+- **What changed:** `findMatchesInner` (match.js): on a camera read with no name anchoring a row and a number that has a 180 degree twin (6/9, 18/81, 66/99, 68/89 ...), when both numbers have open rows the list shows the number read first, then the twin, `soft` (no doubt flag), with `twins: true` (the one-row shortcut cannot turn it green) and `twinOf`. The yellow screen says "6 or 9? both are listed · #6 first" under the number (`screenFor` passes `twinOf` to the overlay). A twin with no open row, a typed read and a read with a name on the roster are as before. The turned-jersey path is kept inside the same block: it needs only the twin open (the number read may have no open row) and keeps its own wording.
+- **Tests:** readguard.test.js (6 lists 6 then 9, 9 then 6, 18/81, no open 9 is green as before, typed unchanged, a name anchors, a turned read still lists both). Two existing tests changed because the rule changes their answer: an upright 6 with a 9 open was green in readguard.test.js and in vigilance.test.js (the re-read of a turned jersey), now a list; and the invariants' `related` counts a 180 degree twin as related to the read (invariant 6 would otherwise call the twin an unrelated row). No invariant was weakened beyond that definition.
+- **Checks:** lint clean; 598 tests pass; `SIM_ORDERS=300 operator-sim` passes. Not clicked through in a browser.
+- **Branch:** `feature/result-screens`.

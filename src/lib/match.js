@@ -363,12 +363,21 @@ function findMatchesInner(roster, name, number, read = {}) {
   // reads again first; this is the net under that.)
   // (A name that is on no roster row — a badge, a sponsor, a misread — anchors nothing.)
   const nameAnchors = !!nName && !numberOnly && roster.some(r => nameMatches(nName, r.name));
-  if (!typed && !nameAnchors && nNum && read.orientation && read.orientation !== "upright") {
+  // The owner, 25 Nov 2026: a 6 and a 9 look the same from the other side, so
+  // whatever the orientation says, a camera read of a number with such a twin
+  // lists both when both have open rows: the number read first, then its twin.
+  // (A turned jersey is the case where the camera itself says so; it needs
+  // only the twin's open rows, as before, and keeps its own wording.)
+  if (!typed && !nameAnchors && nNum) {
     const alt = rotated180(nNum);
+    const turned = !!read.orientation && read.orientation !== "upright";
     const altRows = alt && alt !== nNum ? roster.filter(r => normNum(r.number) === alt && !isDone(r)) : [];
-    if (altRows.length) {
+    if (altRows.length && (turned || byNum.some(r => !isDone(r)))) {
       const cands = dedupe([...byNum, ...altRows]);
-      return { type: "pick", candidates: cands, reason: `Read #${nNum} on a garment that is not the right way up — turned round it would read #${alt}. Which is it?`, soft: true };
+      const reason = turned
+        ? `Read #${nNum} on a garment that is not the right way up — turned round it would read #${alt}. Which is it?`
+        : `Read #${nNum} — it could be #${alt} turned round. Which is it?`;
+      return { type: "pick", candidates: cands, reason, soft: true, twins: true, twinOf: alt };   // twins: the one-row shortcut must not turn it green
     }
   }
   const byName = nName && !numberOnly
