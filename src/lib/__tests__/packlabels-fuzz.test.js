@@ -2,14 +2,20 @@
 // the real chain (printjobs.js builds the label objects, packlabels.js lays them out and records the box of every
 // field it prints), on the 2 x 3, 2 x 4 and 2 x 1 in rolls, and the recorded boxes are checked: every field inside
 // its page, no two text fields touching, no rule through a text, the WEIGHT box over nothing, every garment on the
-// packing list once, the outside label's counts equal to what is in the box, the sign-off's totals adding up.
-// Seeded, so a failure repeats: the message says the seed, the order and the roll. FUZZ_ORDERS=2000 runs more.
+// packing list once, the outside label's counts equal to what is in the box, the sign-off's totals adding up. Each
+// order's box lists also go the hub's way (printjobs.js boxListJobs → labels.js listChunks → printJob, which
+// re-pages them, dispatches each kind to its layout and counts the labels that come out): no chunk splits a packing
+// list from its count label and outside label, and the count is the labels in the ZPL (an outside label is two on a
+// tall roll), also when a tall roll's lists reach a short roll.
+// Seeded, so a failure repeats: the message says the seed, the order and the roll. About 13 s for the 300 orders (AK-NB-165, 25 Nov 2026).
+// FUZZ_ORDERS=2000 runs more (the seeds of the first 300 stay the same); below 300 the last test, which checks that
+// the orders reached every branch of the layouts, is skipped, and it also needs the whole file run (not one order by -t).
 import { describe, it, expect } from "vitest";
 import process from "node:process";
-import { labelSize } from "../labels.js";
+import { labelSize, listChunks, printJob, isTallTicket } from "../labels.js";
 import { packListLabel, layoutPackList, layoutBoxFace, layoutSignoff } from "../packlabels.js";
 import { buildBinMap, closeBin, shortSize } from "../roster.js";
-import { packBoxes, boxFaceLabel, signoffLabel } from "../printjobs.js";
+import { packBoxes, boxFaceLabel, boxListJobs, signoffLabel } from "../printjobs.js";
 
 const ORDERS = Number(process.env.FUZZ_ORDERS) || 300;
 const ROLLS = [["2x3", labelSize("2x3")], ["2x4", labelSize("2x4")], ["2x1", labelSize("2x1")]];
@@ -63,8 +69,10 @@ const right = b => b.lx + b.w, bottom = b => b.ly + b.h;
 const apart = (a, b, gap) => right(a) + gap <= b.lx || right(b) + gap <= a.lx || bottom(a) + gap <= b.ly || bottom(b) + gap <= a.ly;
 const inside = (a, f) => a.lx >= f.lx && right(a) <= right(f) && a.ly >= f.ly && bottom(a) <= bottom(f);
 const where = (ctx, p, b) => `${ctx} page ${p} box ${JSON.stringify(b)}`;
-// `textGap`: the least space between two texts (the landscape labels keep 6; the portrait packing list and sign-off
-// were fixed on paper with a header 4 dots over the line below it, which the byte-for-byte fixtures pin).
+// `textGap`: the least space between two texts. The landscape pair keeps 6. The portrait packing list and sign-off
+// keep the spacing of the labels the owner approved on paper (25 Nov 2026; the header ends 4 dots over the
+// "Order N" line), which the byte-for-byte fixtures pin, and the compact 2 x 1 in outside label has 2 dots under
+// its ORDER caption: for those three, 0 (no overlap).
 function check(pages, ctx, { textGap = 6 } = {}) {
   pages.forEach((pg, p) => {
     const { PAGE_W, PAGE_H, boxes } = pg;
@@ -72,8 +80,9 @@ function check(pages, ctx, { textGap = 6 } = {}) {
       const bad = b.lx < 0 || b.ly < 0 || right(b) > PAGE_W || bottom(b) > PAGE_H;
       if (bad) throw new Error(`outside the page ${PAGE_W}x${PAGE_H}: ${where(ctx, p, b)}`);
     }
-    const texts = boxes.filter(b => b.kind === "text"), rules = boxes.filter(b => b.kind === "rule"), fills = boxes.filter(b => b.kind === "fill"), frames = boxes.filter(b => b.kind === "frame");
-    for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) {
+    const texts = boxes.filter(b => b.kind === "text").sort((a, b) => a.lx - b.lx), rules = boxes.filter(b => b.kind === "rule"), fills = boxes.filter(b => b.kind === "fill"), frames = boxes.filter(b => b.kind === "frame");
+    // by lx: once a text starts `textGap` past the end of `a`, so do all after it
+    for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length && texts[j].lx < right(texts[i]) + textGap; j++) {
       const a = texts[i], b = texts[j];
       if (a.rev || b.rev) continue;   // white on a black band: checked against its band below
       if (frames.length && frames.some(f => inside(a, f) && inside(b, f))) continue;   // two texts in one frame
@@ -91,7 +100,7 @@ function check(pages, ctx, { textGap = 6 } = {}) {
 }
 const texts = pg => pg.boxes.filter(b => b.kind === "text");
 // What the random orders reached, so that the test proves it tried every branch of the layouts.
-const seen = { oneLineName: 0, twoLineName: 0, cutName: 0, weightBeside: 0, weightBelow: 0, teamsMore: 0, sizesMore: 0, fourColSizes: 0, cutTeam: 0, squeezedOrderNo: 0, bands: 0, listPages2: 0 };
+const seen = { oneLineName: 0, twoLineName: 0, cutName: 0, weightBeside: 0, weightBelow: 0, teamsMore: 0, sizesMore: 0, fourColSizes: 0, cutTeam: 0, squeezedOrderNo: 0, bands: 0, listPages2: 0, hubChunks: 0, hubShortRoll: 0 };
 function saw(face, pages) {
   const id = pages[1].boxes, big = id.filter(b => b.kind === "text" && (b.h === 100 || b.h === 80));
   if (big.length === 1) seen.oneLineName++;
@@ -112,16 +121,32 @@ function listChecks(rows, bin, label, orderNumber, by, size, ctx) {
   check(pl.pages, `${ctx} box ${bin} list`, { textGap: 0 });
   const numbers = pl.pages.flatMap(pg => texts(pg).filter(t => t.h === 34 && t.ly >= 104)).map(t => t.text).sort();
   expect(numbers, `${ctx} box ${bin} every garment once`).toEqual(rows.map(x => String(x.number ?? "").trim() || "-").sort());
-  for (const pg of pl.pages) for (const t of texts(pg).filter(t => t.h === 24 && t.ly >= 104 && !t.rev)) {
-    const c0 = 20 + Math.floor((t.lx - 20) / step) * step;
-    expect(right(t), `${ctx} box ${bin} a name ends inside its column: ${t.text}`).toBeLessThanOrEqual(c0 + colW);
-  }
+  const past = pl.pages.flatMap(pg => texts(pg).filter(t => t.h === 24 && t.ly >= 104 && !t.rev && right(t) > 20 + Math.floor((t.lx - 20) / step) * step + colW));
+  expect(past.map(t => t.text), `${ctx} box ${bin} names that end past their column`).toEqual([]);
   const n = pl.pages.length, nos = pl.pages.map(pg => (texts(pg).find(t => t.h === 24 && t.ly === 18)?.text || "").match(/ - (\d+)\/(\d+)$/));
   expect(nos.every(Boolean), `${ctx} page header`).toBe(true);
   expect(nos.map(m => Number(m[1])), `${ctx} pages last first`).toEqual(Array.from({ length: n }, (_, i) => n - i));
   expect(nos.every(m => Number(m[2]) === n)).toBe(true);
   if (n > 1) seen.listPages2++;
   if (pl.pages.some(pg => pg.boxes.some(x => x.kind === "fill"))) seen.bands++;
+}
+
+// The box lists of the whole order built for a tall roll (`jobs`: boxListJobs), cut into requests by `listChunks`
+// (at most `max` labels) and printed by `printJob` on `size`, as the station sends them and the hub prints them.
+function hubChecks(jobs, size, ctx, max) {
+  const chunks = listChunks(jobs, max), tall = isTallTicket(size);
+  expect(chunks.flat(), `${ctx} the chunks are the labels, in order`).toEqual(jobs);
+  for (const c of chunks) {
+    expect(c.length, `${ctx} a chunk`).toBeLessThanOrEqual(max);
+    // a packing list goes with its box's count label and outside label
+    c.forEach((l, i) => { if (l?.kind === "packlist") expect(c.findIndex((x, j) => j > i && x?.kind === "boxface" && x.bin === l.bin), `${ctx} box ${l.bin}: its outside label in its chunk`).toBeGreaterThan(i); });
+    const job = printJob(c, size, "binlist"), faces = c.filter(l => l?.kind === "boxface").length;
+    expect(job.count, `${ctx} the hub's count is the labels in the ZPL`).toBe((job.zpl.match(/\^XA/g) || []).length);
+    expect((job.zpl.match(/\^FDWEIGHT\^FS/g) || []).length, `${ctx} an ID label for every outside label`).toBe(tall ? faces : 0);
+    if (!tall) expect(job.zpl, `${ctx} no packing list table on a short roll`).not.toMatch(/ pcs - \d+\/\d+\^FS/);
+  }
+  if (chunks.length > 1) seen.hubChunks++;
+  if (!tall) seen.hubShortRoll++;
 }
 
 describe("packing labels: random orders", () => {
@@ -131,10 +156,11 @@ describe("packing labels: random orders", () => {
     it(`order ${k} (seed ${seed})`, () => {
       const o = make(seed), pk = pack(o);
       if (!pk) return;
-      const boxes = packBoxes(pk).filter(b => b.count > 0), by = o.by;
+      const packed = packBoxes(pk), boxes = packed.filter(b => b.count > 0), by = o.by;
       expect(boxes.length).toBeGreaterThan(0);
       // The sign-off's totals add up.
-      const so = signoffLabel(pk, meta), faces = boxes.map(b => boxFaceLabel(pk, b));
+      const so = signoffLabel(pk, meta), faces = boxes.map(b => boxFaceLabel(pk, b, packed));
+      const hubJobs = k % 10 === 0 ? boxListJobs(pk, undefined, { tall: true }) : null;
       expect(so.bySize.reduce((n, s) => n + s.passed, 0), `seed ${seed} sign-off per size`).toBe(so.passed);
       expect(so.passed + so.flagged + so.missing, `seed ${seed} sign-off totals`).toBe(so.total);
       for (const [rollName, size] of ROLLS) {
@@ -178,15 +204,21 @@ describe("packing labels: random orders", () => {
             if (want) { const got = nm.join("").replace(/\s+/g, ""); expect(got === want || (got.endsWith("…") && want.startsWith(got.slice(0, -1))), `${ctx} customer ${got}`).toBe(true); }
             saw(face, fl.pages);
           }
-          // ── the packing list (tall rolls only: the short roll prints rows)
-          if (tall) listChecks(b.rows, b.bin, b.label, pk.orderNumber, by, size, ctx);
+          // ── the packing list (tall rolls only: the short roll prints rows), on one tall roll an order, 2 x 3 and
+          // 2 x 4 in by turns (it is most of the test's time)
+          const listRoll = tall && rollName === (k % 2 ? "2x4" : "2x3");
+          if (listRoll) listChecks(b.rows, b.bin, b.label, pk.orderNumber, by, size, ctx);
           // a box of several teams (the app cannot make one yet, the layout can): a band a team
-          if (tall && bi === 0 && boxes.length > 1) listChecks(boxes.slice(0, 4).flatMap(x => x.rows.slice(0, 30)), "9.9", "Mixed", pk.orderNumber, "team", size, ctx);
+          if (listRoll && bi === 0 && boxes.length > 1) listChecks(boxes.slice(0, 4).flatMap(x => x.rows.slice(0, 30)), "9.9", "Mixed", pk.orderNumber, "team", size, ctx);
         });
+        // ── the hub's way, every tenth order (it lays everything out again); a seeded chunk size, so the cuts
+        // between lists move; on the 2 x 1 in roll the lists built for a tall roll, as when the station's box
+        // roll and the hub's roll disagree
+        if (hubJobs) hubChecks(hubJobs, size, ctx, 3 + (seed % 9));
       }
     });
   }
-  it("the random orders reached every layout branch", () => {
+  it.runIf(ORDERS >= 300)("the random orders reached every layout branch", () => {
     for (const [name, n] of Object.entries(seen)) expect(n, name).toBeGreaterThan(0);
   });
 });

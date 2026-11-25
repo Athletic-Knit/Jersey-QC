@@ -234,6 +234,13 @@ describe("the outside label (kind boxface)", () => {
     expect(tx(long, "123456789012345").fw).toBeLessThan(92);   // squeezed
     const wide = face({}, tall4).pages[1].boxes.find(b => b.kind === "frame");
     expect(wide.lx + wide.w).toBe(812 - 20); expect(wide.w).toBe(220);
+    // below, the WEIGHT box keeps at least 120: a long "Box N of M" is squeezed (then cut) to leave it that, on both tall rolls
+    for (const [r, W] of [[roll, 609], [tall4, 812]]) {
+      const pg = face({ orderNumber: "1234567890".repeat(4), boxNo: 123456789, boxes: 987654321 }, r).pages[1], f3 = pg.boxes.find(b => b.kind === "frame");
+      const b3 = pg.boxes.find(b => b.kind === "text" && b.ly === 350);
+      expect(f3.ly).toBe(350); expect(f3.w).toBeGreaterThanOrEqual(120); expect(f3.lx + f3.w).toBe(W - 20);
+      expect(b3.lx + b3.w + 24).toBeLessThanOrEqual(f3.lx);
+    }
   });
   it("the teams: 1-2 in one column at 40 high, 3-4 in two columns at 36, 5-8 at 28, more at 24 with '+N more'; the count right-aligned in its cell", () => {
     const h = n => face({ teams: mkTeams(n) }).pages[0].boxes.find(b => b.text === "TEAM 1")?.h;

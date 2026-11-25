@@ -44,7 +44,7 @@ import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./l
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { duplicateOptions } from "./lib/dupoptions.js";
 import { matchRead, screenFor } from "./lib/scanpolicy.js";
-import { binLabels, jerseyLabel, flagLabel, listChunks, cleanSpots, repageLists, isTallTicket, labelSize as labelDots, DEFAULT_FLAG_LABEL_SIZE } from "./lib/labels.js";
+import { binLabels, jerseyLabel, flagLabel, listChunks, cleanSpots, printJob, isTallTicket, labelSize as labelDots, DEFAULT_FLAG_LABEL_SIZE } from "./lib/labels.js";
 import { LIST_COPIES } from "./lib/packlabels.js";
 // The status line of a print with a packing list in it: each of its pages comes out four times (the owner, 25 Nov 2026).
 const copiesNote = labels => (labels.some(l => l?.kind === "packlist") ? `, the packing list ${LIST_COPIES} copies` : "");
@@ -3425,9 +3425,12 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const needle   = pick.trim().toLowerCase();
   const picked   = needle ? stickers.filter(r => rosterMatches(r, pick)).slice(0, 8) : [];   // the same search as the roster table's
   const tall = roll ? isTallTicket(roll) : false;   // a tall roll prints a box's list as a table (printjobs.js boxListLabels)
-  const allLabels = pack ? boxLabelJobs(pack) : [], allLists = pack ? boxListJobs(pack, undefined, { tall }) : [];
+  const allLabels = pack ? boxLabelJobs(pack) : [];
+  const allLists = useMemo(() => (pack ? boxListJobs(pack, undefined, { tall }) : []), [pack, tall]);
   const sum = pack ? orderSummary(pack) : null;
-  const listCount = roll ? repageLists(allLists, roll).length : null;   // the list labels that come out on this station's roll
+  // The list labels that come out on this station's roll, counted as the hub counts them (printJob): a tall roll
+  // re-pages the lists, a packing list is all its pages and an outside label is two (the ID and the detail label).
+  const listCount = useMemo(() => (roll ? printJob(allLists, roll, "binlist").count : null), [allLists, roll]);
   const listN = listCount ?? allLists.length, countOf = n => (listCount === null ? "" : ` · ${n}`);
   const many = (n, what) => n <= 30 || window.confirm(`Print ${n} ${what}?`);
   const secSt  = { fontSize: 14, fontWeight: 800, color: "#94a3b8", letterSpacing: 1, textTransform: "uppercase", margin: "20px 0 8px" };
@@ -3487,7 +3490,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
                   <button style={smBtn} onClick={() => send([[boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label`)}>Label</button>
                   <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin, { tall }), "binlist"]], `the ${of(b)} list`)}>List</button>
                   <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin, { tall }), "binlist"], [boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label and list`)}>Both</button>
-                  <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} title="The shipping face of the box: order, customer, teams and sizes in it, Box 1 of N, a blank for the weight" onClick={() => send([[boxFaceJobs(pack, b.bin), "binlist"]], `the ${of(b)} outside label`)}>Outside label</button>
+                  <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} title={tall ? "The shipping face of the box, two labels: the ID label (order, a blank for the weight, customer, Box 1 of N) and the detail label (the teams and sizes in it)" : "The shipping face of the box: order, customer, Box 1 of N"} onClick={() => send([[boxFaceJobs(pack, b.bin), "binlist"]], `the ${of(b)} outside ${tall ? "labels (ID and detail)" : "label"}`)}>Outside label</button>
                 </div>
               ))}
             </div>

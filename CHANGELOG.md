@@ -613,3 +613,14 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Differs from the paper samples:** letters are measured by the module (the samples had no width checks and some overflowed): the customer on one line is squeezed from 64 to what fits (57 for SOURCE FOR SPORTS); the WEIGHT box is at most 220 wide (on 2 x 4 in it stays the size of the approved one instead of growing); the detail label's size cells are one string `A-M 3/4` as in the samples; heights and gaps were moved by a few dots so that no two fields come within 6 dots.
 - **Checks:** lint clean; all tests pass. NOTHING was printed.
 - **Branch:** `feature/packing-labels`.
+
+## 2026-11-25 · Packing labels 6, reviewed and cleaned
+- **What changed:**
+  - The ID label's WEIGHT box, when the order number leaves it under 120 dots and it goes on the bottom row, now always keeps 120: "Box N of M" beside it is squeezed (then cut) to leave the room. Before, a very long "Box N of M" took the whole width and the box was drawn off the label (no real order reaches it; a test pins it now).
+  - The Print menu's list counts ("Box lists · N", "Both · N") are the hub's count (`printJob(...).count`): a packing list is all its pages and an outside label two on a tall roll. They counted label objects, so a tall roll showed fewer than came out. The "Outside label" button's message says "outside labels (ID and detail)" on a tall roll.
+  - packlabels.js works out a letter width from a room in one place (`fwFor`), used by the portrait labels' `txt` and the landscape `place`; `cutTo` finds its cut by halving instead of trying every length (the same result; it was most of the fuzz's time). `recorded`, `landscapePage` are no longer exported and the unused `land` flag is gone.
+  - `boxFaceLabel(pack, box, boxes)` takes the order's boxes when the caller has them (`boxFaceJobs`, `boxListJobs`), instead of working out every box again for each box.
+  - The fuzz also sends every tenth order's box lists the hub's way (`boxListJobs` → `listChunks` at a seeded size → `printJob`, on 2 x 3, 2 x 4 and, built for a tall roll, 2 x 1 in): a packing list stays in one request with its count label and outside label, the hub's count is the labels in the ZPL (an outside label two on a tall roll, one on 2 x 1 in), no table reaches the short roll. The packing list is checked on one tall roll an order (2 x 3 and 2 x 4 in by turns) and the text check sweeps by position; 300 orders take about 13 s (33 s before). The branch check runs only with 300 orders or more.
+- **Left as it was:** the pair's look, the one-line / two-line customer rule, the weight box beside the order number, the team and size cells (the owner, 25 Nov 2026, on paper). The packing list and sign-off fixtures are unchanged byte for byte (they are checked out with CRLF; the test drops the CR).
+- **Checks:** lint clean; all tests pass. NOTHING was printed.
+- **Branch:** `feature/packing-labels`.

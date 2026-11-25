@@ -32,7 +32,7 @@ const head = (w, h, rec = { PAGE_W: w, PAGE_H: h, boxes: [] }) => {
 };
 const on = z => { cur = z.pg; return z; };   // the page the next fields belong to (a label made before another is filled)
 const note = (kind, lx, ly, w, h, text) => { if (cur && w > 0 && h > 0) cur.boxes.push({ kind, lx, ly, w, h, ...(text === undefined ? {} : { text }) }); };
-export function recorded(build) {
+function recorded(build) {
   const was = sink; sink = []; cur = null;
   try { const zpl = build(); return { zpl, pages: sink }; } finally { sink = was; cur = null; }
 }
@@ -42,12 +42,22 @@ export function recorded(build) {
 // labels is measured with it.
 const PRINTED = 0.85;
 const dotsOf = (text, fw) => Math.ceil(textUnits(text) * fw * PRINTED);
+// The widest letters (at most `fw`) at which `text` takes no more than `room` dots by `dotsOf`; 0 when not even 1 fits.
+// The one place a letter width is worked out from a room: `txt` and `place` both squeeze through it.
+const fwFor = (text, fw, room) => {
+  let f = Math.max(0, Math.min(fw, Math.floor(room / (textUnits(text) * PRINTED))));
+  while (f > 0 && dotsOf(text, f) > room) f--;   // the rounding up of dotsOf
+  return f;
+};
 // `text` cut with "…" so that it takes at most `room` dots at letter width `fw` ("" when not even one letter fits).
 function cutTo(text, fw, room) {
   const t = String(text ?? "").trim(), ch = [...t];
   if (dotsOf(t, fw) <= room) return t;
-  for (let k = ch.length - 1; k > 0; k--) { const s = ch.slice(0, k).join("").trimEnd() + "…"; if (dotsOf(s, fw) <= room) return s; }
-  return "";
+  // The longest start that fits: its width only grows with its length, so a halving search finds it.
+  const at = k => ch.slice(0, k).join("").trimEnd() + "…";
+  let lo = 0, hi = ch.length - 1;   // at(lo) fits (lo 0: nothing does yet), at(hi + 1) does not
+  while (lo < hi) { const k = Math.ceil((lo + hi) / 2); if (dotsOf(at(k), fw) <= room) lo = k; else hi = k - 1; }
+  return lo > 0 ? at(lo) : "";
 }
 // A name and what follows it on one line ("U11 TIGERS" + " - BOX 1.1 - 15 pcs - 1/2"): the name is cut
 // so that the whole line still fits `width` at letter width `min`; the tail is never cut.
@@ -62,7 +72,7 @@ function fitList(items, fw, room, sep = ", ") {
 }
 // One line of text, never wider than `width`: the letters get narrower (down from `fw`) until it fits.
 const txt = (x, y, fh, fw, width, text, { reverse = false } = {}) => {
-  const w = Math.max(6, Math.min(fw, Math.floor(width / (textUnits(text) * PRINTED))));
+  const w = Math.max(6, fwFor(text, fw, width));
   note("text", x, y, dotsOf(text, w), fh, String(text)); if (reverse && cur?.boxes.length) cur.boxes.at(-1).rev = true;
   return `^FO${x},${y}^A0N,${fh},${w}${reverse ? "^FR" : ""}^FD${safe(text)}^FS`;
 };
@@ -212,8 +222,8 @@ export const packListRows = l => (l.groups || []).flatMap(g => (g.sizes || []).f
 // with "…", and RECORDS the field's box on the page (`layoutBoxFace(...).pages[].boxes`), so the test
 // that tries a few hundred orders reads the same boxes that become the ZPL.
 const ROLL_W = 406;   // the 2 in rolls are 406 dots wide; a tall roll is read turned a quarter turn clockwise
-export function landscapePage(LW) {
-  const rec = { PAGE_W: LW, PAGE_H: ROLL_W, land: true, boxes: [] }, out = [];
+function landscapePage(LW) {
+  const rec = { PAGE_W: LW, PAGE_H: ROLL_W, boxes: [] }, out = [];
   return {
     rec,
     // `text` at (lx, ly) in the page as it is READ, fh high, letters fw wide; `right`: lx is where the text ENDS.
@@ -222,8 +232,7 @@ export function landscapePage(LW) {
       let t = String(text ?? "").trim(), f = fw;
       if (!t) return null;
       if (dotsOf(t, f) > maxW) {
-        f = Math.min(fw, Math.floor(maxW / (textUnits(t) * PRINTED)));
-        while (f > 0 && dotsOf(t, f) > maxW) f--;
+        f = fwFor(t, fw, maxW);
         if (f < floor) { f = floor; t = cutTo(t, f, maxW); if (!t) return null; }
       }
       const w = dotsOf(t, f), x = right ? lx - w : lx, b = { kind: "text", lx: x, ly, w, h: fh, fw: f, text: t };
@@ -264,10 +273,11 @@ function idLabel(l, LW) {
   const P = landscapePage(LW), M = 20, R = LW - M, full = R - M;
   P.place("ORDER", M, 8, 22, 20);
   const num = P.place(String(l.orderNumber ?? ""), M, 38, 110, 92, { maxW: full, floor: 40 });
-  // The WEIGHT box takes the room the order number leaves (its edge + 24 to the margin, 220 at most, as approved
-  // on paper); with under 120 dots left it goes on the bottom row, right of "Box 1 of 2", never over anything.
-  const room = R - ((num ? num.lx + num.w : M) + 24);
-  let weight = room >= 120 ? [R - Math.min(room, 220), 38, Math.min(room, 220), 110] : null;
+  // The WEIGHT box takes the room the order number leaves (its edge + 24 to the margin, 220 at most: the owner's
+  // paper sample, 25 Nov 2026); with under 120 dots left it goes on the bottom row, right of "Box 1 of 2", which
+  // then leaves it at least 120 (WEIGHT_MIN), never over anything.
+  const WEIGHT_MIN = 120, room = R - ((num ? num.lx + num.w : M) + 24);
+  let weight = room >= WEIGHT_MIN ? [R - Math.min(room, 220), 38, Math.min(room, 220), 110] : null;
   // The customer: one line at 100 high when it fits (letters down to 44 wide); else two lines at 80 high split at
   // the last word that fits, each squeezed down to 44; else the second line cut with "…".
   const name = upper(l.customer);
@@ -279,7 +289,7 @@ function idLabel(l, LW) {
     }
   }
   P.rule(M, 156, full);
-  const bb = P.place(boxText(l), M, 350, 52, 46, { maxW: full, floor: 24 });
+  const bb = P.place(boxText(l), M, 350, 52, 46, { maxW: weight ? full : full - 24 - WEIGHT_MIN, floor: 24 });
   if (!weight) { const x = (bb ? bb.lx + bb.w : M) + 24, w = Math.min(220, R - x); weight = [R - w, 350, w, 52]; }
   const fr = P.frame(...weight);
   P.place("WEIGHT", fr.lx + 12, fr.ly + 8, 20, 18);
@@ -331,7 +341,9 @@ function detailLabel(l, LW) {
 }
 
 // The outside label of a box: { zpl, pages } as laid out, the pages in print order (detail, then ID). The 2 x 1 in
-// roll keeps the compact portrait label (a landscape 203 x 406 page would leave 26 dots a line).
+// roll keeps the compact portrait label (a landscape 203 x 406 page would leave 26 dots a line). The layout fuzz
+// (25 Nov 2026) moved its ORDER caption up and made it 22 high (it ran 2 dots into the order number; 2 dots clear
+// now) and cuts a customer that would need letters under 12 wide (it was squeezed to 6 and still ran off the label).
 export function layoutBoxFace(l, size) {
   const { w, h } = sizeOf(size), W = w - 40;
   if (!isTallTicket(size)) {

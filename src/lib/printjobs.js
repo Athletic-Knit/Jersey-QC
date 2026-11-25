@@ -50,13 +50,13 @@ export function boxLabelJobs(pack, bin) {
 // label object that the hub lays out in pages, then the count label, then the outside label (printed
 // last, so it comes off the printer on top of the strip); on the 2 x 1 in roll and the sticker roll it is
 // the pages of rows and the count label. `b.rows` are the garments in the box.
-export function boxListLabels(pack, b, { tall = false } = {}) {
+export function boxListLabels(pack, b, { tall = false, boxes } = {}) {
   if (!b || !b.rows?.length) return [];
   const by = binFieldOf(pack?.binMap), orderNumber = ordersInBox(pack, b.bin, b.rows);
   const of = b.rows.some(r => r.carried) ? 0 : groupSize(pack?.roster, pack?.binMap, b.rows);
   const pages = binListLabels(b.rows, { bin: b.bin, label: b.label, orderNumber, by, of });
   if (!tall) return pages;
-  return [packListLabel(b.rows, { bin: b.bin, label: b.label, orderNumber, by }), ...pages.filter(l => l.title), boxFaceLabel(pack, b)];
+  return [packListLabel(b.rows, { bin: b.bin, label: b.label, orderNumber, by }), ...pages.filter(l => l.title), boxFaceLabel(pack, b, boxes)];
 }
 
 // ── The outside label of a box (the owner, 25 Nov 2026) ─────────────────────
@@ -65,9 +65,11 @@ export function boxListLabels(pack, b, { tall = false } = {}) {
 // order" (within the box's own team: see below), and "Box 1 of 3". No garment names: the list with the names goes inside. `pack.plan` (the station's box plan: [{ bin, boxes,
 // total }]) says how many boxes the order is still expected to need, for "of N"
 // before Finish; on a finished order (`pack.finished`, `pack.past`, `pack.final`)
-// N is the number of boxes that have garments in them.
-export function boxFaceLabel(pack, b) {
-  const boxes = packBoxes(pack), roster = pack?.roster || [], by = binFieldOf(pack?.binMap);
+// N is the number of boxes that have garments in them. One object, two labels on a
+// tall roll (packlabels.js: the detail label and the ID label). `boxes`: packBoxes(pack),
+// passed by a caller that has it already (every box of an order would make it again each time).
+export function boxFaceLabel(pack, b, boxes = packBoxes(pack)) {
+  const roster = pack?.roster || [], by = binFieldOf(pack?.binMap);
   const rows = b?.rows || [], label = String(b?.label || "");
   const count = (list, key) => { const m = new Map(); list.forEach(r => { const v = key(r); if (!v.k) return; const t = m.get(v.k) || { name: v.name, n: 0 }; t.n++; m.set(v.k, t); }); return m; };
   const teamOf = r => { const t = String(r.team ?? "").trim(); return { k: teamKey(t) || teamKey(label), name: t || label }; };
@@ -97,7 +99,8 @@ export function boxFaceLabel(pack, b) {
 }
 // The outside label of one box, or of every box with something in it (the Print menu).
 export function boxFaceJobs(pack, bin) {
-  return packBoxes(pack).filter(b => b.count > 0 && (bin === undefined || b.bin === bin)).map(b => boxFaceLabel(pack, b));
+  const boxes = packBoxes(pack);
+  return boxes.filter(b => b.count > 0 && (bin === undefined || b.bin === bin)).map(b => boxFaceLabel(pack, b, boxes));
 }
 
 // The list of what is in a box (kind "binlist"): one box, or every box with
@@ -114,7 +117,7 @@ export function boxListJobs(pack, bin, { tall = false } = {}) {
   return boxes.filter(b => (b.count > 0 || alone(b)) && (bin === undefined || b.bin === bin))
     .flatMap(b => [
       ...(isLastBox(pack, b.bin) ? notInBoxJobs(pack, b.bin, b.label) : []),
-      ...(b.count > 0 ? boxListLabels(pack, b, { tall }) : []),
+      ...(b.count > 0 ? boxListLabels(pack, b, { tall, boxes }) : []),
     ]);
 }
 // What Finish order prints for an OPEN box, before its own list (the third
