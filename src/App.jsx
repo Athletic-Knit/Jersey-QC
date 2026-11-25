@@ -2454,11 +2454,11 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
             { on: "binLists", roll: "boxRoll", text: "Print what is in a box when it is closed (full, or the order finished): a count label and the jerseys in it. Box labels print on this roll too" },
           ].map(o => (
             <div key={o.on} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", flex: 1 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", flex: 1, minWidth: 0 }}>
                 <input type="checkbox" checked={temp[o.on] !== false} onChange={e => setTemp(t => ({ ...t, [o.on]: e.target.checked }))} />
                 {o.text}
               </label>
-              <select aria-label="Roll" title="The label roll this prints on" value={temp[o.roll] || DEFAULT_SETTINGS[o.roll]} onChange={e => { setTemp(t => ({ ...t, [o.roll]: e.target.value })); e.target.blur(); }} style={{ ...selSt, flexShrink: 0 }}>
+              <select aria-label="Roll" title="The label roll this prints on" value={temp[o.roll] || DEFAULT_SETTINGS[o.roll]} onChange={e => { setTemp(t => ({ ...t, [o.roll]: e.target.value })); e.target.blur(); }} style={{ ...selSt, width: "auto", flexShrink: 0 }}>
                 {LABEL_ROLLS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
               </select>
             </div>
