@@ -126,16 +126,16 @@ describe("the order summary", () => {
   });
   it("its labels: FAILED and MISSING pages then the count label; the PASSED list only on request", () => {
     const jobs = summaryJobs(pack2, { station: "Station 1", date: "2026-11-24" });
-    expect(jobs.map(l => l.summary ? "count" : l.head)).toEqual(["MISSING", "FAILED", "count"]);
-    expect(jobs[0].items.map(i => i.text)).toEqual(["#8 P7 Red A-L: marked missing", "#7 P6 Red A-L: not scanned"]);
+    expect(jobs.map(l => l.summary ? "count" : l.head)).toEqual(["UNSCANNED", "FAILED", "count"]);
+    expect(jobs[0].items.map(i => i.text)).toEqual(["#8 P7 Red A-L: marked missing", "#7 P6 Red A-L: unscanned"]);
     expect(jobs[1].items.map(i => i.text)).toEqual(["#6 P5 Red A-L: Loose thread"]);
     expect(jobs[2]).toMatchObject({ summary: true, orderNumber: "264247", station: "Station 1", date: "2026-11-24", counts: { total: 8, passed: 5, failed: 1, missing: 2 } });
     const withPassed = summaryJobs(pack2, { withPassed: true });
-    expect(withPassed.map(l => l.summary ? "count" : l.head)).toEqual(["PASSED", "MISSING", "FAILED", "count"]);
+    expect(withPassed.map(l => l.summary ? "count" : l.head)).toEqual(["PASSED", "UNSCANNED", "FAILED", "count"]);
     expect(withPassed[0].items[0].text).toBe("#1 P0 Navy A-L  Box 1.1");
     const z = binListZPL(jobs[2]);
     expect(z).toContain("^FDOrder 264247^FS");
-    expect(z).toContain("^FD5 passed   1 failed   2 missing^FS");
+    expect(z).toContain("^FD5 passed   1 failed   2 unscanned^FS");
     expect(z).toContain("^FDStation 1   2026-11-24^FS");
   });
 });
@@ -144,7 +144,7 @@ describe("what is NOT in a box", () => {
   const roster2 = [...roster, row(7, { team: "Red", scanned: "missing" })];
   const pack2 = { ...pack, roster: roster2 };
   it("the garments of the box's team that are in no box, with why", () => {
-    expect(notInBox(pack2, "2.1").map(x => [x.row.number, x.why])).toEqual([["6", "flagged — Loose thread"], ["7", "not scanned"], ["8", "marked missing"]]);
+    expect(notInBox(pack2, "2.1").map(x => [x.row.number, x.why])).toEqual([["6", "flagged — Loose thread"], ["7", "unscanned"], ["8", "marked missing"]]);
     expect(notInBox(pack2, "1.2")).toEqual([]);                       // Navy is complete
     expect(notInBox(pack2, "1.1")).toEqual([]);                       // a closed box of a complete team
     expect(notInBox({ ...pack2, binMap: null }, "2.1")).toEqual([]);
@@ -198,7 +198,7 @@ describe("review of 24 Nov 2026: the last box and the failed list", () => {
     const jobs = summaryJobs(p);
     expect(jobs[0].items.map(i => i.text)).toEqual(["#2 P1 Navy A-L: flagged", "#99 STRAY A-M: Not on the roster — #99 A-M"]);
     expect(binListZPL(jobs[1])).toContain("^FDSUMMARY   2 garments   +1 extra^FS");   // the extra on the SUMMARY line, so the tally keeps its size
-    expect(binListZPL(jobs[1])).toContain("^FD1 passed   1 failed   0 missing^FS");
+    expect(binListZPL(jobs[1])).toContain("^FD1 passed   1 failed   0 unscanned^FS");
   });
 });
 

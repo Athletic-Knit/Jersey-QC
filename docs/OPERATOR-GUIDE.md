@@ -165,16 +165,16 @@ Tap **📦 Packing** (bottom left, beside History; it is also the main button wh
 - **Now: finish the order**: every list is printed. **🏁 Finish order** opens the confirm.
 - **The order is finished**: you opened Packing from the "Order is done" screen. Reprint a box's list from its row if you need it.
 
-Under the sentence: "39 of 41 passed · 2 with the supervisor · 0 missing". The pedal (Enter) does nothing on this screen: touch the button.
+Under the sentence: "39 of 41 passed · 2 with the supervisor · 0 unscanned". The pedal (Enter) does nothing on this screen: touch the button.
 
 Each box has a row: its name, the team or size, "12 scanned · 3 to scan", and the box it is expected to fill (→ Medium).
 
 - **🖨 Print list** prints what is in the box now and leaves the box **open**. It asks "What box is it in?" (small, medium, large; the suggested one is marked; **Just print** skips the answer). Your answer teaches the app how many garments fit in each box. The row then says **✓ List printed · 12 pcs** and the button reads **Print again**. If more garments go in afterwards, or a garment of its team is flagged or marked missing, it reads **Print list (changed)**. Finish order does not print a list that is already printed and unchanged.
 - **Box full** closes the box: answer "What size is Box 5.1?", its list prints, tape the box and stick the labels on it. That team carries on in the next box (5.2); its label prints if it was not printed before.
 
-A closed box has **Print list again**. The DAMAGED box has its own **Print list**. A row warns **⚠ Short** when garments of its team or size are in no box yet (not scanned, flagged or missing). Check before you seal.
+A closed box has **Print list again**. The DAMAGED box has its own **Print list**. A row warns **⚠ Short** when garments of its team or size are in no box yet (unscanned, flagged or missing). Check before you seal.
 
-**Summary ▸** (folded) opens every garment that passed (with its box), every one that failed (with why) and the missing ones. **⬇ Excel** (supervisors) and **🖨 Print summary** (the count label, the FAILED list and the MISSING list) are beside it.
+**Summary ▸** (folded) opens every garment that passed (with its box), every one that failed (with why) and the unscanned ones (marked missing, or not scanned). **⬇ Excel** (supervisors) and **🖨 Print summary** (the count label, the FAILED list and the UNSCANNED list) are beside it.
 
 ### Mark a garment missing
 
@@ -185,9 +185,9 @@ To find a garment in a long roster, tap **Number or name** above the table and t
 ### Finish the order
 
 1. Tap **🏁 Finish order** in the header. (This is a click only: the pedal never finishes an order.)
-2. Check the counts: passed, open, not scanned, and the amber list of garments that are in no box. **📋 See the summary first** opens the Packing screen (the boxes, their lists and the summary). It is behind **📦 Packing** at the bottom of the station at any time. The summary's **With the passed list** (every passed garment) is in the **🖨 Print** menu.
+2. Check the counts: passed, open, unscanned, and the amber list of garments that are in no box. **📋 See the summary first** opens the Packing screen (the boxes, their lists and the summary). It is behind **📦 Packing** at the bottom of the station at any time. The summary's **With the passed list** (every passed garment) is in the **🖨 Print** menu.
 3. If the order **ships with** other orders, choose for each box **Leave open** (it waits for the next order of the group) or **Full — close it**.
-4. Press **✓ Finish order**. The lists of every open box print (each with a NOT IN BOX label when something of its team is flagged, missing or not scanned), except a box whose list you already printed from Packing and that has not changed since; the DAMAGED box's list, and the order summary.
+4. Press **✓ Finish order**. The lists of every open box print (each with a NOT IN BOX label when something of its team is flagged, missing or unscanned), except a box whose list you already printed from Packing and that has not changed since; the DAMAGED box's list, and the order summary.
 5. The **"Order N is done"** screen stays up. From here:
    - **🖨 Print the box lists again**,
    - **🖨 Print something else…** (the Print menu),
@@ -198,7 +198,7 @@ If the server does not answer when you press New order, the screen keeps the ord
 
 ### Finish later, and unfinished orders
 
-When an order cannot be finished today (garments out for repair, missing, not yet scanned):
+When an order cannot be finished today (garments out for repair, missing, unscanned):
 
 1. Tap **⏸ Finish later** in the header.
 2. Read the summary: "N of M garments are done", and what is still out.
@@ -212,7 +212,7 @@ To pick it up again, on any station:
 On a picked-up order:
 
 - Scan a garment that came back as usual. The green screen says **🔧 Back from repair — check it is fixed** or **✓ Found — it was marked missing**. Check it and confirm.
-- **🔧 Still out · N** lists what the order still waits for: back from repair, missing, extra garments with the supervisor, not scanned yet. **Pass it** passes one without the camera (tap twice to be sure).
+- **🔧 Still out · N** lists what the order still waits for: back from repair, missing, extra garments with the supervisor, unscanned. **Pass it** passes one without the camera (tap twice to be sure).
 
 ### The Print menu
 

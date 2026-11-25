@@ -101,7 +101,7 @@ export function notInBox(pack, bin) {
   if (key === undefined) return [];
   const open = binMap[key];   // binFor gives the group's open box for any row of the group
   const reason = new Map(damagedItems(pack).filter(x => x._id !== undefined).map(x => [x._id, x.reason]));
-  const why = r => r.scanned === "flag" ? `flagged${reason.get(r._id) ? " — " + reason.get(r._id) : ""}` : r.scanned === "missing" || r.scanned === "short" ? "marked missing" : "not scanned";
+  const why = r => r.scanned === "flag" ? `flagged${reason.get(r._id) ? " — " + reason.get(r._id) : ""}` : r.scanned === "missing" || r.scanned === "short" ? "marked missing" : "unscanned";
   return roster.filter(r => !inBin(r) && binFor(binMap, r) === open).sort(byNumber).map(r => ({ row: r, why: why(r) }));
 }
 // Its labels (kind "binlist"): "NOT IN BOX 5.1 Navy" and one line a jersey.
@@ -166,7 +166,7 @@ export function orderSummary(pack) {
 export function summaryJobs(pack, { withPassed = false, station = "", date = "" } = {}) {
   const s = orderSummary(pack), o = pack?.orderNumber;
   const passed  = withPassed ? listLabels(s.passed.map(p => `${who(p.row)}${p.bin ? "  Box " + p.bin : ""}`), { title: "PASSED", orderNumber: o }) : [];
-  const missing = listLabels([...s.missing.marked.map(r => `${who(r)}: marked missing`), ...s.missing.notScanned.map(r => `${who(r)}: not scanned`)], { title: "MISSING", orderNumber: o });
+  const missing = listLabels([...s.missing.marked.map(r => `${who(r)}: marked missing`), ...s.missing.notScanned.map(r => `${who(r)}: unscanned`)], { title: "UNSCANNED", orderNumber: o });
   const failed  = listLabels([...s.failed, ...s.extra].map(x => `${who(x)}: ${x.reason || "flagged"}`), { title: "FAILED", orderNumber: o });   // the extras' reasons say what they are (Duplicate, Not on the roster, No size tag): no suffix
   return [...passed, ...missing, ...failed, { summary: true, orderNumber: String(o || ""), station: String(station || ""), date: String(date || ""), counts: s.counts }];
 }

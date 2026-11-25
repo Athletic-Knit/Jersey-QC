@@ -435,3 +435,10 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests:** `box-auto-print.test.js`: the default is off and an older saved setting reads off; `applyRoster` opens the screen from the setting.
 - **Checks:** lint clean; 582 tests pass. Not clicked through in a browser by this session.
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · 5e · "Unscanned" instead of "not scanned yet" and of the summary's "missing"
+- **Asked for:** the owner, 25 Nov 2026: unscanned instead of missing.
+- **What changed:** what is not in a box for want of a scan says "Unscanned": the Packing summary's column ("Unscanned · N" with "Marked missing" and "Unscanned" beside each other), its counts line and the Print-menu line, the count label's tally, the printed MISSING list (now UNSCANNED, its lines "marked missing" and "unscanned"), the box lists' NOT IN BOX line, the Finish order tiles and text, the Finish later tiles, the Still out list, the board's order view and cards, the sheets' "Unscanned" row and the roster sheet's UNSCANNED status. The operator's Mark menu "Missing", "Marked missing", the Missing pill and the Missing · Duplicate · Flagged list stay: that is a different fact (the operator says it is not here). The stored status `missing` is not renamed. The guide and CLAUDE.md follow.
+- **Tests:** the strings in export, printjobs, reports and the board's order-view tests.
+- **Checks:** lint clean; 582 tests pass.
+- **Branch:** `feature/result-screens`.

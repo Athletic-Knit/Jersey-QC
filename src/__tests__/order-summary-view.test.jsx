@@ -27,7 +27,7 @@ import { OrderView } from "../App.jsx";
 
 afterEach(cleanup);
 describe("the board's order view: Summary tab", () => {
-  it("is the first tab and shows Passed with its box, Failed with its reason, Missing, the boxes and the rates", async () => {
+  it("is the first tab and shows Passed with its box, Failed with its reason, Unscanned, the boxes and the rates", async () => {
     render(createElement(OrderView, { station: "st-1", order: "264247", run: 1, stationLabel: s => s, onClose: () => {}, onDownload: () => {} }));
     await waitFor(() => expect(screen.getByText(/Passed · 2/)).toBeTruthy());
     const tabs = screen.getAllByRole("button").map(b => b.textContent).filter(t => /^(Summary|Roster|Problems|Log)/.test(t));
@@ -35,7 +35,7 @@ describe("the board's order view: Summary tab", () => {
     expect(tabs[1]).toMatch(/^Roster/);
     expect(screen.getByText(/Failed · 1/)).toBeTruthy();
     expect(screen.getByText("Twill peeling")).toBeTruthy();
-    expect(screen.getByText(/Missing · 1/)).toBeTruthy();
+    expect(screen.getAllByText(/Unscanned · 1/).length).toBe(2);   // the column and its "unscanned" half
     expect(screen.getAllByText(/Box 1\.1/).length).toBeGreaterThan(0);   // the boxes strip and the passed rows' box
     expect(screen.getByText(/pass rate/)).toBeTruthy();
     expect(screen.getByText(/1 with the supervisor/)).toBeTruthy();

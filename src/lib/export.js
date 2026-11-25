@@ -29,7 +29,7 @@ export function localTimeStamp(d = new Date()) { return `${localDateStamp(d)} ${
 
 // A roster row's status as the sheet shows it ("manual" is a by-hand entry kept from older orders).
 export const STATUS_LABEL = { pass: "PASS", flag: "FLAGGED", manual: "MANUAL", missing: "MISSING", short: "SHORT-SHIPPED" };
-export function rosterStatusLabel(r) { return STATUS_LABEL[r.scanned] || "NOT SCANNED"; }
+export function rosterStatusLabel(r) { return STATUS_LABEL[r.scanned] || "UNSCANNED"; }
 
 // Latest log entry per roster row, for reason / resolution / operator columns.
 function latestByRow(log) {
@@ -216,7 +216,7 @@ export function buildOrderSummarySheet(roster, log, meta = {}, categoryOf = () =
     ["Entered by hand", manual],
     ["Sent to the supervisor", flag + offRoster, offRoster ? `${offRoster} of them not on the roster` : ""],
     ["Marked missing", missing],
-    ["Not scanned", todo],
+    ["Unscanned", todo],
     [],
     ["Pass rate %", r.passRate, "of the garments inspected"],
     ["Flag rate %", r.flagRate, "of the garments inspected"],

@@ -111,7 +111,7 @@ describe("the order's summary sheet", () => {
     expect(val("Entered by hand")).toBe(1);
     expect(val("Sent to the supervisor")).toBe(1);
     expect(val("Marked missing")).toBe(1);
-    expect(val("Not scanned")).toBe(1);
+    expect(val("Unscanned")).toBe(1);
     expect(val("Pass rate %")).toBe(50);
     expect(val("Flag rate %")).toBe(25);
     expect(val("Active minutes")).toBe(2);
@@ -120,7 +120,7 @@ describe("the order's summary sheet", () => {
   it("the defects, and every garment that is in no box", () => {
     expect(s).toEqual(expect.arrayContaining([["Decoration", 1, 100]]));
     expect(s.find(r => String(r[0]).startsWith("Not in a box"))[0]).toBe("Not in a box: 3");
-    expect(s).toEqual(expect.arrayContaining([["FLAGGED", "#3 C", "Navy", "A-L"], ["MISSING", "#5 E", "Red", "A-XL"], ["NOT SCANNED", "#6 F", "Red", "A-XL"]]));
+    expect(s).toEqual(expect.arrayContaining([["FLAGGED", "#3 C", "Navy", "A-L"], ["MISSING", "#5 E", "Red", "A-XL"], ["UNSCANNED", "#6 F", "Red", "A-XL"]]));
   });
 });
 

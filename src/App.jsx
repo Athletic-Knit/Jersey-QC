@@ -588,7 +588,7 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
                   const parts = [n.flag ? <span key="f" style={{ color: "#f87171" }}>{n.flag} waiting on repair</span> : null,
                     n.missing ? <span key="m" style={{ color: "#fbbf24" }}>{n.missing} missing</span> : null,
                     n.extra ? <span key="x" style={{ color: "#f9a8d4" }}>{n.extra} extra (with the supervisor)</span> : null,
-                    n.todo ? <span key="t">{n.todo} not scanned yet</span> : null].filter(Boolean);
+                    n.todo ? <span key="t">{n.todo} unscanned</span> : null].filter(Boolean);
                   const named = g ? [...g.flag, ...g.missing].slice(0, 4).map(j => jerseyWords(j) + (j.status === "flag" && j.reason ? ` (${j.reason})` : j.status !== "flag" ? " (missing)" : "")) : [];
                   return <>Still out: {parts.reduce((a, x) => a.length ? [...a, " · ", x] : [x], [])}{named.length ? <div style={{ fontSize: 14, color: "#94a3b8" }}>{named.join(", ")}{g.flag.length + g.missing.length > 4 ? " …" : ""}</div> : null}</>;
                 })()}
@@ -1046,7 +1046,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
   } : null, [rec, events]);
   const c = rec?.counts || {}; const total = c.total ?? rows.length; const done = total - (c.remaining ?? 0);
   const latestByRow = new Map(); [...events].reverse().forEach(e => { if (e.rowId !== undefined && e.rowId !== null) latestByRow.set(e.rowId, e); });
-  const label = s => ({ pass: "PASS", flag: "FLAGGED", manual: "BY HAND", missing: "MISSING", short: "SHORT-SHIPPED" }[s] || "not scanned");
+  const label = s => ({ pass: "PASS", flag: "FLAGGED", manual: "BY HAND", missing: "MISSING", short: "SHORT-SHIPPED" }[s] || "unscanned");
   const colour = s => s === "pass" ? "#22c55e" : s === "flag" ? "#ef4444" : s === "manual" ? "#f59e0b" : s === "missing" || s === "short" ? "#f59e0b" : "#475569";
   const evColour = s => s === "pass" ? "#22c55e" : s === "flagged" ? "#ef4444" : s === "manual" ? "#f59e0b" : s === "undo" ? "#f59e0b" : "#94a3b8";
   const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
@@ -1061,7 +1061,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 900, fontSize: 18 }}>Order {order} <span style={{ fontWeight: 400, color: "#64748b", fontSize: 14 }}>· {stationLabel(station)} · {rec?.operator || "—"}{rec?.jerseyType ? <span style={{ color: "#93c5fd" }}> · {jerseyTypeLabel(rec.jerseyType)}</span> : null}</span></div>
             <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
-              {rec ? <>{done} / {total} done · {c.pass ?? 0} pass · <span style={{ color: c.flag ? "#f87171" : undefined }}>{c.flag ?? 0} with supervisor</span> · <span style={{ color: c.manual ? "#fcd34d" : undefined }}>{c.manual ?? 0} by hand</span>{offRoster.length ? <> · <span style={{ color: "#f87171" }}>{offRoster.length} not on roster</span></> : null} · started {hm(rec.firstSeen)}{orderDone(rec) ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(doneAt(rec))}</span>{c.remaining > 0 ? <span style={{ color: "#fcd34d" }}> with {c.remaining} not scanned</span> : null}</> : <> · in progress</>}{rec.notes ? <> · notes: <span style={{ color: "#fcd34d" }}>{rec.notes}</span></> : null}</> : err || "Loading…"}
+              {rec ? <>{done} / {total} done · {c.pass ?? 0} pass · <span style={{ color: c.flag ? "#f87171" : undefined }}>{c.flag ?? 0} with supervisor</span> · <span style={{ color: c.manual ? "#fcd34d" : undefined }}>{c.manual ?? 0} by hand</span>{offRoster.length ? <> · <span style={{ color: "#f87171" }}>{offRoster.length} not on roster</span></> : null} · started {hm(rec.firstSeen)}{orderDone(rec) ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(doneAt(rec))}</span>{c.remaining > 0 ? <span style={{ color: "#fcd34d" }}> with {c.remaining} unscanned</span> : null}</> : <> · in progress</>}{rec.notes ? <> · notes: <span style={{ color: "#fcd34d" }}>{rec.notes}</span></> : null}</> : err || "Loading…"}
             </div>
           </div>
           <button onClick={() => onDownload({ station, order, run: rec?.run || run, operator: rec?.operator, date })} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet (Excel)</button>
@@ -1175,7 +1175,7 @@ function UnfinishedPile({ by, onClose }) {
   useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
   const act = p => p.then(load).catch(e => setErr(e.message));
   const entry = (list || []).find(e => e.id === open);
-  const statusWord = { flag: "at repair", missing: "missing", short: "short", todo: "not scanned", extra: "extra, not on the order" };
+  const statusWord = { flag: "at repair", missing: "missing", short: "short", todo: "unscanned", extra: "extra, not on the order" };
   const jkey = j => (j.rowId !== null && j.rowId !== undefined ? String(j.rowId) : "x" + j.xid);   // a row, or an extra jersey's log entry
   // confirm: "pass" (back and good) or "short" (the order ships without them)
   const checkOff = () => {
@@ -1201,7 +1201,7 @@ function UnfinishedPile({ by, onClose }) {
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 22, fontWeight: 900 }}>Order {e.order}</div>
                 <div style={{ fontSize: 15, color: "#cbd5e1", flex: 1, minWidth: 220 }}>
-                  {e.done}/{e.total} done{e.flagged ? <> · <span style={{ color: "#f87171" }}>{e.flagged} flagged</span></> : null}{e.missing ? <> · <span style={{ color: "#fbbf24" }}>{e.missing} missing</span></> : null}{e.toScan ? <> · {e.toScan} not scanned</> : null}
+                  {e.done}/{e.total} done{e.flagged ? <> · <span style={{ color: "#f87171" }}>{e.flagged} flagged</span></> : null}{e.missing ? <> · <span style={{ color: "#fbbf24" }}>{e.missing} missing</span></> : null}{e.toScan ? <> · {e.toScan} unscanned</> : null}
                   <div style={{ fontSize: 13, color: "#94a3b8" }}><span style={{ fontWeight: 800, color: waited(e) >= 5 ? "#f87171" : waited(e) >= 2 ? "#fbbf24" : "#94a3b8" }}>{waited(e) ? `waiting ${waited(e)} day${waited(e) === 1 ? "" : "s"}` : "put aside today"}</span> · put aside on {stationLabel(e.station)} by {e.operator || "—"} · {new Date(e.parkedAt).toLocaleDateString()}{e.assignedTo ? <span style={{ color: "#60a5fa", fontWeight: 700 }}> · assigned to {stationLabel(e.assignedTo)}</span> : null}{e.openOn ? <span style={{ color: "#4ade80", fontWeight: 700 }}> · open on {stationLabel(e.openOn.station)} now <button onClick={() => act(hub.releaseUnfinished(e.id))} title="Free it, so another station can open it" style={{ ...btnGhost, fontSize: 12, padding: "1px 8px", marginLeft: 4 }}>Free it</button></span> : null}{e.checkedOff?.length ? ` · ${e.checkedOff.length} checked off` : ""}</div>
                 </div>
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -1475,7 +1475,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                           <strong style={{ color: "#e2e8f0" }}>{done} / {total}</strong> done
                           {c.flag > 0 && <span style={{ color: "#f87171" }}> · {c.flag} with supervisor</span>}
                           {c.manual > 0 && <span style={{ color: "#fcd34d" }}> · {c.manual} by hand</span>}
-                          {" · "}{finished ? <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(doneAt(o))}{c.remaining > 0 ? ` · ${c.remaining} not scanned` : ""}</span> : `in progress · started ${hm(o.firstSeen)}`}
+                          {" · "}{finished ? <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(doneAt(o))}{c.remaining > 0 ? ` · ${c.remaining} unscanned` : ""}</span> : `in progress · started ${hm(o.firstSeen)}`}
                         </div>
                       </div>
                       <button onClick={() => setOpenOrder({ station: o.station, order: o.order, run: o.run || 0, date: o.date })} title="Open this order: roster with statuses, problems, and the log" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
@@ -2642,7 +2642,7 @@ function StillOutModal({ orderNumber, groups, rowOf, binOf, onPass, onClose }) {
         {section("Back from repair", groups.flag, "#f87171", "✓ It's back — pass it")}
         {section("Missing", groups.missing, "#fbbf24", "✓ Found — pass it")}
         {section("Extra, not on this order", groups.extra, "#f9a8d4", null, "With the supervisor: they decide on the board.")}
-        {groups.todo.length > 0 && <div style={{ marginTop: 16, fontSize: 17, color: "#cbd5e1" }}><strong>Not scanned yet · {groups.todo.length}</strong> — scan them as usual.</div>}
+        {groups.todo.length > 0 && <div style={{ marginTop: 16, fontSize: 17, color: "#cbd5e1" }}><strong>Unscanned · {groups.todo.length}</strong> — scan them as usual.</div>}
         <div style={{ marginTop: 18, fontSize: 15, color: "#94a3b8", lineHeight: 1.45 }}>A garment that will not come back: the supervisor marks it <strong>Ship short</strong> on the board (Unfinished orders). When nothing is out, finish the order.</div>
       </div>
     </div>
@@ -2791,7 +2791,7 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
           <div style={{ flex: 1, minWidth: 260 }}>
             <div style={{ fontSize: 26, fontWeight: 900, color: "#e2e8f0" }}>{now.text}</div>
             <div style={{ fontSize: 18, color: "#cbd5e1", marginTop: 2 }}>
-              <strong style={{ color: "#4ade80" }}>{c.passed}</strong> of {c.total} passed · <strong style={{ color: c.failed ? "#f87171" : "#cbd5e1" }}>{c.failed}</strong> with the supervisor · <strong style={{ color: c.missing ? "#fbbf24" : "#cbd5e1" }}>{c.missing}</strong> missing
+              <strong style={{ color: "#4ade80" }}>{c.passed}</strong> of {c.total} passed · <strong style={{ color: c.failed ? "#f87171" : "#cbd5e1" }}>{c.failed}</strong> with the supervisor · <strong style={{ color: c.missing ? "#fbbf24" : "#cbd5e1" }}>{c.missing}</strong> unscanned
             </div>
           </div>
           {now.step === "scan" && <button onClick={onClose} style={bigBtn}>Close</button>}
@@ -2952,10 +2952,10 @@ function OrderSummaryBody({ summary, bins = [] }) {
             {summary.extra.map((f, i) => line("x" + i, f, f.reason || "flagged", "#fecaca"))}
           </div>
         ) : null)}
-        {col(`Missing · ${c.missing}`, "#fbbf24", [], "", (
+        {col(`Unscanned · ${c.missing}`, "#fbbf24", [], "", (
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             {sub(`Marked missing · ${c.marked}`, summary.missing.marked.map(r => line("m" + r._id, r, "", "")), "None.")}
-            {sub(`Not scanned yet · ${c.notScanned}`, summary.missing.notScanned.map(r => line("n" + r._id, r, "", "")), "None.")}
+            {sub(`Unscanned · ${c.notScanned}`, summary.missing.notScanned.map(r => line("n" + r._id, r, "", "")), "None.")}
           </div>
         ))}
       </div>
@@ -2971,7 +2971,7 @@ function SummaryCounts({ summary, stats = null }) {
   const c = summary.counts, num = v => v !== "" && v !== null && v !== undefined;
   return (
     <div style={{ fontSize: 17, color: "#cbd5e1", flex: 1 }}>
-      {c.total} {c.total === 1 ? "garment" : "garments"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} missing</span>{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} with no roster row</span>}
+      {c.total} {c.total === 1 ? "garment" : "garments"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} unscanned</span>{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} with no roster row</span>}
       {stats && (num(stats.passRate) || num(stats.flagRate) || num(stats.perHour)) && (
         <div style={{ fontSize: 14, color: "#94a3b8", marginTop: 2 }}>
           {num(stats.passRate) ? <>pass rate <strong style={{ color: "#e2e8f0" }}>{stats.passRate}%</strong></> : null}
@@ -3251,9 +3251,9 @@ function PrintModal({ current = null, tagOf, onClose }) {
               <button style={{ ...smBtn, opacity: inDamaged.length ? 1 : 0.4 }} disabled={!inDamaged.length} onClick={() => send([[damagedListJobs(pack), "binlist"]], "the DAMAGED box list")}>Its list</button>
               <button style={smBtn} onClick={() => send([[[damagedBoxLabel(pack)], "binticket"]], "the DAMAGED box label")}>Its label</button>
             </div>
-            <div style={secSt}>Order summary · {sum.counts.passed} passed · {sum.counts.failed} failed · {sum.counts.missing} missing</div>
+            <div style={secSt}>Order summary · {sum.counts.passed} passed · {sum.counts.failed} failed · {sum.counts.missing} unscanned</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{/* the count label, FAILED and MISSING; the passed list on request (the owner, 24 Nov 2026) */}
-              <button style={smBtn} onClick={() => { const l = summaryJobs(pack, { station: stationLabel(pack.station), date: localDateStamp() }); if (many(l.length, "summary labels")) send([[l, "binlist"]], "the order summary"); }}>Summary (failed + missing) · {summaryJobs(pack).length}</button>
+              <button style={smBtn} onClick={() => { const l = summaryJobs(pack, { station: stationLabel(pack.station), date: localDateStamp() }); if (many(l.length, "summary labels")) send([[l, "binlist"]], "the order summary"); }}>Summary (failed + unscanned) ·{summaryJobs(pack).length}</button>
               <button style={smBtn} onClick={() => { const l = summaryJobs(pack, { withPassed: true, station: stationLabel(pack.station), date: localDateStamp() }); if (many(l.length, "summary labels")) send([[l, "binlist"]], "the order summary with the passed list"); }}>With the passed list · {summaryJobs(pack, { withPassed: true }).length}</button>
             </div>
             <div style={secSt}>Flag tickets · {flags.length}</div>
@@ -3300,7 +3300,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
   const stats = [
     { label: "Passed",    value: count("pass"), color: "#22c55e" },
     { label: "Open",      value: open,          color: open ? "#ef4444" : "#64748b" },
-    { label: "Not scanned", value: remaining,   color: remaining ? "#f59e0b" : "#64748b" },
+    { label: "Unscanned", value: remaining,  color: remaining ? "#f59e0b" : "#64748b" },
   ];
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -3312,7 +3312,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
         <div style={{ fontSize: 34, fontWeight: 900, color: "#e2e8f0", marginBottom: 8 }}>🏁 Finish order {orderNumber || "—"}?</div>
         <div style={{ fontSize: 18, color: "#cbd5e1", marginBottom: 14, lineHeight: 1.4 }}>
           {remaining
-            ? `${remaining} ${remaining === 1 ? "garment is" : "garments are"} not scanned yet. You can finish anyway; the supervisor keeps this order's record and sheets.`
+            ? `${remaining} ${remaining === 1 ? "garment is" : "garments are"} unscanned. You can finish anyway; the supervisor keeps this order's record and sheets.`
             : "Every garment is scanned. The supervisor keeps this order's record and sheets."}
           {scans === 0 ? " Nothing was scanned on it." : ""}
           {shipWith.length ? ` Ships with order ${shipWith.join(", ")}: a box that is not full stays open for it.` : binLists > 0 ? ` Every open box is closed and its list prints: ${binLists} ${binLists === 1 ? "label" : "labels"}.` : ""}
@@ -3325,7 +3325,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
             {short.map(x => (
               <div key={x.bin} style={{ fontSize: 16, color: "#e2e8f0", lineHeight: 1.45 }}>
                 <strong style={{ color: "#60a5fa" }}>Box {x.bin}</strong> · {x.label}:{" "}
-                {x.toScan > 0 && <><span style={{ color: "#fcd34d" }}>{x.toScan} not scanned</span> ({jerseyList(x.waiting, 5)}){x.short.length > 0 ? " · " : ""}</>}
+                {x.toScan > 0 && <><span style={{ color: "#fcd34d" }}>{x.toScan} unscanned</span> ({jerseyList(x.waiting, 5)}){x.short.length > 0 ? " · " : ""}</>}
                 {x.short.length > 0 && <><span style={{ color: "#fca5a5" }}>{[x.flagged ? `${x.flagged} flagged` : "", x.missing ? `${x.missing} missing` : ""].filter(Boolean).join(", ")}</span> ({jerseyList(x.short, 5)})</>}
               </div>
             ))}
@@ -5103,7 +5103,7 @@ export default function App() {
             {/* Plain words and big numbers (the owner, 19 Nov 2026: "Still out" was confusing). */}
             {(() => { const s = outOf(roster); const tiles = [
               { n: s.done, label: "Done", colour: "#4ade80" },
-              { n: s.toScan, label: "Not scanned yet", colour: "#e2e8f0" },
+              { n: s.toScan, label: "Unscanned", colour: "#e2e8f0" },
               { n: s.flagged, label: "Flagged", colour: "#f87171" },
               { n: s.missing, label: "Missing", colour: "#fbbf24" },
             ]; return (
@@ -5495,7 +5495,7 @@ export default function App() {
                             {binSummary.map(b => <option key={b.bin} value={String(b.bin)}>Box {b.bin} · {b.label} · {b.count} in it{b.open ? "" : " · closed"}</option>)}
                           </select>)}
                         {field("DONE OR TO DO",
-                          <select value={doneFilter} onChange={e => { setDoneFilter(e.target.value); e.currentTarget.blur(); }} title="Done = passed or entered by hand, so in a box. To do = not scanned yet." style={selSt(doneFilter, "#86efac", "#22c55e")}>
+                          <select value={doneFilter} onChange={e => { setDoneFilter(e.target.value); e.currentTarget.blur(); }} title="Done = passed or entered by hand, so in a box. To do = unscanned." style={selSt(doneFilter, "#86efac", "#22c55e")}>
                             <option value="">Both</option>
                             <option value="done">Done only</option>
                             <option value="todo">To do only</option>
