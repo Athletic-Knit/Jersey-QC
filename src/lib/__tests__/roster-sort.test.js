@@ -101,6 +101,12 @@ describe("the pick list follows the last confirmed jersey's size (25 Nov 2026)",
     expect(sortCandidates(odd, "size", { lastSize: "Y-S" }).map(r => r._id)).toEqual([1, 2, 4, 3, 5]);   // "Youth M" is youth
     expect(sortCandidates(odd, "size", { lastSize: "XL" }).map(r => r._id)[0]).toBe(3);                  // no family: its own rows only
   });
+  it("a 6/9 list keeps the number read before its twin, each part in the station's order (`after`, 25 Nov 2026)", () => {
+    const twins = [{ _id: 1, number: "9", size: "A-S" }, { _id: 2, number: "6", size: "A-L" }, { _id: 3, number: "9", size: "L-S" }, { _id: 4, number: "6", size: "A-S" }];
+    const after = r => r.number === "9";
+    expect(sortCandidates(twins, "size", { after }).map(r => r._id)).toEqual([4, 2, 1, 3]);
+    expect(sortCandidates(twins, "size", { after, lastSize: "L-S" }).map(r => r._id)).toEqual([4, 2, 3, 1]);   // the last size first inside each part, never above the number read
+  });
   it("the line under the header knows whether the size or only its family is on the list", () => {
     expect(lastSizeRank("L-S", "L-S")).toBe(0);
     expect(lastSizeRank("L-M", "L-S")).toBe(1);

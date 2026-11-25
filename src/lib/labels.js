@@ -245,7 +245,7 @@ export function binLabels(roster, binMap, { orderNumber = "", boxes = null } = {
 }
 
 // "BOX 5.1" (or its `title`, "DAMAGED") as big as the label allows (half its
-// height), the team or size under it, a small footer with the order number and
+// height), the team under it (by size the other way round), a small footer with the order number and
 // "by team" / "by size" (just the order number on a small label). No jersey
 // count: nobody knows how many will go in before the box is full. It is read
 // from across the table, so the box and what it holds take the room and the
@@ -261,23 +261,20 @@ export function binLabelZPL(l, size = labelSize()) {
   const a     = h - top;                                          // the printable height
   const pad   = Math.round(a * 0.04);
   const small = Math.max(12, Math.round(a * 0.12));              // the footer
-  const big   = Math.round(a * 0.5);                              // "BOX 5.1"
-  const mid   = Math.round(a * 0.27);                             // the team or size
+  const big   = Math.round(a * 0.5);                              // "BOX 5.1" (by size: the size)
+  const mid   = Math.round(a * 0.27);                             // the team (by size: "BOX 5.1")
   const footer = (wide
     ? [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : l.by === "team" ? "by team" : ""]
     : [l.orderNumber ? `Order ${l.orderNumber}` : ""]).filter(Boolean).join("   ");
+  // A by-size box is found by its size: the size takes the big line and
+  // "BOX 6.1" the one under it (the owner, 25 Nov 2026). By team, and the
+  // DAMAGED box, the box first.
+  const box = l.title || `BOX ${l.bin}`;
+  const [head, sub] = l.by === "size" && !l.title ? [l.label, box] : [box, l.label];
   return [
     "^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
-    // A by-size box is found by its size: the size gets the big room and the box number the middle one (owner, 25 Nov 2026).
-    ...(l.by === "size" && !l.title
-      ? [
-          line(side, top + pad, fit(l.label, w, big), w, "C", l.label),
-          line(side, top + pad + big + Math.round(a * 0.01), fit(`BOX ${l.bin}`, w, mid), w, "C", `BOX ${l.bin}`),
-        ]
-      : [
-          line(side, top + pad, fit(l.title || `BOX ${l.bin}`, w, big), w, "C", l.title || `BOX ${l.bin}`),
-          line(side, top + pad + big + Math.round(a * 0.01), fit(l.label, w, mid), w, "C", l.label),
-        ]),
+    line(side, top + pad, fit(head, w, big), w, "C", head),
+    line(side, top + pad + big + Math.round(a * 0.01), fit(sub, w, mid), w, "C", sub),
     ...(footer ? [line(side, h - small - pad, fit(footer, w, small), w, "C", footer)] : []),
     "^PQ1", "^XZ",
   ].join("\n");

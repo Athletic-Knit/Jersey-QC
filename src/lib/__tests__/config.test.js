@@ -53,7 +53,7 @@ describe("jersey types and their reason menus", () => {
   it("Loose thread is cut at the station; THREAD_STAYS is the flag when it needs the stitcher", () => {
     const lt = REASONS.find(r => r.id === "loose_thread");
     expect(reasonsFor("echl").map(r => r.id).indexOf("loose_thread")).toBe(reasonsFor("echl").map(r => r.id).indexOf("stitching") + 1);
-    expect(lt.inPlace).toMatchObject({ emoji: "✂️", title: "CUT IT NOW", text: "Cut the loose thread off. The garment is not flagged.", done: "✓ It is cut now", fail: "🚩 It needs the stitcher", note: "Loose thread, cut at the station", stays: THREAD_STAYS });
+    expect(lt.inPlace).toMatchObject({ emoji: "✂️", title: "CUT IT NOW", text: "Cut the loose thread off.", done: "✓ It is cut now", fail: "🚩 It needs the stitcher", note: "Loose thread, cut at the station", stays: THREAD_STAYS });
     expect(REASONS.find(r => r.id === "mark").inPlace).toMatchObject({ title: "CLEAN IT NOW", done: "✓ It is clean now", stays: MARK_STAYS });
     expect(THREAD_STAYS.inPlace).toBeFalsy();
     expect(reasonCategory(THREAD_STAYS.label)).toBe("Sewing");

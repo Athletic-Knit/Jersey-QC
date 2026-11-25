@@ -41,19 +41,24 @@ export const REASON_CHECK = {
   loose_thread: "thread", thread_stays: "thread",
 };
 
+// "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
+export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning" };
+// "Loose thread" is cut at the station. This is the flag when it needs the stitcher.
+export const THREAD_STAYS = { id: "thread_stays", label: "Loose thread — to the stitcher", route: "Supervisor → stitcher", cat: "Sewing" };
+
 // One tap on the "not right" menu. `route` is where the jersey goes (the board
-// weighs it, routeOfReason); every reason but "mark" flags the jersey (the
-// FLAGGED screen), and "mark" opens the Clean it now screen.
+// weighs it, routeOfReason); every reason flags the jersey (the FLAGGED
+// screen) but the two fixed at the station, which carry their screen in
+// `inPlace` (the owner, 25 Nov 2026; Dirt or mark alone before): its emoji,
+// title and words ("The garment is not flagged." is added on the screen), the
+// two buttons, the note left on the green, and `stays`, the flag when the fix
+// does not work.
 // One short menu for every order (17 Nov 2026, after the demo to the manager:
 // the old menu showed near-twins side by side, "Missing or wrong logo" beside
 // "Missing, wrong or crooked crest or logo", and its labels were sentences).
 // A reason is two or three plain words. `only` keeps the two that belong to
 // one way of making a jersey off the other's menu; `cat` is the defect
 // category the reports count it under.
-// "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
-export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning" };
-// "Loose thread" is cut at the station. This is the flag when it needs the stitcher.
-export const THREAD_STAYS = { id: "thread_stays", label: "Loose thread — to the stitcher", route: "Supervisor → stitcher", cat: "Sewing" };
 export const REASONS = [
   { id: "wrong_decoration", label: "Name or number",       route: "Supervisor → pink slip → decoration", cat: "Decoration" },
   { id: "logo",      label: "Logo or crest",     route: "Supervisor → pink slip → decoration", cat: "Decoration" },
@@ -61,11 +66,11 @@ export const REASONS = [
   { id: "print",     label: "Sublimation error", route: "Supervisor → full remake",            cat: "Artwork",    only: "sublimated" },   // the floor's word for a print or colour fault (it read "Print or colour" for a day, 17 Nov 2026)
   { id: "stitching", label: "Stitching or seam", route: "Supervisor → stitcher",               cat: "Sewing" },
   { id: "loose_thread", label: "Loose thread",   route: "Fix in place", cat: "Sewing",          // cut at the station, not flagged: the "Cut it now" screen (the owner, 25 Nov 2026)
-    inPlace: { emoji: "✂️", title: "CUT IT NOW", text: "Cut the loose thread off. The garment is not flagged.", done: "✓ It is cut now", fail: "🚩 It needs the stitcher", note: "Loose thread, cut at the station", stays: THREAD_STAYS } },
+    inPlace: { emoji: "✂️", title: "CUT IT NOW", text: "Cut the loose thread off.", done: "✓ It is cut now", fail: "🚩 It needs the stitcher", note: "Loose thread, cut at the station", stays: THREAD_STAYS } },
   { id: "fabric",    label: "Holes",             route: "Supervisor → full remake",            cat: "Fabric" },
   { id: "label",     label: "Size label",        route: "Supervisor → stitcher",               cat: "Label" },
   { id: "mark",      label: "Dirt or mark",      route: "Clean in place", cat: "Cleaning",       // cleaned at the station, not flagged: the "Clean it now" screen
-    inPlace: { emoji: "🧽", title: "CLEAN IT NOW", text: "Wipe the dirt or mark off. The garment is not flagged.", done: "✓ It is clean now", fail: "🚩 It will not come out", note: "Dirt or mark, cleaned at the station", stays: MARK_STAYS } },
+    inPlace: { emoji: "🧽", title: "CLEAN IT NOW", text: "Wipe the dirt or mark off.", done: "✓ It is clean now", fail: "🚩 It will not come out", note: "Dirt or mark, cleaned at the station", stays: MARK_STAYS } },
   { id: "other",     label: "Others",            route: "Supervisor decides",                  cat: "Other" },      // flags at once, nothing to type (the owner, 17 Nov 2026; it was "Something else" with a text box)
 ];
 // A jersey with no size tag, flagged from the pick list (the owner, 19 Nov

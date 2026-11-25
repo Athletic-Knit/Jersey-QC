@@ -84,6 +84,11 @@ describe("ZPL", () => {
     expect(fonts(team)[0]).toBeGreaterThan(fonts(team)[1]);
     const damaged = binLabelZPL({ bin: "", title: "DAMAGED", label: "Flagged garments", by: "size", orderNumber: "1" }, size2x1);
     expect(damaged.indexOf("^FDDAMAGED^FS")).toBeLessThan(damaged.indexOf("^FDFlagged garments^FS"));
+    // byte for byte what 438f67a printed (before 5c): by team and DAMAGED did not change
+    expect(team).toBe("^XA\n^CI28\n^PW406\n^LL203\n^LH0,0\n^LT0\n^FO16,23^A0N,89,89^FB374,1,0,C^FDBOX 5.1^FS\n^FO16,119^A0N,50,50^FB374,1,0,C^FDNavy^FS\n^FO16,174^A0N,22,22^FB374,1,0,C^FDOrder 264247   by team^FS\n^PQ1\n^XZ");
+    expect(damaged).toBe("^XA\n^CI28\n^PW406\n^LL203\n^LH0,0\n^LT0\n^FO16,23^A0N,70,70^FB374,1,0,C^FDDAMAGED^FS\n^FO16,119^A0N,40,40^FB374,1,0,C^FDFlagged garments^FS\n^FO16,174^A0N,22,22^FB374,1,0,C^FDOrder 1   by size^FS\n^PQ1\n^XZ");
+    // by size: the size fitted to the width in the big line, the footer as before
+    expect(sized).toBe("^XA\n^CI28\n^PW406\n^LL203\n^LH0,0\n^LT0\n^FO16,23^A0N,94,94^FB374,1,0,C^FDA-2XL^FS\n^FO16,119^A0N,50,50^FB374,1,0,C^FDBOX 6.1^FS\n^FO16,174^A0N,22,22^FB374,1,0,C^FDOrder 264247   by size^FS\n^PQ1\n^XZ");
   });
   it("on the small roll the footer is just the order number", () => {
     const z = binLabelZPL(label, labelSize("1x0.5"));

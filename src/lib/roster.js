@@ -451,8 +451,11 @@ export const lastSizeRank = (size, lastSize) => {
   return sameSize(size, lastSize) ? 0 : fam < 3 && sizeRank(size || "")[0] === fam ? 1 : 2;
 };
 export const lastSizeLetter = lastSize => { const g = SIZE_GROUPS[sizeRank(lastSize || "")[0]]; return g ? `${g.key}-` : ""; };
-export function sortCandidates(rows, by = "size", { lastSize = "" } = {}) {
-  const rank = r => lastSizeRank(r.size, lastSize);
+// `after` (a row test): those rows come after all the others, each part in the
+// order above — a 6/9 list keeps the number read first and its upside-down
+// twin after it (the owner, 25 Nov 2026).
+export function sortCandidates(rows, by = "size", { lastSize = "", after = null } = {}) {
+  const rank = r => (after && after(r) ? 3 : 0) + lastSizeRank(r.size, lastSize);
   const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
   const team = (a, b) => String(a.team || "").localeCompare(String(b.team || ""), undefined, { sensitivity: "base", numeric: true });
   const size = (a, b) => bySize(a.size || "", b.size || "");

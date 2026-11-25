@@ -138,9 +138,9 @@ Garments with no name and no number cannot be read by the camera. When the roste
    | Twill peeling | Stitched orders only: twill lifting or peeling |
    | Sublimation error | Sublimated orders only: a print or colour fault |
    | Stitching or seam | Loose or broken stitching, a seam or hem |
+   | Loose thread | See below: this is cut off, not flagged |
    | Holes | A hole or snag in the fabric |
    | Size label | The size label is wrong or missing |
-   | Loose thread | See below: this is cut off, not flagged |
    | Dirt or mark | See below: this is cleaned, not flagged |
    | Others | Anything else |
 

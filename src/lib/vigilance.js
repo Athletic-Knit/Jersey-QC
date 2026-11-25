@@ -121,6 +121,9 @@ export function turnMatters(read, roster) {
 // read again. The upright read wins when it says the lettering is now upright,
 // its number is whole, and it differs from the first read only the way a turn
 // would (99 → 66, 9 → 6, or not at all). Anything else is a question with both.
+// "Wins" means its match is the screen: since 25 Nov 2026 (the owner) an
+// upright 6 with a 9 still open is itself a list of both (match.js), so a
+// turned 9 re-read upright as 6 lists 6 then 9 once, from the upright read.
 export function settleTurned(first, m1, upright, m2) {
   const n1 = normNum(first?.number), n2 = normNum(upright?.number);
   const explained = n1 === n2 || rotated180(n1) === n2;

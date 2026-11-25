@@ -71,7 +71,7 @@ const related = (c, read, roster) => {
   const rn = normNum(c.number), nNum = normNum(read.number), nName = norm(read.name);
   if (nNum && rn === nNum) return true;
   if (nNum && nNum.length === 1 && rn.includes(nNum)) return true;
-  if (nNum && rotated180(nNum) === rn) return true;   // the number read turned round (6 for 9): listed beside it whatever the orientation (the owner, 25 Nov 2026)
+  if (nNum && rn && rotated180(nNum) === rn) return true;   // the number read turned round (6 for 9): listed beside it whatever the orientation (the owner, 25 Nov 2026); `rn &&`: rotated180 is "" for 2-5 and 7, which a numberless row would equal
   if (nName && c.name && (nameMatches(nName, c.name) || norm(c.name).startsWith(nName) || c.name.toLowerCase().split(/[^a-z0-9]+/).some(w => w && w.startsWith(nName)))) return true;
   if (nName && c.name && nName.length >= 3) { const a = norm(c.name); if (Math.abs(a.length - nName.length) <= 2) return true; }   // near names (edit distance ≤ 2 is offered)
   const onRoster = roster.some(x => normNum(x.number) === nNum);

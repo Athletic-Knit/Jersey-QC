@@ -356,28 +356,28 @@ function findMatchesInner(roster, name, number, read = {}) {
 
   const byNum  = nNum ? roster.filter(r => normNum(r.number) === nNum) : [];
 
-  // A jersey that is not the right way up, with no name to anchor it, and a
-  // number that reads as another number upside down (6/9, 18/81, 66/99): if
-  // that other number is open on the roster, the camera cannot tell them
-  // apart from a turned picture. Ask, with both. (The app turns the frame and
-  // reads again first; this is the net under that.)
+  // A number that reads as another number upside down (6/9, 18/81, 66/99),
+  // with no name to anchor it: a 6 and a 9 look the same from the other side,
+  // so when both numbers have open rows the list has both, the number read
+  // first, then its twin (`twinOf`), whatever the camera says about the
+  // orientation (the owner, 25 Nov 2026; before, only on a turned jersey). On
+  // a jersey the camera says is turned the twin alone being open is enough
+  // to ask, with its own wording (the app turns the frame and reads again
+  // first; this is the net under that). A self-twin (11, 69, 88) has nothing
+  // to add; a typed number is the operator's word.
   // (A name that is on no roster row — a badge, a sponsor, a misread — anchors nothing.)
   const nameAnchors = !!nName && !numberOnly && roster.some(r => nameMatches(nName, r.name));
-  // The owner, 25 Nov 2026: a 6 and a 9 look the same from the other side, so
-  // whatever the orientation says, a camera read of a number with such a twin
-  // lists both when both have open rows: the number read first, then its twin.
-  // (A turned jersey is the case where the camera itself says so; it needs
-  // only the twin's open rows, as before, and keeps its own wording.)
   if (!typed && !nameAnchors && nNum) {
     const alt = rotated180(nNum);
     const turned = !!read.orientation && read.orientation !== "upright";
     const altRows = alt && alt !== nNum ? roster.filter(r => normNum(r.number) === alt && !isDone(r)) : [];
-    if (altRows.length && (turned || byNum.some(r => !isDone(r)))) {
-      const cands = dedupe([...byNum, ...altRows]);
+    const bothOpen = byNum.some(r => !isDone(r));
+    if (altRows.length && (turned || bothOpen)) {
       const reason = turned
         ? `Read #${nNum} on a garment that is not the right way up — turned round it would read #${alt}. Which is it?`
         : `Read #${nNum} — it could be #${alt} turned round. Which is it?`;
-      return { type: "pick", candidates: cands, reason, soft: true, twins: true, twinOf: alt };   // twins: the one-row shortcut must not turn it green
+      // twins: a list of one here stays a list; twinOf only when both numbers are on it (the screen says "6 or 9? both are listed")
+      return { type: "pick", candidates: dedupe([...byNum, ...altRows]), reason, soft: true, twins: true, ...(bothOpen ? { twinOf: alt } : {}) };
     }
   }
   const byName = nName && !numberOnly

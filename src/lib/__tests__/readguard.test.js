@@ -418,6 +418,11 @@ describe("the camera doubts its read", () => {
     expect(ids(findMatches(r, "", "18"))).toEqual([2, 3]);
     expect(ids(findMatches(r, "", "81"))).toEqual([3, 2]);
     expect(findMatches(r, "", "6", { orientation: "upside_down" })).toMatchObject({ type: "pick", twinOf: "9" });   // a turned read still lists both
+    // turned, the 6 passed: only the 9 is on the list, so no "6 or 9? both are listed" line
+    const turnedNo6 = findMatches(r.map(x => x._id === 0 ? { ...x, scanned: "pass" } : x), "", "6", { orientation: "upside_down" });
+    expect(ids(turnedNo6)).toEqual([1]); expect(turnedNo6.twinOf).toBeUndefined();
+    // a self-twin (11, 69, 88) lists nothing extra
+    expect(findMatches([row(0, "", "69"), row(1, "", "96")], "", "69")).toMatchObject({ type: "exact", match: { _id: 0 } });
     // no open 9: as before, the 6 is green
     const no9 = r.map(x => x._id === 1 ? { ...x, scanned: "pass" } : x);
     expect(findMatches(no9, "", "6")).toMatchObject({ type: "exact", match: { _id: 0 } });
