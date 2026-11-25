@@ -28,7 +28,7 @@ import { flushSync } from "react-dom";
 import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum, norm, nameMatches } from "./lib/text.js";
-import { exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
+import { summarise, exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { createAwayWatch } from "./lib/attention.js";
@@ -44,6 +44,7 @@ import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel
 import { duplicateOptions } from "./lib/dupoptions.js";
 import { matchRead, screenFor } from "./lib/scanpolicy.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
+import { photoSet } from "./lib/photoset.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG } from "./config.js";
 
@@ -898,30 +899,103 @@ function ManualEntryForm({ detected, initial = null, teams, onSubmit, onBack }) 
 // and for ones still running, without touching the station.
 // The photos a flag carries: the scan (what the camera read) and the damage
 // photos the operator took after flagging (red frame). Click to enlarge.
-function PhotoThumbs({ photo, damagePhotos = [], w = 80, h = 60, onOpen }) {
-  const pics = [...(photo ? [{ src: photo, damage: false }] : []), ...(damagePhotos || []).filter(Boolean).map(src => ({ src, damage: true }))];
-  if (!pics.length) return null;
+const logCaption = l => [l.match?.number != null && l.match?.number !== "" ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}` : "", l.reason].filter(Boolean).join(" · ");   // a station log entry's caption
+function PhotoThumbs({ photo, damagePhotos = [], w = 80, h = 60, onOpen, caption = "" }) {
+  const set = photoSet(photo, damagePhotos);
+  if (!set.pics.length) return null;
   return (
     <div style={{ display: "flex", gap: 4, flexShrink: 0, flexWrap: "wrap" }}>
-      {pics.map((p, i) => <img key={i} src={p.src} alt="" onClick={() => onOpen(p.src)} title={p.damage ? "Damage photo — click to enlarge" : "Click to enlarge"} style={{ width: w, height: h, objectFit: "cover", borderRadius: 4, cursor: "zoom-in", border: p.damage ? "2px solid #ef4444" : "1px solid rgba(255,255,255,0.25)" }} />)}
+      {set.pics.map((p, i) => <img key={i} src={p.src} alt="" onClick={() => onOpen({ ...set, index: i, caption })} title={p.damage ? "Damage photo — click to enlarge" : "Click to enlarge"} style={{ width: w, height: h, objectFit: "cover", borderRadius: 4, cursor: "zoom-in", border: p.damage ? "2px solid #ef4444" : "1px solid rgba(255,255,255,0.25)" }} />)}
     </div>
   );
 }
 
-// A flag photo, large, until a click or Esc.
-function PhotoLightbox({ src, onClose }) {
-  useEffect(() => { const h = e => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
+// A flag's photos, large (the owner, 25 Nov 2026: the supervisor could not see
+// a small flaw). The picture is fitted to the screen; the mouse wheel or a
+// pinch zooms about the pointer (1x to 6x), dragging moves it, a double click
+// toggles fit / 2x, + − Fit and the arrow keys or ‹ › walk the flag's photos.
+// Esc, ✕ or a click on the backdrop close it. `photo` is a photoSet() (or a
+// single src, as the station's log passes). No library: one transform.
+const ZOOM_MAX = 6;
+const clampZoom = s => Math.min(ZOOM_MAX, Math.max(1, s));
+export function PhotoLightbox({ photo, onClose }) {
+  const set = typeof photo === "string" ? photoSet(photo) : photo;
+  const pics = set.pics;
+  const [idx, setIdx] = useState(Math.min(set.index || 0, Math.max(0, pics.length - 1)));
+  const [view, setView] = useState({ s: 1, x: 0, y: 0 });   // scale and the picture's offset from the centre, in px
+  const stage = useRef(null);
+  const pointers = useRef(new Map());                          // the pointers down, by id
+  const drag = useRef({ moved: false, dist: 0, onImg: false });
+  const fit = () => setView({ s: 1, x: 0, y: 0 });
+  const go = d => { if (pics.length < 2) return; setIdx(i => (i + d + pics.length) % pics.length); fit(); };
+  // Zoom to `s2` about the point (px, py), given from the stage's centre: the point under the pointer stays under it.
+  const zoomAt = useCallback((s2, px, py) => setView(v => { const s = clampZoom(s2); if (s === 1) return { s: 1, x: 0, y: 0 }; const k = s / v.s; return { s, x: px - (px - v.x) * k, y: py - (py - v.y) * k }; }), []);
+  const centre = e => { const r = stage.current.getBoundingClientRect(); return [e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2]; };
+  useEffect(() => {
+    const h = e => {
+      if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+      else if (e.key === "ArrowLeft")  { e.stopPropagation(); go(-1); }
+      else if (e.key === "ArrowRight") { e.stopPropagation(); go(1); }
+      else if (e.key === "+" || e.key === "=") { e.stopPropagation(); zoomAt(view.s * 1.5, 0, 0); }
+      else if (e.key === "-") { e.stopPropagation(); zoomAt(view.s / 1.5, 0, 0); }
+    };
+    window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true);
+  });
+  // The wheel needs a listener that may stop the page scrolling (React's is passive).
+  useEffect(() => {
+    const el = stage.current; if (!el) return;
+    const w = e => { e.preventDefault(); const [px, py] = centre(e); zoomAt(view.s * Math.exp(-e.deltaY * 0.0015), px, py); };
+    el.addEventListener("wheel", w, { passive: false }); return () => el.removeEventListener("wheel", w);
+  });
+  const down = e => { if (e.target.closest("[data-ctl]")) return; e.currentTarget.setPointerCapture?.(e.pointerId); pointers.current.set(e.pointerId, [e.clientX, e.clientY]); drag.current = { moved: false, dist: 0, onImg: e.target.tagName === "IMG" }; };
+  const move = e => {
+    const p = pointers.current; if (!p.has(e.pointerId)) return;
+    const [ox, oy] = p.get(e.pointerId);
+    p.set(e.pointerId, [e.clientX, e.clientY]);
+    if (p.size === 1) {
+      const dx = e.clientX - ox, dy = e.clientY - oy;
+      if (Math.abs(dx) + Math.abs(dy) > 2) drag.current.moved = true;
+      if (dx || dy) setView(v => ({ ...v, x: v.x + dx, y: v.y + dy }));
+    } else if (p.size === 2) {                                  // a pinch: the distance between the two fingers is the zoom
+      const [[ax, ay], [bx, by]] = [...p.values()];
+      const after = Math.hypot(ax - bx, ay - by), before = drag.current.dist || after;
+      drag.current.dist = after; drag.current.moved = true;
+      const r = stage.current.getBoundingClientRect();
+      zoomAt(view.s * after / before, (ax + bx) / 2 - r.left - r.width / 2, (ay + by) / 2 - r.top - r.height / 2);
+    }
+  };
+  const up = e => { pointers.current.delete(e.pointerId); drag.current.dist = 0; };
+  const onStageClick = e => { if (e.target.closest("[data-ctl]") || drag.current.onImg) return; if (!drag.current.moved) onClose(); };   // a click on the backdrop closes; one on the picture, or the end of a drag, does not
+  const dbl = e => { if (e.target.closest("[data-ctl]")) return; if (view.s > 1) fit(); else { const [px, py] = centre(e); zoomAt(2, px, py); } };
+  const pic = pics[idx];
+  if (!pic) return null;
+  const btn = { background: "rgba(30,41,59,0.9)", color: "#fff", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 10, fontSize: 22, fontWeight: 800, padding: "8px 16px", cursor: "pointer", minWidth: 48 };
+  const caption = [pic.damage ? `Damage photo ${pics.slice(0, idx + 1).filter(p => p.damage).length} of ${pics.filter(p => p.damage).length}` : "Scan photo", set.caption].filter(Boolean).join(" · ");
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
-      <img src={src} alt="Flagged jersey" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8, boxShadow: "0 12px 48px rgba(0,0,0,0.8)" }} />
+    <div ref={stage} onClick={onStageClick} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl}
+      style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", touchAction: "none", cursor: view.s > 1 ? "grab" : "zoom-out", userSelect: "none" }}>
+      <img src={pic.src} alt="Flagged jersey" draggable={false} style={{ maxWidth: "92vw", maxHeight: "86vh", borderRadius: 8, boxShadow: "0 12px 48px rgba(0,0,0,0.8)", transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`, transformOrigin: "center", cursor: view.s > 1 ? "grab" : "zoom-in" }} />
+      <div data-ctl="1" style={{ position: "absolute", top: 12, left: 0, right: 0, display: "flex", justifyContent: "center", alignItems: "center", gap: 10, pointerEvents: "none" }}>
+        <div style={{ background: "rgba(0,0,0,0.7)", color: "#fff", padding: "8px 16px", borderRadius: 10, fontSize: 18, fontWeight: 700, maxWidth: "70vw" }}>{caption}{pics.length > 1 ? ` · ${idx + 1}/${pics.length}` : ""}</div>
+      </div>
+      <div data-ctl="1" style={{ position: "absolute", top: 12, right: 12, display: "flex", gap: 8 }}>
+        <button onClick={() => zoomAt(view.s / 1.5, 0, 0)} title="Zoom out (-)" style={btn}>−</button>
+        <button onClick={() => zoomAt(view.s * 1.5, 0, 0)} title="Zoom in (+)" style={btn}>+</button>
+        <button onClick={fit} title="Fit the screen" style={{ ...btn, fontSize: 16 }}>Fit</button>
+        <button onClick={onClose} title="Close (Esc)" style={btn}>✕</button>
+      </div>
+      {pics.length > 1 && <>
+        <button data-ctl="1" onClick={() => go(-1)} title="Previous photo (←)" style={{ ...btn, position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 34, padding: "12px 18px" }}>‹</button>
+        <button data-ctl="1" onClick={() => go(1)} title="Next photo (→)" style={{ ...btn, position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 34, padding: "12px 18px" }}>›</button>
+      </>}
     </div>
   );
 }
 
 // Which record is the order, which events are its, and whether it is finished: src/lib/ledgerview.js.
-function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload, onPhoto = () => {}, date = "" }) {
+export function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload, onPhoto = () => {}, date = "" }) {
   const [data, setData] = useState(null);     // { rec, events }
-  const [tab,  setTab]  = useState("roster");
+  const [tab,  setTab]  = useState("summary");   // the summary as the operator sees it comes first (the owner, 25 Nov 2026)
   const [err,  setErr]  = useState(null);
   useEffect(() => {
     let on = true;
@@ -938,7 +1012,14 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
   }, [station, order, run, date]);
   useEffect(() => { const h = e => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
 
-  const rec = data?.rec, events = data?.events || [], rows = rec?.rows || [];
+  const rec = data?.rec, rows = rec?.rows || [];
+  const events = useMemo(() => data?.events || [], [data]);
+  // The summary the operator sees (Passed with its box, Failed with its reason, Missing), from the hub's record of the order
+  // and its flag events, through the same functions as the station's screen; the rates from the order's events.
+  const sumView = useMemo(() => rec && rec.rows?.length ? {
+    summary: orderSummary(packFromRecord({ ...rec, flags: events.filter(e => e.status === "flagged") })),
+    stats: summarise(events),
+  } : null, [rec, events]);
   const c = rec?.counts || {}; const total = c.total ?? rows.length; const done = total - (c.remaining ?? 0);
   const latestByRow = new Map(); [...events].reverse().forEach(e => { if (e.rowId !== undefined && e.rowId !== null) latestByRow.set(e.rowId, e); });
   const label = s => ({ pass: "PASS", flag: "FLAGGED", manual: "BY HAND", missing: "MISSING", short: "SHORT-SHIPPED" }[s] || "not scanned");
@@ -964,7 +1045,7 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
           <button onClick={onClose} style={{ ...btnGhost, padding: "6px 12px" }}>✕ Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #21262d", flexShrink: 0 }}>
-          {[["roster", `Roster (${rows.length})`], ["problems", `Problems (${flaggedRows.length + byHandRows.length + offRoster.length})`], ["log", `Log (${events.length})`]].map(([id, t]) => (
+          {[["summary", "Summary"], ["roster", `Roster (${rows.length})`], ["problems", `Problems (${flaggedRows.length + byHandRows.length + offRoster.length})`], ["log", `Log (${events.length})`]].map(([id, t]) => (
             <button key={id} onClick={() => setTab(id)} style={{ background: "transparent", border: 0, borderBottom: `2px solid ${tab === id ? "#3b82f6" : "transparent"}`, color: tab === id ? "#60a5fa" : "#94a3b8", padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t}</button>
           ))}
         </div>
@@ -972,6 +1053,13 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
           {rec && !rows.length && <div style={{ padding: 24, color: "#fcd34d" }}>The hub has no jersey list for this order — the station reported it before today's update. The station's Export has the sheet; reload the station page so future orders come through.</div>}
           {!rec && !err && <div style={{ padding: 24, color: "#64748b" }}>Loading…</div>}
           {!rec && err && <div style={{ padding: 24, color: "#f87171" }}>{err}</div>}
+          {sumView && tab === "summary" && (
+            <div style={{ padding: "14px 18px" }}>
+              <div style={{ display: "flex" }}><SummaryCounts summary={sumView.summary} stats={sumView.stats} /></div>
+              {c.flag > 0 && <div style={{ fontSize: 14, color: "#f87171", marginTop: 4 }}>{c.flag} with the supervisor</div>}
+              <OrderSummaryBody summary={sumView.summary} bins={rec.binSummary || []} />
+            </div>
+          )}
           {rec && rows.length > 0 && (tab === "roster" || tab === "problems") && (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead><tr><th style={th}>Status</th><th style={th}>Name</th><th style={th}>Number</th><th style={th}>Team</th><th style={th}>Size</th><th style={th}>Box</th><th style={th}>What happened</th><th style={th}>Inspector · time</th>{tab === "problems" && <th style={th}>Photo</th>}</tr></thead>
@@ -985,7 +1073,7 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
                       <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Box ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
                       <td style={{ ...td, color: "#cbd5e1" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                       <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
-                      {tab === "problems" && <td style={td}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} /></td>}
+                      {tab === "problems" && <td style={td}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} caption={[`#${r.number}${r.name ? " " + r.name : ""}`, e?.reason].filter(Boolean).join(" · ")} /></td>}
                     </tr>
                   );
                 })}
@@ -995,7 +1083,7 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
                     <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{e.size || ""}</td><td style={td}></td>
                     <td style={{ ...td, color: "#cbd5e1" }}><RouteTag item={e} /> {e.reason}{e.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                     <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
-                    <td style={td}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} /></td>
+                    <td style={td}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} caption={[`#${e.number}${e.name ? " " + e.name : ""}`, e.reason].filter(Boolean).join(" · ")} /></td>
                   </tr>
                 ))}
                 {tab === "problems" && flaggedRows.length + byHandRows.length + offRoster.length === 0 && <tr><td colSpan={9} style={{ ...td, color: "#22c55e", padding: 18 }}>No problems on this order — nothing went to the supervisor and nothing was entered by hand.</td></tr>}
@@ -1318,7 +1406,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
         </div>
       )}
       {openOrder && <OrderView station={openOrder.station} order={openOrder.order} run={openOrder.run || 0} date={openOrder.date ?? day} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}
-      {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => setBigPhoto(null)} />}
+      {bigPhoto && <PhotoLightbox photo={bigPhoto} onClose={() => setBigPhoto(null)} />}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gridAutoRows: "max-content", gap: 12, alignContent: "start" }}>{/* max-content rows: the station cards were squeezed to a strip to fit the orders list (27 in board, 19 Nov 2026) */}
           {data.stations.length === 0 && <div style={{ color: "#64748b", padding: 24 }}>No station has reported yet. A station appears here within a few seconds of starting an order.</div>}
@@ -1439,7 +1527,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                     {s.attention.length > 3 && <div style={{ fontSize: 11, color: "#64748b", marginBottom: 3 }}>the three that weigh most — the rest are in the order</div>}
                     {s.attention.slice().sort(bySeverity).slice(0, 3).map((a, i) => (
                       <div key={i} style={{ fontSize: 12, marginBottom: 3, display: "flex", gap: 8, alignItems: "flex-start" }}>
-                        <PhotoThumbs photo={a.photo} damagePhotos={a.damagePhotos} w={56} h={42} onOpen={setBigPhoto} />
+                        <PhotoThumbs photo={a.photo} damagePhotos={a.damagePhotos} w={56} h={42} onOpen={setBigPhoto} caption={[a.jersey, a.reason].filter(Boolean).join(" · ")} />
                         <div>
                           <RouteTag item={a} /> <span style={{ color: attnColour(a.status), fontWeight: 700 }}>{attnIcon(a.status)} {a.jersey}</span>
                           <span style={{ color: "#94a3b8" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
@@ -2845,8 +2933,11 @@ function IssuesModal({ missing, dups, flagged, binOf, onClose }) {
 // the passed list" adds every passed jersey with its box. Finish order prints
 // the summary by itself; this screen is how the operator sees it first (the
 // owner: "have option for operators to see the list before printing").
-function OrderSummaryModal({ orderNumber, summary, status, labels = { summary: 0, withPassed: 0 }, onPrint, onFinish, onClose }) {
-  useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
+// The summary's body, shared by the station's summary screen and the board's
+// order view (25 Nov 2026), so the two can never drift: the boxes of the order
+// (`bins`: Box · label · count · box size · open or closed), then Passed with
+// its box, Failed with its reason and Missing.
+function OrderSummaryBody({ summary, bins = [] }) {
   const c = summary.counts;
   const line = (key, j, extra, colour, box = null) => (
     <div key={key} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "5px 10px", borderRadius: 8, background: "#0d1117", flexWrap: "wrap" }}>
@@ -2870,35 +2961,74 @@ function OrderSummaryModal({ orderNumber, summary, status, labels = { summary: 0
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{items.length ? items : <div style={{ color: "#7c8ba1", fontSize: 15, padding: "4px 2px" }}>{empty}</div>}</div>
     </div>
   );
+  return (
+    <div>
+      {bins.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+          {bins.map(b => (
+            <div key={b.bin} style={{ background: "#1e293b", border: `1px solid ${b.open ? "#3f4b5c" : "#166534"}`, borderRadius: 10, padding: "6px 12px", fontSize: 15, color: "#cbd5e1" }}>
+              <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "#60a5fa" }}>Box {b.bin}</strong> {b.label} · <strong style={{ color: "#4ade80" }}>{b.count}</strong>{b.box ? <span style={{ color: "#fcd34d" }}> · {b.box}</span> : null} · <span style={{ color: b.open ? "#fbbf24" : "#4ade80" }}>{b.open ? "open" : `closed${b.closedAt ? " " + String(b.closedAt).slice(11, 16) : ""}`}</span>
+            </div>
+          ))}
+        </div>
+      )}
+  <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start", marginTop: 14 }}>
+    {col(`Passed · ${c.passed}`, "#4ade80", summary.passed.map(p => line("p" + p.row._id, p.row, "", "", p.bin)), "Nothing has passed yet.")}
+    {col(`Failed · ${c.failed}`, "#f87171", summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca")), "Nothing is flagged.", c.extra > 0 ? (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca"))}
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#94a3b8", margin: "6px 0 2px" }}>No roster row · {c.extra}</div>{/* not on the roster, a duplicate, no size tag: in the DAMAGED box, not among the order's jerseys */}
+        {summary.extra.map((f, i) => line("x" + i, f, f.reason || "flagged", "#fecaca"))}
+      </div>
+    ) : null)}
+    {col(`Missing · ${c.missing}`, "#fbbf24", [], "", (
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {sub(`Marked missing · ${c.marked}`, summary.missing.marked.map(r => line("m" + r._id, r, "", "")), "None.")}
+        {sub(`Not scanned yet · ${c.notScanned}`, summary.missing.notScanned.map(r => line("n" + r._id, r, "", "")), "None.")}
+      </div>
+    ))}
+  </div>
+    </div>
+  );
+}
+
+// The counts and the rates on one line: jerseys, passed, failed, missing, the
+// extras, then pass rate, flag rate and pace (`stats`: summarise() of the order's
+// events, src/lib/export.js). The station's summary header and the board's
+// order view both draw it.
+function SummaryCounts({ summary, stats = null }) {
+  const c = summary.counts, num = v => v !== "" && v !== null && v !== undefined;
+  return (
+    <div style={{ fontSize: 17, color: "#cbd5e1", flex: 1 }}>
+      {c.total} {c.total === 1 ? "jersey" : "jerseys"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} missing</span>{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} with no roster row</span>}
+      {stats && (num(stats.passRate) || num(stats.flagRate) || num(stats.perHour)) && (
+        <div style={{ fontSize: 14, color: "#94a3b8", marginTop: 2 }}>
+          {num(stats.passRate) ? <>pass rate <strong style={{ color: "#e2e8f0" }}>{stats.passRate}%</strong></> : null}
+          {num(stats.flagRate) ? <> · flag rate <strong style={{ color: "#e2e8f0" }}>{stats.flagRate}%</strong></> : null}
+          {num(stats.perHour) ? <> · <strong style={{ color: "#e2e8f0" }}>{stats.perHour}</strong> jerseys / hour</> : null}
+          {num(stats.medianSec) ? <> · {stats.medianSec} s a jersey</> : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrderSummaryModal({ orderNumber, summary, bins = [], stats = null, status, labels = { summary: 0, withPassed: 0 }, onPrint, onFinish, onClose }) {
+  useEffect(() => { const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true); }, [onClose]);
   const colour = { printing: "#94a3b8", done: "#4ade80", error: "#f87171", off: "#fbbf24" }[status?.status] || "#94a3b8";
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2400, display: "flex", alignItems: "center", justifyContent: "center" }}>{/* above the done screen (2300), which opens it; below the Print menu (2500) (review, 24 Nov 2026) */}
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 30, maxWidth: 1400, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ fontSize: 30, fontWeight: 900, color: "#60a5fa", whiteSpace: "nowrap" }}>📋 Order {orderNumber || "—"}</div>
-          <div style={{ fontSize: 17, color: "#cbd5e1", flex: 1 }}>{c.total} {c.total === 1 ? "jersey" : "jerseys"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} missing</span>{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} with no roster row</span>}</div>
+          <SummaryCounts summary={summary} stats={stats} />
           <button onClick={() => onPrint(false)} disabled={status?.status === "printing"} title="The count label, the FAILED list and the MISSING list, on the 2 x 1 in roll" style={{ ...btnPri, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap", background: "#3b82f6", color: "#0d1117" }}>🖨 Print summary · {labels.summary} {labels.summary === 1 ? "label" : "labels"}</button>
           <button onClick={() => onPrint(true)} disabled={status?.status === "printing"} title="The same, plus every passed jersey with its box" style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>🖨 With the passed list · {labels.withPassed}</button>
           {onFinish && <button onClick={onFinish} style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap", borderColor: "#22c55e", color: "#86efac" }}>🏁 Finish order…</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15, padding: "7px 14px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         {status && <div style={{ marginTop: 10, fontSize: 16, fontWeight: 600, color: colour }}>{status.status === "printing" ? "🖨 Printing… " : "🖨 "}{status.text}</div>}
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start", marginTop: 16 }}>
-          {col(`Passed · ${c.passed}`, "#4ade80", summary.passed.map(p => line("p" + p.row._id, p.row, "", "", p.bin)), "Nothing has passed yet.")}
-          {col(`Failed · ${c.failed}`, "#f87171", summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca")), "Nothing is flagged.", c.extra > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca"))}
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#94a3b8", margin: "6px 0 2px" }}>No roster row · {c.extra}</div>{/* not on the roster, a duplicate, no size tag: in the DAMAGED box, not among the order's jerseys */}
-              {summary.extra.map((f, i) => line("x" + i, f, f.reason || "flagged", "#fecaca"))}
-            </div>
-          ) : null)}
-          {col(`Missing · ${c.missing}`, "#fbbf24", [], "", (
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {sub(`Marked missing · ${c.marked}`, summary.missing.marked.map(r => line("m" + r._id, r, "", "")), "None.")}
-              {sub(`Not scanned yet · ${c.notScanned}`, summary.missing.notScanned.map(r => line("n" + r._id, r, "", "")), "None.")}
-            </div>
-          ))}
-        </div>
+        <OrderSummaryBody summary={summary} bins={bins} />
       </div>
     </div>
   );
@@ -3825,6 +3955,7 @@ export default function App() {
   [settings.binLists, binMap, openBins, packNow, listOf]);
   // The summary screen (OrderSummaryModal) and its printing.
   const summaryNow = useMemo(() => orderSummary(packNow), [packNow]);
+  const summaryStats = useMemo(() => summarise(log.map(l => ({ t: l.timestamp ?? l.t, status: l.status, reason: l.reason, offRoster: !!(l.match?.offRoster || l.offRoster) }))), [log]);   // pass rate, flag rate and pace, as the order sheet's Summary has them
   const [summaryPrint, setSummaryPrint] = useState(null);   // { status, text } on the summary screen
   const summaryLabelCounts = useMemo(() => ({ summary: summaryJobs(packNow).length, withPassed: summaryJobs(packNow, { withPassed: true }).length }), [packNow]);
   const printSummary = useCallback(withPassed => {
@@ -4975,7 +5106,7 @@ export default function App() {
       {showSettings && (
         <SettingsPanel settings={settings} cameras={cameras} onSave={setSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
       )}
-      {bigPhoto && <PhotoLightbox src={bigPhoto} onClose={() => closeDialog(() => setBigPhoto(null))} />}
+      {bigPhoto && <PhotoLightbox photo={bigPhoto} onClose={() => closeDialog(() => setBigPhoto(null))} />}
 
       {retried && !overlay && !noJersey && (
         <div style={{ position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 1950, background: "#1e293b", color: "#fcd34d", border: "2px solid #f59e0b", borderRadius: 999, padding: "10px 22px", fontSize: 20, fontWeight: 800, boxShadow: "0 8px 30px rgba(0,0,0,0.5)", whiteSpace: "nowrap" }}>
@@ -5032,7 +5163,7 @@ export default function App() {
         onPass={id => { setShowStillOut(false); actions.passBack(id); }} onClose={() => closeDialog(() => setShowStillOut(false))} />}
       {showIssues && <IssuesModal missing={issues.missing} dups={issues.dups} flagged={issues.flagged} binOf={binOf} onClose={() => closeDialog(() => setShowIssues(false))} />}
       {showSummary && (
-        <OrderSummaryModal orderNumber={orderNumber} summary={summaryNow} status={summaryPrint} labels={summaryLabelCounts} onPrint={printSummary}
+        <OrderSummaryModal orderNumber={orderNumber} summary={summaryNow} bins={binSummary} stats={summaryStats} status={summaryPrint} labels={summaryLabelCounts} onPrint={printSummary}
           onFinish={finished ? null : () => { setShowSummary(false); setSummaryPrint(null); askFinish(); }}
           onClose={() => closeDialog(() => { setShowSummary(false); setSummaryPrint(null); })} />
       )}
@@ -5474,8 +5605,8 @@ export default function App() {
                 : log.map(l => (
                   <div key={l.id} style={{ ...card, borderLeft: `3px solid ${statusColor(l.status)}`, padding: "10px 12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                      {(l.photo || l.thumb) && <img src={l.photo || l.thumb} alt="" title={l.photo ? "Photo kept for the supervisor — click to enlarge" : ""} onClick={l.photo ? () => setBigPhoto(l.photo) : undefined} style={{ width: l.photo ? 72 : 48, height: l.photo ? 54 : 36, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: l.photo ? "zoom-in" : "default", border: l.photo ? "1px solid #ef4444" : "none" }} />}
-                      {(l.damagePhotos || []).map((p, i) => <img key={i} src={p} alt="" title="Damage photo — click to enlarge" onClick={() => setBigPhoto(p)} style={{ width: 72, height: 54, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: "zoom-in", border: "2px solid #ef4444" }} />)}
+                      {(l.photo || l.thumb) && <img src={l.photo || l.thumb} alt="" title={l.photo ? "Photo kept for the supervisor — click to enlarge" : ""} onClick={l.photo ? () => setBigPhoto(photoSet(l.photo, l.damagePhotos, 0, logCaption(l))) : undefined} style={{ width: l.photo ? 72 : 48, height: l.photo ? 54 : 36, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: l.photo ? "zoom-in" : "default", border: l.photo ? "1px solid #ef4444" : "none" }} />}
+                      {(l.damagePhotos || []).map((p, i) => <img key={i} src={p} alt="" title="Damage photo — click to enlarge" onClick={() => setBigPhoto(photoSet(l.photo, l.damagePhotos, (l.photo ? 1 : 0) + i, logCaption(l)))} style={{ width: 72, height: 54, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: "zoom-in", border: "2px solid #ef4444" }} />)}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: statusColor(l.status) }}>{cap(l.status)}</span>
                         <div style={{ fontWeight: 700, fontSize: 18, marginTop: 2 }}>{l.typed ? `Typed: #${l.typed.number || "?"} · ${l.typed.name || "—"}` : `Read: #${l.detected?.number || "?"} · ${l.detected?.name || "—"}`}</div>

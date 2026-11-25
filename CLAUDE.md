@@ -397,6 +397,8 @@ How to use it: `docs/OPERATOR-GUIDE.md`. Its rules:
 - "📺 Wall" (or `?view=wall`): one row per station in letters for a TV, sized in container-query units because of the page zoom; click or Esc returns.
 - Rosters sent: who has each, with Release / Remove. The supervisor can give a station's running order its number.
 - Orders list with a day picker: the order view, order sheet, day sheet and damage report follow the day picked. Station cards are always now.
+- The order view's first tab is Summary (the owner, 25 Nov 2026: "the summary like the operator sees it"): the counts, pass rate, flag rate and pace (`SummaryCounts`, `summarise` from export.js), the order's boxes (`rec.binSummary`) and Passed with its box, Failed with its reason and Missing, from `orderSummary(packFromRecord({ ...rec, flags: flag events }))`. `OrderSummaryBody` / `SummaryCounts` are shared with the station's summary screen (`OrderSummaryModal`), so the two cannot drift.
+- Photo viewer (`PhotoLightbox`, `photoSet` in `src/lib/photoset.js`; board and station): fitted to the screen at first; the mouse wheel or a pinch zooms about the pointer (1x to 6x), dragging pans, a double click toggles fit / 2x, + − Fit buttons (and the + − keys), ‹ › and the arrow keys walk the flag's photos (the scan photo, then each damage photo) under a caption ("Damage photo 2 of 3 · #12 LEACH · Twill peeling"); Esc, ✕ or a click on the backdrop close it. No library: one transform and pointer events.
 - "⏸ Unfinished": the pile (see "Unfinished orders"). "Compare days": see "Reports".
 
 ## Labels and printers

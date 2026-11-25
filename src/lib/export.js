@@ -134,7 +134,7 @@ export const undidPass = e => e.status === "undo"
   && !/^Taken back\b/i.test(String(e.reason || ""))
   && !/^Un-checked — was (?!passed\b)/i.test(String(e.reason || ""));
 
-function summarise(events) {
+export function summarise(events) {
   const times = events.map(e => tsMs(e.t));
   const passTimes = events.filter(e => e.status === "pass").map(e => tsMs(e.t)).filter(x => x !== null).sort((a, b) => a - b);
   const gaps = passTimes.slice(1).map((t, i) => (t - passTimes[i]) / 1000).filter(g => g > 0 && g <= 600);

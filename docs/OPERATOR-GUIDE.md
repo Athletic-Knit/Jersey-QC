@@ -239,9 +239,9 @@ One card per station, always showing now:
 
 - the operator, the order, how many jerseys are done, the pace and the time left;
 - **Now at**: the last jersey scanned;
-- **Needs you**: the open problems of this order, the three that weigh most first. Each has a tag for where it goes (REMAKE, DECORATION, STITCHER, CLEANING, CHECK ORDER, SIGN OFF, DECIDE) and its photos (click to enlarge);
+- **Needs you**: the open problems of this order, the three that weigh most first. Each has a tag for where it goes (REMAKE, DECORATION, STITCHER, CLEANING, CHECK ORDER, SIGN OFF, DECIDE) and its photos (click to enlarge: the wheel or a pinch zooms, drag moves the picture, double-click toggles fit / 2x, the arrow keys or ‹ › show the next photo of the same jersey, Esc closes);
 - **Still open from earlier orders**, each with **Done** when it has been dealt with;
-- **Open order**, and **Remove** to take a card off the board.
+- **Open order**, and **Remove** to take a card off the board. An open order starts on its **Summary** tab, the same summary the operator sees: pass rate, flag rate and pace, the boxes, and the jerseys Passed (with their box), Failed (with the reason) and Missing; Roster, Problems and Log are the next tabs.
 
 A station that has signed out shows "signed out". A station silent for over 2 hours moves into a "Not reporting" strip.
 
