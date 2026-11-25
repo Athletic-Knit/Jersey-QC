@@ -138,6 +138,7 @@ Garments with no name and no number cannot be read by the camera. When the roste
    | Stitching or seam | Loose or broken stitching, a seam or hem |
    | Holes | A hole or snag in the fabric |
    | Size label | The size label is wrong or missing |
+   | Loose thread | See below: this is cut off, not flagged |
    | Dirt or mark | See below: this is cleaned, not flagged |
    | Others | Anything else |
 
@@ -149,6 +150,11 @@ Garments with no name and no number cannot be read by the camera. When the roste
 
 - **It is clean now**: the garment is not flagged. It goes back to the green screen (or stays passed).
 - **It will not come out**: it is flagged as "Dirt that will not come out".
+
+**Loose thread** works the same way: a blue **CUT IT NOW** screen. Cut the thread off.
+
+- **It is cut now**: the garment is not flagged and carries on as it was.
+- **It needs the stitcher**: it is flagged as "Loose thread — to the stitcher".
 
 **Damage photo.** On the FLAGGED screen, press **Photo of the damage**. For a defect (logo, twill, stitching, holes, dirt that will not come out) the pedal takes the photo too; for Name or number, Not on the roster, Duplicate and No size tag the pedal presses **Continue** instead. Set the damaged part under the camera, then press **Enter**: the photo is taken at once (no countdown), so set the garment first. **Retake** or **Take another** as needed. The photos go to the supervisor and into the damage report.
 

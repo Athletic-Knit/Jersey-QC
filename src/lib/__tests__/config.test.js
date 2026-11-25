@@ -3,7 +3,7 @@
 // once, the owner, 17 Nov 2026), and where a flag goes and what it weighs on
 // the supervisor board.
 import { describe, it, expect } from "vitest";
-import { JERSEY_TYPES, reasonsFor, jerseyTypeLabel, REASONS, MARK_STAYS, reasonCategory, routeOfReason, severityOf, STATIONS, stationOf, ROLES } from "../../config.js";
+import { JERSEY_TYPES, reasonsFor, jerseyTypeLabel, REASONS, REASON_CHECK, MARK_STAYS, THREAD_STAYS, reasonCategory, routeOfReason, severityOf, STATIONS, stationOf, ROLES } from "../../config.js";
 
 describe("stations", () => {
   it("three stations, each with its own PIN, none equal to the supervisor's", () => {
@@ -23,7 +23,7 @@ describe("jersey types and their reason menus", () => {
   });
   // One short list for every order (17 Nov 2026): a stitched order leaves out
   // "Print or colour", a sublimated one leaves out "Twill peeling".
-  const ALL_IDS = ["wrong_decoration", "logo", "twill", "print", "stitching", "fabric", "label", "mark", "other"];
+  const ALL_IDS = ["wrong_decoration", "logo", "twill", "print", "stitching", "loose_thread", "fabric", "label", "mark", "other"];
   it("one short list: stitched orders get it without print, sublimated without twill", () => {
     const st = reasonsFor("echl").map(r => r.id), sub = reasonsFor("sublimated").map(r => r.id);
     expect(st).toEqual(ALL_IDS.filter(id => id !== "print"));
@@ -37,7 +37,7 @@ describe("jersey types and their reason menus", () => {
   it("the wording of the menu", () => {
     expect(Object.fromEntries(REASONS.map(r => [r.id, r.label]))).toEqual({
       wrong_decoration: "Name or number", logo: "Logo or crest", twill: "Twill peeling", print: "Sublimation error",
-      stitching: "Stitching or seam", fabric: "Holes", label: "Size label", mark: "Dirt or mark", other: "Others",
+      stitching: "Stitching or seam", loose_thread: "Loose thread", fabric: "Holes", label: "Size label", mark: "Dirt or mark", other: "Others",
     });
   });
   it("every menu keeps the in-place option and ends with 'Others', which flags at once: nothing to type (the owner, 17 Nov 2026)", () => {
@@ -47,14 +47,27 @@ describe("jersey types and their reason menus", () => {
       expect(rs.at(-1).custom).toBeFalsy();
       expect(rs.some(r => r.custom)).toBe(false);
       expect(rs.some(r => r.inPlace)).toBe(true);
-      expect(rs.filter(r => r.inPlace).map(r => r.id)).toEqual(["mark"]);
+      expect(rs.filter(r => r.inPlace).map(r => r.id)).toEqual(["loose_thread", "mark"]);
     }
   });
-  it("no type → all nine reasons, one per id, in-place and free-text last; labels resolve", () => {
+  it("Loose thread is cut at the station; THREAD_STAYS is the flag when it needs the stitcher", () => {
+    const lt = REASONS.find(r => r.id === "loose_thread");
+    expect(reasonsFor("echl").map(r => r.id).indexOf("loose_thread")).toBe(reasonsFor("echl").map(r => r.id).indexOf("stitching") + 1);
+    expect(lt.inPlace).toMatchObject({ emoji: "✂️", title: "CUT IT NOW", text: "Cut the loose thread off. The garment is not flagged.", done: "✓ It is cut now", fail: "🚩 It needs the stitcher", note: "Loose thread, cut at the station", stays: THREAD_STAYS });
+    expect(REASONS.find(r => r.id === "mark").inPlace).toMatchObject({ title: "CLEAN IT NOW", done: "✓ It is clean now", stays: MARK_STAYS });
+    expect(THREAD_STAYS.inPlace).toBeFalsy();
+    expect(reasonCategory(THREAD_STAYS.label)).toBe("Sewing");
+    expect(routeOfReason(THREAD_STAYS.label)).toBe("Supervisor → stitcher");
+    expect(severityOf(THREAD_STAYS.label).tag).toBe("STITCHER");
+    expect(routeOfReason("Loose thread")).toBe("Fix in place");
+    expect(REASON_CHECK.loose_thread).toBe("thread");
+    expect(REASON_CHECK.thread_stays).toBe("thread");
+  });
+  it("no type → all ten reasons, one per id, in-place and free-text last; labels resolve", () => {
     const all = reasonsFor("");
     expect(reasonsFor("nonsense")).toBe(all);
     const ids = all.map(r => r.id);
-    expect(ids.length).toBe(9);
+    expect(ids.length).toBe(10);
     expect(ids).toEqual(ALL_IDS);
     expect(new Set(ids).size).toBe(ids.length);
     for (const list of [reasonsFor("echl"), reasonsFor("sublimated"), REASONS]) for (const r of list) expect(ids).toContain(r.id);

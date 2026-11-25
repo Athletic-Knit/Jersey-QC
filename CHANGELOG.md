@@ -483,3 +483,11 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests:** labels.test.js: by size the size field is drawn first and larger than the box field; by team and DAMAGED keep their order.
 - **Checks:** lint clean; 594 tests pass. Not printed on the Zebra.
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · Loose thread: fix it right there (5d)
+- **Asked for:** the owner, 25 Nov 2026: a loose thread is cut at the station, as dirt is wiped off, and the garment is not flagged unless the thread needs the stitcher.
+- **What changed:** an `inPlace` reason now carries its own screen (`inPlace: { emoji, title, text, done, fail, note, stays }` in config.js); "Dirt or mark" has today's words, and the new "Loose thread" (after Stitching or seam on both menus) opens CUT IT NOW with "It is cut now" and "It needs the stitcher", which flags `THREAD_STAYS` ("Loose thread — to the stitcher", stitcher, Sewing). Both check "Thread damage" on the next garments (`REASON_CHECK`). The overlay keeps the chosen reason as `fixing` (`reason` is already the flag text on other screens). The route "Fix in place" is weighed like "Clean in place".
+- **Tests:** config.test.js (menu, words, THREAD_STAYS route, category, check); clean-in-place.test.jsx (both screens, the fail button runs its action).
+- **Left open:** the whole path through App (choose Loose thread, press the fail button, see the flag) is not driven by a test; only the screen and the config are.
+- **Checks:** lint clean; 597 tests pass.
+- **Branch:** `feature/result-screens`.

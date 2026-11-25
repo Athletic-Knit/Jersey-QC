@@ -38,6 +38,7 @@ export const REASON_CHECK = {
   wrong_decoration: "decoration", logo: "decoration", print: "decoration",   // the name, the number, a logo or crest, sublimated graphics: all decoration
   label: "size", no_size_tag: "size",
   mark: "fabric", mark_stays: "fabric", fabric: "holes", twill: "thread", stitching: "thread",
+  loose_thread: "thread", thread_stays: "thread",
 };
 
 // One tap on the "not right" menu. `route` is where the jersey goes (the board
@@ -49,19 +50,24 @@ export const REASON_CHECK = {
 // A reason is two or three plain words. `only` keeps the two that belong to
 // one way of making a jersey off the other's menu; `cat` is the defect
 // category the reports count it under.
+// "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
+export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning" };
+// "Loose thread" is cut at the station. This is the flag when it needs the stitcher.
+export const THREAD_STAYS = { id: "thread_stays", label: "Loose thread — to the stitcher", route: "Supervisor → stitcher", cat: "Sewing" };
 export const REASONS = [
   { id: "wrong_decoration", label: "Name or number",       route: "Supervisor → pink slip → decoration", cat: "Decoration" },
   { id: "logo",      label: "Logo or crest",     route: "Supervisor → pink slip → decoration", cat: "Decoration" },
   { id: "twill",     label: "Twill peeling",     route: "Supervisor → pink slip → decoration", cat: "Decoration", only: "stitched" },
   { id: "print",     label: "Sublimation error", route: "Supervisor → full remake",            cat: "Artwork",    only: "sublimated" },   // the floor's word for a print or colour fault (it read "Print or colour" for a day, 17 Nov 2026)
   { id: "stitching", label: "Stitching or seam", route: "Supervisor → stitcher",               cat: "Sewing" },
+  { id: "loose_thread", label: "Loose thread",   route: "Fix in place", cat: "Sewing",          // cut at the station, not flagged: the "Cut it now" screen (the owner, 25 Nov 2026)
+    inPlace: { emoji: "✂️", title: "CUT IT NOW", text: "Cut the loose thread off. The garment is not flagged.", done: "✓ It is cut now", fail: "🚩 It needs the stitcher", note: "Loose thread, cut at the station", stays: THREAD_STAYS } },
   { id: "fabric",    label: "Holes",             route: "Supervisor → full remake",            cat: "Fabric" },
   { id: "label",     label: "Size label",        route: "Supervisor → stitcher",               cat: "Label" },
-  { id: "mark",      label: "Dirt or mark",      route: "Clean in place", inPlace: true,       cat: "Cleaning" },   // cleaned at the station, not flagged: the "Clean it now" screen
+  { id: "mark",      label: "Dirt or mark",      route: "Clean in place", cat: "Cleaning",       // cleaned at the station, not flagged: the "Clean it now" screen
+    inPlace: { emoji: "🧽", title: "CLEAN IT NOW", text: "Wipe the dirt or mark off. The garment is not flagged.", done: "✓ It is clean now", fail: "🚩 It will not come out", note: "Dirt or mark, cleaned at the station", stays: MARK_STAYS } },
   { id: "other",     label: "Others",            route: "Supervisor decides",                  cat: "Other" },      // flags at once, nothing to type (the owner, 17 Nov 2026; it was "Something else" with a text box)
 ];
-// "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
-export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning" };
 // A jersey with no size tag, flagged from the pick list (the owner, 19 Nov
 // 2026): with no size to read there is no row to pick, so it is flagged as it
 // is — the number read, no row — and goes to the stitcher for a tag.
@@ -168,7 +174,7 @@ const OLD_REASONS = [
   ["Something else", "Supervisor decides", "Other"],              // the last item of the menu that day, with a text box
   ["Hole or snag", "Supervisor → full remake", "Fabric"],         // renamed "Holes" 20 Nov 2026
 ].map(([label, route, cat]) => ({ label, route, cat }));
-const ALL_REASONS = [...REASONS, MARK_STAYS, NO_SIZE_TAG, ...OLD_REASONS];
+const ALL_REASONS = [...REASONS, MARK_STAYS, THREAD_STAYS, NO_SIZE_TAG, ...OLD_REASONS];
 // The defect category of a flag, from its reason's label, for the reports'
 // breakdown. A reason typed by the operator is "Other"; a jersey that is not
 // on the roster, or a duplicate, is an order problem, not a defect.

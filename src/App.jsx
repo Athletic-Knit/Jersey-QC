@@ -1754,7 +1754,8 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
   const isRed   = mode === "flag" || mode === "duplicate" || mode === "supervisor";
   const isMenu  = mode === "reasons" || mode === "reasonText";
   const isManual = mode === "manual";
-  const isClean = mode === "clean";   // "Dirt or mark": clean it at the station
+  const isClean = mode === "clean";   // "Dirt or mark", "Loose thread": fixed at the station, not flagged
+  const fixIn = state.fixing?.inPlace;   // the words of that reason's screen
 
   const bg     = isGreen ? "#052e16" : (isList || isManual || isSizePick) ? "#1c1a06" : isMenu ? "#1a1033" : isClean ? "#082f49" : "#450a0a";
   const accent = isGreen ? "#22c55e" : (isList || isManual || isSizePick) ? "#f59e0b" : isMenu ? "#a78bfa" : isClean ? "#38bdf8" : "#ef4444";
@@ -1861,7 +1862,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
       { id: "back", label: "← Back", run: actions.back }];
     if (mode === "flag")       return [{ ...retry, primary: true }, { id: "listflag", label: "🚩 Flag", run: actions.listFlag }];   // Retry and Flag only (the owner, 20 Nov 2026); Flag opens the yellow list's menu: No size tag, Duplicate, Not on the roster
     if (mode === "manual")     return [];
-    if (mode === "clean")      return [{ id: "cleaned", label: "✓ It is clean now", primary: true, run: actions.cleaned }, { id: "stays", label: "🚩 It will not come out", run: actions.cleanFailed }, { id: "back", label: "← Back", run: actions.back }];
+    if (mode === "clean")      return [{ id: "cleaned", label: fixIn?.done || "✓ It is clean now", primary: true, run: actions.cleaned }, { id: "stays", label: fixIn?.fail || "🚩 It will not come out", run: actions.cleanFailed }, { id: "back", label: "← Back", run: actions.back }];
     if (mode === "duplicate")  return duplicateOptions({ match: state.match, actions, retry });   // a flagged jersey scanned again: Skip first, "Back from repair" a mouse click only (src/lib/dupoptions.js)
     if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") {
@@ -1878,7 +1879,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
     }
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, damagePhotos.length, canPhoto, state.photoFirst, takePhoto, sorter, state.match, state.fromList]);
+  }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, damagePhotos.length, canPhoto, state.photoFirst, takePhoto, sorter, state.match, state.fromList, fixIn]);
 
   const selectedIdx = picked ?? Math.max(0, options.findIndex(o => !o.disabled));
   const lastKeyRef = useRef(0);
@@ -2150,15 +2151,15 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
       {/* ── CLEAN IT NOW: dirt or a mark is wiped off at the station, not flagged ── */}
       {isClean && (
         <>
-          <div style={{ fontSize: 80, lineHeight: 1, marginBottom: 4 }}>🧽</div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 9vw, 120px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 4 }}>CLEAN IT NOW</div>
+          <div style={{ fontSize: 80, lineHeight: 1, marginBottom: 4 }}>{state.fixing?.inPlace?.emoji || "🧽"}</div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 9vw, 120px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 4 }}>{state.fixing?.inPlace?.title || "CLEAN IT NOW"}</div>
           {match && (
             <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 4.5vw, 52px)", fontWeight: 700, color: "#bae6fd", marginTop: 14, textAlign: "center" }}>
               #{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${shortSize(match.size)}` : ""}
             </div>
           )}
           <div style={{ fontSize: 26, color: "#e0f2fe", marginTop: 14, textAlign: "center", padding: "0 40px", maxWidth: 820, lineHeight: 1.4 }}>
-            Wipe the dirt or mark off. The garment is <strong>not flagged</strong>.
+            {(state.fixing?.inPlace?.text || "Wipe the dirt or mark off. The garment is not flagged.").split("not flagged").map((part, i, a) => i < a.length - 1 ? <span key={i}>{part}<strong>not flagged</strong></span> : part)}
           </div>
           <div style={{ marginTop: 28, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
             {options.map((o, i) => optionButton(o, i))}
@@ -4607,7 +4608,7 @@ export default function App() {
       if (!r.custom) { inspectRef.current.defect(REASON_CHECK[r.id]); syncInspect(); }
       // Dirt or a mark is cleaned at the station, not flagged: say so, and ask.
       // (Before 17 Nov 2026 the menu just closed, and nobody could tell what had happened.)
-      if (r.inPlace) { setOverlay({ mode: "clean", scan: o.scan, match: o.match || null, returnTo: o.returnTo || null, reopened: !!o.reopened, late: o.late }); return; }
+      if (r.inPlace) { setOverlay({ mode: "clean", fixing: r, scan: o.scan, match: o.match || null, returnTo: o.returnTo || null, reopened: !!o.reopened, late: o.late }); return; }
       if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it
       const entry = { id: o.reopened ? Date.now() : (o.scan?.id || Date.now()), detected: o.scan?.detected, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened && o.late !== false ? `${r.label} — found after it passed` : r.label, reasonId: r.id, ...stamp() };
       if (o.match) { setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x)); setClosedBins(prev => dropFromClosed(prev, o.match._id)); }   // flagged: it is out of the bin it was in, closed or not
@@ -4621,9 +4622,9 @@ export default function App() {
     cleaned() {
       const o = overlay; if (!o) return;
       if (o.reopened || !o.returnTo) { setOverlay(null); armAutoScan(); return; }
-      setOverlay({ ...o.returnTo, note: "Dirt or mark, cleaned at the station" });
+      setOverlay({ ...o.returnTo, note: o.fixing?.inPlace?.note || "Dirt or mark, cleaned at the station" });
     },
-    cleanFailed() { actions.chooseReason(MARK_STAYS); },
+    cleanFailed() { actions.chooseReason(overlay?.fixing?.inPlace?.stays || MARK_STAYS); },
     reasonSubmit(text) {
       const o = overlay; if (!o) return;
       const label = String(text || "").trim(); if (!label) return;
