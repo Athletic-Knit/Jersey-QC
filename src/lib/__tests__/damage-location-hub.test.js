@@ -88,9 +88,9 @@ describe("each station's ticket roll (JERSEY_FLAG_LABEL_SIZE_STATION1 …)", () 
     const f = fakes();
     const { call } = makeHub({ ...f.opts, flagLabelSizes: { "st-station2": "2x4" } });
     expect((await call("POST", "/print", { kind: "binlist", station: "st-station1", labels: lists })).body.count).toBe(4);
-    expect((await call("POST", "/print", { kind: "binlist", station: "st-station2", labels: lists })).body.count).toBe(2);   // one page of 56 and the count label
-    expect((f.printed[1].zpl.match(/\^XA/g) || []).length).toBe(2);
-    expect(printJob(lists, labelSize("2x4"), "binlist").count).toBe(2);
+    expect((await call("POST", "/print", { kind: "binlist", station: "st-station2", labels: lists })).body.count).toBe(1);   // the count label with the 30 rows under it
+    expect((f.printed[1].zpl.match(/\^XA/g) || []).length).toBe(1);
+    expect(printJob(lists, labelSize("2x4"), "binlist").count).toBe(1);
     expect(printJob(lists, labelSize("2x1"), "binlist").count).toBe(4);
   });
 });

@@ -89,7 +89,7 @@ describe("ZPL", () => {
     expect(z).not.toContain("~");
   });
   it("every label scales with the label size", () => {
-    const small = binLabelZPL(label, labelSize("2.25x1.25")), big = binLabelZPL(label, labelSize("4x6"));
+    const small = binLabelZPL(label, labelSize("2.25x1.25")), big = binLabelZPL(label, labelSize("4x1.5"));
     const fontOf = z => parseInt(z.match(/\^A0N,(\d+)/)[1], 10);
     expect(fontOf(big)).toBeGreaterThan(fontOf(small));
     expect(big).toContain("^FB780,")   // 4 in less 2 mm each side;

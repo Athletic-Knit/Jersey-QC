@@ -131,23 +131,42 @@ describe("the tall flag ticket", () => {
   });
 });
 
-describe("box label and count label on a tall roll", () => {
-  const size = labelSize("2x4");
-  it("lay out in a band at the top, the label as long as the roll", () => {
-    const label = { bin: "5.1", label: "Navy", by: "team", count: 14, orderNumber: "264247" };
-    const count = binListLabels([{ number: "7", name: "SMITH", size: "A-L", team: "Navy" }], { bin: "5.1", label: "Navy", orderNumber: "264247" }).at(-1);
-    for (const z of [binLabelZPL(label, size), binListZPL(count, size)]) {
-      expect(z).toContain(`^LL${size.h}`);
-      for (const b of boxes(z)) {
-        expect(b.x).toBeGreaterThanOrEqual(mm2(size));
-        expect(b.y + b.h).toBeLessThanOrEqual(Math.round(size.w * 1.25 / 2));   // 1.25 in on a 2 in roll
-      }
-    }
+describe("box label on a tall roll: turned a quarter turn, filling the label (the co-op, 25 Nov 2026)", () => {
+  const label = { bin: "5.1", label: "Navy", by: "team", orderNumber: "264247" };
+  const turned = z => z.split("\n").filter(l => l.startsWith("^FO")).map(l => {
+    const [, x, y, fh, len] = l.match(/^\^FO(\d+),(\d+)\^A0R,(\d+),\d+\^FB(\d+),1,0,C/).map(Number);
+    return { x, y, fh, len, text: l.match(/\^FD(.*)\^FS$/)[1] };
   });
-  it("BOX 5.1 is as big as on the 2 x 1 in roll", () => {
-    const font = z => +z.split("\n").find(l => l.endsWith("^FDBOX 5.1^FS")).match(/\^A0N,(\d+)/)[1];
-    const label = { bin: "5.1", label: "Navy", by: "team", orderNumber: "264247" };
-    expect(font(binLabelZPL(label, size))).toBe(font(binLabelZPL(label, labelSize("2x1"))));
+  for (const spec of ["2x3", "2x4"]) {
+    it(`${spec}: every line turned (^A0R), 2 mm clear of every edge, spread over the width`, () => {
+      const size = labelSize(spec), z = binLabelZPL(label, size), m = mm2(size);
+      expect(z).toContain(`^LL${size.h}`);
+      expect(z).not.toMatch(/\^A0N/);
+      const f = turned(z);
+      expect(f.map(x => x.text)).toEqual(["BOX 5.1", "Navy", "Order 264247   by team"]);
+      for (const x of f) {
+        expect(x.x).toBeGreaterThanOrEqual(m); expect(x.x + x.fh).toBeLessThanOrEqual(size.w - m);
+        expect(x.y).toBe(m); expect(x.y + x.len).toBe(size.h - m);
+      }
+      const used = Math.max(...f.map(x => x.x + x.fh)) - Math.min(...f.map(x => x.x));
+      expect(used).toBeGreaterThan(size.w * 0.8);                   // the lines take the label's width
+      expect(f[0].fh).toBeGreaterThan(f[1].fh);                      // BOX 5.1 the biggest
+      expect(f[1].fh).toBeGreaterThan(f[2].fh);
+      expect(f[0].x).toBeGreaterThan(f[2].x);                        // BOX 5.1 at the top when the label is turned to read it
+    });
+  }
+  it("BOX 5.1 is much bigger than on the 2 x 1 in roll", () => {
+    const font = z => +z.split("\n").find(l => l.endsWith("^FDBOX 5.1^FS")).match(/\^A0[NR],(\d+)/)[1];
+    expect(font(binLabelZPL(label, labelSize("2x3")))).toBeGreaterThan(1.5 * font(binLabelZPL(label, labelSize("2x1"))));
+  });
+  it("the DAMAGED box: its title in place of BOX", () => {
+    const z = binLabelZPL({ title: "DAMAGED", label: "Flagged jerseys", by: "", orderNumber: "5" }, labelSize("2x3"));
+    expect(turned(z).map(x => x.text)).toEqual(["DAMAGED", "Flagged jerseys", "Order 5"]);
+  });
+  it("a count label alone (no rows) keeps its band at the top", () => {
+    const size = labelSize("2x4");
+    const count = binListLabels([{ number: "7", name: "SMITH", size: "A-L", team: "Navy" }], { bin: "5.1", label: "Navy", orderNumber: "264247" }).at(-1);
+    for (const b of boxes(binListZPL(count, size))) { expect(b.x).toBeGreaterThanOrEqual(mm2(size)); expect(b.y + b.h).toBeLessThanOrEqual(Math.round(size.w * 1.25 / 2)); }
   });
 });
 
@@ -161,13 +180,17 @@ describe("lists on a tall roll", () => {
     expect(rowsPerLabel(labelSize("2x4"))).toBe(56);
     expect(rowsPerLabel(labelSize("2x4"), true)).toBe(28);
   });
-  it("a 70-jersey box list: two pages of 56 and 14, last page first, the count label last, in number order", () => {
+  it("a 70-jersey box list on 2 x 4: the count label with the first 42 under it, then 28; printed last page first, in number order", () => {
     const size = labelSize("2x4");
     const out = repageLists(binListLabels(rows(70), { bin: "1.1", label: "Navy", orderNumber: "264247" }), size);
-    expect(out.map(l => [l.page, l.pages, l.items.length, !!l.title])).toEqual([[2, 2, 14, false], [1, 2, 56, false], [0, 2, 0, true]]);
+    expect(out.map(l => [l.page, l.pages, l.items.length, !!l.title])).toEqual([[2, 2, 28, false], [1, 2, 42, true]]);
     expect(out[1].items[0]).toBe("1-P1-AL");
     expect(out[0].items.at(-1)).toBe("70-P70-AL");
     expect([...out[1].items, ...out[0].items]).toEqual(rows(70).map(r => `${r.number}-${r.name}-AL`));
+  });
+  it("on 2 x 3 the count label takes 28 under it, then 42 a label", () => {
+    const out = repageLists(binListLabels(rows(100), { bin: "1.1", label: "Navy" }), labelSize("2x3"));
+    expect(out.map(l => [l.page, l.items.length, !!l.title])).toEqual([[3, 30, false], [2, 42, false], [1, 28, true]]);
   });
   it("two boxes' lists and a DAMAGED list in one print: each re-paged on its own, the order kept", () => {
     const size = labelSize("2x4");
@@ -177,28 +200,30 @@ describe("lists on a tall roll", () => {
     const x = boxesListLabels(rows(9).map(r => `Box ${r.number}`), { title: "DONE BOXES" });
     const out = repageLists([...a, ...b, ...d, ...x], size);
     expect(out.map(l => [l.bin, l.page, l.pages, l.items.length, !!l.title])).toEqual([
-      ["1.1", 1, 1, 30, false], ["1.1", 0, 1, 0, true],
-      ["2.1", 1, 1, 3, false], ["2.1", 0, 1, 0, true],
+      ["1.1", 1, 1, 30, true],
+      ["2.1", 1, 1, 3, true],
       ["DAMAGED", 2, 2, 2, false], ["DAMAGED", 1, 2, 28, false],
       ["DONE BOXES", 1, 1, 9, false],
     ]);
   });
-  it("labelsZPL re-pages: 30 jerseys are one list label and the count label; rows keep the 2 x 1 in height and stay on the label", () => {
-    const size = labelSize("2x4");
-    const z = labelsZPL(binListLabels(rows(30), { bin: "1.1", label: "Navy", orderNumber: "264247" }), size, "binlist");
+  it("labelsZPL: 30 jerseys are ONE label, the count label on top and the rows right under it, as tall as on the 2 x 1 in roll", () => {
+    const size = labelSize("2x4"), dpi = size.dpi;
+    const z = labelsZPL(binListLabels(rows(30), { bin: "1.1", label: "Navy", orderNumber: "264247", of: 50 }), size, "binlist");
     const blocks = z.split("^XZ").filter(s => s.includes("^XA"));
-    expect(blocks).toHaveLength(2);
-    const items = boxes(blocks[0]);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toContain("^FDNavy^FS");
+    expect(blocks[0]).toContain("^FD30/50 pcs^FS");
+    const all = boxes(blocks[0]), items = all.filter(b => /^\d+-P\d+-AL$/.test(b.line.match(/\^FD(.*)\^FS$/)[1]));
     expect(items).toHaveLength(30);
+    for (const b of all.filter(b => !items.includes(b))) expect(b.y + b.h).toBeLessThanOrEqual(dpi);   // the count label in the top inch
+    for (const b of items) { expect(b.y).toBeGreaterThan(dpi); expect(b.x).toBeGreaterThanOrEqual(mm2(size)); expect(b.y + b.h).toBeLessThanOrEqual(size.h); }
     const one = boxes(binListZPL(binListLabels(rows(14), { bin: "1.1" })[0], labelSize("2x1")));
     expect(items[1].y - items[0].y).toBe(one[1].y - one[0].y);
     expect(items[0].line.match(/\^A0N,\d+/)[0]).toBe(one[0].line.match(/\^A0N,\d+/)[0]);
-    for (const b of items) { expect(b.x).toBeGreaterThanOrEqual(mm2(size)); expect(b.y + b.h).toBeLessThanOrEqual(size.h); }
-    expect(items[28].x).toBeGreaterThan(items[27].x);   // the 29th jersey starts the right column
+    expect(items[21].x).toBeGreaterThan(items[20].x);   // 21 rows down the left (3 inches), then the right column
     const d = labelsZPL(damagedListLabels(rows(28).map(r => ({ ...r, reason: "Holes" }))), size, "binlist");
-    const lines = boxes(d);
     expect(d.split("^XZ").filter(s => s.includes("^XA"))).toHaveLength(1);
-    for (const b of lines) expect(b.y + b.h).toBeLessThanOrEqual(size.h);
+    for (const b of boxes(d)) expect(b.y + b.h).toBeLessThanOrEqual(size.h);
   });
 });
 

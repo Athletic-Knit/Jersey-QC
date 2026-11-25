@@ -392,6 +392,7 @@ const BAND_OF_WIDTH = 0.625;
 const tallRoll = size => isTallTicket(size) || pagesPerLabel(size) > 1;
 const bandOf = size => (tallRoll(size) ? Math.min(size.h, Math.round(size.w * BAND_OF_WIDTH)) : size.h);
 export function binLabelZPL(l, size = labelSize()) {
+  if (tallRoll(size)) return binLabelTurnedZPL(l, size);
   const { w: full, h: label, top = 0, dpi = 203 } = size;
   const h = bandOf(size);
   const wide  = full >= 300;
@@ -412,6 +413,41 @@ export function binLabelZPL(l, size = labelSize()) {
     ...(footer ? [line(side, h - small - pad, fit(footer, w, small), w, "C", footer)] : []),
     "^PQ1", "^XZ",
   ].join("\n");
+}
+
+// On a tall roll (2 x 3, 2 x 4) the box label is turned a quarter turn and
+// fills the whole label (the co-op, 25 Nov 2026: "we use up like an inch of the
+// 3 inch height"): it reads along the roll, BOX 5.1 as big as the length
+// allows, the team or size under it, the order number and "by team" at the
+// bottom, the three spread over the label's width. The fields are laid out on
+// the label as if it were lying on its side (L long, S across) and then turned:
+// a line at (X, Y) of height fh is printed with the ^A0R font (turned 90°
+// clockwise) at x = S - Y - fh, y = X. Turn the label so its right-hand edge is
+// on top to read it. 2 mm clear of every edge (the ZD411 cuts at the top and
+// the left of the roll).
+const turnedLine = (S, X, Y, fh, length, align, text) => {
+  const fw = Math.max(5, Math.min(fh, Math.floor(length / textUnits(text))));
+  return `^FO${Math.max(0, S - Y - fh)},${X}^A0R,${fh},${fw}^FB${length},1,0,${align}^FD${safe(text)}^FS`;
+};
+function binLabelTurnedZPL(l, size) {
+  const { w: S, h: L, dpi = 203 } = size;
+  const m = Math.round(dpi * 2 / 25.4);                           // 2 mm clear of each edge
+  const len = L - 2 * m, across = S - 2 * m;
+  const title = l.title || `BOX ${l.bin}`;
+  const footer = [l.orderNumber ? `Order ${l.orderNumber}` : "", l.by === "size" ? "by size" : l.by === "team" ? "by team" : ""].filter(Boolean).join("   ");
+  // The heights, each as big as its share of the width across and its text's length allow.
+  const lines = [
+    { text: title, h: fit(title, len, Math.round(across * 0.48)) },
+    { text: l.label || "", h: l.label ? fit(l.label, len, Math.round(across * 0.3)) : 0 },
+    { text: footer, h: footer ? fit(footer, len, Math.round(across * 0.13)) : 0 },
+  ].filter(x => x.h > 0);
+  // Spread them evenly over the width across: the room left over goes in equal gaps.
+  const gap = Math.max(0, Math.floor((across - lines.reduce((t, x) => t + x.h, 0)) / (lines.length + 1)));
+  let y = m + gap;
+  const out = ["^XA", "^CI28", `^PW${S}`, `^LL${L}`, "^LH0,0", "^LT0"];
+  for (const x of lines) { out.push(turnedLine(S, m, y, x.h, len, "C", x.text)); y += x.h + gap; }
+  out.push("^PQ1", "^XZ");
+  return out.join("\n");
 }
 
 // ── The list of what is in a box ─────────────────────────────────────────────
@@ -472,9 +508,9 @@ export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "t
 // sorted leads with the order number. The box number is only small, in the
 // bottom-left corner, for the packer (see below); the box also has its
 // BOX 5.1 label inside.
-function binCountZPL(l, size) {
+function binCountZPL(l, size, band = bandOf(size), { open = false } = {}) {
   const { w: full, h: label, top = 0, dpi = 203 } = size;
-  const h = bandOf(size);                                  // a band at the top of a tall roll
+  const h = band;                                          // a band at the top of a tall roll
   const side  = full >= 300 ? Math.round(dpi * 2 / 25.4) : 0;
   const w     = full - 2 * side;
   const a     = h - top;
@@ -495,6 +531,7 @@ function binCountZPL(l, size) {
   if (l.mix) out.push(line(side, top + pad + big + mid + 5, mixH, w, "C", l.mix));
   if (named && order) out.push(line(side + boxW, h - small - pad, fit(order, fw, small), fw, "C", order));
   if (boxTxt) out.push(line(side, h - boxH - pad, boxH, boxW, "L", boxTxt));
+  if (open) return out;   // the list's first rows go under it (binListZPL)
   out.push("^PQ1", "^XZ");
   return out.join("\n");
 }
@@ -559,23 +596,39 @@ function damagedListZPL(l, size) {
 // (`title`), or a page of a box list's rows in two columns.
 export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   if (l.damaged) return damagedListZPL(l, size);
+  const dpi = size.dpi || 203;
+  // The count label with the list's first rows under it (a tall roll, see
+  // repageLists): the count label in the top inch, as on the 2 x 1 in roll.
+  if (l.title && l.items?.length) {
+    const out = binCountZPL(l, size, dpi, { open: true });
+    out.push(...listRows(l.items, size, dpi, pagesPerLabel(size) - 1));
+    out.push("^PQ1", "^XZ");
+    return out.join("\n");
+  }
   if (l.title) return binCountZPL(l, size);
+  const out = ["^XA", "^CI28", `^PW${size.w}`, `^LL${size.h}`, "^LH0,0", "^LT0"];
+  out.push(...listRows(l.items, size, 0, pagesPerLabel(size)), "^PQ1", "^XZ");
+  return out.join("\n");
+}
+// The rows of a box list from `from` dots down, `k` inches of them (on the
+// 2 x 1 in roll the whole label): 14 an inch in two columns, read down the left
+// column and then down the right, each row as tall as on the 2 x 1 in roll.
+function listRows(items, size, from, k) {
   const { w, h, top = 0 } = size;
-  const k    = pagesPerLabel(size), hb = k === 1 ? h : (size.dpi || 203);   // on a tall roll the rows keep their 2 x 1 in height
-  const a    = hb - top;                                          // the printable height
+  if (k < 1) return [];
+  const one  = pagesPerLabel(size) === 1;
+  const hb   = one ? h : (size.dpi || 203);                       // on a tall roll the rows keep their 2 x 1 in height
+  const a    = hb - top;                                          // the printable height of one inch
   const pad  = Math.max(3, Math.round(a * 0.03));
   const rows = BIN_LIST_PER_LABEL / 2 * k;                        // in each column
-  const y0   = top + pad;
-  const rowH = Math.floor((hb - pad - y0) / (BIN_LIST_PER_LABEL / 2));
+  const y0   = from + (from ? pad : top + pad);
+  const rowH = Math.floor((hb - pad - top - pad) / (BIN_LIST_PER_LABEL / 2));
   const x0   = Math.round((size.dpi || 203) * BIN_LIST_LEFT_MM / 25.4) + pad;   // where the rows start
   const colW = Math.floor((w - x0 - pad - pad) / 2);
-  const out = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", "^LT0"];
-  (l.items || []).slice(0, BIN_LIST_PER_LABEL * k).forEach((text, i) => {
+  return (items || []).slice(0, BIN_LIST_PER_LABEL * k).map((text, i) => {
     const col = Math.floor(i / rows), row = i % rows;            // down the left column, then down the right
-    out.push(tight(x0 + col * (colW + pad), y0 + row * rowH, Math.max(10, rowH - 3), colW, text));
+    return tight(x0 + col * (colW + pad), y0 + row * rowH, Math.max(10, rowH - 3), colW, text);
   });
-  out.push("^PQ1", "^XZ");
-  return out.join("\n");
 }
 
 // ── Lists on a tall roll ─────────────────────────────────────────────────────
@@ -603,11 +656,23 @@ export function repageLists(labels, size) {
     let j = i;
     while (j < list.length && same(list[j]) && !seen.has(list[j].page)) seen.add(list[j++].page);
     const items = list.slice(i, j).sort((a, b) => (a.page || 0) - (b.page || 0)).flatMap(p => p.items);
-    const per = rowsPerLabel(size, !!l.damaged), pages = Math.max(1, Math.ceil(items.length / per));
+    const per = rowsPerLabel(size, !!l.damaged);
     const { items: _items, page: _page, ...base } = l;
+    const next = list[j];
+    if (!l.damaged && next?.title && next.bin === l.bin && next.label === l.label && next.orderNumber === l.orderNumber) {
+      // The count label takes the top inch of the first label and the list
+      // starts right under it (the co-op, 25 Nov 2026: the bottom of the count
+      // label was left empty). That label is printed last, as the count label
+      // was, so the strip still starts with it.
+      const first = per - BIN_LIST_PER_LABEL, rest = items.slice(first);
+      const pages = 1 + Math.ceil(rest.length / per);
+      out.push(...Array.from({ length: pages - 1 }, (_, p) => ({ ...base, pages, page: p + 2, items: rest.slice(p * per, (p + 1) * per) })).reverse());
+      out.push({ ...next, pages, page: 1, items: items.slice(0, first) });
+      i = j + 1;
+      continue;
+    }
+    const pages = Math.max(1, Math.ceil(items.length / per));
     out.push(...Array.from({ length: pages }, (_, p) => ({ ...base, pages, page: p + 1, items: items.slice(p * per, (p + 1) * per) })).reverse());
-    const next = list[j];   // the list's count label comes last: it gets the new page count too
-    if (!l.damaged && next?.title && next.bin === l.bin && next.label === l.label && next.orderNumber === l.orderNumber) { out.push({ ...next, pages }); j++; }
     i = j;
   }
   return out;
