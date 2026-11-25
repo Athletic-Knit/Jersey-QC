@@ -8,7 +8,7 @@
 //   { kind: "packlist", bin, team, orderNumber, pcs, copies,
 //     groups: [{ team, pcs, sizes: [{ size, rows: [{ number, name }] }] }] }
 //   { kind: "boxface", bin, boxNo, boxes, orderNumber, customer,
-//     teams: [{ team, inBox, ofOrder }], sizes: [{ size, inBox, ofOrder }], notIn: ["#19 A-M flagged"] }
+//     teams: [{ team, inBox, ofOrder }], sizes: [{ size, inBox, ofOrder }] }
 //   { kind: "signoff", orderNumber, customer, teams, date, time, station, operator,
 //     bySize: [{ size, passed }], passed, flagged, missing, total, boxes }
 // Each of them is laid out whole by its function below, which returns the ZPL of
@@ -181,42 +181,58 @@ export function packListZPL(l, size) {
 export const packListRows = l => (l.groups || []).flatMap(g => (g.sizes || []).flatMap(s => (s.rows || []).map(r => ({ number: r.number, name: r.name, size: s.size, team: g.team }))));
 
 // ── The outside label ────────────────────────────────────────────────────────
-// The shipping face of a box (one per box): ORDER, CUSTOMER, the teams and the
-// sizes in it as "in this box / in the whole order", what is not in it, "Box 1
-// of 2", and a blank WEIGHT box for the hand. No garment names.
+// The shipping face of a box (one per box), LANDSCAPE on the tall rolls: ORDER and
+// CUSTOMER, the customer's name as the biggest line, a line a team ("10/10": in this
+// box / in the team's whole order), one line of sizes with their counts in this box,
+// "Box 1 of 2" and a blank WEIGHT box for the hand. No garment names, and nothing
+// about flagged or missing garments (the NOT IN BOX list says that).
 export function boxFaceZPL(l, size) {
-  const { w, h } = sizeOf(size), W = w - 40, right = w - 116;
+  const { w, h } = sizeOf(size), W = w - 40;
   const z = head(w, h);
-  if (!isTallTicket(size)) {   // a short roll: the order, the customer and the box, one label
+  if (!isTallTicket(size)) {   // a short roll (2 x 1 in: the compact portrait label, as before; a landscape 203 x 406 page would leave 26 dots a line): the order, the customer and the box, one label
     z.push(txt(20, 8, 24, 20, W, "ORDER"), txt(20, 30, Math.round(h * 0.32), Math.round(h * 0.28), W, String(l.orderNumber ?? "")));
     z.push(txt(20, Math.round(h * 0.62), 26, 22, W, String(l.customer ?? "")), txt(20, Math.round(h * 0.8), 28, 24, W, `Box ${l.boxNo ?? ""}${l.boxes ? ` of ${l.boxes}` : ""}`), "^PQ1", "^XZ");
     return z.join("\n");
   }
-  z.push(txt(20, 14, 20, 18, W, "ORDER"), txt(20, 34, 52, 46, W, String(l.orderNumber ?? "")));
-  z.push(txt(20, 94, 20, 18, W, "CUSTOMER"), txt(20, 114, 32, 28, W, named(l.customer, "", 16, W)), box(20, 152, W, 2, 2));
-  z.push(txt(20, 160, 20, 18, W, "TEAMS IN THIS BOX   in box / of order"));
-  const pair = (y, name, more, a, b) => [txt(20, y, 30, 26, right - 30, named(name, more, 16, right - 30)), `^FO${right},${y}^A0N,30,26^FD${a} / ${b}^FS`];
+  // The tall rolls print the label LANDSCAPE (the owner, 25 Nov 2026): every field is ^A0R (turned a quarter
+  // turn clockwise), so the paper is read as a page LW wide (the roll's length) and `w` (406) high. (lx, ly)
+  // are landscape coordinates; the 2 x 4 in roll is the same page, wider.
+  const LW = h, M = 20, full = LW - 2 * M;
+  const rt = (lx, ly, fh, fw, text) => `^FO${w - ly - fh},${lx}^A0R,${fh},${fw}^FD${safe(text)}^FS`;
+  const hr = (lx, ly, len) => `^FO${w - ly - 3},${lx}^GB3,${len},3^FS`;
+  // `text` at letter width `fw`, squeezed down to `minFw` to fit `room` dots, then cut with "…": [text, width].
+  const fit = (text, fw, minFw, room) => {
+    const f = Math.min(fw, Math.floor(room / (Math.max(1, textUnits(text)) * PRINTED)));
+    return f >= minFw ? [String(text), f] : [cutTo(text, minFw, room), minFw];
+  };
+  const put = (lx, ly, fh, fw, minFw, room, text) => { const [t, f] = fit(text, fw, minFw, room); return t ? rt(lx, ly, fh, f, t) : ""; };
+  const weightX = LW - 173, clearRoom = weightX - 10 - M;   // nothing at the bottom right reaches the WEIGHT box
   const teams = l.teams || [], sizes = l.sizes || [];
-  // At most three lines (^FB prints a fourth over the third): what does not fit is "+2 more".
-  const notIn = fitList(l.notIn || [], 18, Math.floor(3 * W * 0.8) - dotsOf("Not in this box: ", 18));
-  const bottom = h - 100, rowsAvail = Math.max(2, Math.floor((bottom - 184 - 70 - (notIn ? 70 : 0)) / 36));
-  const tShow = Math.min(teams.length, Math.max(1, rowsAvail - Math.min(sizes.length, Math.ceil(rowsAvail / 2))));
-  const sShow = Math.min(sizes.length, Math.max(0, rowsAvail - tShow));
-  let y = 184;
+  // The sizes: one line at 40 high, "S 10   M 10   L 10"; many sizes squeeze, then wrap to a second line.
+  const toks = sizes.map(s => `${s.size} ${s.inBox}`), SEP = "   ";
+  let sLines = [toks.join(SEP)];
+  if (fit(sLines[0], 34, 24, clearRoom)[1] < 28 && toks.length > 1) {
+    const a = []; let cur = "";
+    for (const t of toks) { const next = cur ? cur + SEP + t : t; if (cur && dotsOf(next, 28) > clearRoom && a.length < 1) { a.push(cur); cur = t; } else cur = next; }
+    sLines = [...a, cur];
+  }
+  // The rows between the first rule and the one above "Box 1 of 2" share 126 dots: 42 a row, closer when there are many.
+  const m = sLines.length, tShow = Math.min(teams.length, Math.max(1, 5 - m));
+  const pitch = Math.min(42, Math.floor(126 / Math.max(1, tShow + m))), fh = Math.min(40, pitch - 2), fw = Math.min(34, Math.round(fh * 0.85));
+  z.push(rt(M, 12, 20, 18, "ORDER"), put(M, 32, 70, 60, 30, LW - 309 - M - 10, String(l.orderNumber ?? "")), rt(LW - 309, 12, 20, 18, "CUSTOMER"));
+  z.push(put(M, 110, 78, 54, 36, full, String(l.customer ?? "").toUpperCase()), hr(M, 196, LW - 39));
   teams.slice(0, tShow).forEach((t, i) => {
-    const more = i === tShow - 1 && teams.length > tShow ? ` +${teams.length - tShow}` : "";
-    z.push(...pair(y, t.team, more, t.inBox, t.ofOrder)); y += 36;
+    const more = i === tShow - 1 && teams.length > tShow ? ` +${teams.length - tShow}` : "", y = 206 + i * pitch, cnt = `${t.inBox}/${t.ofOrder}`;
+    const cx = Math.min(LW - 279, LW - M - dotsOf(cnt, fw));
+    z.push(put(M, y, fh, fw, 16, cx - M - 16, `${String(t.team ?? "").toUpperCase()}${more}`), rt(cx, y, fh, fw, cnt));
   });
-  z.push(box(20, y + 2, W, 2, 2), txt(20, y + 10, 20, 18, W, "SIZES"));
-  y += 34;
-  sizes.slice(0, sShow).forEach((s, i) => {
-    const more = i === sShow - 1 && sizes.length > sShow ? ` +${sizes.length - sShow}` : "";
-    z.push(...pair(y, s.size, more, s.inBox, s.ofOrder)); y += 36;
-  });
-  if (notIn) z.push(`^FO20,${y + 4}^A0N,22,18^FB${W},3,0,L^FDNot in this box: ${safe(notIn)}^FS`);
-  z.push(txt(20, h - 69, 44, 40, w - 136 - 30, `Box ${l.boxNo ?? ""}${l.boxes ? ` of ${l.boxes}` : ""}`));   // ends 10 dots before the WEIGHT box
-  z.push(box(w - 136, h - 89, 116, 70, 3), `^FO${w - 128},${h - 83}^A0N,18,16^FDWEIGHT^FS`, "^PQ1", "^XZ");
-  return z.join("\n");
+  const rule1 = 206 + pitch * tShow + 4;
+  z.push(hr(M, rule1, LW - 39));
+  sLines.forEach((s, i) => z.push(put(M, rule1 + 8 + i * pitch, fh, fw, 16, clearRoom, s)));
+  z.push(hr(M, 348, LW - 209));   // the rule stops before the WEIGHT box
+  z.push(put(M, 356, 48, 42, 24, clearRoom, `Box ${l.boxNo ?? ""}${l.boxes ? ` of ${l.boxes}` : ""}`));
+  z.push(`^FO${w - 318 - 84},${weightX}^GB84,164,3^FS`, rt(weightX + 6, 324, 18, 16, "WEIGHT"), "^PQ1", "^XZ");
+  return z.filter(Boolean).join("\n");
 }
 
 // ── The sign-off ticket ──────────────────────────────────────────────────────

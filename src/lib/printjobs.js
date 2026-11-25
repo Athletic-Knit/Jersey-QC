@@ -62,8 +62,7 @@ export function boxListLabels(pack, b, { tall = false } = {}) {
 // ── The outside label of a box (the owner, 25 Nov 2026) ─────────────────────
 // The shipping face of the box: the order, the customer (the box's teams when
 // none was given), the teams and the sizes in it as "in this box / in the whole
-// order" (within the box's own team: see below), what is not in it, and "Box 1
-// of 3". No garment names: the list with the names goes inside. `pack.plan` (the station's box plan: [{ bin, boxes,
+// order" (within the box's own team: see below), and "Box 1 of 3". No garment names: the list with the names goes inside. `pack.plan` (the station's box plan: [{ bin, boxes,
 // total }]) says how many boxes the order is still expected to need, for "of N"
 // before Finish; on a finished order (`pack.finished`, `pack.past`, `pack.final`)
 // N is the number of boxes that have garments in them.
@@ -93,10 +92,8 @@ export function boxFaceLabel(pack, b) {
     const open = pack.plan.filter(e => e.boxes > 0 && (e.total > 0 || (boxes.find(x => x.bin === e.bin)?.count || 0) > 0 || e.bin === b?.bin)).reduce((n, e) => n + e.boxes, 0);
     total = Math.max(total, closed + open);
   }
-  // What the team is missing: only on the group's last box (the earlier ones were full, not short).
-  const why = r => r.scanned === "flag" ? "flagged" : r.scanned === "missing" || r.scanned === "short" ? "missing" : "not scanned";
-  const notIn = b && by !== "all" && isLastBox(pack, b.bin) ? notInBox(pack, b.bin).map(x => `${String(x.row.number ?? "").trim() ? "#" + String(x.row.number).trim() : "Garment"} ${shortSize(x.row.size)} ${why(x.row)}`.replace(/\s+/g, " ").trim()) : [];
-  return { kind: "boxface", bin: b?.bin, boxNo, boxes: total, orderNumber: String(pack?.orderNumber || ""), customer: String(pack?.customer || "").trim() || teams.map(t => t.team).join(", ") || label, teams, sizes, notIn };
+  // Nothing about flagged or missing garments on the outside (the owner, 25 Nov 2026): the NOT IN BOX list says that.
+  return { kind: "boxface", bin: b?.bin, boxNo, boxes: total, orderNumber: String(pack?.orderNumber || ""), customer: String(pack?.customer || "").trim() || teams.map(t => t.team).join(", ") || label, teams, sizes };
 }
 // The outside label of one box, or of every box with something in it (the Print menu).
 export function boxFaceJobs(pack, bin) {
