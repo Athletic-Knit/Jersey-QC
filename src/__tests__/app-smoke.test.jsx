@@ -122,7 +122,11 @@ describe("the station screen", () => {
     // Finish order printed the summary's count label and nothing of Box 1.1: its list was out already.
     const later = hubCalls.filter(c => c.url.includes("/api/hub/print")).slice(1).flatMap(c => c.body.labels);
     expect(later.length).toBeGreaterThan(0);
-    expect(later.every(l => l.summary)).toBe(true);
+    // ... and the sign-off ticket, last in the strip so that it comes off the printer first (the owner, 25 Nov 2026).
+    expect(later.every(l => l.summary || l.kind === "signoff")).toBe(true);
+    expect(later.filter(l => l.kind === "signoff")).toHaveLength(1);
+    expect(later.at(-1).kind).toBe("signoff");
+    expect(later.at(-1)).toMatchObject({ orderNumber: "999100", passed: 2 });
   });
 
   // Fixed at the station is still a flag (the owner, 25 Nov 2026): the flag is written, resolved at once,

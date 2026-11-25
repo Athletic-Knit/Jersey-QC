@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { labelSize, printJob, repageLists, listChunks } from "../labels.js";
 import { packListLabel, packListZPL, boxFaceZPL, signoffZPL, packListLayout, LIST_COPIES } from "../packlabels.js";
 import { buildBinMap } from "../roster.js";
-import { packBoxes, boxFaceLabel, boxFaceJobs, boxListJobs } from "../printjobs.js";
+import { packBoxes, boxFaceLabel, boxFaceJobs, boxListJobs, signoffLabel, signoffJobs, packFromRecord } from "../printjobs.js";
 import { WALK, walkBox, walkRoster } from "./walk-order.js";
 
 const fx = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
@@ -171,5 +171,44 @@ describe("the outside label (kind boxface)", () => {
 });
 
 describe("the sign-off ticket (kind signoff)", () => {
-  it("is a function", () => { expect(typeof signoffZPL).toBe("function"); });
+  const meta = { date: "2026-11-25", time: "14:32", station: "Station 1", operator: "Person 1" };
+  it("the walk-through order at Finish: passed per size in rack order, the totals, who and when", () => {
+    const l = signoffLabel(pack, meta);
+    expect(l).toEqual({ kind: "signoff", orderNumber: "123456", customer: "Source for Sports", teams: ["U11 Tigers", "U12 Bombers"], ...meta,
+      bySize: [{ size: "A-S", passed: 6 }, { size: "A-M", passed: 6 }, { size: "A-L", passed: 5 }, { size: "A-XL", passed: 1 }],
+      passed: 18, flagged: 1, missing: 1, total: 20, boxes: 2 });
+    const z = signoffZPL(l, roll);
+    same("signoff-walk.zpl", z);
+    expect(pages(z)).toHaveLength(1);
+    expect(z).toContain("^FD123456^FS"); expect(z).toContain("^FDSource for Sports - U11 Tigers - U12 Bombers^FS");
+    expect(z).toContain("^FD2026-11-25 - 14:32 - Station 1 - Person 1^FS");
+    expect(z).toContain("^FDPASSED^FS"); expect(z).toContain("^FD18^FS");
+    expect(z).toContain("^FDFlagged 1 - Missing 1 - of 20 - Boxes 2^FS");
+    expect(z).toContain("^FDOperator^FS"); expect(z).toContain("^FDSupervisor^FS");
+    expect(z).not.toContain("LEACH");   // no garment names
+  });
+  it("a past order from the hub's record prints as it was finished", () => {
+    const rec = { order: "123456", customer: "Source for Sports", station: "st-station1", operator: "Person 2", date: "2026-11-24", finishedAt: new Date(2026, 10, 24, 9, 5).getTime(), rows: roster, bins: pack.binMap, closedBins: [], counts: null, flags: [] };
+    const l = signoffJobs(packFromRecord(rec), { date: "never", time: "never" })[0];
+    expect(l).toMatchObject({ orderNumber: "123456", customer: "Source for Sports", date: "2026-11-24", time: "09:05", station: "st-station1", operator: "Person 2", passed: 18, total: 20 });
+  });
+  it("on a 2 x 1 in roll it is three labels: header and sizes, the totals, the signatures", () => {
+    const z = signoffZPL(signoffLabel(pack, meta), labelSize("2x1"));
+    expect(pages(z)).toHaveLength(3);
+    expect(pages(z)[0]).toContain("123456"); expect(pages(z)[0]).toContain("A-S 6");
+    expect(pages(z)[1]).toContain("PASSED 18"); expect(pages(z)[1]).toContain("Flagged 1 - Missing 1 - of 20 - Boxes 2");
+    expect(pages(z)[2]).toContain("Operator"); expect(pages(z)[2]).toContain("Supervisor");
+    const job = printJob([signoffLabel(pack, meta)], labelSize("2x1"), "binlist");
+    expect(job.count).toBe(3);
+  });
+  it("the hub counts the tall one as one label; a roster with no size does not crash it", () => {
+    expect(printJob([signoffLabel(pack, meta)], roll, "binlist").count).toBe(1);
+    const odd = signoffLabel({ ...pack, roster: [{ _id: 1, number: "1", name: "A", team: "", size: "", scanned: "pass" }], binMap: null }, {});
+    expect(odd.bySize).toEqual([{ size: "No size", passed: 1 }]);
+    expect(() => signoffZPL(odd, roll)).not.toThrow();
+    // many sizes still fit above the signature lines
+    const many = { ...odd, bySize: Array.from({ length: 12 }, (_, i) => ({ size: "S" + i, passed: i })) };
+    const ys = [...signoffZPL(many, roll).matchAll(/^FO20,(d+)^A0N,d+,d+^FDSd+^FS/g)].map(m => Number(m[1]));
+    expect(Math.max(...ys)).toBeLessThan(520 - 60);
+  });
 });

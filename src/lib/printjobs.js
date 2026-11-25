@@ -227,6 +227,31 @@ export function summaryJobs(pack, { withPassed = false, station = "", date = "" 
   return [...passed, ...unscanned, ...missing, ...failed, { summary: true, orderNumber: String(o || ""), station: String(station || ""), date: String(date || ""), counts: s.counts }];
 }
 
+// ── The sign-off ticket (the owner, 25 Nov 2026) ───────────────────────────────
+// For the order paper at Finish order: the order, the customer and teams, when and where and who, the
+// passed garments per size in rack order, PASSED, flagged / missing / of the order's total / boxes, and
+// two lines to sign. A past order (`pack.past`: the hub's record) takes the date, station and operator
+// it was done with, and the time it was finished; the order on a station, `meta` ({ date, time, station,
+// operator }; the caller gives what the station knows right now).
+const p2 = n => String(n).padStart(2, "0");
+export function signoffLabel(pack, meta = {}) {
+  const roster = pack?.roster || [], past = pack?.past || null;
+  const sum = orderSummary(pack), n = new Map();
+  roster.filter(inBin).forEach(r => { const z = shortSize(String(r.size ?? "").trim()) || "No size", k = z.toLowerCase(), t = n.get(k) || { size: z, passed: 0 }; t.passed++; n.set(k, t); });
+  const teams = [...new Map(roster.map(r => String(r.team ?? "").trim()).filter(Boolean).map(t => [teamKey(t), t])).values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  const at = past?.finishedAt ? new Date(past.finishedAt) : null;
+  return {
+    kind: "signoff", orderNumber: String(pack?.orderNumber || ""), customer: String(pack?.customer || "").trim(), teams,
+    date: String(past ? past.date || (at ? `${at.getFullYear()}-${p2(at.getMonth() + 1)}-${p2(at.getDate())}` : "") : meta.date || ""),
+    time: String(past ? (at ? `${p2(at.getHours())}:${p2(at.getMinutes())}` : "") : meta.time || ""),
+    station: String(past ? past.station || "" : meta.station || ""), operator: String(past ? past.operator || "" : meta.operator || ""),
+    bySize: [...n.values()].sort((a, b) => bySize(a.size, b.size)),
+    passed: sum.counts.passed, flagged: sum.counts.failed, missing: sum.counts.missing, total: sum.counts.total,
+    boxes: packBoxes(pack).filter(b => b.count > 0).length,
+  };
+}
+export const signoffJobs = (pack, meta) => [signoffLabel(pack, meta)];
+
 // The jerseys that have a sticker: passed by the camera or by hand.
 export const stickerRows = pack => (pack?.roster || []).filter(inBin);
 // Their stickers (kind "jersey"); `ids` picks some. The box on a reprinted
@@ -300,6 +325,6 @@ export function packFromRecord(rec) {
       ...(ev.garment ? { garment: ev.garment } : {}), ...(Array.isArray(ev.spots) && ev.spots.length ? { spots: ev.spots } : {}),
       match: roster.find(r => r._id === ev.rowId) || { number: ev.number, name: ev.name, size: ev.size, team: ev.team },
     })),
-    past: { station: rec?.station || "", date: rec?.date || "", operator: rec?.operator || "", counts: rec?.counts || null },
+    past: { station: rec?.station || "", date: rec?.date || "", operator: rec?.operator || "", counts: rec?.counts || null, finishedAt: rec?.finishedAt || null },
   };
 }

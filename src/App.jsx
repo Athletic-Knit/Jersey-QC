@@ -29,6 +29,7 @@ import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntr
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum, norm, nameMatches } from "./lib/text.js";
 import { summarise, summariseLog, exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
+const clockNow = () => localTimeStamp().slice(11, 16);   // "14:32", for the sign-off ticket
 import { saveSession, loadSession, clearSession, saveSettings, loadSettings, saveSignIn, loadSignIn, clearSignIn, rememberName, shrinkDataUrl, downscaleImage, frameForUpload, cropDataUrl, rotateDataUrl } from "./lib/persist.js";
 import { buildDamageRows, exportDamageReportXLSX } from "./lib/damage.js";
 import { createAwayWatch } from "./lib/attention.js";
@@ -47,7 +48,7 @@ import { binLabels, jerseyLabel, flagLabel, listChunks, cleanSpots, repageLists,
 import { isTallRoll } from "./lib/packlabels.js";
 import { nowStep, listUnchanged, listIds } from "./lib/packing.js";
 import { photoSet, photoCaption } from "./lib/photoset.js";
-import { packBoxes, boxLabelJobs, boxListJobs, boxListLabels, boxFaceJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
+import { packBoxes, boxLabelJobs, boxListJobs, boxListLabels, boxFaceJobs, signoffJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, NO_SIZE_TAG, FIXED_AT_STATION, GARMENT_MENU, DEFAULT_ORDER_GARMENT, LABEL_ROLLS } from "./config.js";
 import { garment as garmentShape, garmentOf, garmentView, toView, fromView, spotAt, spotWords, rosterGarment, orderGarmentOf, SIDES, SIDE_LABELS, MAX_SPOTS } from "./lib/garments.js";
 
@@ -3474,6 +3475,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{/* the count label, FAILED, MISSING and UNSCANNED; the passed list on request (the owner, 24 Nov 2026) */}
               <button style={smBtn} onClick={() => { const l = summaryJobs(pack, { station: stationLabel(pack.station), date: localDateStamp() }); if (many(l.length, "summary labels")) send([[l, "binlist"]], "the order summary"); }}>Summary (failed, unscanned, missing) · {summaryJobs(pack).length}</button>
               <button style={smBtn} onClick={() => { const l = summaryJobs(pack, { withPassed: true, station: stationLabel(pack.station), date: localDateStamp() }); if (many(l.length, "summary labels")) send([[l, "binlist"]], "the order summary with the passed list"); }}>With the passed list · {summaryJobs(pack, { withPassed: true }).length}</button>
+              {/* The sign-off ticket for the order paper (the owner, 25 Nov 2026): a past order from the hub prints the way it was finished. */}
+              <button style={smBtn} title="The order, the passed garments per size, the totals, and two lines to sign: Operator and Supervisor" onClick={() => send([[signoffJobs({ ...pack, final: true }, { date: localDateStamp(), time: clockNow(), station: stationLabel(pack.station), operator: pack.operator || "" }), "binlist"]], "the sign-off ticket")}>Sign-off ticket</button>
             </div>
             <div style={secSt}>Flag tickets · {flags.length}</div>
             {flags.length === 0 ? <div style={{ color: "#64748b" }}>No flags on this order.</div> : (
@@ -4171,8 +4174,10 @@ export default function App() {
     : [...openBins.flatMap(b => !again && b.count > 0 && listUnchanged(listPrinted[b.bin], listIdsOf(b.bin, true)) ? []   // printed from the Packing screen and nothing on it changed since, its NOT IN BOX list included: not again (the owner, 25 Nov 2026)
          : [...finishNotInBoxJobs(packNow, b.bin, b.label, b.count), ...(b.count > 0 ? listOf(b.bin, b.label, true) : [])]),   // an empty open box: what its team lacks, under the name of the box on the floor, only when Box full did not print it already (printjobs.js; the third check, 24 Nov 2026). Before: an empty open box still says what its team lacks (review, 24 Nov 2026: a team flagged or marked missing after its last full box)
        ...damagedListJobs(packNow),   // and what is in the DAMAGED box
-       ...summaryJobs(packNow, { station: stationLabel(stationId()), date: localDateStamp() })],
-  [settings.binLists, binMap, openBins, packNow, listOf, listPrinted, listIdsOf]);
+       ...summaryJobs(packNow, { station: stationLabel(stationId()), date: localDateStamp() }),
+       // The sign-off ticket for the order paper goes LAST, so it comes off the printer first (the owner, 25 Nov 2026)
+       ...signoffJobs({ ...packNow, carried, customer: orderCustomer, final: true }, { date: localDateStamp(), time: clockNow(), station: stationLabel(stationId()), operator: operatorName })],
+  [settings.binLists, binMap, openBins, packNow, listOf, listPrinted, listIdsOf, carried, orderCustomer, operatorName]);
   const finishLists = useMemo(() => finishListsOf(false), [finishListsOf]);
   // The summary on the Packing screen and its printing.
   const summaryNow = useMemo(() => orderSummary(packNow), [packNow]);
@@ -4290,7 +4295,7 @@ export default function App() {
   // Boxes left open at Finish order for a ship-with order: their lists do not print (they are not full).
   const keptOpen = useRef(new Set());
   const printFinishLists = useCallback((note = "", again = false) => {
-    const lists = (again ? finishListsOf(true) : finishLists).filter(l => !keptOpen.current.has(String(l.box ?? l.bin)));   // a box kept open for the ship-with order: neither its list nor its NOT IN BOX list (review, 24 Nov 2026)
+    const lists = (again ? finishListsOf(true) : finishLists).filter(l => !keptOpen.current.has(String(l.box ?? l.bin))).map(l => l.kind === "signoff" ? { ...l, date: localDateStamp(), time: clockNow() } : l);   // the ticket says when it is printed   // a box kept open for the ship-with order: neither its list nor its NOT IN BOX list (review, 24 Nov 2026)
     const n = lists.length, pre = note ? note + " " : "";
     if (!n) { setFinished({ status: "none", text: pre + (settings.binLists ? "No other box has anything in it: no list to print." : "Box lists are switched off in Settings.") }); return; }
     setFinished({ status: "printing", text: `${pre}Printing the box lists…` });
@@ -4402,8 +4407,8 @@ export default function App() {
   }, [resumeSession, role, operatorName]);
   // The order on this station, as the Print menu takes it (printjobs.js).
   const printPack = useMemo(() => !sessionStarted || !roster.length ? null
-    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels, plan: boxPlan, finished: !!finishedAt, garment: orderGarment, customer: orderCustomer },   // finished: on the done screen a jersey never scanned is short (isLastBox)
-  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels, boxPlan, finishedAt, orderGarment, orderCustomer]);
+    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels, plan: boxPlan, finished: !!finishedAt, garment: orderGarment, customer: orderCustomer, operator: operatorName },   // finished: on the done screen a jersey never scanned is short (isLastBox)
+  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels, boxPlan, finishedAt, orderGarment, orderCustomer, operatorName]);
   const flagTag = useCallback(reason => severityOf(reason).tag, []);
   // The list of what is in the DAMAGED box, whenever the inspector asks for it.
   const printDamagedList = useCallback(() => {

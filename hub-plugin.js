@@ -528,7 +528,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
               if ((o.run && ev.run ? ev.run !== o.run : (ev.station !== o.station || (ev.run || 0) !== (o.run || 0))) || String(ev.order) !== String(o.order) || ev.status !== "flagged") return;
               const slim = { ...ev }; delete slim.photo; delete slim.damagePhotos; flags[ev.id] = slim;
             });
-            found[k] = { date, exact: n === q, station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", firstSeen: before?.firstSeen ?? o.firstSeen, lastSeen: o.lastSeen, counts: o.counts || null, jerseyType: o.jerseyType || "", garment: o.garment || before?.garment || "", customer: o.customer || before?.customer || "", rows: o.rows || [], bins: o.bins || null, closedBins: o.closedBins || [], flagsById: flags };
+            found[k] = { date, exact: n === q, station: o.station, order: o.order, run: o.run || 0, operator: o.operator || "", firstSeen: before?.firstSeen ?? o.firstSeen, lastSeen: o.lastSeen, counts: o.counts || null, jerseyType: o.jerseyType || "", garment: o.garment || before?.garment || "", customer: o.customer || before?.customer || "", finishedAt: o.finishedAt || before?.finishedAt || null, rows: o.rows || [], bins: o.bins || null, closedBins: o.closedBins || [], flagsById: flags };
           }
         }
         const orders = Object.values(found).sort((a, b) => (b.exact - a.exact) || ((b.lastSeen || 0) - (a.lastSeen || 0))).slice(0, 10)
