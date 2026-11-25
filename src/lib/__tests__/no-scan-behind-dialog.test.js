@@ -59,11 +59,18 @@ describe("no scan behind a dialog", () => {
   });
 
   it("the pedal handler uses the one list", () => {
-    const i = src.indexOf("Global keyboard: scan trigger only");
+    const i = src.indexOf("Global keyboard: the scan key, and the By hand key");
     expect(i).toBeGreaterThan(-1);
     const body = src.slice(i, i + 700);
     expect(body).toMatch(/anyDialogOpen/);
     expect(body).not.toMatch(/showBins|showPrint|showSettings/);   // no second hand-written list
+  });
+
+  it("the By hand key (W) opens the form from the camera screen, in the same handler, after the dialog check (the co-op, 25 Nov 2026)", () => {
+    const i = src.indexOf("Global keyboard: the scan key, and the By hand key");
+    const body = src.slice(i, i + 1400);
+    expect(body.indexOf("anyDialogOpen")).toBeLessThan(body.indexOf("e.code === byHandKey"));
+    expect(body).toMatch(/e\.code === byHandKey[\s\S]*actions\.manual\(\)/);
   });
 
   it("hands-free, the scan itself, the SCAN button and By hand use it", () => {

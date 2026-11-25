@@ -5203,13 +5203,23 @@ export default function App() {
     else markRow(r._id, v || false);
   }; });
 
-  // ── Global keyboard: scan trigger only ───────────────────────────────────
+  // ── Global keyboard: the scan key, and the By hand key ──────────────────
   useEffect(() => {
     const onKey = (e) => {
       if (e.repeat) return;
       if (overlay || anyDialogOpen || !sessionStarted) return;   // no scan behind any dialog; dialogs that use Enter themselves still get it (this handler never stops the key there)
-      if (e.code !== scanKey) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+      // The By hand key (W by default) on the camera screen opens the form, as the
+      // ⌨ By hand button does (the co-op, 25 Nov 2026: the key was set in Settings
+      // but only the result screens read it, and none of them offers By hand any more).
+      if (byHandKey && e.code === byHandKey && e.code !== scanKey) {
+        if (scanning || locatingUp) return;
+        e.preventDefault();
+        gateRef.current.disarm(); setArmed(false);
+        actions.manual();
+        return;
+      }
+      if (e.code !== scanKey) return;
       // The scan key is Enter by default, and Enter on a focused button clicks it
       // (the last button the mouse touched keeps the focus): the pedal must only
       // scan, so the button loses the focus and the default action is stopped.
@@ -5220,7 +5230,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, anyDialogOpen, sessionStarted, scanKey, doTriggerScan]);
+  }, [overlay, anyDialogOpen, sessionStarted, scanKey, byHandKey, scanning, locatingUp, actions, doTriggerScan]);
 
   // ── Replay (development only): yesterday's scans through today's screens ──
   // The station page with ?replay=<order> loads public/sim/replay-<order>.json
@@ -5635,7 +5645,7 @@ export default function App() {
                         </>
                     }
                     <button onClick={() => { gateRef.current.disarm(); setArmed(false); actions.manual(); }} disabled={scanning || anyDialogOpen || locatingUp} title="Type the garment in — when the camera cannot read it"
-                      style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, whiteSpace: "nowrap" }}>⌨ By hand</button>
+                      style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, whiteSpace: "nowrap" }}>⌨ By hand{byHandKey ? <> <Kbd>{formatKey(byHandKey)}</Kbd></> : null}</button>
                     {blanks.length > 0 && (
                       <button onClick={() => { gateRef.current.disarm(); setArmed(false); setShowBlanks(true); }} title="Garments with no name and no number: count them in by team and size"
                         style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", borderColor: "#22c55e", color: "#4ade80" }}>Blanks · {blanks.reduce((t, g) => t + (g.total - g.done - g.flagged), 0)}</button>
