@@ -497,6 +497,14 @@ function findMatchesInner(roster, name, number, read = {}) {
   // name, a jersey whose name is not the roster's (N4), or a name printed on a
   // jersey whose row has no name (rule NN, also on a roster with no names).
   if (byNum.length >= 1) {
+    // 5h (the owner, 25 Nov 2026): on a roster with no names at all, a name the camera read is
+    // noise (a sponsor, a tag, a stray word): the number has the one open row, so it is green,
+    // whatever name or team the camera read. A doubtful read stays a question (N1), and a
+    // roster WITH names keeps rule NN below.
+    if (numberOnly && !typed && !isDoubtfulRead(number, read)) {
+      const open = byNum.filter(r => !isDone(r));
+      if (open.length === 1) return { type: "exact", match: open[0] };
+    }
     const shown = String(name).trim();
     // Typed by the operator, say it in their terms: the name they typed is not
     // the roster's name for that number (code review of 23 Nov 2026).

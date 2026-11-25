@@ -112,7 +112,7 @@ describe("matcher invariants over random rosters and reads", () => {
         expect(g.scanned, "1 open row: " + ctx).toBeFalsy();
         expect(doubtful(read), "4 a doubtful read went green: " + ctx).toBe(false);
         if (g.name) expect(nameMatches(read.name, g.name) && read.flags.nameComplete !== false, "2 named row needs its whole name: " + ctx).toBe(true);
-        else expect(norm(read.name), "8 a name was read but the row has none: " + ctx).toBe("");
+        else if (!roster.every(x => !x.name)) expect(norm(read.name), "8 a name was read but the row has none: " + ctx).toBe("");   // on a roster with no names at all the name is noise (5h, 25 Nov 2026)
         expect(normNum(g.number), "3 the number read, digit for digit: " + ctx).toBe(normNum(read.number));
         const twins = roster.filter(x => !x.scanned && x !== g && normNum(x.number) === normNum(g.number) && (!g.name || nameMatches(read.name, x.name)));
         if (twins.length) {
