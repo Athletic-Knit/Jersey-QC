@@ -107,6 +107,15 @@ describe("the pick list follows the last confirmed jersey's size (25 Nov 2026)",
     expect(sortCandidates(twins, "size", { after }).map(r => r._id)).toEqual([4, 2, 1, 3]);
     expect(sortCandidates(twins, "size", { after, lastSize: "L-S" }).map(r => r._id)).toEqual([4, 2, 3, 1]);   // the last size first inside each part, never above the number read
   });
+  it("a 6/9 list: the number read, its last size first, then every other size in rack order (no family step, whatever the sort), then the twin the same way (the co-op, 25 Nov 2026)", () => {
+    const rows = [["6", "A-M"], ["9", "Y-L"], ["6", "Y-S"], ["6", "Y-L"], ["9", "A-S"], ["6", "A-S"], ["9", "Y-M"]].map(([number, size], i) => ({ _id: i, number, size, team: `T${7 - i}` }));
+    const after = r => r.number === "9";
+    const got = by => sortCandidates(rows, by, { after, lastSize: "Y-L" }).map(r => `${r.number} ${r.size}`);
+    expect(got("size")).toEqual(["6 Y-L", "6 Y-S", "6 A-S", "6 A-M", "9 Y-L", "9 Y-M", "9 A-S"]);
+    expect(got("team")).toEqual(got("size"));
+    // A list with no twin keeps the family step.
+    expect(sortCandidates(rows.filter(r => r.number === "6"), "size", { lastSize: "Y-L" }).map(r => r.size)).toEqual(["Y-L", "Y-S", "A-S", "A-M"]);
+  });
   it("the line under the header knows whether the size or only its family is on the list", () => {
     expect(lastSizeRank("L-S", "L-S")).toBe(0);
     expect(lastSizeRank("L-M", "L-S")).toBe(1);

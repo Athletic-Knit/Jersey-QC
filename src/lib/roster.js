@@ -451,11 +451,16 @@ export const lastSizeRank = (size, lastSize) => {
   return sameSize(size, lastSize) ? 0 : fam < 3 && sizeRank(size || "")[0] === fam ? 1 : 2;
 };
 export const lastSizeLetter = lastSize => { const g = SIZE_GROUPS[sizeRank(lastSize || "")[0]]; return g ? `${g.key}-` : ""; };
-// `after` (a row test): those rows come after all the others, each part in the
-// order above — a 6/9 list keeps the number read first and its upside-down
-// twin after it (the owner, 25 Nov 2026).
+// `after` (a row test): those rows come after all the others — a 6/9 list keeps
+// the number read first and its upside-down twin after it (the owner, 25 Nov
+// 2026). Each number's part is then the last confirmed size first and every
+// other size in rack order, whatever the station's sort, with no family step
+// (the co-op, 25 Nov 2026: "#6 Y-L first, then all other sizes of #6, then all
+// sizes of #9").
 export function sortCandidates(rows, by = "size", { lastSize = "", after = null } = {}) {
-  const rank = r => (after && after(r) ? 3 : 0) + lastSizeRank(r.size, lastSize);
+  if (after) by = "size";
+  const near = r => after ? (lastSize && !sameSize(r.size, lastSize) ? 1 : 0) : lastSizeRank(r.size, lastSize);
+  const rank = r => (after && after(r) ? 3 : 0) + near(r);
   const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
   const team = (a, b) => String(a.team || "").localeCompare(String(b.team || ""), undefined, { sensitivity: "base", numeric: true });
   const size = (a, b) => bySize(a.size || "", b.size || "");

@@ -109,10 +109,10 @@ describe("NN: a name read where the roster row has no name is yellow", () => {
     expect(findMatches(r, "", "5")).toMatchObject({ type: "exact", match: { _id: 0 } });   // no name on the jersey: green as before
   });
   it("5h: but a doubtful read, two open rows of the number, or a typed entry are not made green by it", () => {
-    const r = [row(0, "", "5"), row(1, "", "23"), row(2, "", "23")];
+    const r = [row(0, "", "5"), row(1, "", "23"), row(2, "", "23", { size: "A-M" })];
     expect(findMatches(r, "ZHANG", "5", { numberComplete: false }).type).toBe("pick");      // the number may be covered
     expect(findMatches(r, "ZHANG", "5", { laidFlat: false }).type).toBe("pick");            // a one-digit number on a jersey not laid flat
-    expect(findMatches(r, "ZHANG", "23").type).toBe("pick");                                // two open #23
+    expect(findMatches(r, "ZHANG", "23").type).toBe("pick");                                // two open #23 of two sizes (one size: see "one garment" below)
     const done = [row(0, "", "23"), { ...row(1, "", "23"), scanned: "pass" }];
     expect(findMatches(done, "ZHANG", "23")).toMatchObject({ type: "exact", match: { _id: 0 } });   // one open, the other passed
     expect(findMatches([{ ...row(0, "", "23"), scanned: "pass" }], "ZHANG", "23").type).toBe("duplicate");
@@ -125,6 +125,31 @@ describe("NN: a name read where the roster row has no name is yellow", () => {
   });
   it("typed by the operator, the typed name does not block the nameless row", () => {
     expect(findMatches([row(0, "", "5")], "ZHANG", "5", { typed: true }).type).toBe("exact");
+  });
+});
+
+describe("one garment: the same number and size on several teams of a roster with no names (the co-op, 25 Nov 2026)", () => {
+  // "When we scan #10 and it lists 6 different #10, all different teams but the same size,
+  // it doesn't matter which one we select: it is the same garment worn by different players."
+  const teams = ["Hawks", "Eagles", "Wolves", "Bears", "Lions", "Owls"];
+  const tens = teams.map((team, i) => row(i, "", "10", { team, size: "Y-L" }));
+  it("a clean read of #10 with six open Y-L #10 on six teams is green on the first open one", () => {
+    expect(findMatches(tens, "", "10")).toMatchObject({ type: "exact", match: { _id: 0 }, sameGarment: 6 });
+    expect(findMatches(tens, "ZHANG", "10")).toMatchObject({ type: "exact", match: { _id: 0 } });   // a name read is noise there (5h)
+    const someDone = tens.map((r, i) => i < 2 ? { ...r, scanned: "pass" } : r);
+    expect(findMatches(someDone, "", "10")).toMatchObject({ type: "exact", match: { _id: 2 } });
+  });
+  it("two sizes, a doubtful read, a typed entry or a roster with names stay a list", () => {
+    const mixed = [...tens.slice(0, 3), row(9, "", "10", { team: "Owls", size: "A-S" })];
+    expect(findMatches(mixed, "", "10").type).toBe("pick");
+    expect(findMatches(tens, "", "10", { numberComplete: false }).type).toBe("pick");
+    expect(findMatches(tens, "", "10", { typed: true }).type).toBe("pick");
+    const named = [...tens, row(20, "Nguyen", "23")];
+    expect(findMatches(named, "", "10").type).not.toBe("exact");
+  });
+  it("two colours in a colour column stay a list unless the colour seen settles it", () => {
+    const c = [row(0, "", "10", { colour: "Navy" }), row(1, "", "10", { colour: "White" })];
+    expect(findMatches(c, "", "10").type).toBe("pick");
   });
 });
 

@@ -5,6 +5,7 @@
 // the comment above findMatches.
 import { norm, normNum, nameMatches, nameWords, editDistance } from "./text.js";
 import { narrowByColour } from "./colour.js";
+import { sameSize } from "./roster.js";
 
 // A row is done when it passed, was entered by hand (status "manual", only on
 // orders saved before a typed jersey became a plain pass, 20 Nov 2026), or is
@@ -187,6 +188,25 @@ function sameReadRows(rows, read, reason, eligible = rows) {
   const { rows: agree, narrowed } = narrowByColour(rows, read);
   const seen = narrowed && read.colour ? ` — the garment looks ${String(read.colour).trim()}` : "";
   return { type: "pick", candidates: dedupe([...agree, ...rows]), reason: reason + seen, twins: true };   // twins: the one left open may be the passed one scanned again (the colour seen says so), so a list of one here stays a list
+}
+
+// One garment, several rows (the co-op, 25 Nov 2026): on a roster with no names,
+// the open rows of the number read that are all the SAME size are the same
+// garment, made for different teams' players ("when we scan #10 and it lists 6
+// different #10, all different teams but the same size, it does not matter which
+// one we select"). A clean camera read goes green on the first of them, in roster
+// order; it goes in that row's box. Rows of more than one size, or (with a colour
+// column) of more than one colour once the colour seen has narrowed them, stay a
+// list; so does a typed entry, a doubtful read (N1) and a roster with names.
+function oneGarment(rows, read, numberOnly, typed, number) {
+  if (!numberOnly || typed || isDoubtfulRead(number, read)) return null;
+  const open = rows.filter(r => !isDone(r));
+  if (open.length < 2) return null;
+  const { rows: agree, strong } = narrowByColour(open, read);
+  const pool = strong && agree.length ? agree : open;
+  const colourOf = r => norm(r.colour ?? r.color ?? "");
+  if (!pool.every(r => sameSize(r.size, pool[0].size) && colourOf(r) === colourOf(pool[0]))) return null;
+  return { type: "exact", match: pool[0], sameGarment: pool.length };
 }
 
 // `direct` is the row the read points at, `cands` every row it could be: when
@@ -500,7 +520,7 @@ function findMatchesInner(roster, name, number, read = {}) {
   // question, rule NN: the next branch; on a roster with no names at all only
   // when the number has more than one open row, 5h.)
   if (byNum.length >= 1 && nName === "") {
-    return single(byNum) || sameReadRows(byNum, read, "More than one row with this number — check size and team", byNum.filter(r => !norm(r.name)));
+    return single(byNum) || oneGarment(byNum, read, numberOnly, typed, number) || sameReadRows(byNum, read, "More than one row with this number — check size and team", byNum.filter(r => !norm(r.name)));
   }
 
   // Number is on the roster but the name read agrees with no row: a misread
@@ -515,6 +535,8 @@ function findMatchesInner(roster, name, number, read = {}) {
     if (numberOnly && !typed && !isDoubtfulRead(number, read)) {
       const open = byNum.filter(r => !isDone(r));
       if (open.length === 1) return { type: "exact", match: open[0] };
+      const same = oneGarment(byNum, read, numberOnly, typed, number);   // several open rows, one size: one garment
+      if (same) return same;
     }
     const shown = String(name).trim();
     // Typed by the operator, say it in their terms: the name they typed is not

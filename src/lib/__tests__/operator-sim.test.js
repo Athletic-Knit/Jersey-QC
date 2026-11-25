@@ -229,7 +229,11 @@ function workOrder(r, seed, k, stats, findings) {
         // see the whole number — check it is #N". The operator sees the two digits on the jersey and scans it again.
         if (kind === "digit hidden" && !sameJersey(g, truth)) { stats.hiddenRescan++; seconds += T.retry; continue; }
         const consumed = !item.extra && !sameJersey(g, truth) && roster.some(x => sameJersey(x, truth) && isDone(x));   // its own row was taken by an earlier misread
-        if (item.extra || !sameJersey(g, truth)) { if (kind === "digit misread") stats.misreadGreen++; else if (consumed) stats.misreadChain++; else { findings.push(`A WRONG GREEN: ${ctx()} → green on #${g.number} "${g.name}" ${g.team} ${g.size}`); stats.wrongGreen++; } }
+        // One garment (the co-op, 25 Nov 2026): on a roster with no names, the open rows of a number that are
+        // all one size are the same garment, so a green on any of them is right; the garment's own row stays
+        // open for the next one of that number and size.
+        const oneGarment = !!m.sameGarment && !item.extra && !norm(truth.name) && normNum(g.number) === normNum(truth.number) && (g.size || "") === (truth.size || "");
+        if (item.extra || (!sameJersey(g, truth) && !oneGarment)) { if (kind === "digit misread") stats.misreadGreen++; else if (consumed) stats.misreadChain++; else { findings.push(`A WRONG GREEN: ${ctx()} → green on #${g.number} "${g.name}" ${g.team} ${g.size}`); stats.wrongGreen++; } }
         // The screen shows the number large: half the time the operator sees a
         // misread green is not this jersey, says "not right" and types it. That
         // is the correction the self-check starts from.

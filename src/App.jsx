@@ -877,6 +877,25 @@ function LivePreview({ stream, rotation }) {
   );
 }
 
+// ── The live camera, big, where the damage photo will be (the co-op, 25 Nov 2026) ──
+// The FLAGGED screen's framing view: the same stream as the camera panel, as large
+// as the room allows, so the operator sees what the photo will show before taking it.
+function LiveFrame({ stream, rotation, maxWidth = "100%" }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const v = ref.current; if (!v || !stream) return;
+    v.srcObject = stream; v.play().catch(() => {});
+    return () => { v.srcObject = null; };
+  }, [stream]);
+  return (
+    <div style={{ position: "relative", height: "100%", maxWidth, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {/* contain, never cover: the operator must see the whole frame the photo will keep */}
+      <video ref={ref} autoPlay muted playsInline style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", transform: `rotate(${rotation || 0}deg)`, display: "block", borderRadius: 12, border: "3px solid #fbbf24", boxSizing: "border-box", background: "#000" }} />
+      <div style={{ position: "absolute", top: 8, left: 10, fontSize: 16, fontWeight: 800, color: "#fff", background: "rgba(0,0,0,0.6)", padding: "4px 12px", borderRadius: 10 }}>● Live</div>
+    </div>
+  );
+}
+
 // ── A defect the reason list does not cover: the operator types it ───────────
 // Reached only by a reason marked `custom`, and no reason in config.js is one now:
 // "Others" flags at once, with nothing to type (the owner, 17 Nov 2026).
@@ -1895,11 +1914,20 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
   // the live frame is kept on the flag for the supervisor at once (the owner,
   // 25 Nov 2026: the 3-2-1 hurried the operator and the photos were poor).
   const damagePhotos = state.damagePhotos || [];
-  // FLAGGED with a damage photo: the photo takes all the room there is and
-  // the words share a line above it and a line below, so the operator can see
-  // whether the shot shows the damage and nothing scrolls (the owner, 17 Nov
-  // 2026: at a fixed height it was still small and the screen scrolled).
-  const compact = mode === "supervisor" && damagePhotos.length > 0;
+  // Framing the damage photo (the co-op, 25 Nov 2026): the live camera fills the
+  // screen where the photo will be, the operator sets the damage in it and presses
+  // "Take photo"; the photo then shows in the same place (Retake and Take another
+  // go back to the live view). A defect opens on the live view, a roster problem
+  // on Continue with "Photo of the damage" to open it. `aim`: null until the
+  // operator moves it, then true (live) or false (the photo).
+  const [aim, setAim] = useState(null);
+  const canFrame = mode === "supervisor" && canPhoto && !!stream;
+  const framing = canFrame && (aim ?? (!!state.photoFirst && damagePhotos.length === 0));
+  // FLAGGED with a damage photo, or framing one: the picture takes all the room
+  // there is and the words share a line above it and a line below, so the
+  // operator can see whether the shot shows the damage and nothing scrolls (the
+  // owner, 17 Nov 2026: at a fixed height it was still small and the screen scrolled).
+  const compact = mode === "supervisor" && (damagePhotos.length > 0 || framing);
   // The highlighted option: null until a key, a hover or a shot moves it, and
   // then the first option that can be picked (below, once the options exist).
   const [picked, setSelectedIdx] = useState(null);
@@ -1913,7 +1941,13 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
     if (retake) actions.dropDamagePhoto();
     setShooting(true);
     playTone("shutter");
-    Promise.resolve(actions.damagePhoto()).finally(() => { setShooting(false); setSelectedIdx(0); });
+    Promise.resolve(actions.damagePhoto()).finally(() => { setShooting(false); setAim(false); setSelectedIdx(0); });
+  }, [shooting, actions]);
+  // Back to the live view: "Photo of the damage" on a roster problem, Take another, and Retake (which drops the last photo first).
+  const frameAgain = useCallback((retake = false) => {
+    if (shooting) return;
+    if (retake) actions.dropDamagePhoto();
+    setAim(true); setSelectedIdx(0);
   }, [shooting, actions]);
   // The retry pedal on a green: the read is right, there is nothing to retry,
   // and a retry here looks exactly like a confirm from the operator's side
@@ -1978,6 +2012,12 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
       // 19 Nov 2026: a wrong size tapped by mistake).
       const sizeBack = state.sizeBack ? [{ id: "sizeback", label: "← Back · wrong size", run: actions.backToSize }] : [];
       if (!canPhoto) return [{ ...cont, primary: true }, ...sizeBack];
+      if (canFrame) {
+        // The live view is up: Take photo first (the pedal), Continue to go on without one.
+        if (framing) return [{ id: "shoot", label: shooting ? "📷 Taking…" : "📷 Take photo", primary: true, hint: "set the damage in the picture", run: () => takePhoto() }, { ...cont, label: damagePhotos.length ? "✓ Continue" : "✓ Continue without a photo" }, ...sizeBack];
+        if (damagePhotos.length) return [{ ...cont, primary: true }, { ...photo, run: () => frameAgain() }, { ...retake, run: () => frameAgain(true) }, ...sizeBack];
+        return [{ ...cont, primary: true }, { ...photo, hint: "", run: () => frameAgain() }, ...sizeBack];
+      }
       if (damagePhotos.length) return [{ ...cont, primary: true }, photo, retake, ...sizeBack];
       // A defect wants a photo first; a roster problem is already in the scan photo.
       return state.photoFirst ? [{ ...photo, primary: true }, cont, ...sizeBack] : [{ ...cont, primary: true }, photo, ...sizeBack];
@@ -1996,7 +2036,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
     }
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [state.spots, allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, damagePhotos.length, canPhoto, state.photoFirst, takePhoto, sorter, state.match, state.fromList, fixIn]);
+  }, [state.spots, allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, damagePhotos.length, canPhoto, state.photoFirst, takePhoto, frameAgain, canFrame, framing, shooting, sorter, state.match, state.fromList, fixIn]);
 
   const selectedIdx = picked ?? Math.max(0, options.findIndex(o => !o.disabled));
   const lastKeyRef = useRef(0);
@@ -2314,10 +2354,14 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
           <div style={{ flexShrink: 0, fontSize: "clamp(15px, 2.6cqh, 24px)", fontWeight: 700, color: "#fecaca", marginTop: "0.8cqh", textAlign: "center", padding: "0 20px" }}>Stick a ticket on it and put it in the DAMAGED box.</div>
           <div style={{ flex: "1 1 0", minHeight: 0, width: "100%", display: "flex", justifyContent: "center", alignItems: "center", gap: 20, margin: "1cqh 0", padding: "0 20px", boxSizing: "border-box" }}>
             {state.spots?.length > 0 && <div style={{ flexShrink: 0, textAlign: "center" }}><GarmentMap kind={state.garment} spots={state.spots} fit={{ cqh: 26, cqw: 15 }} title={spotWords(state.garment, state.spots)} /><div style={{ fontSize: "clamp(14px, 2.2cqh, 20px)", color: "#fde68a", fontWeight: 700, marginTop: 4, maxWidth: "34cqw" }}>{spotWords(state.garment, state.spots)}</div></div>}
-            <img src={damagePhotos[damagePhotos.length - 1]} alt="" style={{ height: "100%", width: "auto", maxWidth: state.spots?.length > 0 ? "58%" : "100%", objectFit: "contain", borderRadius: 12, border: "3px solid #fca5a5", boxSizing: "border-box", background: "#000" }} />
+            {framing
+              ? <LiveFrame stream={stream} rotation={rotation} maxWidth={state.spots?.length > 0 ? "58%" : "100%"} />
+              : <img src={damagePhotos[damagePhotos.length - 1]} alt="" style={{ height: "100%", width: "auto", maxWidth: state.spots?.length > 0 ? "58%" : "100%", objectFit: "contain", borderRadius: 12, border: "3px solid #fca5a5", boxSizing: "border-box", background: "#000" }} />}
           </div>
           <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", columnGap: 28, rowGap: 4, padding: "0 20px", fontSize: "clamp(15px, 2.4cqh, 21px)", color: "#fecaca", fontWeight: 700 }}>
-            <span>✓ {damagePhotos.length > 1 ? `${damagePhotos.length} damage photos` : "Damage photo"} saved for the supervisor</span>
+            <span>{framing
+              ? `📷 Set the damage in the picture, then press Take photo${damagePhotos.length ? ` · ${damagePhotos.length} taken` : ""}`
+              : `✓ ${damagePhotos.length > 1 ? `${damagePhotos.length} damage photos` : "Damage photo"} saved for the supervisor`}</span>
             {ticket && (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 10, fontWeight: 400, color: ticket.status === "done" ? "#fecaca" : ticket.status === "printing" ? "#fca5a5" : "#fbbf24" }}>
                 <span>{ticket.status === "printing" ? "🖨 Printing the flag ticket…" : ticket.status === "done" ? "🖨 2 flag tickets printed" : ticket.status === "none" ? "🖨 No label printer for this station — write the ticket by hand" : `🖨 Ticket not printed: ${ticket.message}`}</span>
@@ -5669,7 +5713,7 @@ export default function App() {
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && (   /* the result screen takes this half, so the camera stays in view: one layout on every PC */
             <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} listSort={settings.listSort} lastSize={lastConfirmed?.match?.size || ""} paused={overlayPaused}
-              stream={null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera" && !sorting} />
+              stream={cameraOn ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera" && !sorting} />
           )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", borderBottom: "1px solid #21262d", flexShrink: 0 }}>{/* no ETA here (the owner, 19 Nov 2026): it is on the board and the Wall */}

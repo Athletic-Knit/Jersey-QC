@@ -127,7 +127,7 @@ describe("no alternative, no yellow", () => {
     expect(findMatches(r, "", "4")).toMatchObject({ type: "exact", match: { _id: 0 } });
   });
   it("two #4 rows with no name → yellow", () => {
-    const r = [row(0, "", "4", "red"), row(1, "", "4", "blue")];
+    const r = [row(0, "", "4", "red"), row(1, "", "4", "blue", "A-M")];   // two sizes: one size is one garment, green (the co-op, 25 Nov 2026)
     expect(findMatches(r, "", "4").type).toBe("pick");
   });
   it("#4 read flagged covered on a NAMED row, no name read → yellow even with nothing else to offer", () => {
@@ -218,7 +218,7 @@ describe("colour settles same-number rows", () => {
     expect(ids(m).length).toBe(3);
   });
   it("team names that are not colours leave the pick as it was", () => {
-    const r = [row(0, "", "7", "Ravens"), row(1, "", "7", "Wolves")];
+    const r = [row(0, "", "7", "Ravens"), row(1, "", "7", "Wolves", "A-M")];   // two sizes (one size is one garment, green)
     expect(findMatches(r, "", "7", { colour: "black" }).type).toBe("pick");
   });
   it("trim colour orders the list but never decides a green", () => {
@@ -323,7 +323,7 @@ describe("the camera doubts its read", () => {
     }
   });
   it("a doubtful (not flat) read of a number that IS on the roster lists only that number's rows", () => {
-    const r = [row(0, "", "30", "red"), row(1, "", "30", "blue"), row(2, "", "31"), row(3, "", "70"), row(4, "", "60"), row(5, "", "3")];
+    const r = [row(0, "", "30", "red"), row(1, "", "30", "blue", "A-M"), row(2, "", "31"), row(3, "", "70"), row(4, "", "60"), row(5, "", "3")];
     const m = findMatches(r, "", "30", { laidFlat: false });
     expect(m.type).toBe("pick");
     expect(ids(m)).toEqual([0, 1]);
