@@ -47,7 +47,7 @@ import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.j
 import { nowStep, listUnchanged, listIds } from "./lib/packing.js";
 import { photoSet, photoCaption } from "./lib/photoset.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, NO_SIZE_TAG } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, NO_SIZE_TAG, FIXED_AT_STATION } from "./config.js";
 
 
 const S_PASS    = "pass";
@@ -4624,6 +4624,15 @@ export default function App() {
     // already passed stays passed. Not cleaned: flagged like any other defect.
     cleaned() {
       const o = overlay; if (!o) return;
+      // Fixed at the station is still a flag (the owner, 25 Nov 2026: "it should be flagged even
+      // if it is resolved"): a flag entry, resolved at once, so the reports count it. The garment
+      // itself stays as it was: its row is not set to flag, no ticket prints (the entry counts as
+      // printed), it stays in its box, and lastConfirmed / lastResult are left alone.
+      if (o.fixing) {
+        const f = o.fixing, entry = { id: Date.now(), detected: o.scan?.detected, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: o.match || null, status: S_FLAGGED, reason: f.label, reasonId: f.id, resolution: FIXED_AT_STATION, ...stamp() };
+        ticketPrinted.current = entry.id;
+        setLog(prev => [entry, ...prev]);
+      }
       if (o.reopened || !o.returnTo) { setOverlay(null); armAutoScan(); return; }
       setOverlay({ ...o.returnTo, note: o.fixing.inPlace.note });
     },

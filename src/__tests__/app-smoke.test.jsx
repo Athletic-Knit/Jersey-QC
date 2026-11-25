@@ -123,4 +123,42 @@ describe("the station screen", () => {
     expect(later.length).toBeGreaterThan(0);
     expect(later.every(l => l.summary)).toBe(true);
   });
+
+  // Fixed at the station is still a flag (the owner, 25 Nov 2026): the flag is written, resolved at once,
+  // the garment stays as it was and no ticket prints.
+  it("Dirt or mark cleaned on a passed jersey: a resolved flag in the log, the row still passed, no ticket", async () => {
+    await resumeOrder({ roster: [{ ...roster[0], scanned: "pass" }, roster[1]] });
+    const sel = screen.getByText("Smith").closest("tr").querySelector("select");
+    fireEvent.change(sel, { target: { value: "flag" } });
+    fireEvent.click(await screen.findByText(/Dirt or mark/));
+    fireEvent.click(await screen.findByText(/It is clean now/));
+    await waitFor(() => expect(screen.queryByText("CLEAN IT NOW")).toBeNull());
+    expect(screen.getByText("Smith").closest("tr").querySelector("select").querySelector('option[value="flag"]')).toBeTruthy();   // still passed: it can still be flagged
+    fireEvent.click(screen.getByRole("button", { name: /history/i }));
+    expect(await screen.findByRole("button", { name: /Flag it/ })).toBeTruthy();   // History lists the garment, still passed
+    expect(hubCalls.filter(c => c.url.includes("/api/hub/print") && c.body?.kind === "flag").length).toBe(0);
+    const rep = hubCalls.filter(c => c.url.includes("/api/hub/stations/") && c.body?.events).pop();
+    expect(rep.body.events.find(e => e.status === "flagged")).toMatchObject({ reason: "Dirt or mark", resolution: "Fixed at the station" });
+    expect(rep.body.rows.find(r => r.number === "12")?.status ?? "pass").toMatch(/pass/);
+  });
+
+  it("Dirt or mark cleaned before the pass: a resolved flag in the log, then the green carries on and passes", async () => {
+    await resumeOrder();
+    reads.push(read("12", "SMITH"));
+    fireEvent.click(screen.getByRole("button", { name: /upload/i }));
+    const input = document.querySelector('input[type="file"][accept="image/*"]');
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "jersey.jpg", { type: "image/jpeg" })] } }); });
+    await screen.findByText(/Confirm · \d+ to check/);
+    fireEvent.click(screen.getByRole("button", { name: /^🚩 Flag$/ }));
+    fireEvent.click(await screen.findByText(/Dirt or mark/));
+    fireEvent.click(await screen.findByText(/It is clean now/));
+    await screen.findByText(/Confirm · \d+ to check/);                                   // back on the green
+    for (let i = 0; i < 10 && screen.queryByText(/to check/); i++) await pressEnter();
+    await pressEnter();
+    await waitFor(() => expect(screen.getAllByText(/^1 Pass$/).length).toBeGreaterThan(0));
+    expect(hubCalls.filter(c => c.url.includes("/api/hub/print") && c.body?.kind === "flag").length).toBe(0);
+    const rep = hubCalls.filter(c => c.url.includes("/api/hub/stations/") && c.body?.events).pop();
+    expect(rep.body.events.filter(e => e.status === "flagged")).toEqual([expect.objectContaining({ reason: "Dirt or mark", resolution: "Fixed at the station" })]);
+    expect(rep.body.events.some(e => e.status === "pass")).toBe(true);
+  });
 });

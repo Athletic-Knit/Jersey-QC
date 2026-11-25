@@ -265,6 +265,13 @@ describe("third check, 24 Nov 2026", () => {
     expect(heads(boxListJobs(p([2]), "1.2"))).toEqual([]);
     expect(heads(boxListJobs(p([2]), "2.1"))).toEqual(["NOT IN BOX 2.1 Red"]);
   });
+  it("a flag fixed at the station is in no list: not in the DAMAGED box, not failed in the summary", () => {
+    const r = [row(0), row(1)];
+    const q = { orderNumber: "1", roster: r, binMap: null, closedBins: [], flags: [
+      { id: 7, match: r[0], reason: "Dirt or mark", resolution: "Fixed at the station", timestamp: "2026-11-25 09:00:00" }] };
+    expect(damagedItems(q)).toEqual([]);
+    expect(orderSummary(q).failed).toEqual([]);
+  });
   it("a duplicate copy stays in the DAMAGED box and the summary when its row is later flagged itself", () => {
     const r = [row(0), row(1, { scanned: "flag" })];
     const q = { orderNumber: "1", roster: r, binMap: null, closedBins: [], flags: [

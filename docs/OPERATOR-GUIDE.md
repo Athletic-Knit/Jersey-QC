@@ -150,12 +150,12 @@ Garments with no name and no number cannot be read by the camera. When the roste
 
 **Dirt or mark** opens a blue **CLEAN IT NOW** screen. Wipe the mark off.
 
-- **It is clean now**: the garment is not flagged. It goes back to the green screen (or stays passed).
+- **It is clean now**: the garment is not put in the DAMAGED box and no ticket prints. It goes back to the green screen (or stays passed). It is still written down as a flag, marked "Fixed at the station", so the reports count it.
 - **It will not come out**: it is flagged as "Dirt that will not come out".
 
 **Loose thread** works the same way: a blue **CUT IT NOW** screen. Cut the thread off.
 
-- **It is cut now**: the garment is not flagged and carries on as it was.
+- **It is cut now**: no ticket, no DAMAGED box; the garment carries on as it was. It is written down as a flag marked "Fixed at the station", the same as dirt.
 - **It needs the stitcher**: it is flagged as "Loose thread — to the stitcher".
 
 **Damage photo.** On the FLAGGED screen, press **Photo of the damage**. For a defect (logo, twill, stitching, holes, dirt that will not come out) the pedal takes the photo too; for Name or number, Not on the roster, Duplicate and No size tag the pedal presses **Continue** instead. Set the damaged part under the camera, then press **Enter**: the photo is taken at once (no countdown), so set the garment first. **Retake** or **Take another** as needed. The photos go to the supervisor and into the damage report.

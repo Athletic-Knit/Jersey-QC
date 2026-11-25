@@ -42,6 +42,8 @@ export const REASON_CHECK = {
 };
 
 // "Dirt or mark" is cleaned at the station. This is the flag when it will not come out.
+// The resolution of a flag written when dirt or a loose thread is dealt with at the station (25 Nov 2026).
+export const FIXED_AT_STATION = "Fixed at the station";
 export const MARK_STAYS = { id: "mark_stays", label: "Dirt that will not come out", route: "Supervisor → back to cleaning", cat: "Cleaning" };
 // "Loose thread" is cut at the station. This is the flag when it needs the stitcher.
 export const THREAD_STAYS = { id: "thread_stays", label: "Loose thread — to the stitcher", route: "Supervisor → stitcher", cat: "Sewing" };

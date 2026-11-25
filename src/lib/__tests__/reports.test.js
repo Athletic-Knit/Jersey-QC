@@ -49,6 +49,15 @@ describe("defect categories", () => {
     expect(reasonsFor("echl").map(r => r.id)).toContain("label");
     expect(reasonsFor("sublimated").map(r => r.id)).toContain("label");
   });
+  it("a flag fixed at the station counts in the Defects sheet and the flag rate like any other", () => {
+    const fixed = [ev(21, "2026-11-12 09:00:00", "pass", "Jordan"), ev(22, "2026-11-12 09:01:00", "flagged", "Jordan", { reason: "Dirt or mark", resolution: "Fixed at the station" })];
+    const s = buildDefectsSheet(fixed, reasonCategory);
+    expect(s.find(r => r[0] === "Cleaning")?.[1]).toBe(1);
+    expect(s.find(r => r[0] === "All flags")?.[1]).toBe(1);
+    const d = buildDaySheets({ date: "2026-11-12", events: fixed, orders: [] }, id => id, { categoryOf: reasonCategory });
+    const all = d.summary.find(r => r[0] === "All stations");
+    expect(all[d.summary[4].indexOf("Flag rate %")]).toBe(50);   // 1 of 2 inspected
+  });
   it("the sheet counts flags by category, then by reason", () => {
     const s = buildDefectsSheet(day1, reasonCategory);
     expect(s[0]).toEqual(["Category", "Garments", "Share of flags %"]);
