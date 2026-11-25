@@ -29,7 +29,7 @@
 // is exactly as before.
 import { binEntries, binFieldOf, binFor, boxParts, bySize, shortSize } from "./roster.js";
 import { GARMENTS, MAX_SPOTS, SIDES, garment as garmentShape } from "./garments.js";
-import { packListZPL, packListRows, boxFaceZPL, signoffZPL, isTallRoll } from "./packlabels.js";
+import { packListZPL, packListRows, boxFaceZPL, signoffZPL } from "./packlabels.js";
 
 // "1x0.5" (inches, width x height) → dots at the printer's resolution.
 // `top` is where printing starts: the ZD411 begins its label about 2 mm
@@ -753,7 +753,8 @@ export function repageLists(labels, size) {
 // one request, so a cut in the middle of a box's list would print it on two
 // half-empty labels with the wrong page count: `listChunks` cuts only between
 // lists. A list is a run of pages of the same list (as repageLists counts
-// them) and, for a box list, the count label that ends it. A single list
+// them) and, for a box list, the count label that ends it; a packing list on a
+// tall roll (packlabels.js), its count label and its outside label. A single list
 // longer than `max` (over 1,400 jerseys in one box) is cut where it must.
 export function listChunks(labels, max = 100) {
   const list = Array.isArray(labels) ? labels : [], lists = [];
@@ -765,6 +766,9 @@ export function listChunks(labels, max = 100) {
       while (j < list.length && list[j] && !list[j].title && Array.isArray(list[j].items) && key(list[j]) === k) j++;
       const next = list[j];
       if (!l.damaged && next?.title && next.bin === l.bin && next.label === l.label && next.orderNumber === l.orderNumber) j++;
+    } else if (l?.kind === "packlist") {
+      // A packing list (all its pages in one object) stays with the count label and the outside label of its box.
+      while (j < list.length && list[j]?.bin === l.bin && (list[j].title || list[j].kind === "boxface")) j++;
     }
     lists.push(list.slice(i, j)); i = j;
   }
@@ -795,7 +799,7 @@ export function printJob(labels, size = labelSize(), kind = "bin") {
   let list = kind === "binlist" ? repageLists(labels, size) : (Array.isArray(labels) ? labels : []);
   // A packing list on a roll that is not tall (the station sends it only for a tall one) falls back to
   // the rows list of the 2 x 1 in roll; a list pages itself on a tall roll, and repageLists leaves it alone.
-  if (kind === "binlist" && !isTallRoll(size) && list.some(l => l?.kind === "packlist")) {
+  if (kind === "binlist" && !isTallTicket(size) && list.some(l => l?.kind === "packlist")) {
     list = repageLists(list.flatMap(l => l?.kind === "packlist" ? binListLabels(packListRows(l), { bin: l.bin, label: l.team, orderNumber: l.orderNumber }).filter(x => !x.title) : [l]), size);
   }
   const zpls = list.map(l => one(l, size));

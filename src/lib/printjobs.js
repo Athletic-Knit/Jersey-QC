@@ -46,14 +46,10 @@ export function boxLabelJobs(pack, bin) {
   return [...have, ...extra].sort((a, b) => binOrder(a.bin, b.bin));
 }
 
-// The list of what is in a box (kind "binlist"): one box, or every box with
-// something in it. Each box's labels come in print order (labels.js); the
-// group's last box gets its NOT IN BOX list too (below), printed first so the
-// strip reads count label, the rows, then what is not there.
 // What a box's list is made of (the owner, 25 Nov 2026): on a TALL roll the packing list is a table, one
-// label object that the hub lays out in pages, then the count label; on the 2 x 1 in roll and the sticker
-// roll it is today's pages of rows and the count label. `rows` are the garments in the box.
-// The outside label goes with it (printed last, so it comes off the printer on top of the strip).
+// label object that the hub lays out in pages, then the count label, then the outside label (printed
+// last, so it comes off the printer on top of the strip); on the 2 x 1 in roll and the sticker roll it is
+// the pages of rows and the count label. `b.rows` are the garments in the box.
 export function boxListLabels(pack, b, { tall = false } = {}) {
   if (!b || !b.rows?.length) return [];
   const by = binFieldOf(pack?.binMap), orderNumber = ordersInBox(pack, b.bin, b.rows);
@@ -64,10 +60,10 @@ export function boxListLabels(pack, b, { tall = false } = {}) {
 }
 
 // ── The outside label of a box (the owner, 25 Nov 2026) ─────────────────────
-// The shipping face of the box: the order, the customer (the team's name when
+// The shipping face of the box: the order, the customer (the box's teams when
 // none was given), the teams and the sizes in it as "in this box / in the whole
-// order" (within the box's own team: see below), what is not in it, and "Box 1 of 3". No garment names: the list with
-// the names goes inside. `pack.plan` (the station's box plan: [{ bin, boxes,
+// order" (within the box's own team: see below), what is not in it, and "Box 1
+// of 3". No garment names: the list with the names goes inside. `pack.plan` (the station's box plan: [{ bin, boxes,
 // total }]) says how many boxes the order is still expected to need, for "of N"
 // before Finish; on a finished order (`pack.finished`, `pack.past`, `pack.final`)
 // N is the number of boxes that have garments in them.
@@ -83,8 +79,13 @@ export function boxFaceLabel(pack, b) {
   const inTeam = count(rows, teamOf), allTeam = count(scope, teamOf), inSize = count(rows, sizeOf), allSize = count(scope, sizeOf);
   const teams = [...inTeam].map(([k, t]) => ({ team: t.name, inBox: t.n, ofOrder: allTeam.get(k)?.n ?? t.n })).sort((x, y) => x.team.localeCompare(y.team, undefined, { sensitivity: "base" }));
   const sizes = [...inSize].map(([k, t]) => ({ size: t.name, inBox: t.n, ofOrder: allSize.get(k)?.n ?? t.n })).sort((x, y) => bySize(x.size, y.size));
-  // The box's place among the order's boxes, and how many there are.
-  const withG = boxes.filter(x => x.count > 0 || x.bin === b?.bin);
+  // The box's place among the order's boxes that have garments, and how many there are: the closed boxes
+  // first, in the order they were closed, then the open ones in box order. A sealed box keeps its number
+  // on a reprint whatever opens after it (by box order alone, 2.1 closed as "Box 2" became "Box 3" once
+  // 1.2 had garments; the co-op, 25 Nov 2026).
+  const closedAt = new Map((pack?.closedBins || []).map((c, i) => [c.bin, i]));
+  const withG = boxes.filter(x => x.count > 0 || x.bin === b?.bin)
+    .sort((x, y) => (closedAt.get(x.bin) ?? Infinity) - (closedAt.get(y.bin) ?? Infinity) || binOrder(x.bin, y.bin));
   const boxNo = Math.max(1, withG.findIndex(x => x.bin === b?.bin) + 1);
   let total = withG.length;
   if (!(pack?.finished || pack?.past || pack?.final) && Array.isArray(pack?.plan)) {
@@ -95,12 +96,17 @@ export function boxFaceLabel(pack, b) {
   // What the team is missing: only on the group's last box (the earlier ones were full, not short).
   const why = r => r.scanned === "flag" ? "flagged" : r.scanned === "missing" || r.scanned === "short" ? "missing" : "not scanned";
   const notIn = b && by !== "all" && isLastBox(pack, b.bin) ? notInBox(pack, b.bin).map(x => `${String(x.row.number ?? "").trim() ? "#" + String(x.row.number).trim() : "Garment"} ${shortSize(x.row.size)} ${why(x.row)}`.replace(/\s+/g, " ").trim()) : [];
-  return { kind: "boxface", bin: b?.bin, boxNo, boxes: total, orderNumber: String(pack?.orderNumber || ""), customer: String(pack?.customer || "").trim() || label, teams, sizes, notIn };
+  return { kind: "boxface", bin: b?.bin, boxNo, boxes: total, orderNumber: String(pack?.orderNumber || ""), customer: String(pack?.customer || "").trim() || teams.map(t => t.team).join(", ") || label, teams, sizes, notIn };
 }
 // The outside label of one box, or of every box with something in it (the Print menu).
 export function boxFaceJobs(pack, bin) {
   return packBoxes(pack).filter(b => b.count > 0 && (bin === undefined || b.bin === bin)).map(b => boxFaceLabel(pack, b));
 }
+
+// The list of what is in a box (kind "binlist"): one box, or every box with
+// something in it. Each box's labels come in print order (labels.js); the
+// group's last box gets its NOT IN BOX list too (below), printed first so the
+// strip reads count label, the rows, then what is not there.
 export function boxListJobs(pack, bin, { tall = false } = {}) {
   const boxes = packBoxes(pack);
   // An empty open box with no closed box before it: the whole team is flagged or missing, and only

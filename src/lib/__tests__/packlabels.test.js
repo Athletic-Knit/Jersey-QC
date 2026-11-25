@@ -6,9 +6,9 @@ import { describe, it, expect } from "vitest";
 import process from "node:process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { labelSize, printJob, repageLists, listChunks } from "../labels.js";
+import { labelSize, printJob, repageLists, listChunks, textUnits } from "../labels.js";
 import { packListLabel, packListZPL, boxFaceZPL, signoffZPL, packListLayout, LIST_COPIES } from "../packlabels.js";
-import { buildBinMap } from "../roster.js";
+import { buildBinMap, closeBin } from "../roster.js";
 import { packBoxes, boxFaceLabel, boxFaceJobs, boxListJobs, signoffLabel, signoffJobs, packFromRecord } from "../printjobs.js";
 import { WALK, walkBox, walkRoster } from "./walk-order.js";
 
@@ -38,7 +38,7 @@ describe("the packing list as a table (kind packlist)", () => {
     expect(z).toContain("^FDOrder 123456^FS");
     expect(at(z, "A-S")).toEqual([20, 104]); expect(at(z, "A-M")).toEqual([150, 104]); expect(at(z, "A-L")).toEqual([280, 104]);
     expect(z).not.toMatch(/\^FD19\^FS/);   // the flagged garment is not in the box
-    expect(z).toContain("^FDVAN…^FS");     // #100 VANDERHOOGENBAND-SMITH is cut, never run into the next column
+    expect(z).toContain("^FDVANDE…^FS");   // #100 VANDERHOOGENBAND-SMITH is cut, never run into the next column
     expect(z).not.toContain("VANDERHOOGENBAND");
   });
   it("U12 Bombers (#44 missing out): ONE page, A-XL under A-S in the first column", () => {
@@ -51,13 +51,29 @@ describe("the packing list as a table (kind packlist)", () => {
     expect(xl[0]).toBe(s[0]); expect(xl[1]).toBeGreaterThan(s[1] + 40);
     expect(at(z, "A-M")[0]).toBe(150); expect(at(z, "A-L")[0]).toBe(280);
   });
-  it("the name never reaches the next column: cut with an ellipsis, shorter behind a three-digit number", () => {
+  it("the name never reaches the next column: cut with an ellipsis to the room the number leaves", () => {
     const z = packListZPL(packListLabel(walkBox("u11"), { bin: "1", label: "U11 Tigers", orderNumber: "1" }), roll);
     const names = [...z.matchAll(/\^FO(\d+),\d+\^A0N,24,19\^FD([^^]+)\^FS/g)].map(m => [Number(m[1]), m[2]]);
     expect(names.length).toBe(10);
-    for (const [, n] of names) expect([...n.replace("…", "")].length).toBeLessThanOrEqual(9);
-    expect(z).toContain("^FDVAN…^FS");   // behind #100 only a few letters fit
-    expect(z).toContain("…");
+    // each name ends inside its column (108 dots from the column's x), by the same estimate the layout uses
+    const colX = x => [20, 150, 280].filter(c => c <= x).at(-1);
+    for (const [x, n] of names) expect(x - colX(x) + Math.ceil(textUnits(n) * 19 * 0.85)).toBeLessThanOrEqual(108);
+    expect(z).toContain("^FDEVANO…^FS"); expect(z).toContain("^FDKOVALE…^FS");
+  });
+  it("a three-digit number has narrower letters, so the name behind it keeps about five letters", () => {
+    const z = packListZPL(packListLabel([{ number: "100", name: "VANDERHOOGENBAND-SMITH", size: "A-L", team: "T" }, { number: "12", name: "VANDERHOOGENBAND", size: "A-L", team: "T" }], { bin: "1", label: "T" }), roll);
+    expect(z).toContain("^A0N,34,20^FD100^FS"); expect(z).toContain("^A0N,34,28^FD12^FS");
+    expect(z).toContain("^FDVANDE…^FS");
+    expect(packListZPL(packListLabel([{ number: "1000", name: "X", size: "A-L", team: "T" }], { bin: "1", label: "T" }), roll)).toContain("^A0N,34,15^FD1000^FS");
+  });
+  it("a long team name keeps the header on one line: squeezed, then the name cut, never the box, pieces or page", () => {
+    const team = "U11 Greater Toronto Hockey League Select Tigers";
+    const z = packListZPL(packListLabel([{ number: "1", name: "A", size: "A-S", team }], { bin: "12.3", label: team, orderNumber: "264247" }), roll);
+    const m = z.match(/\^FO20,18\^A0N,24,(\d+)\^FD([^^]+)\^FS/);
+    expect(Number(m[1])).toBeGreaterThanOrEqual(13);
+    expect(m[2]).toMatch(/^U11 GREATER.*… - BOX 12\.3 - 1 pcs - 1\/1$/);
+    expect(Math.ceil(textUnits(m[2]) * Number(m[1]) * 0.85)).toBeLessThanOrEqual(366);
+    expect(z).toContain("^FO20,46^A0N,40,36^FDOrder 264247^FS");   // the order line under it, as always
   });
   it("overflow: more rows than a page holds go to the next page, headers again, the last page prints first", () => {
     const rows = Array.from({ length: 40 }, (_, i) => ({ number: String(i + 1), name: `NAME${i}`, size: "A-S", team: "U11 Tigers" }));
@@ -97,6 +113,16 @@ describe("the packing list as a table (kind packlist)", () => {
     const lay = packListLayout(two, roll);
     expect(lay.pages.length).toBeGreaterThanOrEqual(2);
     expect(lay.pages.every(p => p.blocks.every(b => b.band))).toBe(true);
+    // a team longer than a page still prints whole: its own pages, split by the section rule, its band on each
+    const huge = Array.from({ length: 80 }, (_, i) => ({ number: String(i + 1), name: "X", size: i % 2 ? "A-M" : "A-L", team: "Zebras" }));
+    const big = packListLayout(packListLabel([...walkBox("u11"), ...huge], { bin: "1", label: "Shared", orderNumber: "1" }), roll);
+    const placed = t => big.pages.flatMap(p => p.blocks.filter(b => b.team === t)).flatMap(b => b.cols.flat()).reduce((n, s) => n + s.rows.length, 0);
+    expect(placed("Zebras")).toBe(80); expect(placed("U11 Tigers")).toBe(10);
+    expect(big.pages.length).toBeGreaterThanOrEqual(3);
+  });
+  it("the same rows always lay out the same way", () => {
+    const rows = [...walkBox("u11"), ...walkBox("u12")];
+    expect(packListZPL(packListLabel(rows, { bin: "1", label: "Shared" }), roll)).toBe(packListZPL(packListLabel([...rows].reverse(), { bin: "1", label: "Shared" }), roll));
   });
   it("copies: every page prints four times (^PQ4), the label's own count when it says so", () => {
     const l = packListLabel(walkBox("u11"), { bin: "1", label: "U11 Tigers", orderNumber: "1" });
@@ -112,6 +138,9 @@ describe("the packing list as a table (kind packlist)", () => {
     expect(repageLists(list, tall4)).toEqual(list);
     expect(repageLists(list, tall4)[0]).toBe(l);
     expect(listChunks([l, l, l], 2)).toEqual([[l, l], [l]]);
+    // a cut never comes between a packing list and its box's count label and outside label
+    const box2 = [{ ...l, bin: "2" }, { title: true, bin: "2" }, { kind: "boxface", bin: "2" }];
+    expect(listChunks([l, { title: true, bin: "1" }, ...box2], 3).map(c => c.map(x => x.bin))).toEqual([["1", "1"], ["2", "2", "2"]]);
     const job = printJob([l], roll, "binlist");
     expect(job.count).toBe(1); expect(job.zpl).toContain("^PQ4");
   });
@@ -156,6 +185,26 @@ describe("the outside label (kind boxface)", () => {
     expect(l.boxes).toBe(3);   // box 1.1 may need a second box; 2.1 one
     expect(boxFaceLabel({ ...open, plan: [] }, packBoxes(open).find(b => b.bin === "1.1")).boxes).toBe(2);
   });
+  it("a sealed box keeps its number: closed boxes in the order they were closed, then the open ones", () => {
+    // #2 LEACH not scanned yet; U12's box 2.1 is closed first, then 1.1; LEACH then passes into 1.2
+    const r0 = roster.map(x => x.number === "2" && x.team === "U11 Tigers" ? { ...x, scanned: undefined } : x), bins = buildBinMap(r0, {}, "team");
+    const no = (p, bin) => boxFaceLabel(p, packBoxes(p).find(b => b.bin === bin)).boxNo;
+    const c1 = closeBin(r0, bins, [], "2.1");
+    expect(no({ ...pack, roster: r0, binMap: c1.binMap, closedBins: c1.closed }, "2.1")).toBe(1);
+    const c2 = closeBin(r0, c1.binMap, c1.closed, "1.1");
+    const later = { ...pack, roster: r0.map(x => x.scanned ? x : { ...x, scanned: "pass" }), binMap: c2.binMap, closedBins: c2.closed };
+    expect(["2.1", "1.1", "1.2"].map(b => no(later, b))).toEqual([1, 2, 3]);
+  });
+  it("the outside label: 'Not in this box' never takes more than its three lines, 'Box 1 of 2' stays clear of the WEIGHT box", () => {
+    const notIn = Array.from({ length: 30 }, (_, i) => `#${i + 10} A-M flagged`);
+    const z = boxFaceZPL({ ...boxFaceLabel(pack, box("1.1")), notIn }, roll);
+    const line = z.match(/\^FDNot in this box: ([^^]+)\^FS/)[1];
+    expect(line).toMatch(/ \+\d+ more$/);
+    expect(Math.ceil(textUnits(`Not in this box: ${line}`) * 18 * 0.85)).toBeLessThanOrEqual(3 * 366 * 0.8);
+    const [, bx, , bw] = z.match(/\^FO(\d+),(\d+)\^A0N,44,(\d+)\^FDBox 1 of 2\^FS/).map(Number);
+    const wx = Number(z.match(/\^FO(\d+),\d+\^GB116,70,3\^FS/)[1]);
+    expect(bx + Math.ceil(textUnits("Box 1 of 2") * bw * 0.85)).toBeLessThan(wx);
+  });
   it("the box lists of a tall roll end with the outside label, the Print menu can print it alone, and a short roll gets none", () => {
     const jobs = boxListJobs(pack, "1.1", { tall: true });
     expect(jobs.map(l => l.kind || (l.title ? "count" : "rows"))).toEqual(["rows", "packlist", "count", "boxface"]);   // the NOT IN BOX list first (#19 is out of this team)   // the outside label last: it comes off the printer on top
@@ -192,12 +241,12 @@ describe("the sign-off ticket (kind signoff)", () => {
     const l = signoffJobs(packFromRecord(rec), { date: "never", time: "never" })[0];
     expect(l).toMatchObject({ orderNumber: "123456", customer: "Source for Sports", date: "2026-11-24", time: "09:05", station: "st-station1", operator: "Person 2", passed: 18, total: 20 });
   });
-  it("on a 2 x 1 in roll it is three labels: header and sizes, the totals, the signatures", () => {
+  it("on a 2 x 1 in roll it is three labels, signatures printed first, so the strip reads header and sizes, totals, signatures", () => {
     const z = signoffZPL(signoffLabel(pack, meta), labelSize("2x1"));
     expect(pages(z)).toHaveLength(3);
-    expect(pages(z)[0]).toContain("123456"); expect(pages(z)[0]).toContain("A-S 6");
+    expect(pages(z)[2]).toContain("123456"); expect(pages(z)[2]).toContain("A-S 6");
     expect(pages(z)[1]).toContain("PASSED 18"); expect(pages(z)[1]).toContain("Flagged 1 - Missing 1 - of 20 - Boxes 2");
-    expect(pages(z)[2]).toContain("Operator"); expect(pages(z)[2]).toContain("Supervisor");
+    expect(pages(z)[0]).toContain("Operator"); expect(pages(z)[0]).toContain("Supervisor");
     const job = printJob([signoffLabel(pack, meta)], labelSize("2x1"), "binlist");
     expect(job.count).toBe(3);
   });
@@ -206,9 +255,18 @@ describe("the sign-off ticket (kind signoff)", () => {
     const odd = signoffLabel({ ...pack, roster: [{ _id: 1, number: "1", name: "A", team: "", size: "", scanned: "pass" }], binMap: null }, {});
     expect(odd.bySize).toEqual([{ size: "No size", passed: 1 }]);
     expect(() => signoffZPL(odd, roll)).not.toThrow();
-    // many sizes still fit above the signature lines
-    const many = { ...odd, bySize: Array.from({ length: 12 }, (_, i) => ({ size: "S" + i, passed: i })) };
-    const ys = [...signoffZPL(many, roll).matchAll(/^FO20,(d+)^A0N,d+,d+^FDSd+^FS/g)].map(m => Number(m[1]));
-    expect(Math.max(...ys)).toBeLessThan(520 - 60);
+  });
+  it("many sizes and teams still fit: the sizes go to two columns above PASSED, the teams line ends '+N more', the signatures at the bottom", () => {
+    for (const n of [12, 15, 22]) {
+      const many = { ...signoffLabel(pack, meta), teams: Array.from({ length: 9 }, (_, i) => `U${10 + i} Greater Toronto Select`), bySize: Array.from({ length: n }, (_, i) => ({ size: "S" + i, passed: i })) };
+      const z = signoffZPL(many, roll);
+      const ys = [...z.matchAll(/\^FO\d+,(\d+)\^A0N,(\d+),\d+\^FDS\d+\^FS/g)].map(m => Number(m[1]) + Number(m[2]));
+      expect(ys).toHaveLength(n);
+      const totals = z.match(/\^FO20,(\d+)\^A0N,22,\d+\^FDFlagged/);
+      expect(Math.max(...ys)).toBeLessThan(Number(totals[1]));
+      expect(Number(totals[1]) + 22).toBeLessThan(609 - 89);   // above the first signature line
+      expect(z).toContain("^FO20,520^GB366,2,2^FS"); expect(z).toContain("^FO20,566^GB366,2,2^FS");
+      expect(z).toMatch(/\^FDSource for Sports - U10 Greater Toronto Select.* \+\d+ more\^FS/);
+    }
   });
 });

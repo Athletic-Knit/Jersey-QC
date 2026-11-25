@@ -44,8 +44,10 @@ import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./l
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { duplicateOptions } from "./lib/dupoptions.js";
 import { matchRead, screenFor } from "./lib/scanpolicy.js";
-import { binLabels, jerseyLabel, flagLabel, listChunks, cleanSpots, repageLists, labelSize as labelDots, DEFAULT_FLAG_LABEL_SIZE } from "./lib/labels.js";
-import { isTallRoll } from "./lib/packlabels.js";
+import { binLabels, jerseyLabel, flagLabel, listChunks, cleanSpots, repageLists, isTallTicket, labelSize as labelDots, DEFAULT_FLAG_LABEL_SIZE } from "./lib/labels.js";
+import { LIST_COPIES } from "./lib/packlabels.js";
+// The status line of a print with a packing list in it: each of its pages comes out four times (the owner, 25 Nov 2026).
+const copiesNote = labels => (labels.some(l => l?.kind === "packlist") ? `, the packing list ${LIST_COPIES} copies` : "");
 import { nowStep, listUnchanged, listIds } from "./lib/packing.js";
 import { photoSet, photoCaption } from "./lib/photoset.js";
 import { packBoxes, boxLabelJobs, boxListJobs, boxListLabels, boxFaceJobs, signoffJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
@@ -3362,7 +3364,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
       : Array.from({ length: Math.ceil(labels.length / 50) }, (_, i) => [labels.slice(i * 50, i * 50 + 50), kind]));
     // The count is the hub's: the labels that came out (a tall roll's lists are re-paged).
     chunks.reduce((pr, [labels, kind]) => pr.then(t => hub.printLabels(labels, { kind, station: stationId() }).then(r => ({ printer: r?.printer, count: t.count + (Number.isFinite(r?.count) ? r.count : labels.length) }))), Promise.resolve({ count: 0 }))
-      .then(r => setStatus({ kind: "done", text: `Printed ${what}: ${r.count} ${r.count === 1 ? "label" : "labels"} on ${r.printer}` }))
+      .then(r => setStatus({ kind: "done", text: `Printed ${what}: ${r.count} ${r.count === 1 ? "label" : "labels"}${copiesNote(parts.flatMap(([labels]) => labels))} on ${r.printer}` }))
       .catch(e => setStatus({ kind: "error", text: `${what} NOT printed: ${e.status === 503 ? "no label printer for this station" : e.status ? e.message : "could not reach the server"}` }));
   };
   const search = () => {
@@ -3378,7 +3380,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const inDamaged = useMemo(() => damagedItems(pack), [pack]);
   const needle   = pick.trim().toLowerCase();
   const picked   = needle ? stickers.filter(r => rosterMatches(r, pick)).slice(0, 8) : [];   // the same search as the roster table's
-  const tall = roll ? isTallRoll(roll) : false;   // a tall roll prints a box's list as a table (printjobs.js boxListLabels)
+  const tall = roll ? isTallTicket(roll) : false;   // a tall roll prints a box's list as a table (printjobs.js boxListLabels)
   const allLabels = pack ? boxLabelJobs(pack) : [], allLists = pack ? boxListJobs(pack, undefined, { tall }) : [];
   const sum = pack ? orderSummary(pack) : null;
   const listCount = roll ? repageLists(allLists, roll).length : null;   // the list labels that come out on this station's roll
@@ -3868,7 +3870,7 @@ export default function App() {
   const boxPlanLabels = useMemo(() => { const has = new Set(carried.map(c => c.bin)); return binLabels(roster, binMap, { orderNumber, boxes: Object.fromEntries(boxPlan.map(e => [e.bin, e.boxes])) }).filter(l => !has.has(String(l.bin))); }, [roster, binMap, orderNumber, boxPlan, carried]);
   // The box lists print as a table on a tall roll (boxRoll 2 x 3 in, 2 x 4 in) and as pages of rows on the others
   // (printjobs.js boxListLabels). Placed after boxPlan: the outside label reads the plan.
-  const tallBoxRoll = useMemo(() => isTallRoll(labelDots(settings.boxRoll)), [settings.boxRoll]);
+  const tallBoxRoll = useMemo(() => isTallTicket(labelDots(settings.boxRoll)), [settings.boxRoll]);
   // `final`: Finish order is printing, so the outside label's "of N" is the boxes that have garments, not the plan's.
   const listOf     = useCallback((bin, label, final = false) => {
     const p = { orderNumber, roster, binMap, closedBins, carried, customer: orderCustomer, plan: boxPlan, final };
@@ -4221,7 +4223,8 @@ export default function App() {
     const packAfter = { orderNumber, roster, binMap: r.binMap, closedBins: r.closed, flags: log.filter(l => l.status === S_FLAGGED) };
     const notInIds = left === 0 ? notInBox(packAfter, bin).map(x => x.row._id) : null;
     const notIn = left === 0 ? notInBoxJobs(packAfter, bin, r.entry.label) : [];
-    const lists = [...notIn, ...boxListLabels({ orderNumber, roster, binMap, closedBins, carried, customer: orderCustomer, plan: boxPlan }, { bin, label: r.entry.label, rows }, { tall: tallBoxRoll })];
+    // The order as it is after the close, so the outside label numbers the box as a closed one (printjobs.js boxFaceLabel).
+    const lists = [...notIn, ...boxListLabels({ ...packAfter, carried, customer: orderCustomer, plan: boxPlan }, { bin, label: r.entry.label, rows }, { tall: tallBoxRoll })];
     const what  = `Box ${bin} closed with ${rows.length} ${rows.length === 1 ? "garment" : "garments"}${carriedIn(bin).length ? ` (${carriedIn(bin).length} from order ${[...new Set(carriedIn(bin).map(x => x.order))].join(", ")})` : ""}. ${left ? `${r.entry.label} now goes in Box ${r.newBin}` : `Nothing of ${r.entry.label} is left to scan`}`;
     if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Box lists are switched off in Settings.` }); return; }
     setBinPrint({ status: "printing", text: what });
@@ -4234,7 +4237,7 @@ export default function App() {
         .then(res2 => { setBoxLabelled(prev => [...new Set([...prev, r.newBin])]); return { ...res2, count: res.count }; }))
       .then(res => {
         if (notInIds) setClosedBins(prev => prev.map(c => c.bin === bin ? { ...c, notIn: notInIds } : c));   // printed: Finish order need not print it again unless it changes
-        setBinPrint({ status: "done", text: `${what}. Printed ${res.count} list ${res.count === 1 ? "label" : "labels"} for Box ${bin}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` });
+        setBinPrint({ status: "done", text: `${what}. Printed ${res.count} list ${res.count === 1 ? "label" : "labels"} for Box ${bin}${copiesNote(lists)}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` });
       })
       .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
   }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, teachBox, boxLabelled, carriedIn, carried, tallBoxRoll, orderCustomer, boxPlan, log]);
@@ -4251,7 +4254,7 @@ export default function App() {
     printOnTicketRoll(lists, "binlist")
       .then(res => {
         setListPrinted(p => ({ ...p, ...Object.fromEntries(jobs.map(j => [j.bin, j.ids])) }));
-        setBinPrint({ status: "done", text: `${what} printed: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}. ${boxes.length === 1 ? "The box stays" : "The boxes stay"} open.` });
+        setBinPrint({ status: "done", text: `${what} printed: ${res.count} ${res.count === 1 ? "label" : "labels"}${copiesNote(lists)} on ${res.printer}. ${boxes.length === 1 ? "The box stays" : "The boxes stay"} open.` });
       })
       .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
   }, [settings.binLists, packNow, listIdsOf, listOf, printOnTicketRoll]);
@@ -4272,7 +4275,7 @@ export default function App() {
     if (!lists.length) return;
     setBinPrint({ status: "printing", text: `Box ${bin} list` });
     printOnTicketRoll(lists, "binlist")
-      .then(res => setBinPrint({ status: "done", text: `Box ${bin} list printed again: ${res.count} ${res.count === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .then(res => setBinPrint({ status: "done", text: `Box ${bin} list printed again: ${res.count} ${res.count === 1 ? "label" : "labels"}${copiesNote(lists)} on ${res.printer}` }))
       .catch(e => setBinPrint({ status: "error", text: `Box ${bin} list. ${printProblem(e)}` }));
   }, [closedBins, listOf, printOnTicketRoll, packNow]);
 
@@ -4295,12 +4298,12 @@ export default function App() {
   // Boxes left open at Finish order for a ship-with order: their lists do not print (they are not full).
   const keptOpen = useRef(new Set());
   const printFinishLists = useCallback((note = "", again = false) => {
-    const lists = (again ? finishListsOf(true) : finishLists).filter(l => !keptOpen.current.has(String(l.box ?? l.bin))).map(l => l.kind === "signoff" ? { ...l, date: localDateStamp(), time: clockNow() } : l);   // the ticket says when it is printed   // a box kept open for the ship-with order: neither its list nor its NOT IN BOX list (review, 24 Nov 2026)
+    const lists = (again ? finishListsOf(true) : finishLists).filter(l => !keptOpen.current.has(String(l.box ?? l.bin))).map(l => l.kind === "signoff" ? { ...l, date: localDateStamp(), time: clockNow() } : l);   // a box kept open for the ship-with order: neither its list nor its NOT IN BOX list (review, 24 Nov 2026); the sign-off ticket says when it is printed
     const n = lists.length, pre = note ? note + " " : "";
     if (!n) { setFinished({ status: "none", text: pre + (settings.binLists ? "No other box has anything in it: no list to print." : "Box lists are switched off in Settings.") }); return; }
     setFinished({ status: "printing", text: `${pre}Printing the box lists…` });
     printOnTicketRoll(lists, "binlist")
-      .then(r => setFinished({ status: "done", text: `${pre}Box lists printed: ${r.count} ${r.count === 1 ? "label" : "labels"} on ${r.printer}` }))
+      .then(r => setFinished({ status: "done", text: `${pre}Box lists printed: ${r.count} ${r.count === 1 ? "label" : "labels"}${copiesNote(lists)} on ${r.printer}` }))
       .catch(e => setFinished({ status: "error", text: `${pre}The box lists were NOT printed. ${printProblem(e)}. Fix the printer and print them again.` }));
   }, [finishLists, finishListsOf, settings.binLists, printOnTicketRoll]);
   // `keep`: the boxes the operator left open for the ship-with order. They go to the hub

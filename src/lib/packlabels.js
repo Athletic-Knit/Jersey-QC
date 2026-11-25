@@ -13,7 +13,8 @@
 //     bySize: [{ size, passed }], passed, flagged, missing, total, boxes }
 // Each of them is laid out whole by its function below, which returns the ZPL of
 // every label it needs (the list: every page, last page first).
-import { textUnits, byNumber } from "./labels.js";
+// The tall rolls are the flag ticket's (`isTallTicket` in labels.js: 2 in wide, 2.5 in or more high).
+import { textUnits, byNumber, isTallTicket } from "./labels.js";
 import { bySize, shortSize } from "./roster.js";
 
 // Every page of a packing list comes out this many times (the owner, 25 Nov 2026: "print 4 of this").
@@ -21,16 +22,37 @@ export const LIST_COPIES = 4;
 
 const safe = s => String(s ?? "").replace(/[\^~]/g, " ");
 const head = (w, h) => ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", "^LT0"];
+// How many dots a text takes at letter width `fw`. labels.js's `textUnits` is the safe (wide)
+// estimate; font 0 prints at about 0.85 of it (the paper trial of 25 Nov 2026: six capitals of
+// the 24-dot name behind a two-digit number fitted the 108-dot column). Every width on these
+// labels is measured with it.
+const PRINTED = 0.85;
+const dotsOf = (text, fw) => Math.ceil(textUnits(text) * fw * PRINTED);
+// `text` cut with "…" so that it takes at most `room` dots at letter width `fw` ("" when not even one letter fits).
+function cutTo(text, fw, room) {
+  const t = String(text ?? "").trim(), ch = [...t];
+  if (dotsOf(t, fw) <= room) return t;
+  for (let k = ch.length - 1; k > 0; k--) { const s = ch.slice(0, k).join("").trimEnd() + "…"; if (dotsOf(s, fw) <= room) return s; }
+  return "";
+}
+// A name and what follows it on one line ("U11 TIGERS" + " - BOX 1.1 - 15 pcs - 1/2"): the name is cut
+// so that the whole line still fits `width` at letter width `min`; the tail is never cut.
+const named = (name, tail, min, width) => cutTo(name, min, width - dotsOf(tail, min)) + tail;
+// As many of `items` as fit `room` dots at letter width `fw`, then "+3 more".
+function fitList(items, fw, room, sep = ", ") {
+  for (let k = items.length; k > 0; k--) {
+    const s = items.slice(0, k).join(sep) + (k < items.length ? ` +${items.length - k} more` : "");
+    if (dotsOf(s, fw) <= room) return s;
+  }
+  return items.length ? `${items.length} more` : "";
+}
 // One line of text, never wider than `width`: the letters get narrower (down from `fw`) until it fits.
 const txt = (x, y, fh, fw, width, text, { reverse = false } = {}) => {
-  const w = Math.max(6, Math.min(fw, Math.floor(width / textUnits(text))));
+  const w = Math.max(6, Math.min(fw, Math.floor(width / (textUnits(text) * PRINTED))));
   return `^FO${x},${y}^A0N,${fh},${w}${reverse ? "^FR" : ""}^FD${safe(text)}^FS`;
 };
 const box = (x, y, w, h, t) => `^FO${x},${y}^GB${w},${h},${t}^FS`;
-const dpiOf = size => Number(size?.dpi) || 203;
 const sizeOf = size => ({ w: Number(size?.w) || 406, h: Number(size?.h) || 609 });
-// The tall rolls: 2 in wide and 2.5 in or more high (the same rule as the flag ticket's).
-export const isTallRoll = size => { const { w, h } = sizeOf(size); return h >= Math.round(2.5 * dpiOf(size)) && w >= Math.round(2 * dpiOf(size)); };
 
 // ── The packing list ─────────────────────────────────────────────────────────
 // The rows in a box → the label object the hub lays out. One group a team (a box
@@ -58,20 +80,12 @@ export function packListLabel(rows, { bin, label = "", orderNumber = "", by = "t
 
 const SEC_HEAD = 44;   // a size's header, the rule under it, and the gap before the first row
 const ROW = 40, GAP = 8, BAND = 30, TOP = 104;
-const NAME_FW = 19;    // the name's letter width
-// The name, cut so that it never reaches the next column: about six letters in
-// a column of 108 dots, fewer behind a three-digit number, then "…".
-function cutName(number, name, colW) {
-  // textUnits is the safe (wide) estimate; letters in the 24-dot name are about 0.8 of it. The room ends at
-  // the rule between the columns, 13 dots before the next column.
-  const n = String(name ?? "").trim(), room = colW + 2 - (String(number ?? "").length * 16 + 6);
-  if (!n) return "";
-  const wide = [...n].map(ch => textUnits(ch) * NAME_FW * 0.85);
-  if (wide.reduce((a, b) => a + b, 0) <= room) return n;
-  let used = 0, k = 0;   // cut: the "…" needs about 10 dots of its own
-  for (const w of wide) { used += w; if (used > room - 10) break; k++; }
-  return [...n].slice(0, Math.max(1, k)).join("").trimEnd() + "…";
-}
+const NAME_FW = 19;    // the name's letter width (24 dots high)
+const MIN_FW = 14;     // the narrowest letters of a header or band line; a longer team name is cut with "…"
+// The number is 34 dots high, its letters 28 wide; past two digits they get narrower, so "100" takes
+// about the room of "12" and the name behind it keeps about five letters (the co-op, 25 Nov 2026:
+// at full width "#100 VAN…" was too short to be any use).
+const numFw = num => (num.length > 2 ? Math.floor(60 / num.length) : 28);
 // The sections of a packing list laid onto pages: { pages: [{ blocks: [{ team, pcs, band, top, colTop, colY, cols }] }] }.
 // A section (a size's header and its rows) goes whole into the column with the
 // least in it where it fits (so a fourth size with one row sits under another
@@ -80,7 +94,8 @@ function cutName(number, name, colW) {
 // page, and a team's band is drawn again on every page its sections continue on.
 export function packListLayout(l, size) {
   const { w, h } = sizeOf(size);
-  const step = Math.floor((w - 16) / 3), bottom = h - 9;
+  // At least one row a column, whatever the roll (a short roll never gets here: printJob makes it rows), so the loop below always ends.
+  const step = Math.floor((w - 16) / 3), bottom = Math.max(h - 9, TOP + BAND + 8 + SEC_HEAD + ROW);
   const groups = (l.groups || []).map(g => ({ ...g, sizes: (g.sizes || []).filter(s => s.rows?.length) })).filter(g => g.sizes.length);
   const band = groups.length > 1;
   const capAt = y => Math.floor((bottom - y - SEC_HEAD) / ROW);   // rows that fit under a header that starts at y
@@ -120,8 +135,7 @@ export function packListLayout(l, size) {
     if (st.page?.blocks.length) { const t = structuredClone(st); place(t, g); if (t.pages.length > st.pages.length) { st.page = null; } }
     place(st, g);
   }
-  const pages = st.pages;
-  return { pages, step, bottom };
+  return { pages: st.pages, step, bottom };
 }
 
 // Every page of the list as ZPL, the last page first; each page is printed `copies` times.
@@ -134,11 +148,12 @@ export function packListZPL(l, size) {
   const out = [];
   for (let p = pages.length - 1; p >= 0; p--) {
     const z = head(w, h);
-    z.push(txt(20, 18, 24, 20, w - 40, `${title} - BOX ${l.bin ?? ""} - ${pcs} pcs - ${p + 1}/${pages.length}`));
+    // The header is one line whatever the team's name: squeezed, then the name cut (never the box, the pieces or the page).
+    z.push(txt(20, 18, 24, 20, w - 40, named(title, ` - BOX ${l.bin ?? ""} - ${pcs} pcs - ${p + 1}/${pages.length}`, MIN_FW, w - 40)));
     z.push(txt(20, 46, 40, 36, w - 40, `Order ${l.orderNumber ?? ""}`), box(20, 92, w - 40, 3, 3));
     for (const b of pages[p].blocks) {
       if (b.band) {
-        z.push(box(20, b.top, w - 40, BAND, BAND), txt(28, b.top + 4, 24, 20, w - 56, `${String(b.team ?? "").toUpperCase()} - ${b.pcs ?? ""} pcs`, { reverse: true }));
+        z.push(box(20, b.top, w - 40, BAND, BAND), txt(28, b.top + 4, 24, 20, w - 56, named(String(b.team ?? "").toUpperCase(), ` - ${b.pcs ?? ""} pcs`, MIN_FW, w - 56), { reverse: true }));
       }
       const end = Math.max(...b.colY) - GAP;
       b.cols.forEach((parts, c) => {
@@ -146,11 +161,12 @@ export function packListZPL(l, size) {
         const x = 20 + c * step;
         if (c > 0) z.push(box(x - 13, b.colTop, 3, end - b.colTop, 3));
         for (const sec of parts) {
-          z.push(txt(x, sec.y, 30, 26, colW, sec.head || "-"), box(x, sec.y + 32, colW, 3, 3));
+          z.push(txt(x, sec.y, 30, 26, colW, named(sec.head || "-", "", MIN_FW, colW)), box(x, sec.y + 32, colW, 3, 3));
           sec.rows.forEach((r, i) => {
-            const y = sec.y + SEC_HEAD + i * ROW, num = String(r.number ?? "").trim() || "-", nw = num.length * 16 + 6;
-            z.push(`^FO${x},${y}^A0N,34,28^FD${safe(num)}^FS`);
-            const nm = cutName(num, r.name, colW);
+            // The name gets the room the number leaves in the column, so it never reaches the rule.
+            const y = sec.y + SEC_HEAD + i * ROW, num = String(r.number ?? "").trim() || "-", fw = numFw(num), nw = dotsOf(num, fw) + 6;
+            const nm = cutTo(r.name, NAME_FW, colW - nw);
+            z.push(`^FO${x},${y}^A0N,34,${fw}^FD${safe(num)}^FS`);
             if (nm) z.push(`^FO${x + nw},${y + 8}^A0N,24,${NAME_FW}^FD${safe(nm)}^FS`);
           });
         }
@@ -171,33 +187,34 @@ export const packListRows = l => (l.groups || []).flatMap(g => (g.sizes || []).f
 export function boxFaceZPL(l, size) {
   const { w, h } = sizeOf(size), W = w - 40, right = w - 116;
   const z = head(w, h);
-  if (!isTallRoll(size)) {   // a short roll: the order, the customer and the box, one label
+  if (!isTallTicket(size)) {   // a short roll: the order, the customer and the box, one label
     z.push(txt(20, 8, 24, 20, W, "ORDER"), txt(20, 30, Math.round(h * 0.32), Math.round(h * 0.28), W, String(l.orderNumber ?? "")));
     z.push(txt(20, Math.round(h * 0.62), 26, 22, W, String(l.customer ?? "")), txt(20, Math.round(h * 0.8), 28, 24, W, `Box ${l.boxNo ?? ""}${l.boxes ? ` of ${l.boxes}` : ""}`), "^PQ1", "^XZ");
     return z.join("\n");
   }
   z.push(txt(20, 14, 20, 18, W, "ORDER"), txt(20, 34, 52, 46, W, String(l.orderNumber ?? "")));
-  z.push(txt(20, 94, 20, 18, W, "CUSTOMER"), txt(20, 114, 32, 28, W, String(l.customer ?? "")), box(20, 152, W, 2, 2));
+  z.push(txt(20, 94, 20, 18, W, "CUSTOMER"), txt(20, 114, 32, 28, W, named(l.customer, "", 16, W)), box(20, 152, W, 2, 2));
   z.push(txt(20, 160, 20, 18, W, "TEAMS IN THIS BOX   in box / of order"));
-  const pair = (y, name, a, b) => [txt(20, y, 30, 26, right - 30, name), `^FO${right},${y}^A0N,30,26^FD${a} / ${b}^FS`];
+  const pair = (y, name, more, a, b) => [txt(20, y, 30, 26, right - 30, named(name, more, 16, right - 30)), `^FO${right},${y}^A0N,30,26^FD${a} / ${b}^FS`];
   const teams = l.teams || [], sizes = l.sizes || [];
-  const notIn = (l.notIn || []).join(", ");
+  // At most three lines (^FB prints a fourth over the third): what does not fit is "+2 more".
+  const notIn = fitList(l.notIn || [], 18, Math.floor(3 * W * 0.8) - dotsOf("Not in this box: ", 18));
   const bottom = h - 100, rowsAvail = Math.max(2, Math.floor((bottom - 184 - 70 - (notIn ? 70 : 0)) / 36));
   const tShow = Math.min(teams.length, Math.max(1, rowsAvail - Math.min(sizes.length, Math.ceil(rowsAvail / 2))));
   const sShow = Math.min(sizes.length, Math.max(0, rowsAvail - tShow));
   let y = 184;
   teams.slice(0, tShow).forEach((t, i) => {
     const more = i === tShow - 1 && teams.length > tShow ? ` +${teams.length - tShow}` : "";
-    z.push(...pair(y, `${t.team}${more}`, t.inBox, t.ofOrder)); y += 36;
+    z.push(...pair(y, t.team, more, t.inBox, t.ofOrder)); y += 36;
   });
   z.push(box(20, y + 2, W, 2, 2), txt(20, y + 10, 20, 18, W, "SIZES"));
   y += 34;
   sizes.slice(0, sShow).forEach((s, i) => {
     const more = i === sShow - 1 && sizes.length > sShow ? ` +${sizes.length - sShow}` : "";
-    z.push(...pair(y, `${s.size}${more}`, s.inBox, s.ofOrder)); y += 36;
+    z.push(...pair(y, s.size, more, s.inBox, s.ofOrder)); y += 36;
   });
   if (notIn) z.push(`^FO20,${y + 4}^A0N,22,18^FB${W},3,0,L^FDNot in this box: ${safe(notIn)}^FS`);
-  z.push(txt(20, h - 69, 44, 40, 240, `Box ${l.boxNo ?? ""}${l.boxes ? ` of ${l.boxes}` : ""}`));
+  z.push(txt(20, h - 69, 44, 40, w - 136 - 30, `Box ${l.boxNo ?? ""}${l.boxes ? ` of ${l.boxes}` : ""}`));   // ends 10 dots before the WEIGHT box
   z.push(box(w - 136, h - 89, 116, 70, 3), `^FO${w - 128},${h - 83}^A0N,18,16^FDWEIGHT^FS`, "^PQ1", "^XZ");
   return z.join("\n");
 }
@@ -205,28 +222,35 @@ export function boxFaceZPL(l, size) {
 // ── The sign-off ticket ──────────────────────────────────────────────────────
 // For the order paper at Finish order: the order, who and when, the passed
 // garments per size, the totals, and two lines to sign. One label on a tall
-// roll; three on a short one (header and sizes, totals, signatures).
+// roll; three on a short one (header and sizes, totals, signatures), printed
+// signatures first so that the strip reads header, totals, signatures.
 export function signoffZPL(l, size) {
   const { w, h } = sizeOf(size), W = w - 40;
   const sizes = l.bySize || [];
-  const who = `${[l.customer, ...(Array.isArray(l.teams) ? l.teams : [])].filter(Boolean).join(" - ")}`;
+  const who = fitList([l.customer, ...(Array.isArray(l.teams) ? l.teams : [])].filter(Boolean), MIN_FW, W, " - ");   // a line: the teams that do not fit are "+3 more"
   const when = [l.date, l.time, l.station, l.operator].filter(Boolean).join(" - ");
   const totals = `Flagged ${l.flagged ?? 0} - Missing ${l.missing ?? 0} - of ${l.total ?? 0} - Boxes ${l.boxes ?? 0}`;
-  if (!isTallRoll(size)) {
+  if (!isTallTicket(size)) {
     const a = head(w, h), b = head(w, h), c = head(w, h);
     a.push(txt(20, 6, 20, 18, W, "ORDER"), txt(100, 4, 40, 36, W - 80, String(l.orderNumber ?? "")), txt(20, 48, 22, 18, W, who), txt(20, 72, 22, 18, W, when),
-      `^FO20,102^A0N,24,20^FB${W},3,0,L^FD${safe(sizes.map(s => `${s.size} ${s.passed}`).join("   "))}^FS`, "^PQ1", "^XZ");
+      `^FO20,102^A0N,24,20^FB${W},3,0,L^FD${safe(fitList(sizes.map(s => `${s.size} ${s.passed}`), 20, Math.floor(3 * W * 0.8), "   "))}^FS`, "^PQ1", "^XZ");
     b.push(txt(20, 20, 56, 46, W, `PASSED ${l.passed ?? 0}`), txt(20, 100, 24, 20, W, totals), "^PQ1", "^XZ");
     c.push(box(20, 70, W, 2, 2), txt(20, 76, 18, 16, W, "Operator"), box(20, 150, W, 2, 2), txt(20, 156, 18, 16, W, "Supervisor"), "^PQ1", "^XZ");
-    return [a, b, c].map(z => z.join("\n")).join("\n");
+    return [c, b, a].map(z => z.join("\n")).join("\n");
   }
   const z = head(w, h);
   z.push(txt(20, 14, 20, 18, W, "ORDER"), txt(20, 34, 52, 46, W, String(l.orderNumber ?? "")));
   z.push(txt(20, 92, 22, 18, W, who), txt(20, 116, 22, 18, W, when), box(20, 144, W, 2, 2));
-  const first = 154, limit = h - 89 - 80, pitch = Math.max(24, Math.min(38, Math.floor((limit - first) / Math.max(1, sizes.length))));
-  const fh = Math.min(30, pitch - 6);
-  let y = first;
-  for (const s of sizes) { z.push(txt(20, y, fh, 26, 200, s.size), `^FO300,${y}^A0N,${fh},26^FD${s.passed}^FS`, box(20, y + fh + 2, W, 1, 1)); y += pitch; }
+  // A line a size above PASSED and the totals, which end above the signature lines: the lines get closer
+  // (38 dots down to 24) as sizes are added; past what one column holds at 24, two columns.
+  const first = 154, limit = h - 89 - 80, fitRows = Math.floor((limit - first) / 24);
+  const cols = sizes.length > fitRows ? 2 : 1, perCol = Math.min(fitRows, Math.ceil(sizes.length / cols)), colW = Math.floor(W / cols);
+  const pitch = Math.max(24, Math.min(38, Math.floor((limit - first) / Math.max(1, perCol)))), fh = Math.min(30, pitch - 6);
+  sizes.slice(0, cols * perCol).forEach((s, i) => {
+    const x = 20 + Math.floor(i / perCol) * colW, y = first + (i % perCol) * pitch, nx = cols === 1 ? 300 : x + colW - 60;
+    z.push(txt(x, y, fh, Math.min(26, fh), nx - x - 10, s.size), `^FO${nx},${y}^A0N,${fh},${Math.min(26, fh)}^FD${s.passed}^FS`,box(x, y + fh + 2, colW - (cols > 1 ? 10 : 0), 1, 1));
+  });
+  const y = first + perCol * pitch;
   z.push(txt(20, y + 6, 34, 30, 260, "PASSED"), `^FO290,${y + 6}^A0N,34,30^FD${l.passed ?? 0}^FS`, txt(20, y + 46, 22, 18, W, totals));
   z.push(box(20, h - 89, W, 2, 2), txt(20, h - 83, 18, 16, W, "Operator"), box(20, h - 43, W, 2, 2), txt(20, h - 37, 18, 16, W, "Supervisor"), "^PQ1", "^XZ");
   return z.join("\n");
