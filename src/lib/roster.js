@@ -392,9 +392,17 @@ export const sameSize = (a, b) => sizeRank(a || "")[2] === sizeRank(b || "")[2];
 // its family (youth, adult or ladies, `sizeRank`'s group: L-S, then L-M, L-L),
 // then the rest; within a rank the order is as chosen. A size with no family
 // (XL, OSFA) only brings its own rows up.
+// Where a row's size stands to the last confirmed jersey's: 0 the same size,
+// 1 the same family, 2 neither (or no last size). `lastSizeFamily` names the
+// family ("Ladies") for the line under the list's header, "" when it has none.
+export const lastSizeRank = (size, lastSize) => {
+  if (!lastSize) return 0;
+  const fam = sizeRank(lastSize)[0];
+  return sameSize(size, lastSize) ? 0 : fam < 3 && sizeRank(size || "")[0] === fam ? 1 : 2;
+};
+export const lastSizeFamily = lastSize => SIZE_GROUPS[sizeRank(lastSize || "")[0]]?.label || "";
 export function sortCandidates(rows, by = "size", { lastSize = "" } = {}) {
-  const fam  = lastSize ? sizeRank(lastSize)[0] : null;
-  const rank = r => fam === null ? 0 : sameSize(r.size, lastSize) ? 0 : fam < 3 && sizeRank(r.size || "")[0] === fam ? 1 : 2;
+  const rank = r => lastSizeRank(r.size, lastSize);
   const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
   const team = (a, b) => String(a.team || "").localeCompare(String(b.team || ""), undefined, { sensitivity: "base", numeric: true });
   const size = (a, b) => bySize(a.size || "", b.size || "");

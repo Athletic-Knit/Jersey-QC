@@ -2,7 +2,7 @@
 // order, by default), its filters' choices, and its search box ("7" is #7
 // exactly, never #70; the owner, 17 Nov 2026).
 import { describe, it, expect } from "vitest";
-import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices, rosterMatches, sortCandidates, sameSize } from "../roster.js";
+import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices, rosterMatches, sortCandidates, sameSize, lastSizeRank, lastSizeFamily } from "../roster.js";
 
 const roster = [
   { _id: 1, name: "ZED",   number: "10", team: "Red",  size: "A-L",  scanned: "pass" },
@@ -100,5 +100,15 @@ describe("the pick list follows the last confirmed jersey's size (25 Nov 2026)",
     const odd = [{ _id: 1, size: "Y-S" }, { _id: 2, size: "Youth M" }, { _id: 3, size: "XL" }, { _id: 4, size: "l-s" }, { _id: 5, size: "" }];
     expect(sortCandidates(odd, "size", { lastSize: "Y-S" }).map(r => r._id)).toEqual([1, 2, 4, 3, 5]);   // "Youth M" is youth
     expect(sortCandidates(odd, "size", { lastSize: "XL" }).map(r => r._id)[0]).toBe(3);                  // no family: its own rows only
+  });
+  it("the line under the header knows whether the size or only its family is on the list", () => {
+    expect(lastSizeRank("L-S", "L-S")).toBe(0);
+    expect(lastSizeRank("L-M", "L-S")).toBe(1);
+    expect(lastSizeRank("A-M", "L-S")).toBe(2);
+    expect(lastSizeRank("A-M", "")).toBe(0);
+    expect(lastSizeRank("XL", "OSFA")).toBe(2);   // no family
+    expect(lastSizeFamily("L-S")).toBe("Ladies");
+    expect(lastSizeFamily("Youth M")).toBe("Youth");
+    expect(lastSizeFamily("XL")).toBe("");
   });
 });

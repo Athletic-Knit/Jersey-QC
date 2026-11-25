@@ -25,7 +25,7 @@
 //                                    order start and finish, the station layout
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
 import { flushSync } from "react-dom";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, sameSize, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeFamily, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum, norm, nameMatches } from "./lib/text.js";
 import { summarise, summariseLog, exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
@@ -1733,7 +1733,9 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
 
   const match      = state.match || state.scan?.match || null;
   const candidates = useMemo(() => sortCandidates(state.candidates || [], listSort, { lastSize }), [state.candidates, listSort, lastSize]);   // by size unless the station says otherwise (Settings → Pick list); the last jersey's size first
-  const lastSizeOnList = !!lastSize && candidates.some(c => sameSize(c.size, lastSize));   // says why the list starts where it does
+  // Why the list starts where it does: 0 when the last jersey's size is on it ("L-S first"), 1 when only
+  // its family is ("Ladies sizes first"), 2 when the order is the plain one (nothing said).
+  const lastRank = lastSize && candidates.length ? Math.min(...candidates.map(c => lastSizeRank(c.size, lastSize))) : 2;
   const detected   = state.scan?.detected;
   // A one-column list (three rows or fewer) is drawn with bigger text, but only
   // while that leaves nothing to scroll (the owner, 23 Nov 2026) and every name
@@ -2036,7 +2038,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               : `#${detected?.number || "?"}${detected?.number && detected?.number_complete === false ? "?" : ""}${detected?.name ? " · " + detected.name + (detected.name_complete === false ? "…" : "") : ""}`}
           </div>
 
-          {lastSizeOnList && <div style={{ fontSize: 17, color: "#a8a29e", textAlign: "center", marginTop: 4 }}>{lastSize} first · the last jersey</div>}
+          {lastRank < 2 && <div style={{ fontSize: 17, color: "#a8a29e", textAlign: "center", marginTop: 4 }}>{lastRank === 0 ? `${lastSize} first · the last jersey` : `${lastSizeFamily(lastSize)} sizes first · the last jersey was ${lastSize}`}</div>}
           <div style={{ fontSize: 20, color: "#d6d3d1", marginBottom: 16, textAlign: "center" }}>
             {/* Typed by hand: what was typed, not the camera's empty read ("Read: #? · no name"; code review, low finding). */}
             {state.typed ? `Typed: #${state.typed.number || "?"}${state.typed.name ? " · " + state.typed.name : ""}` : <>
