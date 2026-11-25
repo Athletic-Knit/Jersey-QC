@@ -8,7 +8,7 @@
 // hub's flag events turned into the same shape); `planLabels` are the box
 // labels the station expects the order to need (the open order only).
 // Nothing here prints: each function returns the labels for hub.printLabels.
-import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, boxParts, inBin, groupSize } from "./roster.js";
+import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, boxParts, inBin, groupSize, shortSize } from "./roster.js";
 import { binListLabels, jerseyLabel, flagLabel, damagedListLabels, listLabels } from "./labels.js";
 
 // Every box of the order, closed and open, in box order, with the rows in it.
@@ -140,7 +140,7 @@ export function isLastBox(pack, bin) {
 //   missing  marked missing by the operator, and not scanned yet, side by side.
 const byNumber = (a, b) => { const n = x => { const v = parseInt(String(x.number ?? "").replace(/\D/g, ""), 10); return Number.isFinite(v) ? v : 1e9; }; return n(a) - n(b) || String(a.name ?? "").localeCompare(String(b.name ?? "")); };
 // "#7 SMITH White A-L": a jersey on one line of a label.
-const who = x => [String(x?.number ?? "").trim() ? `#${String(x.number).trim()}` : "", x?.name, x?.team, x?.size].map(v => String(v ?? "").trim()).filter(Boolean).join(" ") || "Garment";
+const who = x => [String(x?.number ?? "").trim() ? `#${String(x.number).trim()}` : "", x?.name, x?.team, shortSize(x?.size)].map(v => String(v ?? "").trim()).filter(Boolean).join(" ") || "Garment";
 export function orderSummary(pack) {
   const roster = pack?.roster || [], binMap = pack?.binMap || null, closed = pack?.closedBins || [];
   const passed = roster.filter(inBin).sort(byNumber).map(row => ({ row, bin: binMap ? binOfRow(binMap, closed, row) : null }));

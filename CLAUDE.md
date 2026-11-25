@@ -157,6 +157,7 @@ Files: `.csv`, `.tsv`, `.txt`, `.xlsx`, `.xls` (`parseCSV`, `parseExcel`, `rowsT
 - **The app's own export** re-used as a roster: its result columns (status, bin, box, reason, resolution, inspected by, time) are dropped, so yesterday's results do not come back as roster data.
 - **Lines with no name and no number** are blank jerseys (no decoration). They are kept when the file has no name and no number column at all (and the line has a size, size range or team), or the line has a quantity; otherwise the line is dropped (`isBlankRow`, `blankGroups`).
 - **Size order** (`sizeRank`, `bySize`): youth, then adult, then ladies (`L-M`, with the dash).
+- **Short sizes** (the owner, 25 Nov 2026: "L-S, not Ladies-S"): `shortSize(size)` in roster.js writes "Ladies-S", "Ladies S", "ladies small" as L-S, "Youth M" as Y-M, "Adult 2XL" as A-2XL; a size already short, XL, OSFA and "" come back unchanged. It is applied where a size is drawn or printed (the roster table, the pick-list tiles, the green SIZE box, the Last passed strip, the Packing and board lists, the box label's size, the count label's mix, the list lines, the sticker, the ticket, the summary lines, the size filter) and nowhere else: matching, `sameSize`, the stored row, the Excel sheets and the hub keep the file's own spelling. The pick list's grey line says "L- sizes first" (`lastSizeLetter`).
 
 ## Matching: what a read becomes
 

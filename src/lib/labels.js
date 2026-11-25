@@ -19,7 +19,7 @@
 // imports config.js.
 // The sticker roll is 1 in wide by 0.5 in tall (JERSEY_LABEL_SIZE); every
 // layout is in fractions of the label so another roll only needs the setting.
-import { binEntries, binFieldOf, binFor, boxParts, bySize } from "./roster.js";
+import { binEntries, binFieldOf, binFor, boxParts, bySize, shortSize } from "./roster.js";
 
 // "1x0.5" (inches, width x height) → dots at the printer's resolution.
 // `top` is where printing starts: the ZD411 begins its label about 2 mm
@@ -76,7 +76,8 @@ export function jerseyLabel(row, binMap, { orderNumber = "" } = {}) {
   const bin = binFor(binMap, row);
   let by = binFieldOf(binMap);
   if (!binMap || by === "all") by = String(row?.team ?? "").trim() ? "team" : "size";   // one bin for the whole order: still say the team or the size
-  return { bin: bin === null ? "" : bin, by, value: String(row?.[by] ?? "").trim(), orderNumber: String(orderNumber || "") };
+  const value = String(row?.[by] ?? "").trim();
+  return { bin: bin === null ? "" : bin, by, value: by === "size" ? shortSize(value) : value, orderNumber: String(orderNumber || "") };
 }
 
 // 1 x 0.5 in: a BIN column on the left with the number as big as the label
@@ -123,7 +124,7 @@ export function flagLabel(entry, binMap, { orderNumber = "", station = "", tag =
     tag:    String(tag || "DECIDE"),
     reason: String(entry?.reason || "").replace(/ — found after it passed$/, "").trim(),
     team:   String(row?.team ?? "").trim(),
-    size:   String(row?.size ?? "").trim(),
+    size:   shortSize(String(row?.size ?? "").trim()),
     bin:    bin === null ? "" : bin,
     orderNumber: String(orderNumber || ""),
     station: stationShort(station),
@@ -298,7 +299,7 @@ const BIN_LIST_ROWS = 7;
 export const BIN_LIST_LEFT_MM = 2;
 const squash = s => String(s ?? "").trim().replace(/[\s-]+/g, "");
 export function binListItem(row) {
-  return [String(row?.number ?? "").trim(), String(row?.name ?? "").trim(), squash(row?.size)].filter(Boolean).join("-");
+  return [String(row?.number ?? "").trim(), String(row?.name ?? "").trim(), squash(shortSize(row?.size))].filter(Boolean).join("-");
 }
 // Jersey-number order: 2 before 10; a number that is not a number goes last;
 // the same number by name.
@@ -321,7 +322,7 @@ export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "t
   // an order sorted by size, of each team). "Y-M 4   A-L 12   A-XL 8".
   const other = by === "size" ? "team" : "size", tally = new Map();
   (rows || []).forEach(r => {   // "Navy" and "navy " are one team, as they are one box: counted together under the first spelling met
-    const shown = String(r?.[other] ?? "").trim(); if (!shown) return;
+    const raw = String(r?.[other] ?? "").trim(), shown = other === "size" ? shortSize(raw) : raw; if (!shown) return;   // sizes in the short form: "Ladies-S" and "L-S" are one count
     const k = shown.toLowerCase(), t = tally.get(k) || { shown, n: 0 };
     t.n++; tally.set(k, t);
   });

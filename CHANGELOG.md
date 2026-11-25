@@ -456,3 +456,10 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests:** review-rules.test.js: a name read on a numbers-only roster is green on the one open row; a doubtful read (number covered, one digit not laid flat), two open rows, and a number not on the roster are not made green; one open and one passed row of the number is green; invariants.test.js relaxed for that case.
 - **Checks:** lint clean; 585 tests pass; `SIM_ORDERS=300 npx vitest run operator-sim` passes (its invariants hold). Risk, as the owner accepted: a stray garment of another order with a number that has one open row goes green on a numbers-only order.
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · 5i · Sizes shown and printed in the short form
+- **Asked for:** the owner, 25 Nov 2026: "L-S not Ladies-S".
+- **What changed:** `shortSize(size)` in roster.js: "Ladies-S", "Ladies S", "ladies small" give L-S; "Youth M" gives Y-M; "Adult 2XL" gives A-2XL; a size already short, XL, OSFA, an empty one and one it cannot read are unchanged. It is applied where a size is drawn or printed: the roster table's size cell and size filter, the pick-list tiles, the green SIZE box, the Last passed strip, the confirm and flag texts, the Packing and board lists, the board's order view, the box label (`binEntries`, by size), the count label's mix (Ladies-S and L-S are one count), the list lines (`binListItem`), the sticker, the flag ticket and the summary lines. Matching (`sameSize`), the stored rows, the hub and the Excel sheets keep the file's own spelling. The pick list's grey line says "L- sizes first · the last garment was L-S" (`lastSizeLetter`). Not changed: a size the operator typed in the by-hand form is shown as typed on its confirm line.
+- **Tests:** `short-size.test.js`, 8 tests: the conversions, the cases left alone, `sameSize` unchanged, `lastSizeLetter`, the box label, sticker, ticket, list line, count label mix and summary lines.
+- **Checks:** lint clean; 593 tests pass. Not clicked through in a browser by this session.
+- **Branch:** `feature/result-screens`.

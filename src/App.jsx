@@ -25,7 +25,7 @@
 //                                    order start and finish, the station layout
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
 import { flushSync } from "react-dom";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeFamily, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, shipParts, shipNorm, shipPress, shipRemove, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeLetter, shortSize, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, shipParts, shipNorm, shipPress, shipRemove, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum, norm, nameMatches } from "./lib/text.js";
 import { summarise, summariseLog, exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
@@ -251,7 +251,7 @@ const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise,
         {r.scanned === "pass" ? "✅" : r.scanned === "flag" ? "🛑" : r.scanned === "manual" ? "✍" : r.scanned === "missing" ? "❓" : r.scanned === "short" ? "📦" : <span style={{ color: "#475569" }}>—</span>}
       </td>
       {cols.map(c => (
-        <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "#fbbf24" : "#e2e8f0" }}>{r[c]}</td>
+        <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "#fbbf24" : "#e2e8f0" }}>{c === "size" ? shortSize(r[c]) : r[c]}</td>
       ))}
       {hasBins && <td style={{ ...tdSt, color: r.scanned === "flag" ? "#f87171" : "#60a5fa", fontWeight: 700, whiteSpace: "nowrap" }}>{r.scanned === "flag" ? "Damaged" : bin !== null ? `Box ${bin}` : "—"}</td>}
       <td style={{ ...tdSt, padding: "2px 6px" }}>
@@ -862,7 +862,7 @@ function ReasonTextForm({ match, onSubmit, onBack }) {
     <div style={{ width: "100%", maxWidth: 560, padding: "0 24px", boxSizing: "border-box" }}>
       <div style={{ fontSize: 56, textAlign: "center", lineHeight: 1 }}>✎</div>
       <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#a78bfa", textAlign: "center", marginBottom: 6 }}>What's wrong with it?</div>
-      {match && <div style={{ fontSize: 18, color: "#c4b5fd", textAlign: "center", marginBottom: 10 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}</div>}
+      {match && <div style={{ fontSize: 18, color: "#c4b5fd", textAlign: "center", marginBottom: 10 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${shortSize(match.size)}` : ""}</div>}
       <input value={text} onChange={e => setText(e.target.value)} onKeyDown={onKey} autoFocus placeholder="e.g. hole under the left arm" maxLength={120} style={{ ...inputSt, fontSize: 22, padding: "12px 14px", marginBottom: 14 }} />
       <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
         <button disabled={!text.trim()} onClick={() => onSubmit(text)} style={{ ...bigBtn, width: "auto", padding: "14px 30px", background: "#a78bfa", color: "#0d1117", opacity: text.trim() ? 1 : 0.5 }}>✓ Send to supervisor <Kbd>Enter</Kbd></button>
@@ -1093,7 +1093,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                   return (
                     <tr key={r._id ?? i} style={{ background: r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned === "manual" ? "rgba(245,158,11,0.07)" : "transparent" }}>
                       <td style={{ ...td, color: colour(r.scanned), fontWeight: 700, whiteSpace: "nowrap" }}>{label(r.scanned)}</td>
-                      <td style={td}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{r.size || ""}</td>
+                      <td style={td}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{shortSize(r.size) || ""}</td>
                       <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Box ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
                       <td style={{ ...td, color: "#cbd5e1" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                       <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
@@ -1104,7 +1104,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                 {tab === "problems" && offRoster.map((e, i) => (
                   <tr key={"off" + i} style={{ background: "rgba(239,68,68,0.07)" }}>
                     <td style={{ ...td, color: "#ef4444", fontWeight: 700, whiteSpace: "nowrap" }}>NOT ON ROSTER</td>
-                    <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{e.size || ""}</td><td style={td}></td>
+                    <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{shortSize(e.size) || ""}</td><td style={td}></td>
                     <td style={{ ...td, color: "#cbd5e1" }}><RouteTag item={e} /> {e.reason}{e.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                     <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
                     <td style={td}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} caption={photoCaption(e.number, e.name, e.reason)} /></td>
@@ -1122,7 +1122,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                   <tr key={e.id ?? i}>
                     <td style={{ ...td, color: "#64748b", whiteSpace: "nowrap" }}>{String(e.t).slice(11)}</td>
                     <td style={{ ...td, color: evColour(e.status), fontWeight: 700, textTransform: "uppercase", fontSize: 11 }}>{e.status === "flagged" && e.offRoster ? "not on roster" : e.status === "undo" ? "un-checked" : e.status}</td>
-                    <td style={td}>#{e.number}{e.name ? ` · ${e.name}` : ""}{e.size ? ` · ${e.size}` : ""}</td>
+                    <td style={td}>#{e.number}{e.name ? ` · ${e.name}` : ""}{e.size ? ` · ${shortSize(e.size)}` : ""}</td>
                     <td style={{ ...td, color: "#cbd5e1" }}>{e.reason}</td><td style={{ ...td, color: "#94a3b8" }}>{e.resolution}</td><td style={{ ...td, color: "#94a3b8" }}>{e.operator}</td>
                   </tr>
                 ))}
@@ -1223,7 +1223,7 @@ function UnfinishedPile({ by, onClose }) {
                         <input type="checkbox" checked={ticked.has(jkey(j))} onChange={() => setTicked(t => { const n = new Set(t); if (n.has(jkey(j))) n.delete(jkey(j)); else n.add(jkey(j)); return n; })} style={{ width: 20, height: 20 }} />
                         <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{j.number || "—"}</strong>
                         {j.name && <span>{j.name}</span>}
-                        {j.size && <span style={{ color: "#4ade80", fontWeight: 700 }}>{j.size}</span>}
+                        {j.size && <span style={{ color: "#4ade80", fontWeight: 700 }}>{shortSize(j.size)}</span>}
                         {j.team && <span style={{ color: "#94a3b8" }}>{j.team}</span>}
                         <span style={{ marginLeft: "auto", fontSize: 12, color: j.status === "flag" ? "#f87171" : j.status === "todo" ? "#94a3b8" : j.status === "extra" ? "#f9a8d4" : "#fbbf24" }}>{statusWord[j.status] || j.status}{j.reason ? `: ${j.reason}` : ""}</span>
                       </label>
@@ -1676,7 +1676,7 @@ export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled,
   const name   = String(c.name ?? "").trim();
   const team   = String(c.team ?? "").trim();
   const extras = extraCols.filter(k => c[k]);
-  const size   = String(c.size || "").trim();
+  const size   = shortSize(String(c.size || "").trim());
   const px  = n => Math.round(n * (big ? 1.2 : 1));
   // Amber on what tells the rows apart: the team when the teams differ (on a
   // by-team list the names differ too, some rows having none, and the team is
@@ -1975,7 +1975,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
                 {hasSize && (
                   <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid #22c55e", background: "rgba(34,197,94,0.14)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
                     <div style={{ fontSize: `min(${binNum !== null ? 7 : 12}cqh, ${binNum !== null ? 14 : 20}cqw)`, color: "#86efac", fontWeight: 900, letterSpacing: 3, lineHeight: 1 }}>SIZE</div>
-                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${binNum !== null ? 34 : 70}cqh, ${Math.min(80, Math.floor(130 / Math.max(1, String(match.size).length)))}cqw)`, fontWeight: 900, color: "#fff", letterSpacing: 1, lineHeight: 1, whiteSpace: "nowrap" }}>{match.size}</div>{/* by width too: four letters (A-XL, A-XS) used to wrap onto two lines (the owner, 19 Nov 2026) */}
+                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${binNum !== null ? 34 : 70}cqh, ${Math.min(80, Math.floor(130 / Math.max(1, String(shortSize(match.size)).length)))}cqw)`, fontWeight: 900, color: "#fff", letterSpacing: 1, lineHeight: 1, whiteSpace: "nowrap" }}>{shortSize(match.size)}</div>{/* by width too: four letters (A-XL, A-XS) used to wrap onto two lines (the owner, 19 Nov 2026) */}
                   </div>
                 )}
                 {binNum !== null && (
@@ -2063,7 +2063,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               : `#${detected?.number || "?"}${detected?.number && detected?.number_complete === false ? "?" : ""}${detected?.name ? " · " + detected.name + (detected.name_complete === false ? "…" : "") : ""}`}
           </div>
 
-          {lastRank < 2 && <div style={{ fontSize: 17, color: "#a8a29e", textAlign: "center", marginTop: 4 }}>{lastRank === 0 ? `${lastSize} first · the last garment` : `${lastSizeFamily(lastSize)} sizes first · the last garment was ${lastSize}`}</div>}
+          {lastRank < 2 && <div style={{ fontSize: 17, color: "#a8a29e", textAlign: "center", marginTop: 4 }}>{lastRank === 0 ? `${shortSize(lastSize)} first · the last garment` : `${lastSizeLetter(lastSize)} sizes first · the last garment was ${shortSize(lastSize)}`}</div>}
           <div style={{ fontSize: 20, color: "#d6d3d1", marginBottom: 16, textAlign: "center" }}>
             {/* Typed by hand: what was typed, not the camera's empty read ("Read: #? · no name"; code review, low finding). */}
             {state.typed ? `Typed: #${state.typed.number || "?"}${state.typed.name ? " · " + state.typed.name : ""}` : <>
@@ -2151,7 +2151,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 9vw, 120px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 4 }}>CLEAN IT NOW</div>
           {match && (
             <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 4.5vw, 52px)", fontWeight: 700, color: "#bae6fd", marginTop: 14, textAlign: "center" }}>
-              #{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}
+              #{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${shortSize(match.size)}` : ""}
             </div>
           )}
           <div style={{ fontSize: 26, color: "#e0f2fe", marginTop: 14, textAlign: "center", padding: "0 40px", maxWidth: 820, lineHeight: 1.4 }}>
@@ -2170,7 +2170,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
             <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 7cqh, 72px)", fontWeight: 900, color: accent, lineHeight: 1 }}>🛑 FLAGGED</span>
             {(match || detected) && (
               <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(24px, 5.5cqh, 56px)", fontWeight: 700, color: "#fca5a5", lineHeight: 1 }}>
-                {match ? `#${match.number}${match.name ? ` · ${match.name}` : ""}${match.size ? ` · ${match.size}` : ""}` : `#${detected.number || "?"}${detected.name ? ` · ${detected.name}` : ""}`}
+                {match ? `#${match.number}${match.name ? ` · ${match.name}` : ""}${match.size ? ` · ${shortSize(match.size)}` : ""}` : `#${detected.number || "?"}${detected.name ? ` · ${detected.name}` : ""}`}
               </span>
             )}
             {state.reason && <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(24px, 5.5cqh, 56px)", fontWeight: 800, color: "#fff", lineHeight: 1 }}>{state.reason}</span>}
@@ -2203,7 +2203,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
           </div>
           {(match || detected) && (
             <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 4.5vw, 52px)", fontWeight: 700, color: "#fca5a5", marginTop: 14, textAlign: "center" }}>
-              {match ? `#${match.number}${match.name ? ` · ${match.name}` : ""}${match.size ? ` · ${match.size}` : ""}` : `#${detected.number || "?"}${detected.name ? ` · ${detected.name}` : ""}`}
+              {match ? `#${match.number}${match.name ? ` · ${match.name}` : ""}${match.size ? ` · ${shortSize(match.size)}` : ""}` : `#${detected.number || "?"}${detected.name ? ` · ${detected.name}` : ""}`}
             </div>
           )}
           {state.reason && mode !== "supervisor" && (
@@ -2258,7 +2258,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
         <>
           <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 4 }}>✎</div>
           <div style={{ fontSize: "clamp(28px, 4.5vw, 44px)", fontWeight: 900, color: accent, marginBottom: 6, textAlign: "center" }}>What's wrong with it?</div>
-          {match && <div style={{ fontSize: 22, color: "#c4b5fd", marginBottom: 16 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${match.size}` : ""}</div>}
+          {match && <div style={{ fontSize: 22, color: "#c4b5fd", marginBottom: 16 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${shortSize(match.size)}` : ""}</div>}
           <div style={{ width: "100%", maxWidth: 1200, padding: "0 24px", boxSizing: "border-box", maxHeight: "68%", overflowY: "auto", ...twoColumns(options.length) }}>
             {options.map((o, i) => {
               const sel = i === selectedIdx;
@@ -2611,7 +2611,7 @@ function StillOutModal({ orderNumber, groups, rowOf, binOf, onPass, onClose }) {
     <div key={j.rowId ?? "x" + j.xid} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10, background: "#0d1117", border: `1px solid ${colour}55` }}>
       <div style={{ fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, minWidth: 64 }}>#{j.number || "?"}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>{j.name || "—"} <span style={{ color: "#fbbf24" }}>{j.size}</span> <span style={{ color: "#94a3b8", fontWeight: 400 }}>{j.team}</span></div>
+        <div style={{ fontSize: 18, fontWeight: 800 }}>{j.name || "—"} <span style={{ color: "#fbbf24" }}>{shortSize(j.size)}</span> <span style={{ color: "#94a3b8", fontWeight: 400 }}>{j.team}</span></div>
         <div style={{ fontSize: 15, color: "#cbd5e1" }}>{j.status === "flag" ? `Was flagged: ${j.reason || "—"}` : j.status === "extra" ? j.reason : "Marked missing"}{boxOf(j) ? <span style={{ color: "#60a5fa", fontWeight: 800 }}> · goes in Box {boxOf(j)}</span> : null}</div>
       </div>
       {passLabel && (sure === j.rowId
@@ -2722,7 +2722,7 @@ function PackingRow({ b, sh, cap, asking, unfolded, onAsk, onUnfold, onFull, onL
           <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 4 }}>
             {sh.waiting.map(r => (
               <div key={r._id} style={{ fontSize: 16, color: "#e2e8f0", padding: "4px 8px", borderRadius: 6, background: "#0d1117" }}>
-                <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{r.number || "—"}</strong>{r.name ? ` ${r.name}` : ""}{r.size ? <span style={{ color: "#4ade80", fontWeight: 700 }}> {r.size}</span> : null}{r.team ? <span style={{ color: "#94a3b8" }}> · {r.team}</span> : null}
+                <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{r.number || "—"}</strong>{r.name ? ` ${r.name}` : ""}{r.size ? <span style={{ color: "#4ade80", fontWeight: 700 }}> {shortSize(r.size)}</span> : null}{r.team ? <span style={{ color: "#94a3b8" }}> · {r.team}</span> : null}
               </div>
             ))}
           </div>
@@ -2867,7 +2867,7 @@ function IssuesModal({ missing, dups, flagged, binOf, onClose }) {
       <div key={key} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "6px 10px", borderRadius: 8, background: "#0d1117", flexWrap: "wrap" }}>
         <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 24, lineHeight: 1 }}>#{j.number || "?"}</strong>
         {j.name && <span style={{ fontWeight: 700 }}>{j.name}</span>}
-        {j.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "#4ade80", fontWeight: 800 }}>{j.size}</span>}
+        {j.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "#4ade80", fontWeight: 800 }}>{shortSize(j.size)}</span>}
         {j.team && <span style={{ color: "#94a3b8" }}>{j.team}</span>}
         {box !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 18, color: "#60a5fa", fontWeight: 800 }}>Box {box}</span>}
         {extra && <span style={{ color: colour, fontSize: 15, marginLeft: "auto" }}>{extra}</span>}
@@ -2915,7 +2915,7 @@ function OrderSummaryBody({ summary, bins = [] }) {
       <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 24, lineHeight: 1 }}>#{j.number || "?"}</strong>
       {j.name && <span style={{ fontWeight: 700 }}>{j.name}</span>}
       {j.team && <span style={{ color: "#94a3b8" }}>{j.team}</span>}
-      {j.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "#4ade80", fontWeight: 800 }}>{j.size}</span>}
+      {j.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "#4ade80", fontWeight: 800 }}>{shortSize(j.size)}</span>}
       {box && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 18, color: "#60a5fa", fontWeight: 800, marginLeft: "auto" }}>Box {box}</span>}
       {extra && <span style={{ color: colour, fontSize: 15, marginLeft: box ? 0 : "auto" }}>{extra}</span>}
     </div>
@@ -3007,7 +3007,7 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
             <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 10, background: st === "flag" ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.06)", border: "1px solid #21262d" }}>
               {l.thumb && <img src={l.thumb} alt="" style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
               <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 28, lineHeight: 1 }}>#{l.match.number}{l.match.name ? ` · ${l.match.name}` : ""}</span>
-              {l.match.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#4ade80", fontWeight: 800 }}>{l.match.size}</span>}
+              {l.match.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#4ade80", fontWeight: 800 }}>{shortSize(l.match.size)}</span>}
               {binOf(l.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#60a5fa", fontWeight: 800 }}>Box {binOf(l.match)}</span>}
               <span style={{ marginLeft: "auto", fontSize: 14, color: "#7c8ba1", whiteSpace: "nowrap" }}>{l.timestamp}</span>
               {st === "flag"
@@ -3041,7 +3041,7 @@ function BlanksModal({ groups, boxOf, last, sticker, scanKey, onCount, onFlag, o
     window.addEventListener("keydown", h, true);
     return () => window.removeEventListener("keydown", h, true);
   }, [current, scanKey, onCount, onClose]);
-  const name = g => [g.team, g.size, g.style].filter(Boolean).join(" · ") || "Blank garment";
+  const name = g => [g.team, shortSize(g.size), g.style].filter(Boolean).join(" · ") || "Blank garment";
   const left = groups.reduce((t, g) => t + (g.total - g.done - g.flagged), 0);
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -3056,7 +3056,7 @@ function BlanksModal({ groups, boxOf, last, sticker, scanKey, onCount, onFlag, o
         </div>
         {last && (
           <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 8, background: "rgba(34,197,94,0.1)", border: "1px solid #22c55e", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 17, color: "#e2e8f0" }}>
-            <span style={{ flex: 1 }}><strong style={{ color: "#4ade80" }}>Counted:</strong> {[last.match?.team, last.match?.size, last.match?.style].filter(Boolean).join(" · ")}{boxOf(last.match) !== null ? <> → <strong style={{ color: "#60a5fa" }}>Box {boxOf(last.match)}</strong></> : null}{sticker ? <span style={{ color: "#94a3b8" }}> · {sticker}</span> : null}</span>
+            <span style={{ flex: 1 }}><strong style={{ color: "#4ade80" }}>Counted:</strong> {[last.match?.team, shortSize(last.match?.size), last.match?.style].filter(Boolean).join(" · ")}{boxOf(last.match) !== null ? <> → <strong style={{ color: "#60a5fa" }}>Box {boxOf(last.match)}</strong></> : null}{sticker ? <span style={{ color: "#94a3b8" }}> · {sticker}</span> : null}</span>
             <button onClick={() => onUndo(last.match._id)} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px" }}>Undo</button>
           </div>
         )}
@@ -3240,7 +3240,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
               {picked.map(r => (
                 <div key={r._id} style={rowSt}>
-                  <div style={{ flex: 1, fontSize: 16, color: "#e2e8f0" }}><strong>#{r.number}</strong> {r.name} <span style={{ color: "#94a3b8" }}>{[r.team, r.size].filter(Boolean).join(" · ")}</span></div>
+                  <div style={{ flex: 1, fontSize: 16, color: "#e2e8f0" }}><strong>#{r.number}</strong> {r.name} <span style={{ color: "#94a3b8" }}>{[r.team, shortSize(r.size)].filter(Boolean).join(" · ")}</span></div>
                   <button style={smBtn} onClick={() => send([[stickerJobs(pack, [r._id]), "jersey"]], `the sticker of #${r.number}`)}>Print sticker</button>
                 </div>
               ))}
@@ -4698,7 +4698,7 @@ export default function App() {
       const who = flaggedAs(o);
       if (o.kind === "dup") {   // one more of a number and size that has passed: flagged with no row, the size on the ticket
         const row = { number: who.number, name: who.name, team: who.team, size: sizeText, goalie: !!o.goalie, noRow: true };
-        const reason = `Duplicate — #${row.number || "?"}${row.size ? " " + row.size : ""}`;
+        const reason = `Duplicate — #${row.number || "?"}${row.size ? " " + shortSize(row.size) : ""}`;
         const entry = { id: o.scan?.id || Date.now(), detected: d, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: row, status: S_FLAGGED, reason, ...stamp() };
         setLog(prev => [entry, ...prev]); setLastResult(entry);
         setOverlay({ mode: "supervisor", scan: o.scan, match: row, reason: "Duplicate.", route: "Supervisor → check the order", entryId: entry.id, photoFirst: false, damagePhotos: [], sizeBack });
@@ -4711,7 +4711,7 @@ export default function App() {
     // back and the size asked again; the tickets that printed are thrown away.
     backToSize() {
       const o = overlay; if (!o?.sizeBack) return;
-      const wrong = o.match?.size || "no size";
+      const wrong = shortSize(o.match?.size || "") || "no size";
       setLog(prev => prev.map(l => l.id === o.entryId && l.status === S_FLAGGED ? { ...l, status: "undo", reason: `Taken back — wrong size picked (${wrong})` } : l));
       setLastResult(r => (r?.id === o.entryId ? null : r));
       // A new id for the next try, on this screen and the ones behind it: the log, the ticket
@@ -4872,7 +4872,7 @@ export default function App() {
   useEffect(() => { markHandler.current = (r, v) => {
     if (v === "unscan") unscan(r._id);
     else if (v === "flag") flagRow(r);
-    else if (v === "back") { if (window.confirm(`Pass #${r.number}${r.name ? " · " + r.name : ""}${r.size ? " · " + r.size : ""}? ${r.scanned === "flag" ? "It is back from repair and fixed." : "It was missing and is here now."}${binMap ? " It goes in Box " + binOf(r) + "." : ""}`)) actions.passBack(r._id); }
+    else if (v === "back") { if (window.confirm(`Pass #${r.number}${r.name ? " · " + r.name : ""}${r.size ? " · " + shortSize(r.size) : ""}? ${r.scanned === "flag" ? "It is back from repair and fixed." : "It was missing and is here now."}${binMap ? " It goes in Box " + binOf(r) + "." : ""}`)) actions.passBack(r._id); }
     else markRow(r._id, v || false);
   }; });
 
@@ -5339,7 +5339,7 @@ export default function App() {
                 <div style={{ padding: "10px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 14, background: "rgba(34,197,94,0.06)", flexShrink: 0, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 14, color: "#94a3b8", whiteSpace: "nowrap" }}>Last passed</span>
                   <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 30, lineHeight: 1 }}>#{lastConfirmed.match?.number}{lastConfirmed.match?.name ? ` · ${lastConfirmed.match.name}` : ""}</span>
-                  {lastConfirmed.match?.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#4ade80", fontWeight: 800 }}>{lastConfirmed.match.size}</span>}
+                  {lastConfirmed.match?.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#4ade80", fontWeight: 800 }}>{shortSize(lastConfirmed.match.size)}</span>}
                   {binOf(lastConfirmed.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "#60a5fa", fontWeight: 800 }}>Box {binOf(lastConfirmed.match)}</span>}
                   {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && r.scanned) && (
                     <button onClick={() => unscan(lastConfirmed.match._id)} title="Un-check it; it must be scanned again" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>↶ Undo</button>
@@ -5503,7 +5503,7 @@ export default function App() {
                         {ch.sizes.length > 1 && field("SIZE",
                           <select value={sizeFilter} onChange={e => { setSizeFilter(e.target.value); e.currentTarget.blur(); }} title="Only this size" style={selSt(sizeFilter, "#fbbf24", "#f59e0b")}>
                             <option value="">All sizes</option>
-                            {ch.sizes.map(x => <option key={x} value={x}>{x}</option>)}
+                            {ch.sizes.map(x => <option key={x} value={x}>{shortSize(x)}</option>)}
                           </select>)}
                         {ch.teams.length > 1 && field("TEAM",
                           <select value={teamFilter} onChange={e => { setTeamFilter(e.target.value); e.currentTarget.blur(); }} title="Only this team or colour" style={selSt(teamFilter, "#93c5fd", "#3b82f6")}>
@@ -5550,7 +5550,7 @@ export default function App() {
                       <span style={{ color: "#f87171" }}>🛑</span>
                       <span style={{ fontWeight: 800, color: "#fff", minWidth: 60 }}>#{l.match?.number || "?"}</span>
                       {l.match?.name && <span style={{ color: "#e2e8f0" }}>{l.match.name}</span>}
-                      {l.match?.size && <span style={{ color: "#fbbf24", fontWeight: 700 }}>{l.match.size}</span>}
+                      {l.match?.size && <span style={{ color: "#fbbf24", fontWeight: 700 }}>{shortSize(l.match.size)}</span>}
                       <span style={{ color: "#fca5a5" }}>{l.reason}</span>
                       <span style={{ marginLeft: "auto", color: "#64748b", fontSize: 14 }}>{String(l.timestamp || "").slice(-8)}</span>
                     </div>
@@ -5579,7 +5579,7 @@ export default function App() {
                         <div style={{ fontWeight: 700, fontSize: 18, marginTop: 2 }}>{l.typed ? `Typed: #${l.typed.number || "?"} · ${l.typed.name || "—"}` : `Read: #${l.detected?.number || "?"} · ${l.detected?.name || "—"}`}</div>
                         {l.match && (
                           <div style={{ fontSize: 15, color: "#cbd5e1", marginTop: 2 }}>
-                            Matched: {l.match.name || "—"} #{l.match.number}{l.match.size ? ` · ${l.match.size}` : ""}{l.match.team ? ` · ${l.match.team}` : ""}{binOf(l.match) !== null ? ` · Box ${binOf(l.match)}` : ""}
+                            Matched: {l.match.name || "—"} #{l.match.number}{l.match.size ? ` · ${shortSize(l.match.size)}` : ""}{l.match.team ? ` · ${l.match.team}` : ""}{binOf(l.match) !== null ? ` · Box ${binOf(l.match)}` : ""}
                           </div>
                         )}
                         {l.reason     && <div style={{ fontSize: 15, color: "#fbbf24", marginTop: 3 }}>⚠ {l.reason}</div>}

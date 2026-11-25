@@ -385,6 +385,22 @@ export function sizeRank(size) {
   const i = SIZE_ORDER.indexOf(m?.[2] || k);
   return [group, i < 0 ? 99 : i, k];
 }
+// A size as it is shown and printed, in the short form whatever the roster file says (the
+// owner, 25 Nov 2026): "Ladies-S", "Ladies S" and "ladies small" are L-S, "Youth M" is Y-M,
+// "Adult 2XL" is A-2XL. A size already short (A-M, L-S), one with no family (XL, OSFA, "")
+// and one that cannot be read are returned as they are. Only for the eye and the printer:
+// matching and the stored row keep the file's own spelling (`sameSize` reads both).
+const SIZE_WORDS = { small: "s", medium: "m", large: "l", xlarge: "xl", extralarge: "xl", xxlarge: "2xl", "2xlarge": "2xl", xxxlarge: "3xl", "3xlarge": "3xl" };
+export function shortSize(size) {
+  const s = String(size ?? "");
+  const k = teamKey(s).replace(/[\s._]+/g, "").replace(/[-/]+/g, "-");
+  const m = k.match(/^(youth|adult|ladies|lady|womens|women)-?(.+)$/);
+  if (!m) return s;
+  const rest = SIZE_WORDS[m[2].replace(/^-/, "")] || m[2].replace(/^-/, "");
+  if (SIZE_ORDER.indexOf(rest) < 0) return s;
+  const letter = m[1] === "youth" ? "Y" : m[1] === "adult" ? "A" : "L";
+  return `${letter}-${rest.toUpperCase()}`;
+}
 // Two sizes in rack order (for sort).
 export const bySize = (a, b) => { const x = sizeRank(a), y = sizeRank(b); return (x[0] - y[0]) || (x[1] - y[1]) || x[2].localeCompare(y[2]); };
 
@@ -433,6 +449,8 @@ export const lastSizeRank = (size, lastSize) => {
   return sameSize(size, lastSize) ? 0 : fam < 3 && sizeRank(size || "")[0] === fam ? 1 : 2;
 };
 export const lastSizeFamily = lastSize => SIZE_GROUPS[sizeRank(lastSize || "")[0]]?.label || "";
+// The family as the short form writes it: "Y-", "A-", "L-" ("L- sizes first"), "" for XL or OSFA.
+export const lastSizeLetter = lastSize => { const g = SIZE_GROUPS[sizeRank(lastSize || "")[0]]; return g ? `${g.key}-` : ""; };
 export function sortCandidates(rows, by = "size", { lastSize = "" } = {}) {
   const rank = r => lastSizeRank(r.size, lastSize);
   const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
@@ -594,7 +612,7 @@ export function shortages(roster, binMap, closed = []) {
 // "#5, #12, #40 and 2 more": the jerseys of a shortage, for a screen line. A
 // jersey with no number goes by its name; a blank one by its size.
 export const jerseyList = (rows, max = 6) => {
-  const one = r => { const n = String(r.number ?? "").trim(), name = String(r.name ?? "").trim(), size = String(r.size ?? "").trim(); return n ? `#${n}` : name || (size ? `${size} blank` : "blank"); };
+  const one = r => { const n = String(r.number ?? "").trim(), name = String(r.name ?? "").trim(), size = shortSize(String(r.size ?? "").trim()); return n ? `#${n}` : name || (size ? `${size} blank` : "blank"); };
   return rows.slice(0, max).map(one).join(", ") + (rows.length > max ? ` and ${rows.length - max} more` : "");
 };
 
@@ -616,7 +634,7 @@ export function binEntries(roster, binMap) {
   if (!binMap) return [];
   const field = binFieldOf(binMap), label = {};
   roster.forEach(r => { const k = teamKey(r[field]); if (k && !label[k]) label[k] = String(r[field]).trim(); });
-  return Object.entries(binMap).filter(([k]) => k !== "__by").map(([k, bin]) => ({ label: field === "all" ? ALL_LABEL : k === BLANK_KEY ? blankLabel(field) : label[k] || k, bin })).sort((a, b) => binOrder(a.bin, b.bin));
+  return Object.entries(binMap).filter(([k]) => k !== "__by").map(([k, bin]) => ({ label: field === "all" ? ALL_LABEL : k === BLANK_KEY ? blankLabel(field) : field === "size" ? shortSize(label[k] || k) : label[k] || k, bin })).sort((a, b) => binOrder(a.bin, b.bin));
 }
 
 // Columns to show in the roster table (everything the file had, minus state).
