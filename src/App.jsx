@@ -12,7 +12,7 @@
 //   station chrome                   IdleWatch, RosterRow, CompareDays, ResumeModal
 //   sign-in and order setup          SignInModal, BinByPicker, JerseyTypePicker,
 //                                    UnfinishedOrders, OrderSetupModal
-//   on the result screens            LivePreview, Countdown, ReasonTextForm, ManualEntryForm
+//   on the result screens            LivePreview, ReasonTextForm, ManualEntryForm
 //   supervisor board                 PhotoThumbs, PhotoLightbox, OrderView, RouteTag,
 //                                    UnfinishedPile, SupervisorPanel
 //   the result screens               CandidateRow, ScanOverlay
@@ -804,10 +804,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
 
 // ── Live camera window on the result screens, so the next jersey can be lined
 // up while the green/yellow/red screen is still up. Same stream, second <video>.
-// `big`: in the middle of the screen, with whatever is passed as children
-// laid over it — the damage-photo countdown, so the operator sees what the
-// camera sees while the numbers run.
-function LivePreview({ stream, rotation, big = false, children }) {
+function LivePreview({ stream, rotation }) {
   const ref = useRef(null);
   useEffect(() => {
     const v = ref.current; if (!v || !stream) return;
@@ -815,26 +812,13 @@ function LivePreview({ stream, rotation, big = false, children }) {
     return () => { v.srcObject = null; };
   }, [stream]);
   if (!stream) return null;
-  const box = big
-    ? { position: "relative", width: "clamp(300px, 52vw, 640px)", maxWidth: "calc(100% - 32px)", borderRadius: 14, overflow: "hidden", border: "3px solid rgba(255,255,255,0.5)", background: "#000", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }
-    : { position: "absolute", bottom: 12, right: 12, width: "clamp(220px, 26vw, 380px)", borderRadius: 10, overflow: "hidden", border: "2px solid rgba(255,255,255,0.35)", background: "#000", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" };
+  const box = { position: "absolute", bottom: 12, right: 12, width: "clamp(220px, 26vw, 380px)", borderRadius: 10, overflow: "hidden", border: "2px solid rgba(255,255,255,0.35)", background: "#000", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" };
   return (
     <div style={box}>
       <div style={{ aspectRatio: "4 / 3", overflow: "hidden" }}>
         <video ref={ref} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", transform: `rotate(${rotation || 0}deg)`, display: "block" }} />
       </div>
-      {big
-        ? <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{children}</div>
-        : <div style={{ position: "absolute", top: 8, left: 10, fontSize: 14, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.6)", padding: "4px 10px", borderRadius: 10 }}>● Live — line up the next jersey</div>}
-    </div>
-  );
-}
-
-// The 3-2-1 of the damage photo; 0 is the shot itself.
-function Countdown({ n }) {
-  return (
-    <div style={{ fontFamily: FONT_DISPLAY, fontSize: n ? "clamp(140px, 24vw, 280px)" : "clamp(90px, 14vw, 170px)", fontWeight: 900, color: "#fff", lineHeight: 1, textAlign: "center", textShadow: "0 4px 24px rgba(0,0,0,0.85)" }}>
-      {n || "📸"}
+      <div style={{ position: "absolute", top: 8, left: 10, fontSize: 14, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.6)", padding: "4px 10px", borderRadius: 10 }}>● Live — line up the next jersey</div>
     </div>
   );
 }
@@ -1624,7 +1608,7 @@ export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled,
 // checklist, the yellow lists, red, ALREADY DONE, the reasons menu, Clean it
 // now, FLAGGED, the by-hand form and the size picker. It draws and takes keys;
 // what each choice does is in `actions` (App).
-function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", lastSize = "", paused = false }) {
+export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", lastSize = "", paused = false }) {
   const reasons = reasonsFor(jerseyType);
   // Runs an option: a click, the Select key or the pedal.
   const fire = useCallback(o => o?.run(), []);
@@ -1685,17 +1669,19 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   }, [oneColBig, candidates]);
 
   // Damage photo on the supervisor screen: the scan photo only ever shows the
-  // back, so the operator holds the problem under the camera, 3-2-1 ticks, and
-  // the live frame is kept on the flag for the supervisor. `count` is 3, 2, 1,
-  // then 0 while the shot is taken; null when nothing is running.
-  const [count, setCount] = useState(null);
+  // back, so the operator sets the problem under the camera, presses Enter, and
+  // the live frame is kept on the flag for the supervisor at once (the owner,
+  // 25 Nov 2026: the 3-2-1 hurried the operator and the photos were poor).
+  // `shootingRef` keeps a second press from taking two while one is on its way.
+  const shootingRef = useRef(false);
   const damagePhotos = state.damagePhotos || [];
   // FLAGGED with a damage photo: the photo takes all the room there is and
   // the words share a line above it and a line below, so the operator can see
   // whether the shot shows the damage and nothing scrolls (the owner, 17 Nov
   // 2026: at a fixed height it was still small and the screen scrolled).
-  const compact = mode === "supervisor" && damagePhotos.length > 0 && count === null;
-  const startCount = useCallback(() => { setCount(3); playTone("count"); }, []);
+  const compact = mode === "supervisor" && damagePhotos.length > 0;
+  const [shot, setShot] = useState(0);   // each press of "Photo" / "Retake" counts one; the effect below takes the shot
+  const takePhoto = useCallback(() => setShot(n => n + 1), []);
   // The retry pedal on a green: the read is right, there is nothing to retry,
   // and a retry here looks exactly like a confirm from the operator's side
   // (both end on the camera screen) — a jersey went in the bin unchecked that
@@ -1754,10 +1740,9 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     if (mode === "duplicate")  return duplicateOptions({ match: state.match, actions, retry });   // a flagged jersey scanned again: Skip first, "Back from repair" a mouse click only (src/lib/dupoptions.js)
     if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") {
-      if (count !== null) return [];                         // counting down: nothing to pick, no key does anything
       const cont   = { id: "cont",   label: "✓ Continue", run: actions.continueSupervisor };
-      const photo  = { id: "photo",  label: damagePhotos.length ? "📷 Take another" : "📷 Photo of the damage", hint: damagePhotos.length ? "" : "hold the problem under the camera", run: startCount };
-      const retake = { id: "retake", label: "↻ Retake", run: () => { actions.dropDamagePhoto(); startCount(); } };
+      const photo  = { id: "photo",  label: damagePhotos.length ? "📷 Take another" : "📷 Photo of the damage", hint: damagePhotos.length ? "" : "set the jersey, then press Enter", run: takePhoto };
+      const retake = { id: "retake", label: "↻ Retake", run: () => { actions.dropDamagePhoto(); takePhoto(); } };
       // Flagged from the size screen: Back undoes the flag and asks the size again (the owner,
       // 19 Nov 2026: a wrong size tapped by mistake).
       const sizeBack = state.sizeBack ? [{ id: "sizeback", label: "← Back · wrong size", run: actions.backToSize }] : [];
@@ -1768,19 +1753,19 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     }
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter, state.match, state.fromList]);
+  }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, damagePhotos.length, canPhoto, state.photoFirst, takePhoto, sorter, state.match, state.fromList]);
 
   const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
   const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
-  const lastKeyRef = useRef(0);
-
-  // The countdown: a tick a second, the shutter on the last, then the shot.
-  // Afterwards the highlight goes back to the first option (Continue).
+  // The shot: the shutter, then the live frame is kept; afterwards the highlight
+  // goes back to the first option (Continue).
   useEffect(() => {
-    if (count === null) return;
-    if (count > 0) { const t = setTimeout(() => { setCount(count - 1); playTone(count > 1 ? "count" : "shutter"); }, 1000); return () => clearTimeout(t); }
-    Promise.resolve(actionsRef.current.damagePhoto()).finally(() => { setCount(null); setSelectedIdx(0); });
-  }, [count]);
+    if (!shot || shootingRef.current) return;
+    shootingRef.current = true;
+    playTone("shutter");
+    Promise.resolve(actionsRef.current.damagePhoto()).finally(() => { shootingRef.current = false; setSelectedIdx(0); });
+  }, [shot]);
+  const lastKeyRef = useRef(0);
 
   // Auto-dismiss the green flash; the app then arms hands-free scanning.
   useEffect(() => {
@@ -2046,16 +2031,6 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         </>
       )}
 
-      {/* ── RED, taking the damage photo: the live picture with 3-2-1 over it ── */}
-      {isRed && count !== null && (
-        <>
-          <div style={{ fontSize: "clamp(26px, 3.2vw, 38px)", fontWeight: 800, color: "#fecaca", textAlign: "center", padding: "0 24px", marginBottom: 14 }}>📷 Hold the damage under the camera</div>
-          {!embedded && stream
-            ? <LivePreview stream={stream} rotation={rotation} big><Countdown n={count} /></LivePreview>
-            : <Countdown n={count} />}
-        </>
-      )}
-
       {/* ── CLEAN IT NOW: dirt or a mark is wiped off at the station, not flagged ── */}
       {isClean && (
         <>
@@ -2107,7 +2082,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       )}
 
       {/* ── RED: not found / API error / duplicate / supervisor ── */}
-      {isRed && count === null && !compact && (
+      {isRed && !compact && (
         <>
           <div style={{ fontSize: 80, lineHeight: 1, marginBottom: 4 }}>{mode === "supervisor" ? "🛑" : mode === "duplicate" ? "⚠️" : "🚩"}</div>
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(56px, 9vw, 120px)", fontWeight: 900, color: accent, textAlign: "center", padding: "0 24px", lineHeight: 0.95, marginTop: 4 }}>
@@ -2138,7 +2113,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           )}
           {mode === "supervisor" && damagePhotos.length === 0 && canPhoto && (
             <div style={{ fontSize: 22, color: "#fecaca", marginTop: 14, textAlign: "center", padding: "0 40px", maxWidth: 820, lineHeight: 1.35 }}>
-              {state.photoFirst ? "Hold the problem under the camera and take a photo for the supervisor." : "The scan photo goes with it. If the problem is somewhere else — the front, a sleeve — take a photo of that."}
+              {state.photoFirst ? "Set the problem under the camera, then press Enter: the photo is taken at once, for the supervisor." : "The scan photo goes with it. If the problem is somewhere else — the front, a sleeve — take a photo of that."}
             </div>
           )}
           {mode === "supervisor" && ticket && (
@@ -2201,7 +2176,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           <img src={state.scan.thumb} alt="" style={{ width: isGreen ? 80 : 120, height: isGreen ? 60 : 90, objectFit: "cover", borderRadius: 8 }} />
         </div>
       )}
-      {!embedded && mode !== "manual" && mode !== "reasonText" && count === null && !compact && <LivePreview stream={stream} rotation={rotation} />}
+      {!embedded && mode !== "manual" && mode !== "reasonText" && !compact && <LivePreview stream={stream} rotation={rotation} />}
     </div>
   );
 }

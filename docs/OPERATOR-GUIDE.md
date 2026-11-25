@@ -150,7 +150,7 @@ Jerseys with no name and no number cannot be read by the camera. When the roster
 - **It is clean now**: the jersey is not flagged. It goes back to the green screen (or stays passed).
 - **It will not come out**: it is flagged as "Dirt that will not come out".
 
-**Damage photo.** On the FLAGGED screen, press **Photo of the damage**. For a defect (logo, twill, stitching, holes, dirt that will not come out) the pedal takes the photo too; for Name or number, Not on the roster, Duplicate and No size tag the pedal presses **Continue** instead. Hold the damaged part under the camera: it counts 3-2-1 and takes the photo. **Retake** or **Take another** as needed. The photos go to the supervisor and into the damage report.
+**Damage photo.** On the FLAGGED screen, press **Photo of the damage**. For a defect (logo, twill, stitching, holes, dirt that will not come out) the pedal takes the photo too; for Name or number, Not on the roster, Duplicate and No size tag the pedal presses **Continue** instead. Set the damaged part under the camera, then press **Enter**: the photo is taken at once (no countdown), so set the jersey first. **Retake** or **Take another** as needed. The photos go to the supervisor and into the damage report.
 
 **The DAMAGED box.** Every station has one, besides the team and size boxes. Its label does not print by itself: it is the same box all day. Print it from **🖨 Print → DAMAGED → Its label**. The Boxes dialog lists what is in it and has **🖨 Print its list**.
 

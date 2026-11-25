@@ -378,3 +378,11 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests:** roster-sort.test.js: the same size, then the family, then rack order, whatever the sort; a size with no family on the list leaves the order alone; `sizeFamily`. candidate-row.test.jsx: size font larger on a by-size tile, equal on a by-team tile.
 - **Left open:** not clicked through in a browser (no server started in this session).
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · The damage photo without a countdown (the owner, after the run of 24 Nov 2026)
+- **Asked for:** the 3-2-1 hurried the operator and the photos were poor. Wanted: the operator sets the jersey, presses Enter, the photo is taken at once.
+- **What changed:** the countdown is gone (`count`, the ticking effect, `Countdown`, the countdown screen and `LivePreview`'s big mode). Photo of the damage, Take another and Retake now play the shutter and keep the live frame at once (`takePhoto`, one at a time: a second press while one is on its way is ignored); the highlight goes back to Continue afterwards. Enter already fires the highlighted option and Photo is first for a defect, so Enter takes the photo. The hint reads "set the jersey, then press Enter". The "count" tone stays in audio.js, unused. `ScanOverlay` is exported for its test.
+- **Tests:** damage-photo.test.jsx: Enter on the first option of the FLAGGED screen calls `damagePhoto` at once, no countdown screen; a second press while the photo is on its way takes no second one.
+- **Checks:** lint clean; 553 tests pass (42 files). Not clicked through in a browser (no server started in this session).
+- **Left open:** the corner live preview is small: the operator no longer sees a big view while the photo is taken.
+- **Branch:** `feature/result-screens`.
