@@ -2439,6 +2439,10 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
             <input type="checkbox" checked={temp.binLists !== false} onChange={e => setTemp(t => ({ ...t, binLists: e.target.checked }))} />
             Print what is in a box when it is closed (full, or the order finished): a count label and fourteen garments a label — the 2 × 1 in roll
           </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginTop: 8 }}>
+            <input type="checkbox" checked={temp.boxAutoPrint === true} onChange={e => setTemp(t => ({ ...t, boxAutoPrint: e.target.checked }))} />
+            Box labels print by themselves when an order starts (off: the set-out screen prints them from its button)
+          </label>
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -2501,7 +2505,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
           {by === "all"
             ? <>This order is <strong style={{ color: "#e2e8f0" }}>not sorted</strong>: one run of boxes. </>
             : <>This order is sorted <strong style={{ color: "#e2e8f0" }}>by {by}</strong>: {entries.length} {by === "size" ? (entries.length === 1 ? "size" : "sizes") : (entries.length === 1 ? "team" : "teams")}. </>}
-          {autoPrint ? "The labels are printing: stick" : "Print the labels and stick"} one inside each box before scanning. How many boxes is an estimate; a box that fills sooner gets its next label at Box full.
+          {autoPrint ? "The labels are printing: stick one inside each box before scanning." : "Print the box labels when the boxes are set out, and stick one inside each box before scanning."} How many boxes is an estimate; a box that fills sooner gets its next label at Box full.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 22, flex: "1 1 auto", minHeight: 120, overflowY: "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "12px 22px", borderRadius: 12, background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", order: 99 }}>
@@ -3821,8 +3825,8 @@ export default function App() {
     const bins = buildBinMap(parsed, existing, binBy);
     setClosedBins([]); setBinPrint(null); setListPrinted({}); setBoxLabelled(boxesIn.map(b => b.bin));   // every roster row starts unscanned: no box is closed; a carried box has its label
     setBoxFilter(""); setDoneFilter(""); setRosterSearch("");    // the last order's box is not this order's
-    setBinMap(binCount(bins) > 0 ? bins : null); setShowBinSetup(binCount(bins) > 0); setBoxAuto(true);
-  }, [syncInspect]);
+    setBinMap(binCount(bins) > 0 ? bins : null); setShowBinSetup(binCount(bins) > 0); setBoxAuto(settings.boxAutoPrint === true);   // only a station that switched it on prints the labels by itself (the owner, 25 Nov 2026)
+  }, [syncInspect, settings.boxAutoPrint]);
 
   // The order belongs to the station, not to a person: whoever is signed in
   // here now continues it under their own name.

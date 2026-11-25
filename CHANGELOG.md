@@ -428,3 +428,10 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests:** `ship-with-field.test.js`, 7 tests: six digits make a chip, the number being typed is not one, Next number, three numbers are three chips and `orderList` reads them, backspace, ✕, a pasted text is cleaned.
 - **Checks:** lint clean; all tests pass. Not clicked through in a browser by this session.
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · 5b · The box labels no longer print by themselves when an order starts
+- **Asked for:** the owner, 25 Nov 2026: do not print the box labels beforehand from order entry.
+- **What changed:** `applyRoster` set `boxAuto(true)`, so the "Set out N boxes" screen printed every label as it opened. It now follows a new setting, `boxAutoPrint` (off by default; a station saved before it existed reads it as off): Settings → Label printer → "Box labels print by themselves when an order starts". With it off the screen says "Print the box labels when the boxes are set out, and stick one inside each box before scanning." and prints only from its button. `boxLabelled` is as it was: Box full prints the next box's label only when it was never printed. CLAUDE.md and the guide say so.
+- **Tests:** `box-auto-print.test.js`: the default is off and an older saved setting reads off; `applyRoster` opens the screen from the setting.
+- **Checks:** lint clean; 582 tests pass. Not clicked through in a browser by this session.
+- **Branch:** `feature/result-screens`.
