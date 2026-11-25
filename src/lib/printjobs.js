@@ -10,6 +10,7 @@
 // Nothing here prints: each function returns the labels for hub.printLabels.
 import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, boxParts, inBin, groupSize } from "./roster.js";
 import { binListLabels, jerseyLabel, flagLabel, damagedListLabels, listLabels } from "./labels.js";
+import { garmentOf } from "./garments.js";
 
 // Every box of the order, closed and open, in box order, with the rows in it.
 // A box an earlier ship-with order left open (`pack.carried`, the owner, 20 Nov 2026) holds that
@@ -186,7 +187,10 @@ export function stickerJobs(pack, ids) {
 // route tag (severityOf in config.js; the caller passes it, as labels do).
 export function flagJobs(pack, ids, tagOf = () => "DECIDE") {
   return (pack?.flags || []).filter(e => !ids || ids.includes(e.id))
-    .map(e => ({ ...flagLabel(e, pack.binMap, { orderNumber: pack.orderNumber, station: pack.station, tag: tagOf(e.reason) }), copies: 1 }));   // a reprint from the Print menu is one ticket (the owner, 19 Nov 2026); a new flag prints FLAG_COPIES
+    // A flag never asked "where" (Others, No size tag, Not on the roster, Duplicate, a sorter's)
+    // has no garment of its own: it takes the row's style or the order's garment, as the first ticket did
+    // (printTicket in App.jsx), so the reprint draws the same garment.
+    .map(e => ({ ...flagLabel({ ...e, garment: e.garment || garmentOf(e.match, pack.garment) }, pack.binMap, { orderNumber: pack.orderNumber, station: pack.station, tag: tagOf(e.reason) }), copies: 1 }));   // a reprint from the Print menu is one ticket (the owner, 19 Nov 2026); a new flag prints FLAG_COPIES. flagLabel carries the garment and the spots: a reprint shows the marks
 }
 
 // ── The DAMAGED box ─────────────────────────────────────────────────────────
@@ -231,12 +235,14 @@ export const damagedBoxLabel = pack => ({ bin: "DAMAGED", title: "DAMAGED", labe
 export function packFromRecord(rec) {
   const roster = rec?.rows || [];
   return {
-    orderNumber: String(rec?.order ?? ""), roster, binMap: rec?.bins || null, closedBins: rec?.closedBins || [], station: rec?.station || "",
+    orderNumber: String(rec?.order ?? ""), garment: rec?.garment || "", roster, binMap: rec?.bins || null, closedBins: rec?.closedBins || [], station: rec?.station || "",
     flags: (rec?.flags || []).map(ev => ({
       // `resolution` comes along: without it a past order's DAMAGED list kept the
       // off-roster jerseys the supervisor had already dealt with (code review of
       // 23 Nov 2026; damagedItems leaves a resolved flag with no row out).
       id: ev.id, reason: ev.reason || "", resolution: ev.resolution || "", timestamp: ev.t || "", detected: null,
+      // Where the damage was marked (24 Nov 2026): a reprint of a past order's ticket shows the marks.
+      ...(ev.garment ? { garment: ev.garment } : {}), ...(Array.isArray(ev.spots) && ev.spots.length ? { spots: ev.spots } : {}),
       match: roster.find(r => r._id === ev.rowId) || { number: ev.number, name: ev.name, size: ev.size, team: ev.team },
     })),
     past: { station: rec?.station || "", date: rec?.date || "", operator: rec?.operator || "", counts: rec?.counts || null },

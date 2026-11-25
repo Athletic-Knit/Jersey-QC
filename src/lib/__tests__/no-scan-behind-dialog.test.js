@@ -72,7 +72,7 @@ describe("no scan behind a dialog", () => {
     // The SCAN button and By hand: their `disabled` mentions anyDialogOpen (any spacing).
     // (the SCAN button is also off while a result is up: code review M1, see the last test)
     expect(src).toMatch(/doTriggerScan\(\);\s*\}\}\s*disabled=\{\s*scanning\s*\|\|\s*anyDialogOpen\s*\|\|\s*!!overlay\s*\}/);
-    expect(src).toMatch(/actions\.manual\(\);\s*\}\}\s*disabled=\{\s*scanning\s*\|\|\s*anyDialogOpen\s*\}/);
+    expect(src).toMatch(/actions\.manual\(\);\s*\}\}\s*disabled=\{\s*scanning\s*\|\|\s*anyDialogOpen\s*(\|\|\s*locatingUp\s*)?\}/);   // greyed too while "where is the damage" is up
     expect(src).not.toMatch(/\bmodalOpen\b/);   // the old, shorter list is gone
   });
 

@@ -18,17 +18,20 @@ import process from 'node:process'
 // JERSEY_LABEL_SIZE the roll ("1x0.5", inches, width x height). The flag
 // tickets are on a 2 x 1 in roll: JERSEY_FLAG_PRINTER_STATION1 …,
 // JERSEY_FLAG_PRINTER and JERSEY_FLAG_LABEL_SIZE the same way; with no flag
-// printer set, the tickets go to the station's sticker printer. A Zebra plugged
+// printer set, the tickets go to the station's sticker printer. Each station's
+// ticket roll may differ while the floor moves to the 2 x 4 in roll:
+// JERSEY_FLAG_LABEL_SIZE_STATION1 … (else JERSEY_FLAG_LABEL_SIZE). A Zebra plugged
 // into the server's own PC beats a JERSEY_PRINTER / JERSEY_FLAG_PRINTER shared
 // from another PC (the owner, 20 Nov 2026; hubPrinter in hub-plugin.js).
 // → the options hubPlugin takes.
 export function printerEnv(env) {
-  const printers = {}, flagPrinters = {}
+  const printers = {}, flagPrinters = {}, flagLabelSizes = {}
   for (const [k, v] of Object.entries(env)) {
     let m = /^JERSEY_PRINTER_(.+)$/.exec(k); if (m && v) printers["st-" + m[1].toLowerCase()] = v
     m = /^JERSEY_FLAG_PRINTER_(.+)$/.exec(k); if (m && v) flagPrinters["st-" + m[1].toLowerCase()] = v
+    m = /^JERSEY_FLAG_LABEL_SIZE_(.+)$/.exec(k); if (m && v) flagLabelSizes["st-" + m[1].toLowerCase()] = v
   }
-  return { printer: env.JERSEY_PRINTER, printers, labelSize: env.JERSEY_LABEL_SIZE, flagPrinter: env.JERSEY_FLAG_PRINTER, flagPrinters, flagLabelSize: env.JERSEY_FLAG_LABEL_SIZE }
+  return { printer: env.JERSEY_PRINTER, printers, labelSize: env.JERSEY_LABEL_SIZE, flagPrinter: env.JERSEY_FLAG_PRINTER, flagPrinters, flagLabelSize: env.JERSEY_FLAG_LABEL_SIZE, flagLabelSizes }
 }
 // The read goes browser → this server → Anthropic. The API key stays HERE: the
 // proxy adds it to each request, so the station's page never holds it

@@ -35,14 +35,15 @@ The station goes full screen. **Sign out** (top right) ends your shift at this s
 2. Check the **order number**. It is usually filled in from the roster. Tap the box to type it on the keypad.
 3. **Ships with**: if this order ships together with other orders, type their numbers (the comma goes in by itself after every six digits). Leave it empty if it ships alone.
 4. **Jersey type**: ECHL, ECHL replica (stitched) or Sublimated (printed). This decides which flag reasons you are offered. Leave it unset to be offered every reason.
-5. **Boxes, how the order is sorted**: **By team**, **By size**, or **Not sorted** (the whole order in one run of boxes). If the supervisor already chose, it says "set by the supervisor".
-6. Press **Start order →**.
+5. **Garment**: what the order is (Hockey jersey, Short-sleeve jersey, Long-sleeve shirt, Button jersey, Tank / singlet, Football jersey, Hoodie, Zip jacket, Shorts, Pants, Socks). This is the outline you tap when you flag a jersey to show where the damage is. **Hockey jersey** is chosen to begin with. When the roster file has a Style column, the app picks the garment from it by itself; change it if it is wrong. A jersey whose style the app knows always gets its own outline (socks on a hockey order are drawn as socks).
+6. **Boxes, how the order is sorted**: **By team**, **By size**, or **Not sorted** (the whole order in one run of boxes). If the supervisor already chose, it says "set by the supervisor".
+7. Press **Start order →**.
 
 An order the supervisor sent can only be open on one station at a time. If another station has it, it shows "In progress on Station N".
 
 ### Set out the boxes
 
-When the order starts, the **Set out N boxes** screen lists each team (or size) and how many boxes it should fill. One 2 x 1 in box label prints for each box by itself.
+When the order starts, the **Set out N boxes** screen lists each team (or size) and how many boxes it should fill. One box label prints for each box by itself.
 
 1. Line up the boxes at the station.
 2. Stick each label inside its box (BOX 5.1, BOX 5.2 …).
@@ -141,18 +142,32 @@ Jerseys with no name and no number cannot be read by the camera. When the roster
    | Dirt or mark | See below: this is cleaned, not flagged |
    | Others | Anything else |
 
-3. The **FLAGGED** screen shows the jersey and the reason. Two flag tickets print (a black column with the jersey in white, and the reason).
-4. Stick a ticket on the jersey and put it in the **DAMAGED** box.
-5. Press **Continue**.
+3. For a fault you can point to (Name or number, Logo or crest, Twill peeling, Sublimation error, Stitching or seam, Holes, Dirt that will not come out) the app asks **where the damage is** (below). Size label and Others go straight on.
+4. The **FLAGGED** screen shows the jersey and the reason, and the garment with your marks. Two flag tickets print (a black column with the jersey in white, and the reason; on the tall labels also the garment with your marks).
+5. Stick a ticket on the jersey and put it in the **DAMAGED** box.
+6. Press **Continue**.
+
+**Where is the damage.** The screen shows the garment from the **FRONT** and from the **BACK**, side by side.
+
+1. Tap the garment where the damage is. A red numbered spot appears. Left and right are as you look at that side on the table.
+2. Up to **3 spots**, on the front, the back or both. Under the garment the spots are written out ("Front: left sleeve · Back: lower middle").
+3. Tapped the wrong place? Tap the spot to take it off, or press **↶ Undo last mark**.
+4. Press **✓ Done · N marked**. The tickets print with the spots.
+
+**Skip — no mark** (or Esc) flags the jersey with no marks (on the tall labels the tickets print an empty garment and "Not marked"). Esc is Skip also when spots are on: they are dropped. The pedal cannot tap the garment, so with nothing marked the pedal presses Skip; once a spot is on, the pedal presses Done. While this screen is up, Finish order, Finish later and By hand are greyed: finish the flag first.
+
+The same step comes up when you flag a jersey after it passed (Last passed, History, the roster's Mark menu) and when you flag a blank jersey.
 
 **Dirt or mark** opens a blue **CLEAN IT NOW** screen. Wipe the mark off.
 
 - **It is clean now**: the jersey is not flagged. It goes back to the green screen (or stays passed).
-- **It will not come out**: it is flagged as "Dirt that will not come out".
+- **It will not come out**: it is flagged as "Dirt that will not come out", and the app asks where the mark is.
 
 **Damage photo.** On the FLAGGED screen, press **Photo of the damage**. For a defect (logo, twill, stitching, holes, dirt that will not come out) the pedal takes the photo too; for Name or number, Not on the roster, Duplicate and No size tag the pedal presses **Continue** instead. Hold the damaged part under the camera: it counts 3-2-1 and takes the photo. **Retake** or **Take another** as needed. The photos go to the supervisor and into the damage report.
 
 **The DAMAGED box.** Every station has one, besides the team and size boxes. Its label does not print by itself: it is the same box all day. Print it from **🖨 Print → DAMAGED → Its label**. The Boxes dialog lists what is in it and has **🖨 Print its list**.
+
+**What the repair department sees.** On the 2 x 1 in labels the ticket is as it always was: the jersey in white on black, the reason, the station and the order number. On the tall labels (2 x 3 in or 2 x 4 in) that same ticket is the top inch, and under it the garment is drawn from the FRONT and the BACK with the numbered spots where you tapped. A ticket you skipped says "Not marked". The supervisor's board and the damage report show the same marks, in words too.
 
 **Wrong size picked** on a "Not on the roster" or "Duplicate" flag: press **← Back · wrong size**. The flag is taken back. Throw away the tickets that printed, and pick the right size.
 
@@ -206,7 +221,7 @@ On a picked-up order:
 
 ### The Print menu
 
-**🖨 Print** (in the header, on the order screen and on the done screen) prints any label again: every box label, every box list, one box's label or list, a jersey's sticker (search by number or name), or a flag ticket. **Another order** finds an order done before by its number. Labels always print on this station's printer.
+**🖨 Print** (in the header, on the order screen and on the done screen) prints any label again: every box label, every box list, one box's label or list, a jersey's sticker (search by number or name), or a flag ticket (with its marks). **Another order** finds an order done before by its number. Labels always print on this station's printer.
 
 ### Other buttons
 
@@ -239,7 +254,7 @@ One card per station, always showing now:
 
 - the operator, the order, how many jerseys are done, the pace and the time left;
 - **Now at**: the last jersey scanned;
-- **Needs you**: the open problems of this order, the three that weigh most first. Each has a tag for where it goes (REMAKE, DECORATION, STITCHER, CLEANING, CHECK ORDER, SIGN OFF, DECIDE) and its photos (click to enlarge);
+- **Needs you**: the open problems of this order, the three that weigh most first. Each has a tag for where it goes (REMAKE, DECORATION, STITCHER, CLEANING, CHECK ORDER, SIGN OFF, DECIDE), its photos (click to enlarge) and, when the operator marked it, a small garment with the spots (rest the pointer on it for the words);
 - **Still open from earlier orders**, each with **Done** when it has been dealt with;
 - **Open order**, and **Remove** to take a card off the board.
 
@@ -250,7 +265,7 @@ The board sends no pop-ups, sounds or desktop notifications: the header count an
 ### Send a roster to a station
 
 1. In **Send a roster**, choose **Send to** (any station, or one station).
-2. Fill in the order number, order notes (from the order paper), jersey type, how the boxes are sorted, and ships with.
+2. Fill in the order number, order notes (from the order paper), jersey type, **garment** (the outline the station marks damage on; Hockey jersey to begin with, picked from the file's Style column when it has one), how the boxes are sorted, and ships with.
 3. Choose the roster file and press **Send to stations**.
 
 **Rosters sent** lists the rosters waiting or in progress, with who has each. **Release** lets another station take it; **Remove** takes it off the list.
@@ -260,7 +275,7 @@ The board sends no pop-ups, sounds or desktop notifications: the header count an
 - **Today**, **Pick a date…** or **A range of dates…** picks which day the orders list shows. The hub keeps 90 days; photos only for the newest 14.
 - **Open order**: every jersey with its status, what was flagged and why, and the log.
 - **⬇ Order sheet**: the order's Excel workbook (results, summary, boxes, attention).
-- **Damage report**: every flagged jersey with its photos, as Excel (per order, or for the whole day).
+- **Damage report**: every flagged jersey with its photos, as Excel (per order, or for the whole day). **Where** says where the damage was marked ("Not marked" when the operator skipped), **Garment** which outline it was marked on.
 - **⬇ Day sheet (Excel)**: the whole day, every station: jerseys per hour, time per jersey, flag rate, each operator, defects by category, every scan.
 - **⬇ Compare days (Excel)**: one workbook over a range of dates: by day, by operator, by station, by part of the day, defects by day.
 

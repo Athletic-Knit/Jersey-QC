@@ -3,11 +3,24 @@
 // community build cannot embed images. The rows are pure data so they can be
 // tested; only exportDamageReportXLSX touches the browser.
 import { safeFilename, localDateStamp } from "./export.js";
+import { GARMENTS, spotWords } from "./garments.js";
 
 // "Photo" is the scan (what the camera read, the back of the jersey); "Damage
 // photo" is what the operator showed the camera after flagging. A jersey with
 // more than one damage photo gets further columns ("Damage photo 2", ...).
-export const DAMAGE_COLUMNS = ["Date", "Time", "Station", "Order", "Jersey type", "Operator", "Number", "Name", "Team / colour", "Size", "Status", "Reason", "Resolution", "Photo", "Damage photo"];
+// "Where" is where the operator marked the damage on the garment (24 Nov
+// 2026): "Front: left sleeve · Back: lower middle", "Not marked" for a flag
+// that was asked and skipped, empty for a reason that is not asked (or a flag
+// from before the step). "Garment" is the outline it was marked on.
+export const DAMAGE_COLUMNS = ["Date", "Time", "Station", "Order", "Jersey type", "Operator", "Number", "Name", "Team / colour", "Size", "Status", "Reason", "Where", "Garment", "Resolution", "Photo", "Damage photo"];
+// The words for where a flag's damage is. A flag that was asked carries its
+// garment (the station puts it on with the step); with no spots it was skipped.
+export function whereOf(e) {
+  const kind = typeof e?.garment === "string" && Object.hasOwn(GARMENTS, e.garment) ? e.garment : "";
+  const spots = Array.isArray(e?.spots) ? e.spots : [];
+  return spots.length ? spotWords(kind, spots) || "Marked" : kind ? "Not marked" : "";
+}
+export const garmentLabelOf = e => (typeof e?.garment === "string" && Object.hasOwn(GARMENTS, e.garment) ? GARMENTS[e.garment].label : "");
 
 // Events as the hub ledger or a station log holds them → one row per flagged
 // jersey, newest last. Accepts both shapes: ledger events ({ t, station,
@@ -32,6 +45,8 @@ export function buildDamageRows(events, { stationLabel = id => id, operatorName 
       size: e.size ?? m?.size ?? "",
       status: e.offRoster || m?.offRoster ? "NOT ON ROSTER" : "FLAGGED",
       reason: e.reason || "",
+      where: whereOf(e),
+      garment: garmentLabelOf(e),
       resolution: e.resolution || "",
       photo: e.photo || null,
       damagePhotos: Array.isArray(e.damagePhotos) ? e.damagePhotos.filter(Boolean) : [],
@@ -87,11 +102,11 @@ export function buildDamageWorkbook(rows, { title = "Damage report" } = {}, XL) 
   ws.addRow(cols);
   ws.getRow(2).font = { bold: true };
   ws.getRow(2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
-  const widths = [11, 9, 10, 10, 13, 14, 8, 16, 14, 8, 14, 32, 24, ...Array(cols.length - PHOTO_COL).fill(Math.ceil(PHOTO_W / 7))];
+  const widths = [11, 9, 10, 10, 13, 14, 8, 16, 14, 8, 14, 32, 30, 16, 24, ...Array(cols.length - PHOTO_COL).fill(Math.ceil(PHOTO_W / 7))];
   widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   rows.forEach((r, i) => {
     const pics = [r.photo, ...(r.damagePhotos || [])];
-    const row = ws.addRow([r.date, r.time, r.station, r.order, r.type, r.operator, r.number, r.name, r.team, r.size, r.status, r.reason, r.resolution, r.photo ? "" : "no photo", (r.damagePhotos || []).length ? "" : "none taken", ...Array(Math.max(0, cols.length - DAMAGE_COLUMNS.length)).fill("")]);
+    const row = ws.addRow([r.date, r.time, r.station, r.order, r.type, r.operator, r.number, r.name, r.team, r.size, r.status, r.reason, r.where || "", r.garment || "", r.resolution, r.photo ? "" : "no photo", (r.damagePhotos || []).length ? "" : "none taken", ...Array(Math.max(0, cols.length - DAMAGE_COLUMNS.length)).fill("")]);
     row.alignment = { vertical: "top", wrapText: true };
     if (pics.some(Boolean)) row.height = PHOTO_H * 0.75 + 6;
     pics.forEach((p, j) => {

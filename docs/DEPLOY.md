@@ -165,7 +165,7 @@ An unfinished order's file that does not parse is kept aside the same way (`<id>
 
 The labels go to a **Zebra ZD411** (203 dpi, ZPL). The server builds the label and sends it raw to a Windows print queue on the **server PC** (`tools\print-raw.ps1`), so the printer is always driven from the server, never from the station's browser.
 
-Two rolls: 1 x 0.5 in stickers (one per passed jersey, off by default per station) and 2 x 1 in labels (box labels, box lists, flag tickets).
+Two rolls: 1 x 0.5 in stickers (one per passed jersey, off by default per station) and the ticket roll (box labels, box lists, flag tickets): 2 x 1 in today, or the tall 2 x 3 in or 2 x 4 in roll, which replaces it (see "Switching a station to the tall roll" below).
 
 Which queue is used, in order:
 
@@ -174,7 +174,7 @@ Which queue is used, in order:
 3. `JERSEY_PRINTER`.
 4. The first queue on the server PC whose name or driver says Zebra, ZD4 or ZDesigner.
 
-The 2 x 1 in roll (flag tickets, box labels and box lists) uses `JERSEY_FLAG_PRINTER_STATIONn`, then `JERSEY_FLAG_PRINTER`, then the station's label printer. Roll sizes: `JERSEY_LABEL_SIZE` (default `1x0.5`), `JERSEY_FLAG_LABEL_SIZE` (default `2x1`). See the settings table in `README.md`.
+The ticket roll (flag tickets, box labels and box lists) uses `JERSEY_FLAG_PRINTER_STATIONn`, then `JERSEY_FLAG_PRINTER`, then the station's label printer. Roll sizes: `JERSEY_LABEL_SIZE` (default `1x0.5`), `JERSEY_FLAG_LABEL_SIZE_STATIONn`, then `JERSEY_FLAG_LABEL_SIZE` (default `2x1`). See the settings table in `README.md`.
 
 A print that gets no answer is stopped after 30 seconds and the station shows why, in plain words.
 
@@ -189,6 +189,32 @@ powershell -ExecutionPolicy Bypass -File tools\printer-check.ps1
 Seen 12 Nov 2026: the printer's PC moved from wired to Wi-Fi and the server PC kept using the old address, so every label took 28 s or failed. The cure was on the network side (plug back into the wire, or `ipconfig /flushdns` on the server PC). A printer shared from another PC also needs that PC on, awake, and on the domain network (its firewall lets printer sharing in on the Domain profile only).
 
 **`clear-prints.bat`** (`tools\clear-print-queue.ps1`), run on the PC the Zebra plugs into, throws away every label waiting in the queue and says "Cleared: N / Left: 0". Use it after testing with the Zebra unplugged: otherwise everything prints the moment it is plugged back in.
+
+### Switching a station to the tall roll (2 x 4 in or 2 x 3 in)
+
+On the tall roll a flag ticket prints today's ticket in its top inch and, under it, the garment from the front and the back with the spots the operator tapped. Box labels and the count label keep today's look in a 1.25 in band at the top of the label (BOX 5.1 the same size, the team and footer a little bigger), with blank under it (the owner, 24 Nov 2026). Box lists put four of today's pages on one 2 x 4 in label (three on 2 x 3 in). Every flag still prints two tickets (the owner, 24 Nov 2026): 8 in of label a flag on the 2 x 4 in roll.
+
+The tall roll goes on the printer the station's **ticket** labels go to (the `flagPrinter` field of `/api/hub/print?station=…`), and it replaces the 2 x 1 in roll there. A station whose tickets go to its sticker printer (no `JERSEY_FLAG_PRINTER…` for it) has one printer for both rolls: load the tall roll there only while that station's stickers are off (Settings → Label printer, off by default). A sticker would be laid out for the 1 x 0.5 in roll and print on a tall label. A station that wants stickers and tall tickets needs a second printer, named by `JERSEY_FLAG_PRINTER_STATIONn`.
+
+Do it on a break: saving `.env.local` reloads the server, and every station shows Resume.
+
+1. **Load the roll** in that station's Zebra ZD411.
+2. **Calibrate the printer** for the new label length: with the printer on and ready, hold **PAUSE** and **CANCEL** together for 2 seconds (SmartCal). It feeds a few labels and stops at the top of the next one. (Or Zebra Setup Utilities on the PC it plugs into → Open Printer Tools → Action → Calibrate media; check both ways against the ZD411 user guide the first time.) Without this the printer still thinks the label is 1 in long and cuts every ticket into pieces.
+3. **Set the roll size** in `.env.local` in the production folder on the server PC:
+   - one station: `JERSEY_FLAG_LABEL_SIZE_STATION1=2x4` (`STATION2`, `STATION3` for the others), so the stations can switch one at a time;
+   - every station at once: `JERSEY_FLAG_LABEL_SIZE=2x4`.
+   Use `2x3` for the 2 x 3 in roll. A per-station value that is not W x H (for example `2by4`) is ignored with a line in `data\server.log`, and that station keeps `JERSEY_FLAG_LABEL_SIZE`. A mistyped `JERSEY_FLAG_LABEL_SIZE` is not caught: the tickets come out laid out for the sticker roll. Step 5 shows it.
+4. **Save.** The server reloads by itself (the log says "server restarted"). Press **Resume** on the stations.
+5. **Check** what the server uses: on the server PC open `https://localhost:5173/api/hub/print?station=st-station1` and read `flagLabelSize` (it should say `2x4`).
+6. **Test print** from that station: **🖨 Print** → a flag ticket (or **Another order** → an order with a flag), then one box's label and its list. Check:
+   - the ticket starts at the top of the label and the black column ends one inch down;
+   - the garment is whole: nothing cut off on the left (2 mm) or at the bottom;
+   - the box label sits at the top and the next label starts where it should (no creeping down the roll);
+   - **the thin sloped lines** of the garment (shoulders, sleeves, necklines are short sloped lines, 2 to 3 dots, about 0.3 mm). Check they come out unbroken and visible. If they are faint or broken, tell the developers (the line thickness is `OUTLINE_DOTS` / `DETAIL_DOTS` in `src/lib/labels.js`) before raising the printer's darkness, which darkens every label.
+
+**Going back** to the 2 x 1 in roll: load it, calibrate again, and remove the line from `.env.local` (or set `2x1`). On the 2 x 1 in roll every label prints exactly as before.
+
+**Symptoms of a mismatch:** a ticket spread over four short labels means the size says `2x4` but the 2 x 1 in roll (or an uncalibrated printer) is in; one small ticket at the top of a long label with nothing under it means the tall roll is in but the size still says `2x1`.
 
 ## Firewall
 

@@ -89,7 +89,7 @@ describe("ZPL", () => {
     expect(z).not.toContain("~");
   });
   it("every label scales with the label size", () => {
-    const small = binLabelZPL(label, labelSize("2.25x1.25")), big = binLabelZPL(label, labelSize("4x6"));
+    const small = binLabelZPL(label, labelSize("2.25x1.25")), big = binLabelZPL(label, labelSize("4x1.5"));
     const fontOf = z => parseInt(z.match(/\^A0N,(\d+)/)[1], 10);
     expect(fontOf(big)).toBeGreaterThan(fontOf(small));
     expect(big).toContain("^FB780,")   // 4 in less 2 mm each side;
@@ -202,8 +202,17 @@ describe("flagLabel", () => {
   it("from a log entry with a roster row: number, name, team, size, box, the tag the caller gives, the reason, order, station and time", () => {
     expect(flagLabel(entry, byTeam, { orderNumber: 264247, station: "st-station1", tag: "STITCHER" })).toEqual({
       number: "3", name: "LEE", tag: "STITCHER", reason: "Loose, missing or broken stitching", team: "Red", size: "A-L", bin: "2.1",
-      orderNumber: "264247", station: "St 1",
+      orderNumber: "264247", station: "St 1", garment: "", spots: [],
     });
+  });
+  it("the garment and the spots: a known kind, at most three spots, each { side, x, y } in 0–1", () => {
+    const spots = [{ side: "front", x: 0.2, y: 0.5, extra: 1 }, { side: "top", x: 0.5, y: 0.5 }, { side: "back", x: 1.2, y: 0.5 },
+      { side: "back", x: NaN, y: 0.1 }, { side: "back", x: "0.3", y: 0.1 }, { side: "back", x: 0, y: 1 }, { side: "front", x: 0.5, y: 0.5 }, { side: "back", x: 0.9, y: 0.9 }];
+    const l = flagLabel({ ...entry, garment: "socks", spots }, byTeam);
+    expect(l.garment).toBe("socks");
+    expect(l.spots).toEqual([{ side: "front", x: 0.2, y: 0.5 }, { side: "back", x: 0, y: 1 }, { side: "front", x: 0.5, y: 0.5 }]);
+    expect(flagLabel({ ...entry, garment: "constructor" }, byTeam).garment).toBe("");
+    expect(flagLabel({ ...entry, garment: 7, spots: "x" }, byTeam)).toMatchObject({ garment: "", spots: [] });
   });
   it("no roster row (not on the roster, could not read): what the camera read, or ?", () => {
     expect(flagLabel({ detected: { number: "88", name: "NOBODY" }, reason: "Not on the roster." }, byTeam, { tag: "CHECK ORDER" })).toMatchObject({ number: "88", name: "NOBODY", tag: "CHECK ORDER", team: "", size: "", bin: "", station: "" });

@@ -49,6 +49,10 @@ export function mergeHub(states) {
           ...(ev.photo || old.photo ? { photo: ev.photo || old.photo } : {}),
           ...((ev.damagePhotos?.length || 0) >= (old.damagePhotos?.length || 0) ? {} : { damagePhotos: old.damagePhotos }),
           ...(ev.resolution || !old.resolution ? {} : { resolution: old.resolution }),
+          // Where the damage is (24 Nov 2026): the spots that are not empty win,
+          // with the garment they were marked on, like a photo.
+          ...(ev.spots?.length || !old.spots?.length ? {} : { spots: old.spots, ...(old.garment ? { garment: old.garment } : {}) }),
+          ...(ev.garment || !old.garment ? {} : { garment: old.garment }),
         };
       }
       for (const [k, o] of Object.entries(d.orders || {})) t.orders[k] = t.orders[k] ? newer(t.orders[k], o, "lastSeen") : o;

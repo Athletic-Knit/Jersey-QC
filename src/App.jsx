@@ -36,16 +36,17 @@ import { playTone } from "./lib/audio.js";
 import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel, checksFor } from "./lib/vigilance.js";
-import { hub, stationId, snapshotOf, stationUse, holdPrints } from "./lib/hub.js";
+import { hub, stationId, snapshotOf, stationUse, holdPrints, setPrintRolls, rollFor } from "./lib/hub.js";
 import { ofRun, pickRun, orderDone, doneAt, eventsAsLog } from "./lib/ledgerview.js";
 import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { duplicateOptions } from "./lib/dupoptions.js";
 import { matchRead, screenFor } from "./lib/scanpolicy.js";
-import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels } from "./lib/labels.js";
+import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels, listChunks, cleanSpots, repageLists, labelSize as labelDots, DEFAULT_FLAG_LABEL_SIZE } from "./lib/labels.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG, GARMENT_MENU, DEFAULT_ORDER_GARMENT, LABEL_ROLLS } from "./config.js";
+import { garment as garmentShape, garmentOf, garmentView, toView, fromView, spotAt, spotWords, rosterGarment, orderGarmentOf, SIDES, SIDE_LABELS, MAX_SPOTS } from "./lib/garments.js";
 
 
 const S_PASS    = "pass";
@@ -499,6 +500,23 @@ function JerseyTypePicker({ value, onChange }) {
   );
 }
 
+// What the order's garments are, for the outline of the "where is the damage"
+// step and the flag ticket (the plan, 23 Nov 2026): one button a kind, hockey
+// by default. A roster whose rows mostly carry a known style picks it by itself.
+function GarmentPicker({ value, onChange }) {
+  const v = orderGarmentOf(value);
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {GARMENT_MENU.map(g => (
+        <button key={g.id} type="button" onClick={() => onChange(g.id)} aria-pressed={v === g.id}
+          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: v === g.id ? "#60a5fa" : "#3f4b5c", background: v === g.id ? "rgba(96,165,250,0.15)" : "transparent", color: v === g.id ? "#93c5fd" : "#cbd5e1", fontWeight: v === g.id ? 700 : 400 }}>
+          {g.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Unfinished orders (23, 24; the owner, 19 Nov 2026) ────────────────────
 // Every order put aside with "Finish later", kept whole on the server: any
 // station picks one up, one station at a time. The ones the supervisor gave to
@@ -588,6 +606,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [jerseyType, setJerseyType] = useState("");
+  const [garment, setGarment] = useState(DEFAULT_ORDER_GARMENT);   // the outline of "where is the damage"; a roster of known styles picks it
+  const garmentByHand = useRef(false);   // picked on the screen: a roster file chosen later leaves it alone
   const [binBy, setBinBy] = useState("team");       // bins by team, by size, or none — the supervisor's roster brings its own
   const [file,    setFile]    = useState(null);
   const [error,   setError]   = useState(null);
@@ -645,6 +665,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           if (n) setOrder(o => o.trim() || n);
           const sw = shipWithOf(parsed);
           if (sw.length) setShipText(t => t.trim() || sw.join(", "));
+          const g = rosterGarment(parsed);
+          if (!garmentByHand.current) setGarment(g || DEFAULT_ORDER_GARMENT);   // a second file with no known style does not keep the first file's kind
         } catch { /* the Start button reports a bad file */ }
       })();
     }
@@ -656,6 +678,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
       const full = await hub.roster(summary.id);
       setPicked(full); setFile(null); setError(null); setShipText((full.shipWith || []).join(", "));
       setOrder(full.orderNumber || ""); setNotes(full.notes || ""); setJerseyType(full.jerseyType || ""); setBinBy(full.binBy || "team");
+      setGarment(orderGarmentOf(full.garment || rosterGarment(full.rows)));
     } catch (e) { setError("Could not fetch that roster: " + e.message); }
   };
 
@@ -680,14 +703,14 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         }
         const rows = normaliseRosterRows(picked.rows), num = order.trim(), shipWith = orderList(shipText).filter(n => n !== num);
         const carried = await takeOpenBoxes({ order: num, shipWith, rows, binBy, station: stationId() });
-        onStart({ roster: rows, orderNumber: num, notes: notes.trim(), jerseyType, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})`, hubRosterId: picked.id, shipWith, carried }); return;
+        onStart({ roster: rows, orderNumber: num, notes: notes.trim(), jerseyType, garment, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})`, hubRosterId: picked.id, shipWith, carried }); return;
       }
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); starting.current = false; return; }
       const num = order.trim() || orderNumberOf(parsed) || file.name.replace(/\.[^.]+$/, ""), shipWith = orderList(shipText || shipWithOf(parsed).join(" ")).filter(n => n !== num);
       const carried = await takeOpenBoxes({ order: num, shipWith, rows: parsed, binBy, station: stationId() });
-      onStart({ roster: parsed, orderNumber: num, notes: notes.trim(), jerseyType, binBy, rosterFile: file.name, shipWith, carried });
+      onStart({ roster: parsed, orderNumber: num, notes: notes.trim(), jerseyType, garment, binBy, rosterFile: file.name, shipWith, carried });
     } catch (err) {
       setError("Failed to parse roster: " + err.message);
       setLoading(false); starting.current = false;
@@ -749,7 +772,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
             onPick={run => {
               const when = new Date(run.lastSeen || run.firstSeen || Date.now()).toLocaleDateString();
               onReplay({ name: run.order, events: run.events });
-              onStart({ roster: normaliseRosterRows(run.rows), orderNumber: run.order, notes: "", jerseyType: run.jerseyType || "", binBy: run.binBy || "team", rosterFile: `replay of ${run.order} (${stationLabel(run.station)}, ${when})` });
+              onStart({ roster: normaliseRosterRows(run.rows), orderNumber: run.order, notes: "", jerseyType: run.jerseyType || "", garment: run.garment || rosterGarment(run.rows), binBy: run.binBy || "team", rosterFile: `replay of ${run.order} (${stationLabel(run.station)}, ${when})` });
             }} />
         )}
         {showUnfinished && (
@@ -781,6 +804,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           {/* No order-notes box here (the owner, 17 Nov 2026): the notes come with the supervisor's roster, when there are any. */}
           <label style={labelSt}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the flag reasons and the reports; leave it unset to offer every reason</span></label>
           <JerseyTypePicker value={jerseyType} onChange={setJerseyType} />
+          <label style={{ ...labelSt, marginTop: 12 }}>Garment <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— the outline the operator taps to show where the damage is</span></label>
+          <GarmentPicker value={garment} onChange={g => { garmentByHand.current = true; setGarment(g); }} />
           <label style={{ ...labelSt, marginTop: 12 }}>Boxes — how the order is sorted{picked?.binBy ? <span style={{ color: "#60a5fa", fontWeight: 400 }}> · set by the supervisor</span> : null}</label>
           <BinByPicker value={binBy} onChange={setBinBy} />
         </div>
@@ -914,6 +939,14 @@ function ManualEntryForm({ detected, initial = null, teams, onSubmit, onBack }) 
 // and for ones still running, without touching the station.
 // The photos a flag carries: the scan (what the camera read) and the damage
 // photos the operator took after flagging (red frame). Click to enlarge.
+// Where the damage was marked (24 Nov 2026), beside a flag's photos on the
+// board: the garment small, front and back, the spots numbered, read only; the
+// words when the pointer rests on it. Nothing when no spot was marked.
+function FlagMarks({ item, height = 40 }) {
+  if (!Array.isArray(item?.spots) || !item.spots.length) return null;
+  const words = spotWords(item.garment, item.spots);
+  return <div data-flag-marks="" style={{ flexShrink: 0 }}><GarmentMap kind={item.garment} spots={item.spots} height={height} captions={false} title={words ? `Where: ${words}` : "Where the damage was marked"} /></div>;
+}
 function PhotoThumbs({ photo, damagePhotos = [], w = 80, h = 60, onOpen }) {
   const pics = [...(photo ? [{ src: photo, damage: false }] : []), ...(damagePhotos || []).filter(Boolean).map(src => ({ src, damage: true }))];
   if (!pics.length) return null;
@@ -1001,7 +1034,7 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
                       <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Box ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
                       <td style={{ ...td, color: "#cbd5e1" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                       <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
-                      {tab === "problems" && <td style={td}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} /></td>}
+                      {tab === "problems" && <td style={td}><div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} />{e?.status === "flagged" && <FlagMarks item={e} />}</div></td>}
                     </tr>
                   );
                 })}
@@ -1011,7 +1044,7 @@ function OrderView({ station, order, run = 0, stationLabel, onClose, onDownload,
                     <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{e.size || ""}</td><td style={td}></td>
                     <td style={{ ...td, color: "#cbd5e1" }}><RouteTag item={e} /> {e.reason}{e.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                     <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
-                    <td style={td}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} /></td>
+                    <td style={td}><div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} /><FlagMarks item={e} /></div></td>
                   </tr>
                 ))}
                 {tab === "problems" && flaggedRows.length + byHandRows.length + offRoster.length === 0 && <tr><td colSpan={9} style={{ ...td, color: "#22c55e", padding: 18 }}>No problems on this order — nothing went to the supervisor and nothing was entered by hand.</td></tr>}
@@ -1210,6 +1243,8 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   const [order,   setOrder]   = useState("");
   const [notes,   setNotes]   = useState("");
   const [jerseyType, setJerseyType] = useState("");
+  const [garment, setGarment] = useState(DEFAULT_ORDER_GARMENT);   // the outline of "where is the damage" at the station
+  const garmentByHand = useRef(false);   // picked on the form: a roster file chosen later leaves it alone
   const [binBy,   setBinBy]   = useState("team");   // how the station sorts the order: a bin per team, per size, or none
   const [file,    setFile]    = useState(null);
   const [target,  setTarget]  = useState("");     // station id to send the roster to; "" = any station may take it
@@ -1246,10 +1281,10 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const rows = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (!rows.length) { setMsg("No valid rows in that file."); return; }
-      await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), jerseyType, binBy, fileName: file.name, rows, by: operatorName, forStation: target, shipWith: orderList(shipText || shipWithOf(rows).join(" ")).filter(n => n !== order.trim()) });
+      await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), jerseyType, garment, binBy, fileName: file.name, rows, by: operatorName, forStation: target, shipWith: orderList(shipText || shipWithOf(rows).join(" ")).filter(n => n !== order.trim()) });
       const to = target ? `${stationLabel(target)} only` : "every station";
       setMsg(`Sent ${file.name} — ${rows.length} jerseys for order ${order.trim()} to ${to}. It shows on the order screen there.`);
-      setFile(null); setOrder(""); setNotes(""); setJerseyType(""); setBinBy("team"); setShipText(""); refresh();
+      setFile(null); setOrder(""); setNotes(""); setJerseyType(""); setGarment(DEFAULT_ORDER_GARMENT); garmentByHand.current = false; setBinBy("team"); setShipText(""); refresh();
     } catch (e) { setMsg("Could not send: " + e.message); }
     finally { sending.current = false; }
   };
@@ -1456,6 +1491,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                     {s.attention.slice().sort(bySeverity).slice(0, 3).map((a, i) => (
                       <div key={i} style={{ fontSize: 12, marginBottom: 3, display: "flex", gap: 8, alignItems: "flex-start" }}>
                         <PhotoThumbs photo={a.photo} damagePhotos={a.damagePhotos} w={56} h={42} onOpen={setBigPhoto} />
+                        {a.status === "flagged" && <FlagMarks item={a} height={36} />}
                         <div>
                           <RouteTag item={a} /> <span style={{ color: attnColour(a.status), fontWeight: 700 }}>{attnIcon(a.status)} {a.jersey}</span>
                           <span style={{ color: "#94a3b8" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
@@ -1502,6 +1538,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Ships with <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— other order numbers on the order form; their boxes are filled together</span></label><input value={shipText} onChange={e => setShipText(e.target.value)} placeholder="e.g. 264248, 264249 (read from the file when it says)" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the station's flag reasons; unset offers every reason</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Garment <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— the outline the station marks the damage on</span></label><GarmentPicker value={garment} onChange={g => { garmentByHand.current = true; setGarment(g); }} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Boxes — how the station sorts it</label><BinByPicker value={binBy} onChange={setBinBy} /></div>
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Roster file</label>
@@ -1510,7 +1547,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
               const f = e.target.files[0];
               if (f) {
                 setFile(f);
-                (async () => { try { const rows = /\.(xlsx|xls)$/i.test(f.name) ? await parseExcel(f) : parseCSV(await f.text()); const n = orderNumberOf(rows), sw = shipWithOf(rows); if (n) setOrder(o => o.trim() || n); if (sw.length) setShipText(t => t.trim() || sw.join(", ")); } catch { /* Send reports a bad file */ } })();
+                (async () => { try { const rows = /\.(xlsx|xls)$/i.test(f.name) ? await parseExcel(f) : parseCSV(await f.text()); const n = orderNumberOf(rows), sw = shipWithOf(rows), g = rosterGarment(rows); if (n) setOrder(o => o.trim() || n); if (sw.length) setShipText(t => t.trim() || sw.join(", ")); if (!garmentByHand.current) setGarment(g || DEFAULT_ORDER_GARMENT); } catch { /* Send reports a bad file */ } })();
               }
               e.target.value = "";
             }} />
@@ -1618,6 +1655,71 @@ export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled,
   );
 }
 
+// ── The garment, front and back, with the damage marked ──────────────────────
+// Drawn from src/lib/garments.js, the same shapes the flag ticket prints. On
+// the "where is the damage" screen (`onTap`) a tap on the garment adds a spot
+// and a tap on a spot takes it off; elsewhere (the FLAGGED screen, History, the
+// last result) it only shows the marks. Spots are numbered 1–3 over both sides
+// in the order they were marked, as on the ticket. Its size: `fit` { cqh, cqw }
+// (each side at most that much of the screen's container) or `height` in px.
+// A component at module level, never inside ScanOverlay (see optionButton).
+const LOCATE_QUIET_MS = 450;   // the Select key is ignored this long after the locate step opens or its highlight is moved
+const DOUBLE_TAP_MS = 400;                         // see GarmentMap's `remove`
+const SPOT_R = 7;                                  // a spot's radius, in viewBox units (the garment is 100 tall)
+function GarmentMap({ kind, spots = [], onTap, onRemove, fit = null, height = 120, captions = true, title }) {
+  const g = garmentShape(kind), view = garmentView(g.id);
+  const ratio = view.vbW / view.vbH;
+  const dims = fit
+    ? { height: `min(${fit.cqh}cqh, ${(fit.cqw / ratio).toFixed(2)}cqw)`, width: `min(${(fit.cqh * ratio).toFixed(2)}cqh, ${fit.cqw}cqw)` }
+    : { height, width: Math.round(height * ratio) };
+  const list = Array.isArray(spots) ? spots : [];
+  const pts = poly => poly.map(p => toView(view, p).map(v => v.toFixed(1)).join(",")).join(" ");
+  // Where a tap lands, in the garment's own 0–1, from the SVG's box on the screen
+  // (the viewBox keeps its proportions: "meet", centred).
+  // A double tap on one point must not add a spot and take it straight off again (review,
+  // 24 Nov 2026): a tap on a spot within DOUBLE_TAP_MS of the tap that made it is ignored.
+  const addedAt = useRef(-Infinity);
+  const tap = (side, e) => {
+    if (!onTap) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const k = Math.min(r.width / view.vbW, r.height / view.vbH);
+    const vx = (e.clientX - r.left - (r.width - view.vbW * k) / 2) / k, vy = (e.clientY - r.top - (r.height - view.vbH * k) / 2) / k;
+    const [x, y] = fromView(view, vx, vy);
+    const s = spotAt(g.id, side, x, y);
+    if (s) { addedAt.current = e.timeStamp; onTap(s); }
+  };
+  const remove = (i, e) => { if (e.timeStamp - addedAt.current < DOUBLE_TAP_MS) return; onRemove(i); };
+  // The tap screen is drawn big; a read-only map (FLAGGED, History) keeps small captions
+  // and lines whatever its size.
+  const big = !!onTap, gap = fit ? "3cqw" : 8;
+  return (
+    <div title={title} style={{ display: "flex", gap, justifyContent: "center", alignItems: "flex-start" }}>
+      {SIDES.map(side => (
+        <div key={side} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: big ? 6 : 2 }}>
+          {captions && <div style={{ fontSize: big ? "clamp(20px, 3.2cqh, 34px)" : 11, fontWeight: 900, letterSpacing: big ? 3 : 1, color: big ? "#ddd6fe" : "#94a3b8", lineHeight: 1 }}>{SIDE_LABELS[side].toUpperCase()}</div>}
+          <svg viewBox={`0 0 ${view.vbW} ${view.vbH}`} data-side={side} onClick={onTap ? e => tap(side, e) : undefined}
+            style={{ ...dims, display: "block", cursor: onTap ? "crosshair" : "default", touchAction: "manipulation", background: big ? "rgba(255,255,255,0.03)" : "transparent", borderRadius: big ? 14 : 4 }}>
+            <polygon points={pts(g.outline)} fill={big ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.06)"} stroke="#e2e8f0" strokeWidth={big ? 1.2 : 2} strokeLinejoin="round" />
+            {(g.detail[side] || []).map((d, i) => <polyline key={i} points={pts(d)} fill="none" stroke="#94a3b8" strokeWidth={big ? 0.8 : 1.4} strokeLinejoin="round" strokeLinecap="round" />)}
+            {list.map((s, i) => {
+              if (s?.side !== side) return null;
+              const [cx, cy] = toView(view, [s.x, s.y]);
+              return (
+                <g key={i} data-spot={i + 1} onClick={onRemove ? e => { e.stopPropagation(); remove(i, e); } : undefined} style={{ cursor: onRemove ? "pointer" : "default" }}>
+                  <circle cx={cx} cy={cy} r={SPOT_R + 1.5} fill="none" stroke="#fff" strokeWidth={1.2} />
+                  <circle cx={cx} cy={cy} r={SPOT_R} fill="#ef4444" />
+                  <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={SPOT_R * 1.5} fontWeight={900} fill="#fff" style={{ pointerEvents: "none", fontFamily: FONT_DISPLAY }}>{i + 1}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Every result screen of a scan, by `state.mode`: the green confirm with its
 // checklist, the yellow lists, red, ALREADY DONE, the reasons menu, Clean it
 // now, FLAGGED, the by-hand form and the size picker. It draws and takes keys;
@@ -1654,9 +1756,10 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const isMenu  = mode === "reasons" || mode === "reasonText";
   const isManual = mode === "manual";
   const isClean = mode === "clean";   // "Dirt or mark": clean it at the station
+  const isLocate = mode === "locate";  // where on the garment the damage is: drawn like the reasons menu it follows
 
-  const bg     = isGreen ? "#052e16" : (isList || isManual || isSizePick) ? "#1c1a06" : isMenu ? "#1a1033" : isClean ? "#082f49" : "#450a0a";
-  const accent = isGreen ? "#22c55e" : (isList || isManual || isSizePick) ? "#f59e0b" : isMenu ? "#a78bfa" : isClean ? "#38bdf8" : "#ef4444";
+  const bg     = isGreen ? "#052e16" : (isList || isManual || isSizePick) ? "#1c1a06" : (isMenu || isLocate) ? "#1a1033" : isClean ? "#082f49" : "#450a0a";
+  const accent = isGreen ? "#22c55e" : (isList || isManual || isSizePick) ? "#f59e0b" : (isMenu || isLocate) ? "#a78bfa" : isClean ? "#38bdf8" : "#ef4444";
 
   const match      = state.match || state.scan?.match || null;
   const candidates = useMemo(() => sortCandidates(state.candidates || [], listSort), [state.candidates, listSort]);   // by size unless the station says otherwise (Settings → Pick list)
@@ -1762,13 +1865,26 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       // A defect wants a photo first; a roster problem is already in the scan photo.
       return state.photoFirst ? [{ ...photo, primary: true }, cont, ...sizeBack] : [{ ...cont, primary: true }, photo, ...sizeBack];
     }
+    if (mode === "locate") {
+      // Where is the damage (the plan, 23 Nov 2026): taps on the garment are the mouse's or the
+      // finger's; the pedal can only Skip or, once something is marked, finish. The buttons never
+      // move under the finger (review, 24 Nov 2026): always Done, Skip, Undo; only the highlight
+      // moves. Nothing marked: Done and Undo are greyed and the highlight is on Skip (the Select
+      // key runs it, so a station without a mouse never gets stuck).
+      const n = (state.spots || []).length;
+      const skip = { id: "skip", label: "Skip — no mark", run: actions.locateSkip };
+      const done = { id: "locdone", label: n ? `✓ Done · ${n} marked` : "✓ Done · tap the damage", primary: n > 0, disabled: n === 0, run: actions.locateDone };
+      const undo = { id: "undo", label: "↶ Undo last mark", disabled: n === 0, run: actions.locateUndo };
+      return [done, skip, undo];
+    }
     if (mode === "reasonText") return [];   // typing, not navigating
     return [];
-  }, [allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter, state.match, state.fromList]);
+  }, [state.spots, allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, count, damagePhotos.length, canPhoto, state.photoFirst, startCount, sorter, state.match, state.fromList]);
 
   const firstEnabled = Math.max(0, options.findIndex(o => !o.disabled));
   const [selectedIdx, setSelectedIdx] = useState(firstEnabled);
   const lastKeyRef = useRef(0);
+  const locateQuietRef = useRef(0);   // until when the Select key is ignored on "where is the damage"
 
   // The countdown: a tick a second, the shutter on the last, then the shot.
   // Afterwards the highlight goes back to the first option (Continue).
@@ -1798,10 +1914,12 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       if (mode === "done") return;
       if (mode === "manual" || mode === "reasonText") { if (e.code === "Escape") { e.preventDefault(); actions.back(); } return; }   // typing, not navigating
       if ((mode === "offSize" || mode === "listFlag") && e.code === "Escape") { e.preventDefault(); actions.back(); return; }
+      if (mode === "locate" && e.code === "Escape") { e.preventDefault(); actions.locateSkip(); return; }   // Esc = Skip: the flag stands, with no mark
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target?.tagName)) return;   // the Enter that submitted the form is still bubbling: it must not also pick the first row of the list it opened
       if (e.code === retryKey) { if (mode === "confirm") { e.preventDefault(); showNudge(); return; } const i = options.findIndex(x => x.id === "retry"); if (i >= 0) { e.preventDefault(); lastKeyRef.current = Date.now(); fire(options[i]); } return; }
       if (e.code === byHandKey) { const i = options.findIndex(x => x.id === "manual"); if (i >= 0) { e.preventDefault(); lastKeyRef.current = Date.now(); fire(options[i]); } return; }   // straight to the form, like R goes straight to retry
+      if (e.code === confirmKey && mode === "locate" && Date.now() < locateQuietRef.current) { e.preventDefault(); return; }   // a second press meant for the screen before: see locateQuietRef
       if (e.code === confirmKey) { e.preventDefault(); lastKeyRef.current = Date.now(); const o = options[selectedIdx]; if (o && !o.disabled && !o.mouseOnly) fire(o); return; }
       // The assigned keys come first; a plain arrow only moves its own way when
       // it is not assigned to the other direction (a pedal board wired the
@@ -1813,6 +1931,17 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [options, selectedIdx, mode, confirmKey, cancelKey, upKey, retryKey, byHandKey, actions, showNudge, fire, paused]);
+
+  // Where is the damage: the first spot puts the highlight on Done (the first
+  // option), and taking the last one off puts it back on Skip (the second).
+  // (Set while rendering, as React advises for state that follows a prop.)
+  const hasSpots = isLocate && (state.spots || []).length > 0;
+  const [hadSpots, setHadSpots] = useState(hasSpots);
+  if (hadSpots !== hasSpots) { setHadSpots(hasSpots); setSelectedIdx(hasSpots ? 0 : 1); }
+  // The Select key waits a moment (LOCATE_QUIET_MS) when the step opens and when the code moves
+  // the highlight (first spot on, last spot off): a double press of Select on a reason, or a second
+  // Undo, must not run Skip and lose the mark (review round 3, 24 Nov 2026). Touch stays immediate.
+  useEffect(() => { if (mode === "locate") locateQuietRef.current = Date.now() + LOCATE_QUIET_MS; }, [mode, hasSpots]);
 
   // A bumped mouse never overrides a key press made in the last moment.
   const hover = useCallback(i => { if (Date.now() - lastKeyRef.current > 800) setSelectedIdx(i); }, []);
@@ -1834,8 +1963,8 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   const optionButton = (o, i) => {
     const sel = i === selectedIdx;
     return (
-      <button key={o.id} onClick={() => fire(o)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
-        style={{ padding: "13px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.22)"}`, background: o.primary ? (o.locked ? "#14532d" : accent) : "transparent", color: o.primary && !o.locked ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 20, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: sel || o.primary ? 1 : 0.85 }}>
+      <button key={o.id} onClick={() => { if (!o.disabled) fire(o); }} onMouseEnter={() => { if (!o.disabled) hover(i); }} data-sel={sel ? "1" : undefined} disabled={!!o.disabled}
+        style={{ padding: "13px 20px", borderRadius: 12, border: `3px solid ${sel ? accent : "rgba(255,255,255,0.22)"}`, background: o.primary ? (o.locked ? "#14532d" : accent) : "transparent", color: o.primary && !o.locked ? "#0d1117" : "#fff", fontWeight: 700, fontSize: 20, cursor: o.disabled ? "default" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, boxShadow: sel ? `0 0 0 3px ${accent}55` : "none", opacity: o.disabled ? 0.4 : sel || o.primary ? 1 : 0.85 }}>
         <span>{o.label} {o.id === "retry" && mode !== "confirm" ? <Kbd light>{formatKey(retryKey)}</Kbd> : o.id === "manual" ? <Kbd light>{formatKey(byHandKey)}</Kbd> : sel && <Kbd light={!o.primary}>{formatKey(confirmKey)}</Kbd>}</span>
         {o.hint && <span style={{ fontSize: 15, fontWeight: 400, opacity: 0.8 }}>{o.hint}</span>}
       </button>
@@ -1843,7 +1972,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
   };
 
   return (
-    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "safe center", userSelect: "none", padding: compact ? "12px 0" : state.scan?.thumb && !isGreen && !isList && !isSizePick ? "16px 0 116px" : "16px 0", overflowY: "auto", containerType: "size" }}>
+    <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, zIndex: 1000, background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "safe center", userSelect: "none", padding: compact ? "12px 0" : state.scan?.thumb && !isGreen && !isList && !isSizePick && !isLocate ? "16px 0 116px" : "16px 0", overflowY: "auto", containerType: "size" }}>
 
       {/* ── GREEN ── */}
       {nudge && (
@@ -2083,8 +2212,9 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
             {state.reason && <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(24px, 5.5cqh, 56px)", fontWeight: 800, color: "#fff", lineHeight: 1 }}>{state.reason}</span>}
           </div>
           <div style={{ flexShrink: 0, fontSize: "clamp(15px, 2.6cqh, 24px)", fontWeight: 700, color: "#fecaca", marginTop: "0.8cqh", textAlign: "center", padding: "0 20px" }}>Stick a ticket on it and put it in the DAMAGED box.</div>
-          <div style={{ flex: "1 1 0", minHeight: 0, width: "100%", display: "flex", justifyContent: "center", alignItems: "center", margin: "1cqh 0", padding: "0 20px", boxSizing: "border-box" }}>
-            <img src={damagePhotos[damagePhotos.length - 1]} alt="" style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", borderRadius: 12, border: "3px solid #fca5a5", boxSizing: "border-box", background: "#000" }} />
+          <div style={{ flex: "1 1 0", minHeight: 0, width: "100%", display: "flex", justifyContent: "center", alignItems: "center", gap: 20, margin: "1cqh 0", padding: "0 20px", boxSizing: "border-box" }}>
+            {state.spots?.length > 0 && <div style={{ flexShrink: 0, textAlign: "center" }}><GarmentMap kind={state.garment} spots={state.spots} fit={{ cqh: 26, cqw: 15 }} title={spotWords(state.garment, state.spots)} /><div style={{ fontSize: "clamp(14px, 2.2cqh, 20px)", color: "#fde68a", fontWeight: 700, marginTop: 4, maxWidth: "34cqw" }}>{spotWords(state.garment, state.spots)}</div></div>}
+            <img src={damagePhotos[damagePhotos.length - 1]} alt="" style={{ height: "100%", width: "auto", maxWidth: state.spots?.length > 0 ? "58%" : "100%", objectFit: "contain", borderRadius: 12, border: "3px solid #fca5a5", boxSizing: "border-box", background: "#000" }} />
           </div>
           <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", columnGap: 28, rowGap: 4, padding: "0 20px", fontSize: "clamp(15px, 2.4cqh, 21px)", color: "#fecaca", fontWeight: 700 }}>
             <span>✓ {damagePhotos.length > 1 ? `${damagePhotos.length} damage photos` : "Damage photo"} saved for the supervisor</span>
@@ -2120,7 +2250,14 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
           )}
           {mode === "supervisor" && (
             <>
-              {state.reason && <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 4.5vw, 52px)", fontWeight: 800, color: "#fff", marginTop: 10, textAlign: "center", padding: "0 30px" }}>{state.reason}</div>}
+              {(state.reason || state.spots?.length > 0) && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24, flexWrap: "wrap", marginTop: 10, padding: "0 30px" }}>
+                  {state.reason && <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 4.5vw, 52px)", fontWeight: 800, color: "#fff", textAlign: "center" }}>{state.reason}</div>}
+                  {/* Where it was marked: what the ticket prints (read only). */}
+                  {state.spots?.length > 0 && <GarmentMap kind={state.garment} spots={state.spots} fit={{ cqh: 22, cqw: 20 }} title={spotWords(state.garment, state.spots)} />}
+                </div>
+              )}
+              {state.spots?.length > 0 && <div style={{ fontSize: 20, fontWeight: 700, color: "#fde68a", marginTop: 6, textAlign: "center", padding: "0 30px" }}>{spotWords(state.garment, state.spots)}</div>}
               <div style={{ fontSize: 24, fontWeight: 700, color: "#fecaca", marginTop: 10, textAlign: "center", padding: "0 40px", maxWidth: 820, lineHeight: 1.35 }}>Stick a ticket on it and put it in the DAMAGED box.</div>
             </>
           )}
@@ -2160,6 +2297,34 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
       {mode === "manual" && (
         <ManualEntryForm detected={detected} initial={state.initial} teams={state.teams || []} onSubmit={actions.manualSubmit} onBack={actions.back} />
       )}
+      {/* ── WHERE IS THE DAMAGE: tap it on the garment, front and back ── */}
+      {isLocate && (
+        <>
+          <div style={{ flexShrink: 0, fontSize: "clamp(28px, 5.5cqh, 52px)", fontWeight: 900, color: accent, textAlign: "center", lineHeight: 1.05, padding: "0 24px" }}>Where is the damage?</div>
+          <div style={{ flexShrink: 0, display: "flex", alignItems: "baseline", justifyContent: "center", flexWrap: "wrap", columnGap: 18, rowGap: 2, marginTop: 4, padding: "0 24px", textAlign: "center" }}>
+            {(match || detected) && (
+              <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(26px, 4.8cqh, 48px)", fontWeight: 800, color: "#fff", lineHeight: 1 }}>
+                {match ? `#${match.number}${match.name ? ` · ${match.name}` : ""}${match.size ? ` · ${match.size}` : ""}` : `#${detected.number || "?"}${detected.name ? ` · ${detected.name}` : ""}`}
+              </span>
+            )}
+            {state.reason && <span style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(26px, 4.8cqh, 48px)", fontWeight: 800, color: "#fca5a5", lineHeight: 1 }}>{state.reason}</span>}
+          </div>
+          <div style={{ flexShrink: 0, fontSize: "clamp(17px, 2.4cqh, 24px)", color: "#c4b5fd", marginTop: 6, textAlign: "center", padding: "0 24px" }}>
+            Tap where it is, up to {MAX_SPOTS} spots, front or back. Tap a spot to take it off.
+          </div>
+          <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", margin: "1.2cqh 0", width: "100%" }}>
+            <GarmentMap kind={state.garment} spots={state.spots || []} fit={{ cqh: 52, cqw: 44 }}
+              onTap={spot => actions.locateTap(spot)} onRemove={i => actions.locateRemove(i)} />
+          </div>
+          <div style={{ flexShrink: 0, minHeight: "1.3em", fontSize: "clamp(18px, 2.8cqh, 28px)", fontWeight: 800, color: (state.spots || []).length ? "#fde68a" : "#7c8ba1", textAlign: "center", padding: "0 24px" }}>
+            {(state.spots || []).length ? spotWords(state.garment, state.spots) : "Nothing marked yet"}
+          </div>
+          <div style={{ flexShrink: 0, marginTop: "1.2cqh", display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
+            {options.map((o, i) => optionButton(o, i))}
+          </div>
+        </>
+      )}
+
       {/* ── REASONS menu ── */}
       {isMenu && (
         <>
@@ -2191,7 +2356,7 @@ function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = ""
         </div>
       )}
 
-      {state.scan?.thumb && mode !== "done" && !isMenu && !compact && !isList && !isSizePick && (   /* not on the pick list: the room goes to the list (owner, 19 Nov 2026) */   // not on the compact flagged screen: it sat under the buttons on a narrow window
+      {state.scan?.thumb && mode !== "done" && !isMenu && !isLocate && !compact && !isList && !isSizePick && (   /* not on the pick list: the room goes to the list (owner, 19 Nov 2026) */   // not on the compact flagged screen: it sat under the buttons on a narrow window
         <div title="What the camera read" style={{ position: "absolute", ...(isGreen ? { top: 12 } : { bottom: 12 }), left: 12, opacity: isGreen ? 0.5 : 0.6 }}>
           <img src={state.scan.thumb} alt="" style={{ width: isGreen ? 80 : 120, height: isGreen ? 60 : 90, objectFit: "cover", borderRadius: 8 }} />
         </div>
@@ -2219,8 +2384,10 @@ function ResultCard({ result, onResolve, canResolve = true }) {
             {result.match ? `#${result.match.number}${result.match.name ? " · " + result.match.name : ""}` : `#${result.detected?.number || "?"}${result.detected?.name ? " · " + result.detected.name : ""}`}
           </span>
           {result.reason     && <span style={{ fontSize: 13, color: "#f87171", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{result.reason}</span>}
+          {result.spots?.length > 0 && <span style={{ fontSize: 13, color: "#fde68a" }}>{spotWords(result.garment, result.spots)}</span>}
           {result.resolution && <span style={{ fontSize: 13, color: "#cbd5e1" }}>{result.resolution}</span>}
         </div>
+        {result.spots?.length > 0 && <GarmentMap kind={result.garment} spots={result.spots} height={40} captions={false} title={spotWords(result.garment, result.spots)} />}
       </div>
       {isFlagged && canResolve && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #21262d" }}>
@@ -2334,18 +2501,22 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
 
         <div style={{ marginBottom: 18 }}>
           <div style={labelSt}>Label printer</div>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginBottom: 8 }}>
-            <input type="checkbox" checked={temp.stickers !== false} onChange={e => setTemp(t => ({ ...t, stickers: e.target.checked }))} />
-            Print a sticker for every passed jersey (its box, and the team or size) — the 1 × ½ in roll
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
-            <input type="checkbox" checked={temp.flagTickets !== false} onChange={e => setTemp(t => ({ ...t, flagTickets: e.target.checked }))} />
-            Print a flag ticket for every flagged jersey (where it goes and why) — the 2 × 1 in roll
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginTop: 8 }}>
-            <input type="checkbox" checked={temp.binLists !== false} onChange={e => setTemp(t => ({ ...t, binLists: e.target.checked }))} />
-            Print what is in a box when it is closed (full, or the order finished): a count label and fourteen jerseys a label — the 2 × 1 in roll
-          </label>
+          {[
+            { on: "stickers", roll: "stickerRoll", text: "Print a sticker for every passed jersey (its box, and the team or size)" },
+            { on: "flagTickets", roll: "flagRoll", text: "Print a flag ticket for every flagged jersey (where it goes and why)" },
+            { on: "binLists", roll: "boxRoll", text: "Print what is in a box when it is closed (full, or the order finished): a count label and the jerseys in it. Box labels print on this roll too" },
+          ].map(o => (
+            <div key={o.on} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", flex: 1, minWidth: 0 }}>
+                <input type="checkbox" checked={temp[o.on] !== false} onChange={e => setTemp(t => ({ ...t, [o.on]: e.target.checked }))} />
+                {o.text}
+              </label>
+              <select aria-label="Roll" title="The label roll this prints on" value={temp[o.roll] || DEFAULT_SETTINGS[o.roll]} onChange={e => { setTemp(t => ({ ...t, [o.roll]: e.target.value })); e.target.blur(); }} style={{ ...selSt, width: "auto", flexShrink: 0 }}>
+                {LABEL_ROLLS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+            </div>
+          ))}
+          <div style={{ fontSize: 14, color: "#7c8ba1" }}>The roll in the printer: the label is laid out for it. A 1 × ½ in label goes to this station's sticker printer, the others to its ticket printer.</div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -2949,6 +3120,13 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
               <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 28, lineHeight: 1 }}>#{l.match.number}{l.match.name ? ` · ${l.match.name}` : ""}</span>
               {l.match.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#4ade80", fontWeight: 800 }}>{l.match.size}</span>}
               {binOf(l.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "#60a5fa", fontWeight: 800 }}>Box {binOf(l.match)}</span>}
+              {/* A flag's reason and, when it was marked, where the damage is. */}
+              {l.status === S_FLAGGED && (l.reason || l.spots?.length > 0) && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  {l.spots?.length > 0 && <GarmentMap kind={l.garment} spots={l.spots} height={44} captions={false} title={spotWords(l.garment, l.spots)} />}
+                  <span style={{ fontSize: 14, color: "#fca5a5", lineHeight: 1.2 }}>{l.reason}{l.spots?.length > 0 ? <><br /><span style={{ color: "#fde68a" }}>{spotWords(l.garment, l.spots)}</span></> : null}</span>
+                </span>
+              )}
               <span style={{ marginLeft: "auto", fontSize: 14, color: "#7c8ba1", whiteSpace: "nowrap" }}>{l.timestamp}</span>
               {st === "flag"
                 ? <Pill color="#ef4444">Flagged</Pill>
@@ -3075,6 +3253,17 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const [keys,   setKeys]   = useState(null);   // which box the on-screen keys are under: "order" | "pick" | null (no keyboard at a station)
   const leave = () => document.activeElement?.blur?.();
   const pack = past || current;
+  // The roll the box lists print on: a tall roll prints a list on fewer labels,
+  // so the counts on the list buttons come from it. The roll chosen in Settings
+  // (boxRoll), else the hub's ticket roll (GET /print; none until it answers).
+  const chosenRoll = rollFor("binlist");
+  const [roll, setRoll] = useState(() => (chosenRoll ? labelDots(chosenRoll) : null));
+  useEffect(() => {
+    let on = true;
+    if (chosenRoll) return () => { on = false; };
+    hub.printStatus(stationId()).then(r => { if (on) setRoll(labelDots(r?.flagLabelSize || DEFAULT_FLAG_LABEL_SIZE)); }).catch(() => {});
+    return () => { on = false; };
+  }, [chosenRoll]);
   useEffect(() => {
     const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } };
     window.addEventListener("keydown", h, true);
@@ -3085,9 +3274,12 @@ function PrintModal({ current = null, tagOf, onClose }) {
     const parts = jobs.filter(([labels]) => labels.length), n = parts.reduce((t, [labels]) => t + labels.length, 0);
     if (!n) { setStatus({ kind: "error", text: `${what}: nothing to print` }); return; }
     setStatus({ kind: "printing", text: `Printing ${what}…` });
-    const chunks = parts.flatMap(([labels, kind]) => Array.from({ length: Math.ceil(labels.length / 50) }, (_, i) => [labels.slice(i * 50, i * 50 + 50), kind]));
-    chunks.reduce((pr, [labels, kind]) => pr.then(() => hub.printLabels(labels, { kind, station: stationId() })), Promise.resolve(null))
-      .then(r => setStatus({ kind: "done", text: `Printed ${what}: ${n} ${n === 1 ? "label" : "labels"} on ${r.printer}` }))
+    const chunks = parts.flatMap(([labels, kind]) => kind === "binlist"   // a list is never cut in two: the hub re-pages it whole for a tall roll
+      ? listChunks(labels, 50).map(c => [c, kind])
+      : Array.from({ length: Math.ceil(labels.length / 50) }, (_, i) => [labels.slice(i * 50, i * 50 + 50), kind]));
+    // The count is the hub's: the labels that came out (a tall roll's lists are re-paged).
+    chunks.reduce((pr, [labels, kind]) => pr.then(t => hub.printLabels(labels, { kind, station: stationId() }).then(r => ({ printer: r?.printer, count: t.count + (Number.isFinite(r?.count) ? r.count : labels.length) }))), Promise.resolve({ count: 0 }))
+      .then(r => setStatus({ kind: "done", text: `Printed ${what}: ${r.count} ${r.count === 1 ? "label" : "labels"} on ${r.printer}` }))
       .catch(e => setStatus({ kind: "error", text: `${what} NOT printed: ${e.status === 503 ? "no label printer for this station" : e.status ? e.message : "could not reach the server"}` }));
   };
   const search = () => {
@@ -3104,6 +3296,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const picked   = needle ? stickers.filter(r => rosterMatches(r, pick)).slice(0, 8) : [];   // the same search as the roster table's
   const allLabels = pack ? boxLabelJobs(pack) : [], allLists = pack ? boxListJobs(pack) : [];
   const sum = pack ? orderSummary(pack) : null;
+  const listCount = roll ? repageLists(allLists, roll).length : null;   // the list labels that come out on this station's roll
+  const listN = listCount ?? allLists.length, countOf = n => (listCount === null ? "" : ` · ${n}`);
   const many = (n, what) => n <= 30 || window.confirm(`Print ${n} ${what}?`);
   const secSt  = { fontSize: 14, fontWeight: 800, color: "#94a3b8", letterSpacing: 1, textTransform: "uppercase", margin: "20px 0 8px" };
   const rowSt  = { display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", borderRadius: 10, background: "#1e293b", border: "1px solid #3f4b5c" };
@@ -3150,8 +3344,8 @@ function PrintModal({ current = null, tagOf, onClose }) {
             <div style={secSt}>The whole order</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button style={bigBtn} onClick={() => many(allLabels.length, "box labels") && send([[allLabels, "binticket"]], "every box label")}>Box labels · {allLabels.length}</button>
-              <button style={bigBtn} onClick={() => many(allLists.length, "list labels") && send([[allLists, "binlist"]], "every box list")}>Box lists · {allLists.length}</button>
-              <button style={bigBtn} onClick={() => many(allLabels.length + allLists.length, "labels") && send([[allLists, "binlist"], [allLabels, "binticket"]], "every box label and list")}>Both · {allLabels.length + allLists.length}</button>
+              <button style={bigBtn} onClick={() => many(listN, "list labels") && send([[allLists, "binlist"]], "every box list")}>Box lists{countOf(listN)}</button>
+              <button style={bigBtn} onClick={() => many(allLabels.length + listN, "labels") && send([[allLists, "binlist"], [allLabels, "binticket"]], "every box label and list")}>Both{countOf(allLabels.length + listN)}</button>
             </div>
             <div style={secSt}>One box</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -3255,7 +3449,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
             ? `${remaining} ${remaining === 1 ? "jersey is" : "jerseys are"} not scanned yet. You can finish anyway; the supervisor keeps this order's record and sheets.`
             : "Every jersey is scanned. The supervisor keeps this order's record and sheets."}
           {scans === 0 ? " Nothing was scanned on it." : ""}
-          {shipWith.length ? ` Ships with order ${shipWith.join(", ")}: a box that is not full stays open for it.` : binLists > 0 ? ` Every open box is closed and its list prints: ${binLists} ${binLists === 1 ? "label" : "labels"}.` : ""}
+          {shipWith.length ? ` Ships with order ${shipWith.join(", ")}: a box that is not full stays open for it.` : binLists > 0 ? " Every open box is closed and its list prints." : ""}
         </div>
         </div>
         <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", margin: "0 -8px", padding: "0 8px" }}>
@@ -3388,6 +3582,7 @@ export default function App() {
   const gateRef         = useRef(createMotionGate({ log: m => console.log("[hands-free] " + m) }));
 
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...(loadSettings() || {}) }));
+  setPrintRolls(settings);   // every print sends the roll chosen for its kind (Settings → Label printer); set during render so the first print already has it
   useEffect(() => { gateRef.current.setGrace(Math.round((Number(settings.autoScanDelay) || 0) * 5)); }, [settings.autoScanDelay]);   // 200 ms ticks
   const { scanKey, confirmKey, cancelKey, upKey, retryKey, byHandKey } = settings;
 
@@ -3415,6 +3610,7 @@ export default function App() {
   const [operatorName,       setOperatorName]       = useState(() => savedSignIn?.name || "");
   const [notes,              setNotes]              = useState("");
   const [jerseyType,         setJerseyType]         = useState("");   // echl | echl_replica | sublimated | "" 
+  const [orderGarment,       setOrderGarment]       = useState(DEFAULT_ORDER_GARMENT);   // the order's garment kind (garments.js): the outline of "where is the damage"
   const [cameraOn,           setCameraOn]           = useState(false);
   const [cameras,            setCameras]            = useState([]);
   const [scanning,           setScanning]           = useState(false);
@@ -3635,23 +3831,55 @@ export default function App() {
   // the GO TO SUPERVISOR screen with a Reprint button. Its own switch in
   // Settings (`flagTickets`), apart from the stickers'.
   const [ticket, setTicket] = useState(null);      // { id, status: "done" | "none" | "error", printer, message }
-  const ticketPrinted = useRef(0);                 // the log id of the last flag sent to the printer
+  const ticketPrinted = useRef(new Set());       // the log ids of the flags sent to the printer
+  const heldTickets = useRef(new Set());         // flags whose ticket waits on "where is the damage"
   const printTicket = useCallback(entry => {
     if (!entry) return Promise.resolve();
-    const label = flagLabel(entry, binMap, { orderNumber, station: stationId(), tag: severityOf(entry.reason).tag });
+    // A flag that did not ask where (Others, No size tag, a sorter's…) still draws the order's
+    // garment on a tall ticket, not a hockey jersey on a pants order (review, 24 Nov 2026).
+    const label = flagLabel({ ...entry, garment: entry.garment || garmentOf(entry.match, orderGarment) }, binMap, { orderNumber, station: stationId(), tag: severityOf(entry.reason).tag });
     return hub.printLabels([label], { kind: "flag", station: stationId() })
       .then(r => setTicket({ id: entry.id, status: "done", printer: r.printer }))
       .catch(e => setTicket({ id: entry.id, status: e.status === 503 ? "none" : "error", message: e.status ? e.message : "could not reach the server" }));
-  }, [binMap, orderNumber]);
+  }, [binMap, orderNumber, orderGarment]);
   const newestEntry = log[0];
+  const locatingUp = overlay?.mode === "locate";   // "where is the damage" is up: the left panel's ways out are greyed
   // Each new flag in the log prints its tickets once, when flag tickets are on.
   useEffect(() => {
-    if (!settings.flagTickets || !newestEntry || newestEntry.status !== S_FLAGGED || ticketPrinted.current === newestEntry.id) return;
-    ticketPrinted.current = newestEntry.id;
+    // A flag still being located (where is the damage) waits: it prints when its spots are on it.
+    if (!settings.flagTickets || !newestEntry || newestEntry.status !== S_FLAGGED || newestEntry.locating || ticketPrinted.current.has(newestEntry.id)) return;
+    ticketPrinted.current.add(newestEntry.id);
     printTicket(newestEntry);
     // No DAMAGED box label on the first flag any more (the owner, 19 Nov 2026): the
     // DAMAGED box is the same box all day. It still prints from the Boxes dialog.
   }, [newestEntry, settings.flagTickets, printTicket]);
+  // A flag held back while "where is the damage" is up prints when it is let go, wherever it
+  // is in the log by then (review round 3, 24 Nov 2026: a Missing or Un-check from the roster
+  // put a new log line on top of it and its ticket never printed). The ticket follows the
+  // entry, not its place: every `locating` entry is remembered, and printed once when cleared.
+  useEffect(() => {
+    const held = heldTickets.current;
+    for (const l of log) {
+      if (!l) continue;
+      if (l.locating) { held.add(l.id); continue; }
+      if (!held.size || !held.has(l.id)) continue;
+      held.delete(l.id);
+      if (!settings.flagTickets || l.status !== S_FLAGGED || ticketPrinted.current.has(l.id)) continue;
+      ticketPrinted.current.add(l.id);
+      printTicket(l);
+    }
+  }, [log, settings.flagTickets, printTicket]);
+  // A flag whose "where is the damage" screen was left any way but Done or Skip (another
+  // button replaced it, a new scan came over it) is let go unmarked, so its ticket prints
+  // through the effect above (review, 24 Nov 2026: "exactly one ticket per flag").
+  useEffect(() => {
+    const keep = overlay?.mode === "locate" ? overlay.entryId : null;
+    const stale = log.filter(l => l?.locating && l.id !== keep);
+    if (!stale.length) return;
+    const ids = new Set(stale.map(l => l.id));
+    const put = l => { if (!l || !ids.has(l.id)) return l; const { locating: _locating, ...rest } = l; return { ...rest, spots: [] }; };
+    setLog(prev => prev.map(put)); setLastResult(put);
+  }, [overlay, log]);
   // What the supervisor screen shows for its entry: how the ticket went, or that it is printing.
   const ticketFor = entryId => !settings.flagTickets || !entryId ? null : ticket?.id === entryId ? ticket : { id: entryId, status: "printing" };
   const reprintTicket = entryId => { const e = log.find(l => l.id === entryId); if (e) { setTicket(null); printTicket(e); } };
@@ -3718,10 +3946,10 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole: orderRole || kindOfRole(role), vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, garment: orderGarment, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole: orderRole || kindOfRole(role), vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
     const t = setTimeout(() => setSaveOk(prev => (prev === saved ? prev : saved)), 0);   // said in the header when it fails
     return () => clearTimeout(t);
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole, checksLeft, inspect]);
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, orderGarment, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole, checksLeft, inspect]);
 
   // An order with scans in it asks "Leave site?" before the tab closes or reloads.
   useEffect(() => {
@@ -3736,7 +3964,7 @@ export default function App() {
   // board and can be sent one. Supervisors on their own screen do not report.
   // What this station tells the hub, sent now. The 5-second report below uses it, and so does
   // New order, which waits for it to arrive before it clears the order (code review M16).
-  const reportNow = useCallback(() => hub.report(stationId(), snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", orderRun: sessionStarted ? orderRun : 0, notes, jerseyType, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap, closedBins: sessionStarted ? closedBins : [], binSummary: sessionStarted ? binSummary : [], idleSpells, awaySpells, finishedAt: sessionStarted ? finishedAt : null })), [sessionStarted, operatorName, role, orderNumber, orderRun, notes, jerseyType, rosterFile, roster, log, lastConfirmed, binMap, closedBins, binSummary, idleSpells, awaySpells, finishedAt]);
+  const reportNow = useCallback(() => hub.report(stationId(), snapshotOf({ operatorName, role, orderNumber: sessionStarted ? orderNumber : "", orderRun: sessionStarted ? orderRun : 0, notes, jerseyType, garment: orderGarment, rosterFile: sessionStarted ? rosterFile : null, roster: sessionStarted ? roster : [], log: sessionStarted ? log : [], lastConfirmed: sessionStarted ? lastConfirmed : null, binMap, closedBins: sessionStarted ? closedBins : [], binSummary: sessionStarted ? binSummary : [], idleSpells, awaySpells, finishedAt: sessionStarted ? finishedAt : null })), [sessionStarted, operatorName, role, orderNumber, orderRun, notes, jerseyType, orderGarment, rosterFile, roster, log, lastConfirmed, binMap, closedBins, binSummary, idleSpells, awaySpells, finishedAt]);
   useEffect(() => {
     if (!signedIn || (role === "supervisor" && !sessionStarted)) return;
     const send = () => reportNow()
@@ -3785,8 +4013,14 @@ export default function App() {
     setPickedUp(s.pickedUp || null); setOrderRole(kindOfSession(s));
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
     setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setFinishedAt(s.finishedAt || null); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
-    setLog(s.log || []); setBinMap(modernBins(s.binMap || null)); setClosedBins(s.closedBins || []); setShipWith(s.shipWith || []); setCarried(s.carried || []); setBoxLabelled(s.boxLabelled || []); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
-    ticketPrinted.current = (s.log || [])[0]?.id ?? 0;             // its last flag's ticket was printed when it happened
+    // A flag left on "where is the damage" (the page reloaded there, or the order was parked)
+    // is cleared, unmarked: its ticket never printed, so it prints now, once, wherever it is in
+    // the log (the held-ticket effect). Every other flag printed when it happened.
+    const wasLocating = (s.log || []).filter(l => l?.locating).map(l => l.id);
+    const loaded = (s.log || []).map(l => { if (!l?.locating) return l; const { locating: _locating, ...rest } = l; return { ...rest, spots: [] }; });
+    heldTickets.current = new Set(wasLocating);
+    setLog(loaded); setOrderGarment(orderGarmentOf(s.garment)); setBinMap(modernBins(s.binMap || null)); setClosedBins(s.closedBins || []); setShipWith(s.shipWith || []); setCarried(s.carried || []); setBoxLabelled(s.boxLabelled || []); setFirstScanTime(s.firstScanTime || null); setIdleSpells(s.idleSpells || []); setAwaySpells(s.awaySpells || []);
+    ticketPrinted.current = new Set((s.log || []).filter(l => l && !l.locating).map(l => l.id));   // printed when they happened
     vigilRef.current.load(s.vigil); setChecksLeft(vigilRef.current.remaining);
     inspectRef.current.load(s.inspect); syncInspect();
     // An order that was finished (Finish order) and not yet cleared by New order comes back
@@ -3819,7 +4053,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true); setPickedUp(null); setOrderRole("");
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setFinishedAt(null); setHubRosterId(null); setNotes(""); setLog([]); setBinMap(null); setClosedBins([]); setShipWith([]); setCarried([]); keptOpen.current = new Set(); setBoxLabelled([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setFinishedAt(null); setHubRosterId(null); setNotes(""); setOrderGarment(DEFAULT_ORDER_GARMENT); setLog([]); setBinMap(null); setClosedBins([]); setShipWith([]); setCarried([]); keptOpen.current = new Set(); setBoxLabelled([]); setBinPrint(null); setShowBins(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
     setShowSummary(false); setSummaryPrint(null);   // a summary opened on the done screen must not come back over the next order (review, 24 Nov 2026)
     waitPedalRef.current = false; setWaitPedal(false);
@@ -3827,11 +4061,14 @@ export default function App() {
 
   // Finish order: the confirm screen, then back to waiting for an order.
   // ── Bins: full, closed, listed ─────────────────────────────────────────────
-  // The 2 x 1 in roll takes at most 100 labels a request: send them in turn.
+  // The 2 x 1 in roll takes at most 100 labels a request: send them in turn,
+  // cut between lists only, so the hub can re-page a whole list for a tall roll (listChunks).
   const printOnTicketRoll = useCallback((labels, kind) => {
-    const chunks = [];
-    for (let i = 0; i < labels.length; i += 100) chunks.push(labels.slice(i, i + 100));
-    return chunks.reduce((p, c) => p.then(() => hub.printLabels(c, { kind, station: stationId() })), Promise.resolve(null));
+    const chunks = kind === "binlist" ? listChunks(labels, 100) : Array.from({ length: Math.ceil(labels.length / 100) }, (_, i) => labels.slice(i * 100, i * 100 + 100));
+    if (!chunks.length) return Promise.reject(new Error("nothing to print"));
+    // → { printer, count }: `count` is the hub's, the labels that really came out
+    // (on a tall roll a list prints on fewer labels than were sent).
+    return chunks.reduce((p, c) => p.then(t => hub.printLabels(c, { kind, station: stationId() }).then(r => ({ ...r, count: t.count + (Number.isFinite(r?.count) ? r.count : c.length) }))), Promise.resolve({ count: 0 }));
   }, []);
   // The order as printjobs.js takes it, right now (the Print menu's `printPack` is the same with more).
   const packNow = useMemo(() => ({ orderNumber, roster, binMap, closedBins, flags: log.filter(l => l.status === S_FLAGGED) }), [orderNumber, roster, binMap, closedBins, log]);
@@ -3886,10 +4123,10 @@ export default function App() {
     const fresh = left > 0 && !boxLabelled.includes(r.newBin);
     printOnTicketRoll(lists, "binlist")
       .then(res => !fresh ? res : hub.printLabels([{ bin: r.newBin, label: r.entry.label, by: binFieldOf(r.binMap), count: 0, orderNumber: String(orderNumber || "") }], { kind: "binticket", station: stationId() })
-        .then(res2 => { setBoxLabelled(prev => [...new Set([...prev, r.newBin])]); return res2; }))
+        .then(res2 => { setBoxLabelled(prev => [...new Set([...prev, r.newBin])]); return { ...res2, count: res.count }; }))
       .then(res => {
         if (notInIds) setClosedBins(prev => prev.map(c => c.bin === bin ? { ...c, notIn: notInIds } : c));   // printed: Finish order need not print it again unless it changes
-        setBinPrint({ status: "done", text: `${what}. Printed ${lists.length} list ${lists.length === 1 ? "label" : "labels"} for Box ${bin}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` });
+        setBinPrint({ status: "done", text: `${what}. Printed ${res.count} list ${res.count === 1 ? "label" : "labels"} for Box ${bin}${fresh ? ` and the Box ${r.newBin} label` : ""} on ${res.printer}` });
       })
       .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
   }, [roster, binMap, closedBins, orderNumber, settings.binLists, printOnTicketRoll, boxOf, stitched, boxLabelled, carriedIn, ordersIn, log]);
@@ -3899,7 +4136,7 @@ export default function App() {
     if (!lists.length) return;
     setBinPrint({ status: "printing", text: `Box ${bin} list` });
     printOnTicketRoll(lists, "binlist")
-      .then(res => setBinPrint({ status: "done", text: `Box ${bin} list printed again: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .then(res => setBinPrint({ status: "done", text: `Box ${bin} list printed again: ${res.count} ${res.count === 1 ? "label" : "labels"} on ${res.printer}` }))
       .catch(e => setBinPrint({ status: "error", text: `Box ${bin} list. ${printProblem(e)}` }));
   }, [closedBins, listOf, printOnTicketRoll, packNow]);
 
@@ -3909,16 +4146,25 @@ export default function App() {
   // cleared by "New order" there, not before, so the lists can be printed
   // again and a reload still has the order.
   const [finished,   setFinished]   = useState(null);    // { status: "printing" | "done" | "error" | "none", text }
-  const askFinish    = useCallback(() => { setShowRosterComplete(false); setShowFinish(true); }, []);
+  // The end of "where is the damage" (Done or Skip): see actions.locateDone.
+  const finishLocate = useCallback((o, spots) => {
+    const marked = cleanSpots(spots);
+    const put = l => { if (!l || l.id !== o.entryId) return l; const { locating: _locating, ...rest } = l; return { ...rest, garment: o.garment, spots: marked }; };
+    setLog(prev => prev.map(put)); setLastResult(put);
+    setOverlay({ ...o, mode: "supervisor", spots: marked });
+  }, []);
+  // A flag still on "where is the damage" is let go unmarked first (Skip), so its ticket
+  // prints here before the order can be cleared (review round 3, 24 Nov 2026).
+  const askFinish    = useCallback(() => { if (overlay?.mode === "locate") finishLocate(overlay, []); setShowRosterComplete(false); setShowFinish(true); }, [overlay, finishLocate]);
   // Boxes left open at Finish order for a ship-with order: their lists do not print (they are not full).
   const keptOpen = useRef(new Set());
   const printFinishLists = useCallback((note = "") => {
     const lists = finishLists.filter(l => !keptOpen.current.has(String(l.box ?? l.bin)));   // a box kept open for the ship-with order: neither its list nor its NOT IN BOX list (review, 24 Nov 2026)
     const n = lists.length, pre = note ? note + " " : "";
     if (!n) { setFinished({ status: "none", text: pre + (settings.binLists ? "No other box has anything in it: no list to print." : "Box lists are switched off in Settings.") }); return; }
-    setFinished({ status: "printing", text: `${pre}Printing the box lists: ${n} ${n === 1 ? "label" : "labels"}…` });
+    setFinished({ status: "printing", text: `${pre}Printing the box lists…` });
     printOnTicketRoll(lists, "binlist")
-      .then(r => setFinished({ status: "done", text: `${pre}Box lists printed: ${n} ${n === 1 ? "label" : "labels"} on ${r.printer}` }))
+      .then(r => setFinished({ status: "done", text: `${pre}Box lists printed: ${r.count} ${r.count === 1 ? "label" : "labels"} on ${r.printer}` }))
       .catch(e => setFinished({ status: "error", text: `${pre}The box lists were NOT printed. ${printProblem(e)}. Fix the printer and print them again.` }));
   }, [finishLists, settings.binLists, printOnTicketRoll]);
   // `keep`: the boxes the operator left open for the ship-with order. They go to the hub
@@ -3979,7 +4225,7 @@ export default function App() {
   const parkOrder = useCallback(async () => {
     const st = stationId(), summary = outOf(roster);
     const kind = orderRole || kindOfRole(role);
-    const session = { sessionStarted: true, role, orderRole: kind, roster, rosterFile, orderNumber, orderRun, hubRosterId: null, operatorName, notes, jerseyType, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() };
+    const session = { sessionStarted: true, role, orderRole: kind, roster, rosterFile, orderNumber, orderRun, hubRosterId: null, operatorName, notes, jerseyType, garment: orderGarment, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() };
     setParking(true); setParkErr("");
     try { await hub.parkOrder({ id: pickedUp?.hubId || undefined, station: st, order: orderNumber, run: orderRun, operator: operatorName, jerseyType, kind: kind === "sorter" ? "sorter" : "", ...summary, out: outList(roster, log), session }); }
     catch (e) { setParkErr(`The order could NOT be saved on the server (${e.message}). Nothing was lost: it is still open here. Try again, or call the supervisor.`); return; }
@@ -3988,7 +4234,7 @@ export default function App() {
     if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});
     setShowPark(false); setParkErr("");
     resetOrder();
-  }, [roster, role, orderRole, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, resetOrder]);
+  }, [roster, role, orderRole, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, orderGarment, log, binMap, closedBins, shipWith, carried, boxLabelled, firstScanTime, idleSpells, awaySpells, pickedUp, resetOrder]);
   // Pick an unfinished order up again, at any station: the server says this station has it
   // now (another station gets "open on Station N"), then sends the whole order. One put
   // aside before the server kept them is taken from this PC, or rebuilt from the order's record.
@@ -4013,7 +4259,7 @@ export default function App() {
           const o = (r.orders || []).find(x => `${x.station}|${x.order}|${x.run || 0}` === entry.key) || (r.orders || [])[0];
           if (!o) throw new Error("the server has no record of it any more");
           const p = packFromRecord(o);
-          session = { sessionStarted: true, roster: p.roster, rosterFile: o.rosterFile || null, orderNumber: String(o.order), orderRun: o.run || Date.now(), notes: o.notes || "", jerseyType: o.jerseyType || "",
+          session = { sessionStarted: true, roster: p.roster, rosterFile: o.rosterFile || null, orderNumber: String(o.order), orderRun: o.run || Date.now(), notes: o.notes || "", jerseyType: o.jerseyType || "", garment: o.garment || rosterGarment(p.roster) || "",
             log: p.flags.map(f => ({ ...f, status: S_FLAGGED })), binMap: p.binMap, closedBins: p.closedBins, boxLabelled: [], firstScanTime: o.firstSeen || null, idleSpells: [], awaySpells: [] };
         }
       }
@@ -4025,8 +4271,8 @@ export default function App() {
   }, [resumeSession, role, operatorName]);
   // The order on this station, as the Print menu takes it (printjobs.js).
   const printPack = useMemo(() => !sessionStarted || !roster.length ? null
-    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels, finished: !!finishedAt },   // finished: on the done screen a jersey never scanned is short (isLastBox)
-  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels, finishedAt]);
+    : { orderNumber, roster, binMap, closedBins, carried, flags: log.filter(l => l.status === S_FLAGGED), station: stationId(), planLabels: boxPlanLabels, finished: !!finishedAt, garment: orderGarment },   // finished: on the done screen a jersey never scanned is short (isLastBox)
+  [sessionStarted, roster, orderNumber, binMap, closedBins, carried, log, boxPlanLabels, finishedAt, orderGarment]);
   const flagTag = useCallback(reason => severityOf(reason).tag, []);
   // The list of what is in the DAMAGED box, whenever the inspector asks for it.
   // The list of boxes that are done (full, or their team complete) and the list
@@ -4047,7 +4293,7 @@ export default function App() {
     if (!labels.length) { setBinPrint({ status: "off", text: `${what}: none.` }); return; }
     setBinPrint({ status: "printing", text: what });
     printOnTicketRoll(labels, "binlist")
-      .then(res => setBinPrint({ status: "done", text: `${what} list printed: ${list.length} ${list.length === 1 ? "box" : "boxes"}, ${labels.length} ${labels.length === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .then(res => setBinPrint({ status: "done", text: `${what} list printed: ${list.length} ${list.length === 1 ? "box" : "boxes"}, ${res.count} ${res.count === 1 ? "label" : "labels"} on ${res.printer}` }))
       .catch(e => setBinPrint({ status: "error", text: `${what} list. ${printProblem(e)}` }));
   }, [boxesDone, boxesNotDone, orderNumber, printOnTicketRoll]);
   const printDamagedList = useCallback(() => {
@@ -4055,7 +4301,7 @@ export default function App() {
     if (!lists.length) { setBinPrint({ status: "off", text: "Nothing is in the DAMAGED box." }); return; }
     setBinPrint({ status: "printing", text: "DAMAGED box list" });
     printOnTicketRoll(lists, "binlist")
-      .then(res => setBinPrint({ status: "done", text: `DAMAGED box list printed: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}` }))
+      .then(res => setBinPrint({ status: "done", text: `DAMAGED box list printed: ${res.count} ${res.count === 1 ? "label" : "labels"} on ${res.printer}` }))
       .catch(e => setBinPrint({ status: "error", text: `DAMAGED box list. ${printProblem(e)}` }));
   }, [printPack, printOnTicketRoll]);
 
@@ -4509,7 +4755,7 @@ export default function App() {
     // reasons screen. The chosen reason flags it (its pass is taken back);
     // Back leaves it passed.
     reopen(c) {
-      if (!c?.match) return;
+      if (!c?.match || overlay?.mode === "locate") return;   // "where is the damage" is finished with Done or Skip first
       // also reached from the roster table (flagRow) and the history list
       const scan = { id: c.id, detected: c.detected, thumb: c.thumb, smallThumb: c.thumb, photo: null };
       // `late`: the jersey had passed before this flag. A blank jersey flagged from the
@@ -4526,12 +4772,28 @@ export default function App() {
       // (Before 17 Nov 2026 the menu just closed, and nobody could tell what had happened.)
       if (r.inPlace) { setOverlay({ mode: "clean", scan: o.scan, match: o.match || null, returnTo: o.returnTo || null, reopened: !!o.reopened, late: o.late }); return; }
       if (r.custom)  { setOverlay({ mode: "reasonText", scan: o.scan, match: o.match || null, returnTo: o }); return; }   // the list did not cover it: type it
-      const entry = { id: o.reopened ? Date.now() : (o.scan?.id || Date.now()), detected: o.scan?.detected, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened && o.late !== false ? `${r.label} — found after it passed` : r.label, reasonId: r.id, ...stamp() };
+      // A physical defect asks where on the garment it is (`where` in config.js; the plan,
+      // 23 Nov 2026) before the FLAGGED screen. The flag is in the log at once, as before;
+      // `locating` holds its ticket back until the spots are on it (Done) or Skip.
+      const where = !!r.where && !sortingRef.current;
+      const kind = garmentOf(o.match, orderGarment);
+      const entry = { id: o.reopened ? Date.now() : (o.scan?.id || Date.now()), detected: o.scan?.detected, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: o.match || null, status: S_FLAGGED, reason: o.reopened && o.late !== false ? `${r.label} — found after it passed` : r.label, reasonId: r.id, ...(where ? { locating: true, garment: kind } : {}), ...stamp() };
       if (o.match) { setRoster(prev => prev.map(x => x._id === o.match._id ? { ...x, scanned: "flag" } : x)); setClosedBins(prev => dropFromClosed(prev, o.match._id)); }   // flagged: it is out of the bin it was in, closed or not
       setLog(prev => [entry, ...prev]); setLastResult(entry); if (o.reopened) setLastConfirmed(c => (c?.match?._id === o.match?._id ? null : c));
-      setOverlay({ mode: "supervisor", scan: o.scan, match: o.match || null, reason: r.label, route: r.route, entryId: entry.id, photoFirst: r.id !== "wrong_decoration", damagePhotos: [] });
+      const flagged = { mode: "supervisor", scan: o.scan, match: o.match || null, reason: r.label, route: r.route, entryId: entry.id, photoFirst: r.id !== "wrong_decoration", damagePhotos: [] };
+      setOverlay(where ? { ...flagged, mode: "locate", garment: kind, spots: [] } : flagged);
       playTone("flag");
     },
+    // Where is the damage: a tap on the garment adds a spot (at most MAX_SPOTS), a tap on a
+    // spot takes it off, Undo takes the last one off.
+    locateTap(spot) { setOverlay(o => (o?.mode === "locate" && spot && (o.spots || []).length < MAX_SPOTS ? { ...o, spots: [...(o.spots || []), spot] } : o)); },
+    locateRemove(i) { setOverlay(o => (o?.mode === "locate" ? { ...o, spots: (o.spots || []).filter((_, k) => k !== i) } : o)); },
+    locateUndo() { setOverlay(o => (o?.mode === "locate" ? { ...o, spots: (o.spots || []).slice(0, -1) } : o)); },
+    // Done (with a spot or more) or Skip (none): the spots go on the flag, `locating` is
+    // cleared, which prints its ticket (the effect on the newest entry), and the FLAGGED
+    // screen follows exactly as it always did (the damage photo, Continue, the pedal).
+    locateDone() { const o = overlay; if (o?.mode === "locate" && (o.spots || []).length) finishLocate(o, o.spots); },
+    locateSkip() { const o = overlay; if (o?.mode === "locate") finishLocate(o, []); },
     // The "Clean it now" screen. Cleaned: the jersey carries on as it was — back
     // to the screen it came from, with a note for the record; one that had
     // already passed stays passed. Not cleaned: flagged like any other defect.
@@ -4648,6 +4910,7 @@ export default function App() {
     // typed value is the truth, and the screen can never loop back on itself.
     manual() {
       const o = overlay;
+      if (o?.mode === "locate") return;   // "where is the damage" is finished with Done or Skip first
       if (o?.typed) { commitTyped(o, o.typed, null); return; }
       setOverlay({ mode: "manual", scan: o?.scan, match: null, teams: teamNames, returnTo: o });
     },
@@ -4699,7 +4962,7 @@ export default function App() {
       setOverlay({ mode: "manual", scan: o.scan, match: null, teams: teamNames, returnTo: null, initial: o.typed });
     },
     };
-  }, [overlay, stamp, armAutoScan, pedalNext, roster, scanRoster, teamNames, noteMistake, lastConfirmed, syncInspect, captureFrame, settings.flagTickets, log]);
+  }, [overlay, stamp, armAutoScan, pedalNext, roster, scanRoster, teamNames, noteMistake, lastConfirmed, syncInspect, captureFrame, settings.flagTickets, log, orderGarment, finishLocate]);
 
   // ── Flag resolution (from the result card) ────────────────────────────────
   const resolveFlag = useCallback((logId, decision, note) => {
@@ -4919,6 +5182,7 @@ export default function App() {
         case "duplicate":  if (s.dup) a.flagDuplicate(); else a.skipDuplicate(); break;
         case "flag":       a.manual(); break;                            // could not read / not found: typed in
         case "supervisor": a.continueSupervisor(); break;
+        case "locate":     a.locateSkip(); break;                         // the ledger has no spots to replay
         case "reasons": case "clean": case "reasonText": a.back(); break;
         default: break;
       }
@@ -4953,11 +5217,11 @@ export default function App() {
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
         <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onPrint={() => setShowPrint(true)} stationLabel={stationLabel} onPickUp={pickUpOrder}
           onReplay={REPLAY_ON ? startReplay : null}
-          onStart={({ roster, orderNumber, notes, jerseyType, binBy, rosterFile, hubRosterId = null, shipWith: sw = [], carried: boxesIn = [] }) => {
+          onStart={({ roster, orderNumber, notes, jerseyType, garment, binBy, rosterFile, hubRosterId = null, shipWith: sw = [], carried: boxesIn = [] }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team", carried: boxesIn });
             setShipWith(sw); setCarried(boxesIn);
-            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || ""); setOrderRole(kindOfRole(role));
+            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || ""); setOrderGarment(orderGarmentOf(garment)); setOrderRole(kindOfRole(role));
             setSessionStarted(true); setResumeDecided(true);
           }} />
       )}
@@ -5113,8 +5377,8 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
           {sessionStarted && <button onClick={() => setShowPrint(true)} title="Print any label of this order again, or of an order done before" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>🖨 Print</button>}
-          {sessionStarted && <button onClick={() => setShowPark(true)} title="Put this order aside: it is saved on the server until the jerseys come back. Any station opens it again from Unfinished orders" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>⏸ Finish later</button>}
-          {sessionStarted && <button onClick={askFinish} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#22c55e", color: "#4ade80" }}>🏁 Finish order</button>}
+          {sessionStarted && <button onClick={() => setShowPark(true)} disabled={locatingUp} title="Put this order aside: it is saved on the server until the jerseys come back. Any station opens it again from Unfinished orders" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>⏸ Finish later</button>}
+          {sessionStarted && <button onClick={askFinish} disabled={locatingUp} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#22c55e", color: "#4ade80" }}>🏁 Finish order</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
           <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>
           {fsHint && <span style={{ fontSize: 14, color: "#fcd34d" }}>{fsHint}</span>}
@@ -5227,7 +5491,7 @@ export default function App() {
                           </button>
                         </>
                     }
-                    <button onClick={() => { gateRef.current.disarm(); setArmed(false); actions.manual(); }} disabled={scanning || anyDialogOpen} title="Type the jersey in — when the camera cannot read it"
+                    <button onClick={() => { gateRef.current.disarm(); setArmed(false); actions.manual(); }} disabled={scanning || anyDialogOpen || locatingUp} title="Type the jersey in — when the camera cannot read it"
                       style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, whiteSpace: "nowrap" }}>⌨ By hand</button>
                     {blanks.length > 0 && (
                       <button onClick={() => { gateRef.current.disarm(); setArmed(false); setShowBlanks(true); }} title="Jerseys with no name and no number: count them in by team and size"
@@ -5248,7 +5512,7 @@ export default function App() {
                       </div>
                   }
                   <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhotoUpload} />
-                  <button onClick={() => photoRef.current.click()} disabled={scanning}
+                  <button onClick={() => photoRef.current.click()} disabled={scanning || locatingUp}
                     style={{ ...btnPri, width: "100%", fontSize: 20, padding: "14px", opacity: scanning ? 0.5 : 1 }}>
                     {scanning ? "⏳ Reading…" : "⚡ Upload & scan"}
                   </button>
@@ -5266,7 +5530,7 @@ export default function App() {
                     <button onClick={() => unscan(lastConfirmed.match._id)} title="Un-check it; it must be scanned again" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>↶ Undo</button>
                   )}
                   {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && (r.scanned === "pass" || r.scanned === "manual")) && (
-                    <button onClick={actions.reopenLast} title="Found a problem after confirming? Flag this jersey" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#ef4444", color: "#fca5a5", whiteSpace: "nowrap" }}>🚩 Flag it</button>
+                    <button onClick={actions.reopenLast} disabled={locatingUp} title="Found a problem after confirming? Flag this jersey" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#ef4444", color: "#fca5a5", whiteSpace: "nowrap" }}>🚩 Flag it</button>
                   )}
                   {settings.stickers && (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, whiteSpace: "nowrap", color: sticker?.id === lastConfirmed.id && sticker.status === "done" ? "#4ade80" : sticker?.id === lastConfirmed.id ? "#fbbf24" : "#7c8ba1" }}>

@@ -1,6 +1,8 @@
 // ── Hub client: progress up, rosters down ─────────────────────────────────────
 // The hub is optional: every call fails quietly if it is not there, and the
 // station keeps working from files.
+import { cleanSpots } from "./labels.js";
+
 const STATION_KEY = "jerseyqc.station.v1";
 const BROWSER_KEY = "jerseyqc.browser.v1";
 
@@ -54,6 +56,15 @@ let printsHeld = "";
 // Holds every print: printLabels fails at once with `reason` (status 423). "" lets prints through again.
 export function holdPrints(reason = "") { printsHeld = String(reason || ""); }
 
+// The roll each kind of label prints on, from the station's Settings (stickerRoll,
+// flagRoll, boxRoll; the owner, 25 Nov 2026). App sets it whenever the settings
+// change; every print sends it as `roll`, unless the caller gave one.
+let printRolls = {};
+export function setPrintRolls(s = {}) { printRolls = { stickerRoll: s.stickerRoll, flagRoll: s.flagRoll, boxRoll: s.boxRoll }; }
+export function rollFor(kind) {
+  return kind === "flag" ? printRolls.flagRoll : kind === "binlist" || kind === "binticket" ? printRolls.boxRoll : printRolls.stickerRoll;
+}
+
 export const hub = {
   report:        (id, snapshot) => call(`/api/hub/stations/${id}`, { method: "POST", body: JSON.stringify(snapshot) }),
   stations:      ()             => call("/api/hub/stations"),
@@ -67,7 +78,7 @@ export const hub = {
   takeRoster:    (id, body)     => call(`/api/hub/rosters/${id}/take`, { method: "POST", body: JSON.stringify(body) }),     // a station starts it; throws "already taken" with .takenBy
   releaseRoster: id             => call(`/api/hub/rosters/${id}/release`, { method: "POST" }),                            // supervisor frees it for another station
   printStatus:   station       => call(`/api/hub/print${station ? "?station=" + encodeURIComponent(station) : ""}`),        // { printer, printers } — the label printer for this station
-  printLabels:   (labels, o = {}) => (printsHeld ? Promise.reject(Object.assign(new Error(printsHeld), { status: 423 })) : call("/api/hub/print", { method: "POST", body: JSON.stringify({ labels, ...o }) })),    // o: { kind: "jersey" | "flag" | "bin", station }; throws 503 "no label printer"
+  printLabels:   (labels, o = {}) => (printsHeld ? Promise.reject(Object.assign(new Error(printsHeld), { status: 423 })) : call("/api/hub/print", { method: "POST", body: JSON.stringify({ labels, ...(rollFor(o.kind) ? { roll: rollFor(o.kind) } : {}), ...o }) })),    // o: { kind: "jersey" | "flag" | "binlist" | "binticket" | "bin", station, roll }; throws 503 "no label printer"
   replayRuns:    q              => call(`/api/replay?q=${encodeURIComponent(q)}`),                                        // development and testing only: the runs of a floor order, to replay (replay-plugin.js)
   openBoxes:     orders         => call(`/api/hub/openboxes?orders=${encodeURIComponent([].concat(orders || []).join(","))}`),   // boxes left open for orders that ship together → { boxes }
   leaveBoxesOpen: body          => call("/api/hub/openboxes", { method: "POST", body: JSON.stringify(body) }),          // { boxes, station, order } → { ids }
@@ -95,7 +106,9 @@ export const hub = {
 // operator took); the hub keeps a photo once it has seen it, so older flags
 // keep theirs without being re-sent every 5 s.
 const PHOTOS_PER_REPORT = 6;   // the newest log entries that carry their photo in each 5-second report
-export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", rosterFile, roster, log, lastConfirmed, binMap, closedBins = [], binSummary = [], idleSpells = [], awaySpells = [], finishedAt = null }) {
+// A flag's garment and damage spots, as the hub keeps them: only what is there.
+const marksOf = l => ({ ...(l.garment ? { garment: l.garment } : {}), ...(cleanSpots(l.spots).length ? { spots: cleanSpots(l.spots) } : {}) });
+export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, notes, jerseyType = "", garment = "", rosterFile, roster, log, lastConfirmed, binMap, closedBins = [], binSummary = [], idleSpells = [], awaySpells = [], finishedAt = null }) {
   const count = s => roster.filter(r => r.scanned === s).length;
   const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
   return {
@@ -105,7 +118,7 @@ export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, note
     away: { count: awaySpells.length, seconds: sum(awaySpells, s => s.seconds), spells: awaySpells.slice(-200) },
     // orderRun: when this order was started on this station. The same order
     // number started again is a new run with its own record on the hub.
-    operatorName, role, orderNumber, orderRun, notes, jerseyType, rosterFile, browserId: browserId(),
+    operatorName, role, orderNumber, orderRun, notes, jerseyType, garment, rosterFile, browserId: browserId(),
     // When Finish order was pressed (null while the order is open): the board shows
     // the order finished even with jerseys not scanned (code review M7).
     finishedAt: finishedAt || null,
@@ -134,11 +147,15 @@ export function snapshotOf({ operatorName, role, orderNumber, orderRun = 0, note
         ...(l.typed ? { typed: `#${l.typed.number || "?"}${l.typed.name ? " " + l.typed.name : ""}` } : {}),
         read: l.detected ? `#${l.detected.number || "?"}${l.detected.number_complete === false ? "?" : ""}${l.detected.name ? " " + l.detected.name : ""}${l.detected.laid_flat === false ? " [not flat]" : ""}` : "",
       };
+      // Where the damage is (24 Nov 2026): the garment and the spots, on every flag and in
+      // every report (a few bytes, not tied to the photos). A flag still being marked
+      // (`locating`) waits for its spots: the hub keeps the newest that are not empty.
+      if (l.status === "flagged" && !l.locating) Object.assign(ev, marksOf(l));
       if (l.status === "flagged" && i < PHOTOS_PER_REPORT) { if (l.photo) ev.photo = l.photo; if (l.damagePhotos?.length) ev.damagePhotos = l.damagePhotos; }
       return ev;
     }),
     // Open items first, then the resolved ones: on a big order the newest 25
     // could be all Missing marks and push every open flag off the board.
-    attention: (a => [...a.filter(l => !l.resolution), ...a.filter(l => l.resolution)])(log.filter(l => l.status === "flagged" || l.status === "manual" || l.status === "missing" || l.status === "short")).slice(0, 100).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(i < 3 && l.photo ? { photo: l.photo } : {}), ...(i < 3 && l.damagePhotos?.length ? { damagePhotos: l.damagePhotos } : {}) })),
+    attention: (a => [...a.filter(l => !l.resolution), ...a.filter(l => l.resolution)])(log.filter(l => l.status === "flagged" || l.status === "manual" || l.status === "missing" || l.status === "short")).slice(0, 100).map((l, i) => ({ id: l.id, time: l.timestamp, status: l.status, jersey: l.match ? `#${l.match.number}${l.match.name ? " " + l.match.name : ""}${l.match.size ? " · " + l.match.size : ""}` : `#${l.detected?.number ?? "?"} ${l.detected?.name ?? ""}`.trim(), reason: l.reason || "", resolution: l.resolution || "", ...(l.status === "flagged" && !l.locating ? marksOf(l) : {}), ...(i < 3 && l.photo ? { photo: l.photo } : {}), ...(i < 3 && l.damagePhotos?.length ? { damagePhotos: l.damagePhotos } : {}) })),
   };
 }
