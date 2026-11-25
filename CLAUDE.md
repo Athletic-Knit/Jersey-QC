@@ -4,6 +4,8 @@ This file is what every Claude Code session on this project reads first, and the
 
 Other documents: `README.md` (the front door), `docs/OPERATOR-GUIDE.md` (using the station and the board), `docs/DEPLOY.md` (for IT: stages, promotion, the scheduled task, printers, troubleshooting).
 
+**Words on screen (the owner, 25 Nov 2026):** the floor makes jerseys, hoodies, T-shirts, polos, quarter-zips, shorts and socks, so everything a person reads says "garment", never "jersey" (screens, labels, tickets, Excel, the guide). The app's own name, "Jersey QC", stays. Code keeps its old names (`jerseyType`, `jerseyLabel`, `kind: "jersey"`, `JERSEY_PRINTER_*`, `jerseyqc.*`), and so do the camera prompt in `vision.js`, the stored data and the roster column detection. The notes below that say "jersey" describe the same thing.
+
 ## READ FIRST: development and production are separate (owner's rule, 17 Nov 2026)
 
 **Never edit, save or restart anything in the production folder while making or testing a change.** On 17 Nov 2026, in the middle of a demo to the owner's manager, edits made in the production folder went live at once and one server rejected every jersey read. The owner's words: "Any change I say you to make shouldn't crash the server when production is actually going on. Make the change in development and then push it to production in a break or when told by us. This is not acceptable."

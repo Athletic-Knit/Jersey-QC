@@ -185,7 +185,7 @@ function sameReadRows(rows, read, reason, eligible = rows) {
   const sure = settleTwins(rows, eligible, read);
   if (sure) return sure;
   const { rows: agree, narrowed } = narrowByColour(rows, read);
-  const seen = narrowed && read.colour ? ` — the jersey looks ${String(read.colour).trim()}` : "";
+  const seen = narrowed && read.colour ? ` — the garment looks ${String(read.colour).trim()}` : "";
   return { type: "pick", candidates: dedupe([...agree, ...rows]), reason: reason + seen, twins: true };   // twins: the one left open may be the passed one scanned again (the colour seen says so), so a list of one here stays a list
 }
 
@@ -283,7 +283,7 @@ export function findMatches(roster, name, number, read = {}) {
   // findMatchesInner does not see (found by the code review's fuzz test,
   // 23 Nov 2026: a nameless #5 went green on a "name unreadable" read).
   if (m.type === "exact" && isDoubtfulRead(number, read)) {
-    return { type: "pick", candidates: [m.match], reason: "Check the jersey: the camera could not see all of the name or number. Is it this one?", soft: true, doubtful: true };
+    return { type: "pick", candidates: [m.match], reason: "Check the garment: the camera could not see all of the name or number. Is it this one?", soft: true, doubtful: true };
   }
   return m;
 }
@@ -349,7 +349,7 @@ function findMatchesInner(roster, name, number, read = {}) {
   if (nNumRaw && !isPlausibleNumber(nNumRaw) && !roster.some(r => normNum(r.number) === nNumRaw)) {
     const byName = nName && !numberOnly ? roster.filter(r => nameMatches(nName, r.name)) : [];
     const cands  = dedupe([...byName, ...subNumberCandidates(nNumRaw, roster)]);
-    if (cands.length) return { type: "pick", candidates: cands, reason: `Read "${nNumRaw}" — sleeve numbers may have merged with the back number. Which jersey is this?` };
+    if (cands.length) return { type: "pick", candidates: cands, reason: `Read "${nNumRaw}" — sleeve numbers may have merged with the back number. Which garment is this?` };
     return { type: "none" };
   }
   const nNum = nNumRaw;
@@ -368,7 +368,7 @@ function findMatchesInner(roster, name, number, read = {}) {
     const altRows = alt && alt !== nNum ? roster.filter(r => normNum(r.number) === alt && !isDone(r)) : [];
     if (altRows.length) {
       const cands = dedupe([...byNum, ...altRows]);
-      return { type: "pick", candidates: cands, reason: `Read #${nNum} on a jersey that is not the right way up — turned round it would read #${alt}. Which is it?`, soft: true };
+      return { type: "pick", candidates: cands, reason: `Read #${nNum} on a garment that is not the right way up — turned round it would read #${alt}. Which is it?`, soft: true };
     }
   }
   const byName = nName && !numberOnly
@@ -388,7 +388,7 @@ function findMatchesInner(roster, name, number, read = {}) {
     const shown = String(name ?? "").trim();
     const why = [];
     if (partialName) why.push(`name read as "${shown}…" and looks cut off`);
-    if (partialNum)  why.push(read.numberComplete === false ? `#${nNum} looks covered or cut off` : `the jersey is not laid flat — a digit may be under a fold`);
+    if (partialNum)  why.push(read.numberComplete === false ? `#${nNum} looks covered or cut off` : `the garment is not laid flat — a digit may be under a fold`);
     else if (offCentre) why.push(`#${nNum} sits ${position} of centre — a digit may be hidden`);
     if (!nName && !partialNum && !offCentre) why.push("no name was read");
     const what = read.obstruction ? ` (${String(read.obstruction).trim()})` : "";
@@ -442,7 +442,7 @@ function findMatchesInner(roster, name, number, read = {}) {
       const ordered = direct ? dedupe([direct, ...cands]) : cands;
       const shown = withoutNamed(trimBySide(ordered, nNum, side, partialNum && read.numberComplete === false), nName, read, numberOnly);
       const sameNum = nNum ? exact.filter(r => normNum(r.number) === nNum) : [];
-      return { type: "pick", candidates: shown, reason: `Check the jersey: ${why.join("; ")}${what}. Is it one of these?`, soft: true, doubtful: true, trimmed: !!shown.trimmed || undefined, twins: sameNum.length > 1 || undefined };
+      return { type: "pick", candidates: shown, reason: `Check the garment: ${why.join("; ")}${what}. Is it one of these?`, soft: true, doubtful: true, trimmed: !!shown.trimmed || undefined, twins: sameNum.length > 1 || undefined };
     }
     return { type: "none", reason: `${why.join("; ")}${what}`, soft: true };
   }
@@ -502,7 +502,7 @@ function findMatchesInner(roster, name, number, read = {}) {
     // the roster's name for that number (code review of 23 Nov 2026).
     const onRoster = [...new Set(byNum.map(r => String(r.name || "").trim()).filter(Boolean))].join(" / ");
     const reason = byNum.every(r => !norm(r.name))
-      ? `The jersey shows the name "${shown}" but the roster has no name for #${nNum} — check it is this order's jersey`
+      ? `The garment shows the name "${shown}" but the roster has no name for #${nNum} — check it is this order's garment`
       : typed
         ? `You typed ${shown}, but #${nNum} is ${onRoster} on the roster — which one?`
         : `#${nNum} is on the roster but the name read as "${shown}"`;
@@ -519,7 +519,7 @@ function findMatchesInner(roster, name, number, read = {}) {
       if (byName.length === 1 && isDone(byName[0])) return { type: "duplicate", match: byName[0] };
       const nums = [...new Set(byName.map(r => r.number))].join(" / ");
       const settles = byName.length === 1 && !normNum(byName[0].number) ? byName[0] : null;   // a row with no number: the name is the whole jersey
-      return soleOpen(settles, byName) || { type: "pick", candidates: byName, reason: `Read "${String(name).trim()}" but no number — is #${nums} hidden or out of frame? Is it this jersey?`, soft: true };
+      return soleOpen(settles, byName) || { type: "pick", candidates: byName, reason: `Read "${String(name).trim()}" but no number — is #${nums} hidden or out of frame? Is it this garment?`, soft: true };
     }
     return { type: "pick", candidates: byName, reason: `Name matches #${[...new Set(byName.map(r => r.number))].join(" / ")} but the number read as #${nNum}` };
   }

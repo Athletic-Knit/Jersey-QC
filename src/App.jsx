@@ -314,7 +314,7 @@ function ResumeModal({ session, onResume, onDiscard, role = "", onSetAside, onSi
         <div style={{ fontSize: 48, marginBottom: 8 }}>🔄</div>
         <div style={{ fontWeight: 900, fontSize: 28, marginBottom: 6 }}>Resume order {session.orderNumber || "—"}?</div>
         <div style={{ fontSize: 17, color: "#cbd5e1", marginBottom: 4 }}>
-          {done} of {session.roster.length} jerseys done · {session.log.length} scans · started by {session.operatorName || "an unknown operator"}
+          {done} of {session.roster.length} garments done · {session.log.length} scans · started by {session.operatorName || "an unknown operator"}
         </div>
         <div style={{ fontSize: 15, color: "#94a3b8", marginBottom: 24 }}>Saved {new Date(session.savedAt).toLocaleString()}</div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
@@ -406,7 +406,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
           keypad on the right. On a narrow screen the columns stack. */}
       <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED ? 940 : 560, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <div style={{ fontWeight: 900, fontSize: 26 }}>🏭 Jersey QC Scanner</div>
+          <div style={{ fontWeight: 900, fontSize: 26 }}>🏭 Garment QC Scanner</div>
           <div style={{ fontSize: 16, color: "#94a3b8" }}>{title || "Sign in once per shift"}</div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 32px", alignItems: "flex-start" }}>
@@ -711,7 +711,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
             19 Nov 2026: they used to fill the top of this screen). Picked, the order shows here. */}
         {picked && (
           <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, border: "2px solid #22c55e", background: "rgba(34,197,94,0.1)", display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ flex: 1, fontSize: 18, fontWeight: 800, color: "#fff" }}>✓ Order {picked.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {picked.rows.length} jerseys · from {picked.by || "the supervisor"}</span></div>
+            <div style={{ flex: 1, fontSize: 18, fontWeight: 800, color: "#fff" }}>✓ Order {picked.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {picked.rows.length} garments · from {picked.by || "the supervisor"}</span></div>
             <button onClick={() => setShowAssigned(true)} style={{ ...btnGhost, padding: "6px 14px", fontSize: 15 }}>Change</button>
           </div>
         )}
@@ -737,7 +737,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
                 <button key={r.id} onClick={() => { if (takenElsewhere(r)) return; pickRoster(r); setShowAssigned(false); }} disabled={takenElsewhere(r)}
                   title={takenElsewhere(r) ? `${stationLabel(r.takenBy.station)} is working on this order — one station per order` : undefined}
                   style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "#22c55e" : "#334155", color: picked?.id === r.id ? "#fff" : "#94a3b8", background: picked?.id === r.id ? "rgba(34,197,94,0.12)" : "transparent", opacity: takenElsewhere(r) ? 0.5 : 1, cursor: takenElsewhere(r) ? "not-allowed" : "pointer" }}>
-                  <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount} jerseys · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}{r.binBy && r.binBy !== "team" ? ` · ${BIN_BY.find(b => b.id === r.binBy)?.label.toLowerCase() || r.binBy}` : ""}</span>{r.forStation && !r.takenBy && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
+                  <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount} garments · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}{r.binBy && r.binBy !== "team" ? ` · ${BIN_BY.find(b => b.id === r.binBy)?.label.toLowerCase() || r.binBy}` : ""}</span>{r.forStation && !r.takenBy && <span style={{ fontWeight: 700, color: "#60a5fa", marginLeft: 8 }}>for this station</span>}</div>
                   <div style={{ fontSize: 14, color: "#94a3b8" }}>{r.by ? `sent by ${r.by} · ` : ""}{new Date(r.createdAt).toLocaleString()}</div>
                   {r.takenBy && <div style={{ fontSize: 14, fontWeight: 700, color: takenElsewhere(r) ? "#f59e0b" : "#4ade80" }}>{takenElsewhere(r) ? `⛔ In progress on ${stationLabel(r.takenBy.station)} · ${r.takenBy.operator || "—"} · since ${new Date(r.takenBy.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "↻ Started on this station — pick it to continue"}</div>}
                 </button>
@@ -781,7 +781,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         </div>
         <div style={{ marginBottom: 12 }}>
           {/* No order-notes box here (the owner, 17 Nov 2026): the notes come with the supervisor's roster, when there are any. */}
-          <label style={labelSt}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the flag reasons and the reports; leave it unset to offer every reason</span></label>
+          <label style={labelSt}>Garment type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the flag reasons and the reports; leave it unset to offer every reason</span></label>
           <JerseyTypePicker value={jerseyType} onChange={setJerseyType} />
           <label style={{ ...labelSt, marginTop: 12 }}>Boxes — how the order is sorted{picked?.binBy ? <span style={{ color: "#60a5fa", fontWeight: 400 }}> · set by the supervisor</span> : null}</label>
           <BinByPicker value={binBy} onChange={setBinBy} />
@@ -791,7 +791,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           <div onClick={() => fileRef.current.click()}
             style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${file ? "#22c55e" : "#334155"}`, background: "#1e293b", color: file ? "#22c55e" : "#94a3b8", fontSize: 17, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 20 }}>{file ? "✓" : "📂"}</span>
-            <span>{file ? file.name : picked ? `Using the supervisor's roster (${picked.rows.length} jerseys)` : `Choose CSV${xlsxReady ? " or Excel" : ""} file…`}</span>
+            <span>{file ? file.name : picked ? `Using the supervisor's roster (${picked.rows.length} garments)` : `Choose CSV${xlsxReady ? " or Excel" : ""} file…`}</span>
           </div>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.tsv,.txt" style={{ display: "none" }} onChange={handleFile} />
         </div>
@@ -820,7 +820,7 @@ function LivePreview({ stream, rotation }) {
       <div style={{ aspectRatio: "4 / 3", overflow: "hidden" }}>
         <video ref={ref} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", transform: `rotate(${rotation || 0}deg)`, display: "block" }} />
       </div>
-      <div style={{ position: "absolute", top: 8, left: 10, fontSize: 14, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.6)", padding: "4px 10px", borderRadius: 10 }}>● Live — line up the next jersey</div>
+      <div style={{ position: "absolute", top: 8, left: 10, fontSize: 14, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.6)", padding: "4px 10px", borderRadius: 10 }}>● Live — line up the next garment</div>
     </div>
   );
 }
@@ -871,7 +871,7 @@ function ManualEntryForm({ detected, initial = null, teams, onSubmit, onBack }) 
   return (
     <div style={{ width: "100%", maxWidth: 560, padding: "0 24px", boxSizing: "border-box" }}>
       <div style={{ fontSize: 56, textAlign: "center", lineHeight: 1 }}>✍</div>
-      <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#f59e0b", textAlign: "center", marginBottom: 18 }}>Enter the jersey by hand</div>
+      <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#f59e0b", textAlign: "center", marginBottom: 18 }}>Enter the garment by hand</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
         <div><label style={labelSt}>Number</label><input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={onKey} onFocus={() => setField("number")} autoFocus inputMode="numeric" placeholder="##" style={{ ...fieldSt, borderColor: field === "number" ? "#f59e0b" : fieldSt.borderColor }} /></div>
         <div><label style={labelSt}>Name</label><input value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} onFocus={() => setField("name")} placeholder="as printed" style={{ ...fieldSt, borderColor: field === "name" ? "#f59e0b" : fieldSt.borderColor }} /></div>
@@ -974,7 +974,7 @@ export function PhotoLightbox({ photo, onClose }) {
   return (
     <div ref={stage} onClick={onStageClick} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl}
       style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", touchAction: "none", cursor: view.s > 1 ? "grab" : "zoom-out", userSelect: "none" }}>
-      <img src={pic.src} alt="Flagged jersey" draggable={false} style={{ maxWidth: "92vw", maxHeight: "86vh", borderRadius: 8, boxShadow: "0 12px 48px rgba(0,0,0,0.8)", transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`, transformOrigin: "center", cursor: view.s > 1 ? "grab" : "zoom-in" }} />
+      <img src={pic.src} alt="Flagged garment" draggable={false} style={{ maxWidth: "92vw", maxHeight: "86vh", borderRadius: 8, boxShadow: "0 12px 48px rgba(0,0,0,0.8)", transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`, transformOrigin: "center", cursor: view.s > 1 ? "grab" : "zoom-in" }} />
       <div data-ctl="1" style={{ position: "absolute", top: 12, left: 0, right: 0, display: "flex", justifyContent: "center", alignItems: "center", gap: 10, pointerEvents: "none" }}>
         <div style={{ background: "rgba(0,0,0,0.7)", color: "#fff", padding: "8px 16px", borderRadius: 10, fontSize: 18, fontWeight: 700, maxWidth: "70vw" }}>{caption}{pics.length > 1 ? ` · ${idx + 1}/${pics.length}` : ""}</div>
       </div>
@@ -1041,7 +1041,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
             </div>
           </div>
           <button onClick={() => onDownload({ station, order, run: rec?.run || run, operator: rec?.operator, date })} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet (Excel)</button>
-          {events.some(e => e.status === "flagged") && <button onClick={() => exportDamageReportXLSX(buildDamageRows(events, { stationLabel, typeLabel: jerseyTypeLabel }), { name: order, title: `Damage report — order ${order}` }).catch(e => setErr(e.message))} title="Every flagged jersey of this order with its photo" style={{ ...btnGhost, padding: "6px 12px", borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>}
+          {events.some(e => e.status === "flagged") && <button onClick={() => exportDamageReportXLSX(buildDamageRows(events, { stationLabel, typeLabel: jerseyTypeLabel }), { name: order, title: `Damage report — order ${order}` }).catch(e => setErr(e.message))} title="Every flagged garment of this order with its photo" style={{ ...btnGhost, padding: "6px 12px", borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>}
           <button onClick={onClose} style={{ ...btnGhost, padding: "6px 12px" }}>✕ Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #21262d", flexShrink: 0 }}>
@@ -1050,7 +1050,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
           ))}
         </div>
         <div style={{ flex: 1, overflow: "auto" }}>
-          {rec && !rows.length && <div style={{ padding: 24, color: "#fcd34d" }}>The hub has no jersey list for this order — the station reported it before today's update. The station's Export has the sheet; reload the station page so future orders come through.</div>}
+          {rec && !rows.length && <div style={{ padding: 24, color: "#fcd34d" }}>The hub has no garment list for this order — the station reported it before today's update. The station's Export has the sheet; reload the station page so future orders come through.</div>}
           {!rec && !err && <div style={{ padding: 24, color: "#64748b" }}>Loading…</div>}
           {!rec && err && <div style={{ padding: 24, color: "#f87171" }}>{err}</div>}
           {sumView && tab === "summary" && (
@@ -1092,7 +1092,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
           )}
           {rec && tab === "log" && (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr><th style={th}>Time</th><th style={th}>What</th><th style={th}>Jersey</th><th style={th}>Reason / note</th><th style={th}>Resolution</th><th style={th}>Inspector</th></tr></thead>
+              <thead><tr><th style={th}>Time</th><th style={th}>What</th><th style={th}>Garment</th><th style={th}>Reason / note</th><th style={th}>Resolution</th><th style={th}>Inspector</th></tr></thead>
               <tbody>
                 {events.map((e, i) => (
                   <tr key={e.id ?? i}>
@@ -1187,12 +1187,12 @@ function UnfinishedPile({ by, onClose }) {
                       → {s.label}
                     </button>
                   ))}
-                  <button disabled={!!e.openOn && open !== e.id} onClick={() => { setOpen(o => (o === e.id ? null : e.id)); setTicked(new Set()); setConfirm(false); }} title={e.openOn ? `Open on ${stationLabel(e.openOn.station)} now: Free it first (the station may be passing these jerseys)` : "Settle the jerseys still out: back and good, or ship short"} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px", borderColor: "#22c55e", color: "#86efac", opacity: e.openOn && open !== e.id ? 0.4 : 1 }}>{open === e.id ? "▲ Close" : "✓ Settle…"}</button>
+                  <button disabled={!!e.openOn && open !== e.id} onClick={() => { setOpen(o => (o === e.id ? null : e.id)); setTicked(new Set()); setConfirm(false); }} title={e.openOn ? `Open on ${stationLabel(e.openOn.station)} now: Free it first (the station may be passing these garments)` : "Settle the garments still out: back and good, or ship short"} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px", borderColor: "#22c55e", color: "#86efac", opacity: e.openOn && open !== e.id ? 0.4 : 1 }}>{open === e.id ? "▲ Close" : "✓ Settle…"}</button>
                 </span>
               </div>
               {open === e.id && entry && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 15, color: "#cbd5e1", marginBottom: 8 }}>Tick jerseys, then: <strong>Back and good</strong> — they count as passed ("checked off by supervisor"). <strong>Ship short</strong> — the order goes without them. An extra jersey (not on the order) is closed either way. When none is left the order is closed.</div>
+                  <div style={{ fontSize: 15, color: "#cbd5e1", marginBottom: 8 }}>Tick garments, then: <strong>Back and good</strong> — they count as passed ("checked off by supervisor"). <strong>Ship short</strong> — the order goes without them. An extra garment (not on the order) is closed either way. When none is left the order is closed.</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 6 }}>
                     {entry.out.map(j => (
                       <label key={jkey(j)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: ticked.has(jkey(j)) ? "rgba(34,197,94,0.15)" : "#0d1117", border: `1px solid ${ticked.has(jkey(j)) ? "#22c55e" : "#21262d"}`, cursor: "pointer" }}>
@@ -1275,7 +1275,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   const downloadOrderSheet = (o) => hub.ledger(o.date ?? day).then(l => {
     const rec = pickRun((l.orders || []).filter(x => x.station === o.station && x.order === o.order), o.run) || o;
     const rows = rec.rows || [];
-    if (!rows.length) { setMsg(`The hub has no jersey list for order ${o.order} on ${stationLabel(o.station)} — that station last reported before today's update, or the order was done before it. Press Export on the station for its sheet; reload the station page so future orders come through.`); return; }
+    if (!rows.length) { setMsg(`The hub has no garment list for order ${o.order} on ${stationLabel(o.station)} — that station last reported before today's update, or the order was done before it. Press Export on the station for its sheet; reload the station page so future orders come through.`); return; }
     const log = eventsAsLog((l.events || []).filter(ofRun(rec)));   // status included: the Summary sheet counts by it (M10)
     exportRosterXLSX(rows, log, { orderNumber: rec.order, operatorName: rec.operator, notes: rec.notes || "", jerseyType: jerseyTypeLabel(rec.jerseyType), idleSpells: rec.idle?.spells || [], awaySpells: rec.away?.spells || [], bins: rec.binSummary || [], categoryOf: reasonCategory }, displayColumns(rows), row => binOfRow(rec.bins, rec.closedBins, row));
   }).catch(() => setMsg("Could not fetch that order from the hub."));
@@ -1320,7 +1320,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       if (!rows.length) { setMsg("No valid rows in that file."); return; }
       await hub.sendRoster({ orderNumber: order.trim(), notes: notes.trim(), jerseyType, binBy, fileName: file.name, rows, by: operatorName, forStation: target, shipWith: orderList(shipText || shipWithOf(rows).join(" ")).filter(n => n !== order.trim()) });
       const to = target ? `${stationLabel(target)} only` : "every station";
-      setMsg(`Sent ${file.name} — ${rows.length} jerseys for order ${order.trim()} to ${to}. It shows on the order screen there.`);
+      setMsg(`Sent ${file.name} — ${rows.length} garments for order ${order.trim()} to ${to}. It shows on the order screen there.`);
       setFile(null); setOrder(""); setNotes(""); setJerseyType(""); setBinBy("team"); setShipText(""); refresh();
     } catch (e) { setMsg("Could not send: " + e.message); }
     finally { sending.current = false; }
@@ -1351,7 +1351,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       <div onClick={() => setWall(false)} style={{ position: "fixed", inset: 0, zIndex: 1950, background: "#000", color: "#fff", fontFamily: FONT_UI, display: "flex", flexDirection: "column", padding: "2cqh 2cqw", boxSizing: "border-box", containerType: "size", cursor: "pointer", userSelect: "none" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "1.5cqh", flexShrink: 0 }}>
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: "7cqh", fontWeight: 900, lineHeight: 1, color: openCount > 0 ? "#f87171" : "#4ade80" }}>{openCount > 0 ? `${openCount} NEED YOU` : "ALL CLEAR"}</div>
-          <div style={{ fontSize: "3cqh", color: "#94a3b8" }}>{todayTotal} {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {active.length} live · {new Date(clock).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+          <div style={{ fontSize: "3cqh", color: "#94a3b8" }}>{todayTotal} {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} live · {new Date(clock).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
         </div>
         {hubDown && <div style={{ background: "#7f1d1d", fontSize: "3cqh", fontWeight: 700, padding: "1cqh 2cqw", borderRadius: "1cqh", marginBottom: "1.5cqh" }}>⚠ The hub stopped answering at {new Date(hubDown).toLocaleTimeString()} — nothing here is live.</div>}
         <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: `repeat(${rows}, 1fr)`, gap: "1.2cqh" }}>
@@ -1390,7 +1390,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 1800, display: "flex", flexDirection: "column", color: "#e2e8f0", fontFamily: FONT_UI }}>
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="#ef4444">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "jersey" : "jerseys"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
+        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="#ef4444">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={() => setShowPile(true)} title="Orders parked with Finish later: search, assign to a station, check off" style={{ ...btnGhost, padding: "6px 12px", borderColor: pileCount ? "#f59e0b" : "#334155", color: pileCount ? "#fcd34d" : undefined }}>⏸ Unfinished · {pileCount}</button>
           <button onClick={toggleFull} title={fullScreen ? "Leave full screen (Esc also works)" : "Full screen: hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px" }}>{fullScreen ? "⛶ Exit" : "⛶ Full screen"}</button>
@@ -1455,7 +1455,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                         </div>
                       </div>
                       <button onClick={() => setOpenOrder({ station: o.station, order: o.order, run: o.run || 0, date: o.date })} title="Open this order: roster with statuses, problems, and the log" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
-                      <button onClick={() => downloadOrderSheet(o)} title="The QC Results workbook for this order: every jersey with its status, reason, resolution, inspector and time" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet</button>
+                      <button onClick={() => downloadOrderSheet(o)} title="The QC Results workbook for this order: every garment with its status, reason, resolution, inspector and time" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet</button>
                     </div>
                   );
                 })}
@@ -1497,7 +1497,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                       title="Give the order running on this station its number (only the supervisor can)" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>{s.orderNumber && s.setOrder ? `→ ${s.setOrder.orderNumber}…` : "Set number"}</button>
                   )}
                   {s.orderNumber && s.counts?.total > 0 && (
-                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber, run: s.orderRun || 0 })} title="Open this order: every jersey with its status, what was flagged and why, and the log" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
+                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber, run: s.orderRun || 0 })} title="Open this order: every garment with its status, what was flagged and why, and the log" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
                   )}
                 </div>
                 <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: orderDone(s) ? "#22c55e" : "#3b82f6" }} /></div>
@@ -1555,9 +1555,9 @@ function SupervisorPanel({ operatorName, onSignOut }) {
         </div>
         <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid #21262d", padding: 14, overflowY: "auto" }}>
           <button onClick={() => hub.ledger(day).then(l => exportDaySheetXLSX(l, stationLabel, undefined, { categoryOf: reasonCategory })).catch(() => setMsg("Could not fetch the day's scans from the hub."))}
-            title="One Excel file for the whole day, every station: jerseys per hour, time per jersey, flag rate, each operator, defects by category, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 8, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {day ? day : `${todayTotal} ${todayTotal === 1 ? "jersey" : "jerseys"} so far`}</button>
+            title="One Excel file for the whole day, every station: garments per hour, time per garment, flag rate, each operator, defects by category, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 8, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {day ? day : `${todayTotal} ${todayTotal === 1 ? "garment" : "garments"} so far`}</button>
           <button onClick={() => hub.ledger(day).then(l => exportDamageReportXLSX(buildDamageRows(l.events || [], { stationLabel, typeLabel: jerseyTypeLabel }), { name: "day_" + (l.date || ""), title: `Damage report — ${l.date || "today"}, every station` })).catch(e => setMsg(e.message || "Could not fetch the day's flags from the hub."))}
-            title="Every flagged jersey of the day, every station, with its photo (photos are kept 14 days)" style={{ ...bigBtn, fontSize: 13, marginBottom: 16, background: "transparent", border: "1px solid #ef4444", color: "#f87171" }}>⬇ Damage report (Excel, with photos){day ? ` — ${day}` : ""}</button>
+            title="Every flagged garment of the day, every station, with its photo (photos are kept 14 days)" style={{ ...bigBtn, fontSize: 13, marginBottom: 16, background: "transparent", border: "1px solid #ef4444", color: "#f87171" }}>⬇ Damage report (Excel, with photos){day ? ` — ${day}` : ""}</button>
           <CompareDays days={days} stationLabel={stationLabel} onProblem={setMsg} />
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Send a roster</div>
           <div style={{ marginBottom: 10 }}>
@@ -1573,7 +1573,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order number</label><input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Ships with <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— other order numbers on the order form; their boxes are filled together</span></label><input value={shipText} onChange={e => setShipText(e.target.value)} placeholder="e.g. 264248, 264249 (read from the file when it says)" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
-          <div style={{ marginBottom: 10 }}><label style={labelSt}>Jersey type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the station's flag reasons; unset offers every reason</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Garment type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the station's flag reasons; unset offers every reason</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Boxes — how the station sorts it</label><BinByPicker value={binBy} onChange={setBinBy} /></div>
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Roster file</label>
@@ -1829,7 +1829,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
     if (mode === "listFlag")   return [{ id: "nosize", label: "🏷 No size tag", run: actions.noSizeTag }, { id: "dup", label: "🔁 Duplicate", run: () => actions.offRosterStart("dup") }, { id: "offroster", label: "🚩 Not on the roster", run: () => actions.offRosterStart("off") }, { id: "back", label: "← Back", run: actions.back }];
     if (mode === "offSize")    return [
       ...(state.sizes || []).flatMap((g, gi) => g.sizes.map(s => ({ id: "sz" + s.value, label: s.short, group: gi, run: () => actions.offRosterSize(s.value) }))),
-      { id: "goalie", label: state.goalie ? "☑ Goalie jersey" : "☐ Goalie jersey", on: !!state.goalie, run: actions.toggleGoalie },
+      { id: "goalie", label: state.goalie ? "☑ Goalie garment" : "☐ Goalie garment", on: !!state.goalie, run: actions.toggleGoalie },
       { id: "notag", label: "🏷 No size tag", run: () => actions.offRosterSize("") },
       { id: "back", label: "← Back", run: actions.back }];
     if (mode === "flag")       return [{ ...retry, primary: true }, { id: "listflag", label: "🚩 Flag", run: actions.listFlag }];   // Retry and Flag only (the owner, 20 Nov 2026); Flag opens the yellow list's menu: No size tag, Duplicate, Not on the roster
@@ -1839,7 +1839,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
     if (mode === "reasons")    return [...reasons.map(r => ({ id: r.id, label: r.label, run: () => actions.chooseReason(r) })), { id: "back", label: "← Back", run: actions.back }];
     if (mode === "supervisor") {
       const cont   = { id: "cont",   label: "✓ Continue", run: actions.continueSupervisor };
-      const photo  = { id: "photo",  label: damagePhotos.length ? "📷 Take another" : "📷 Photo of the damage", hint: damagePhotos.length ? "" : "set the jersey, then press Enter", run: () => takePhoto() };
+      const photo  = { id: "photo",  label: damagePhotos.length ? "📷 Take another" : "📷 Photo of the damage", hint: damagePhotos.length ? "" : "set the garment, then press Enter", run: () => takePhoto() };
       const retake = { id: "retake", label: "↻ Retake", run: () => takePhoto(true) };
       // Flagged from the size screen: Back undoes the flag and asks the size again (the owner,
       // 19 Nov 2026: a wrong size tapped by mistake).
@@ -2024,7 +2024,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               </div>
             </>
           )}
-          {mode === "done" && <div style={{ fontSize: 32, color: "#4ade80", marginTop: 20, opacity: 0.85 }}>Next jersey…</div>}
+          {mode === "done" && <div style={{ fontSize: 32, color: "#4ade80", marginTop: 20, opacity: 0.85 }}>Next garment…</div>}
         </>
       )}
 
@@ -2039,11 +2039,11 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               : `#${detected?.number || "?"}${detected?.number && detected?.number_complete === false ? "?" : ""}${detected?.name ? " · " + detected.name + (detected.name_complete === false ? "…" : "") : ""}`}
           </div>
 
-          {lastRank < 2 && <div style={{ fontSize: 17, color: "#a8a29e", textAlign: "center", marginTop: 4 }}>{lastRank === 0 ? `${lastSize} first · the last jersey` : `${lastSizeFamily(lastSize)} sizes first · the last jersey was ${lastSize}`}</div>}
+          {lastRank < 2 && <div style={{ fontSize: 17, color: "#a8a29e", textAlign: "center", marginTop: 4 }}>{lastRank === 0 ? `${lastSize} first · the last garment` : `${lastSizeFamily(lastSize)} sizes first · the last garment was ${lastSize}`}</div>}
           <div style={{ fontSize: 20, color: "#d6d3d1", marginBottom: 16, textAlign: "center" }}>
             {/* Typed by hand: what was typed, not the camera's empty read ("Read: #? · no name"; code review, low finding). */}
             {state.typed ? `Typed: #${state.typed.number || "?"}${state.typed.name ? " · " + state.typed.name : ""}` : <>
-            Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}{detected?.jersey_colour ? ` · ${detected.jersey_colour} jersey` : ""}
+            Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}{detected?.jersey_colour ? ` · ${detected.jersey_colour} garment` : ""}
             </>}
             {diff.some(f => f !== "number" && f !== "name") && <span style={{ marginLeft: 12, color: accent }}>· differs by {diff.filter(f => f !== "number" && f !== "name").map(cap).join(" and ")}</span>}{/* the team (or an extra column), whether or not the names differ too (review, 24 Nov 2026); a number or a name that differs is plain to see on the tiles */}
           </div>
@@ -2131,7 +2131,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
             </div>
           )}
           <div style={{ fontSize: 26, color: "#e0f2fe", marginTop: 14, textAlign: "center", padding: "0 40px", maxWidth: 820, lineHeight: 1.4 }}>
-            Wipe the dirt or mark off. The jersey is <strong>not flagged</strong>.
+            Wipe the dirt or mark off. The garment is <strong>not flagged</strong>.
           </div>
           <div style={{ marginTop: 28, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
             {options.map((o, i) => optionButton(o, i))}
@@ -2160,7 +2160,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
             {ticket && (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 10, fontWeight: 400, color: ticket.status === "done" ? "#fecaca" : ticket.status === "printing" ? "#fca5a5" : "#fbbf24" }}>
                 <span>{ticket.status === "printing" ? "🖨 Printing the flag ticket…" : ticket.status === "done" ? "🖨 2 flag tickets printed" : ticket.status === "none" ? "🖨 No label printer for this station — write the ticket by hand" : `🖨 Ticket not printed: ${ticket.message}`}</span>
-                {ticket.status !== "printing" && <button onClick={() => reprintTicket?.(state.entryId)} title="Print this jersey's flag ticket again" style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, borderColor: "#fca5a5", color: "#fecaca" }}>Reprint</button>}
+                {ticket.status !== "printing" && <button onClick={() => reprintTicket?.(state.entryId)} title="Print this garment's flag ticket again" style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, borderColor: "#fca5a5", color: "#fecaca" }}>Reprint</button>}
               </span>
             )}
           </div>
@@ -2208,7 +2208,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
           {mode === "supervisor" && ticket && (
             <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, fontSize: 19, color: ticket.status === "done" ? "#fecaca" : ticket.status === "printing" ? "#fca5a5" : "#fbbf24" }}>
               <span>{ticket.status === "printing" ? "🖨 Printing the flag ticket…" : ticket.status === "done" ? "🖨 2 flag tickets printed" : ticket.status === "none" ? "🖨 No label printer for this station — write the ticket by hand" : `🖨 Ticket not printed: ${ticket.message}`}</span>
-              {ticket.status !== "printing" && <button onClick={() => reprintTicket?.(state.entryId)} title="Print this jersey's flag ticket again" style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, borderColor: "#fca5a5", color: "#fecaca" }}>Reprint</button>}
+              {ticket.status !== "printing" && <button onClick={() => reprintTicket?.(state.entryId)} title="Print this garment's flag ticket again" style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, borderColor: "#fca5a5", color: "#fecaca" }}>Reprint</button>}
             </div>
           )}
           {mode === "flag" && state.title === "SCAN FAILED" && (
@@ -2379,7 +2379,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           {cameras.length === 0 && <div style={{ fontSize: 14, color: "#7c8ba1" }}>Start the camera once to list the cameras on this machine.</div>}
           <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
             <input type="checkbox" checked={!!temp.autoScan} onChange={e => setTemp(t => ({ ...t, autoScan: e.target.checked }))} />
-            Hands-free: after a confirm, scan the next jersey when it is placed and still
+            Hands-free: after a confirm, scan the next garment when it is placed and still
           </label>
           {temp.autoScan && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 16, color: "#cbd5e1" }}>
@@ -2398,22 +2398,22 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
               {LIST_SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
-          <div style={{ fontSize: 14, color: "#7c8ba1" }}>The yellow "Which jersey is this?" list. By size, the operator finds the row of the size tag at once; by team or number for an order that is sorted another way.</div>
+          <div style={{ fontSize: 14, color: "#7c8ba1" }}>The yellow "Which garment is this?" list. By size, the operator finds the row of the size tag at once; by team or number for an order that is sorted another way.</div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
           <div style={labelSt}>Label printer</div>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginBottom: 8 }}>
             <input type="checkbox" checked={temp.stickers !== false} onChange={e => setTemp(t => ({ ...t, stickers: e.target.checked }))} />
-            Print a sticker for every passed jersey (its box, and the team or size) — the 1 × ½ in roll
+            Print a sticker for every passed garment (its box, and the team or size) — the 1 × ½ in roll
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
             <input type="checkbox" checked={temp.flagTickets !== false} onChange={e => setTemp(t => ({ ...t, flagTickets: e.target.checked }))} />
-            Print a flag ticket for every flagged jersey (where it goes and why) — the 2 × 1 in roll
+            Print a flag ticket for every flagged garment (where it goes and why) — the 2 × 1 in roll
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginTop: 8 }}>
             <input type="checkbox" checked={temp.binLists !== false} onChange={e => setTemp(t => ({ ...t, binLists: e.target.checked }))} />
-            Print what is in a box when it is closed (full, or the order finished): a count label and fourteen jerseys a label — the 2 × 1 in roll
+            Print what is in a box when it is closed (full, or the order finished): a count label and fourteen garments a label — the 2 × 1 in roll
           </label>
         </div>
 
@@ -2428,7 +2428,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
             <input type="number" min={10} max={70} value={temp.boxWeightCap ?? 45} onChange={e => setTemp(t => ({ ...t, boxWeightCap: e.target.value }))} onBlur={e => setTemp(t => ({ ...t, boxWeightCap: Math.max(10, Math.min(70, Number(e.target.value) || 45)) }))} style={{ ...selSt, width: 76 }} />
             lb
           </label>
-          <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>How many jerseys fill a box is learnt: every Box full asks what size the box was, and all stations learn from the answers.</div>
+          <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>How many garments fill a box is learnt: every Box full asks what size the box was, and all stations learn from the answers.</div>
         </div>
 
         {problems.length > 0 && (
@@ -2482,14 +2482,14 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 22, flex: "1 1 auto", minHeight: 120, overflowY: "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "12px 22px", borderRadius: 12, background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", order: 99 }}>
             <div style={{ fontFamily: FONT_DISPLAY, fontSize: 34, fontWeight: 900, color: "#f87171", minWidth: 150, flexShrink: 0, textAlign: "center", lineHeight: 1, whiteSpace: "nowrap" }}>DAMAGED</div>
-            <div style={{ textAlign: "left", fontSize: 17, color: "#fecaca" }}>One more box, off to the side, for flagged jerseys. It is the same box all day: print its label from the Print menu when you need one.</div>
+            <div style={{ textAlign: "left", fontSize: 17, color: "#fecaca" }}>One more box, off to the side, for flagged garments. It is the same box all day: print its label from the Print menu when you need one.</div>
           </div>
           {entries.map(({ label, bin, total = 0, boxes = 1, carried = 0, from = "" }) => (
             <div key={bin} style={{ display: "flex", alignItems: "center", gap: 18, padding: "14px 22px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" }}>
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 44, fontWeight: 900, color: "#60a5fa", minWidth: 150, textAlign: "center", lineHeight: 1, whiteSpace: "nowrap" }}>Box {bin}</div>
               <div style={{ textAlign: "left" }}>
                 <div style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0" }}>{label}</div>
-                <div style={{ fontSize: 16, color: "#94a3b8" }}>{total} {total === 1 ? "jersey" : "jerseys"} to go · {boxes === 1 ? "1 box" : `${boxes} boxes: ${bin} to ${boxParts(bin)[0]}.${boxParts(bin)[1] + boxes - 1}`}</div>
+                <div style={{ fontSize: 16, color: "#94a3b8" }}>{total} {total === 1 ? "garment" : "garments"} to go · {boxes === 1 ? "1 box" : `${boxes} boxes: ${bin} to ${boxParts(bin)[0]}.${boxParts(bin)[1] + boxes - 1}`}</div>
                 {carried > 0 && <div style={{ fontSize: 16, fontWeight: 800, color: "#7dd3fc" }}>📦 Already open: {carried} from order {from} in it. Use that box, no new label.</div>}
               </div>
             </div>
@@ -2557,7 +2557,7 @@ function ReplayFinder({ onPick, onClose, stationLabel }) {
           {(state.runs || []).map(r => (
             <button key={`${r.source}|${r.station}|${r.run}`} onClick={() => onPick(r)} disabled={!r.rows.length}
               style={{ ...btnGhost, textAlign: "left", padding: "10px 14px", borderColor: "#6b21a8", opacity: r.rows.length ? 1 : 0.5 }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>Order {r.order} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.total} jerseys · {r.done} done then · {r.events.length} scans</span></div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>Order {r.order} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.total} garments · {r.done} done then · {r.events.length} scans</span></div>
               <div style={{ fontSize: 15, color: "#94a3b8" }}>{stationLabel(r.station)}{r.operator ? ` · ${r.operator}` : ""} · {new Date(r.firstSeen || r.lastSeen || 0).toLocaleString()} · from {r.source}</div>
             </button>
           ))}
@@ -2609,13 +2609,13 @@ function StillOutModal({ orderNumber, groups, rowOf, binOf, onPass, onClose }) {
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ fontSize: 17, color: "#cbd5e1", marginTop: 10, lineHeight: 1.45 }}>
-          When a jersey comes back, <strong>scan it</strong>: it goes green and into its box. If the camera cannot read it, tap <strong>Pass it</strong> here.
+          When a garment comes back, <strong>scan it</strong>: it goes green and into its box. If the camera cannot read it, tap <strong>Pass it</strong> here.
         </div>
         {section("Back from repair", groups.flag, "#f87171", "✓ It's back — pass it")}
         {section("Missing", groups.missing, "#fbbf24", "✓ Found — pass it")}
         {section("Extra, not on this order", groups.extra, "#f9a8d4", null, "With the supervisor: they decide on the board.")}
         {groups.todo.length > 0 && <div style={{ marginTop: 16, fontSize: 17, color: "#cbd5e1" }}><strong>Not scanned yet · {groups.todo.length}</strong> — scan them as usual.</div>}
-        <div style={{ marginTop: 18, fontSize: 15, color: "#94a3b8", lineHeight: 1.45 }}>A jersey that will not come back: the supervisor marks it <strong>Ship short</strong> on the board (Unfinished orders). When nothing is out, finish the order.</div>
+        <div style={{ marginTop: 18, fontSize: 15, color: "#94a3b8", lineHeight: 1.45 }}>A garment that will not come back: the supervisor marks it <strong>Ship short</strong> on the board (Unfinished orders). When nothing is out, finish the order.</div>
       </div>
     </div>
   );
@@ -2686,9 +2686,9 @@ function PackingRow({ b, sh, cap, asking, unfolded, onAsk, onUnfold, onFull, onL
         <div style={{ fontSize: 22, fontWeight: 700, color: "#e2e8f0", overflowWrap: "anywhere" }}>{b.label}</div>
         <div style={{ fontSize: 18, color: "#cbd5e1", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span><strong style={{ color: "#4ade80" }}>{b.count}</strong> scanned · <strong style={{ color: toScan > 0 ? "#fbbf24" : "#4ade80" }}>{toScan}</strong> to scan{b.count > 0 && cap ? ` · about ${Math.round(b.weight)} lb of ${cap}` : ""}</span>
-          {b.box && <span title="The size of box this many jerseys fill" style={{ fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>→ {b.box}</span>}
+          {b.box && <span title="The size of box this many garments fill" style={{ fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>→ {b.box}</span>}
           {st === "printed" && <span style={{ fontSize: 16, fontWeight: 800, color: "#86efac", border: "1px solid #22c55e", borderRadius: 999, padding: "2px 12px", background: "rgba(34,197,94,0.12)", whiteSpace: "nowrap" }}>✓ List printed · {b.count} pcs</span>}
-          {toScan > 0 && <button onClick={() => onUnfold(b.bin)} title="The jerseys still to scan for this box" style={{ ...btnGhost, fontSize: 15, padding: "4px 12px" }}>{unfolded ? "▲ Hide" : "▼ Show"} the {toScan} left</button>}
+          {toScan > 0 && <button onClick={() => onUnfold(b.bin)} title="The garments still to scan for this box" style={{ ...btnGhost, fontSize: 15, padding: "4px 12px" }}>{unfolded ? "▲ Hide" : "▼ Show"} the {toScan} left</button>}
         </div>
         {unfolded && (sh?.waiting || []).length > 0 && (
           <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 4 }}>
@@ -2701,7 +2701,7 @@ function PackingRow({ b, sh, cap, asking, unfolded, onAsk, onUnfold, onFull, onL
         )}
         {b.heavy >= 0.95 && <div style={{ fontSize: 16, fontWeight: 800, color: "#f87171" }}>At the weight limit — close it</div>}
         {shortN > 0 && (
-          <div title="These jerseys are flagged or marked missing, so they will not arrive in this box by scanning on" style={{ fontSize: 16, fontWeight: 800, color: "#fbbf24" }}>
+          <div title="These garments are flagged or marked missing, so they will not arrive in this box by scanning on" style={{ fontSize: 16, fontWeight: 800, color: "#fbbf24" }}>
             ⚠ Short {shortN}: {jerseyList(sh.short, 5)}{toScan === 0 ? " — nothing else is coming for this box" : ""}
           </div>
         )}
@@ -2748,7 +2748,7 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
   const tone = { scan: "#f59e0b", print: "#3b82f6", finish: "#22c55e", done: "#22c55e" }[now.step];
   const rowSt = { display: "flex", alignItems: "center", gap: 16, padding: "12px 18px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" };
   const bigBtn = { ...btnPri, fontSize: 20, padding: "14px 28px", whiteSpace: "nowrap", background: tone, color: "#0d1117" };
-  const pcs = n => `${n} ${n === 1 ? "jersey" : "jerseys"}`;
+  const pcs = n => `${n} ${n === 1 ? "garment" : "garments"}`;
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2400, display: "flex", alignItems: "center", justifyContent: "center" }}>{/* above the done screen (2300) and the Finish confirm (1600), which open it; below the Print menu (2500) */}
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #22c55e", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
@@ -2943,13 +2943,13 @@ function SummaryCounts({ summary, stats = null }) {
   const c = summary.counts, num = v => v !== "" && v !== null && v !== undefined;
   return (
     <div style={{ fontSize: 17, color: "#cbd5e1", flex: 1 }}>
-      {c.total} {c.total === 1 ? "jersey" : "jerseys"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} missing</span>{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} with no roster row</span>}
+      {c.total} {c.total === 1 ? "garment" : "garments"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} missing</span>{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} with no roster row</span>}
       {stats && (num(stats.passRate) || num(stats.flagRate) || num(stats.perHour)) && (
         <div style={{ fontSize: 14, color: "#94a3b8", marginTop: 2 }}>
           {num(stats.passRate) ? <>pass rate <strong style={{ color: "#e2e8f0" }}>{stats.passRate}%</strong></> : null}
           {num(stats.flagRate) ? <> · flag rate <strong style={{ color: "#e2e8f0" }}>{stats.flagRate}%</strong></> : null}
-          {num(stats.perHour) ? <> · <strong style={{ color: "#e2e8f0" }}>{stats.perHour}</strong> jerseys / hour</> : null}
-          {num(stats.medianSec) ? <> · {stats.medianSec} s a jersey</> : null}
+          {num(stats.perHour) ? <> · <strong style={{ color: "#e2e8f0" }}>{stats.perHour}</strong> garments / hour</> : null}
+          {num(stats.medianSec) ? <> · {stats.medianSec} s a garment</> : null}
         </div>
       )}
     </div>
@@ -3013,18 +3013,18 @@ function BlanksModal({ groups, boxOf, last, sticker, scanKey, onCount, onFlag, o
     window.addEventListener("keydown", h, true);
     return () => window.removeEventListener("keydown", h, true);
   }, [current, scanKey, onCount, onClose]);
-  const name = g => [g.team, g.size, g.style].filter(Boolean).join(" · ") || "Blank jersey";
+  const name = g => [g.team, g.size, g.style].filter(Boolean).join(" · ") || "Blank garment";
   const left = groups.reduce((t, g) => t + (g.total - g.done - g.flagged), 0);
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #3b82f6", padding: 30, maxWidth: 860, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
-          <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>Blank jerseys</div>
+          <div style={{ fontSize: 32, fontWeight: 900, color: "#60a5fa" }}>Blank garments</div>
           <div style={{ fontSize: 17, color: "#94a3b8", flex: 1 }}>{left} still to count</div>
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ fontSize: 16, color: "#cbd5e1", margin: "8px 0 16px", lineHeight: 1.4 }}>
-          Nothing is printed on these, so the camera has nothing to read. Look the jersey over, then press the button of its {groups.some(g => g.team) ? "team and " : ""}size. Each press counts one, prints its sticker and puts it in its box. The pedal counts one more of the kind you pressed last.
+          Nothing is printed on these, so the camera has nothing to read. Look the garment over, then press the button of its {groups.some(g => g.team) ? "team and " : ""}size. Each press counts one, prints its sticker and puts it in its box. The pedal counts one more of the kind you pressed last.
         </div>
         {last && (
           <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 8, background: "rgba(34,197,94,0.1)", border: "1px solid #22c55e", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 17, color: "#e2e8f0" }}>
@@ -3047,7 +3047,7 @@ function BlanksModal({ groups, boxOf, last, sticker, scanKey, onCount, onFlag, o
             );
           })}
         </div>
-        {open.length === 0 && <div style={{ marginTop: 14, fontSize: 18, fontWeight: 800, color: "#4ade80" }}>Every blank jersey is counted.</div>}
+        {open.length === 0 && <div style={{ marginTop: 14, fontSize: 18, fontWeight: 800, color: "#4ade80" }}>Every blank garment is counted.</div>}
       </div>
     </div>
   );
@@ -3168,7 +3168,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
             {found.orders.map(o => (
               <button key={`${o.station}|${o.order}|${o.run}`} onClick={() => { setPast(packFromRecord(o)); setStatus(null); setFound(null); setPick(""); }} style={{ ...rowSt, cursor: "pointer", color: "#e2e8f0", fontSize: 16, textAlign: "left" }}>
                 <strong>Order {o.order}</strong>
-                <span style={{ color: "#94a3b8" }}>{o.date} · {String(o.station || "").replace(/^st-/, "")}{o.operator ? ` · ${o.operator}` : ""} · {o.rows.length} jerseys{o.counts ? `, ${(o.counts.pass || 0) + (o.counts.manual || 0)} passed` : ""}</span>
+                <span style={{ color: "#94a3b8" }}>{o.date} · {String(o.station || "").replace(/^st-/, "")}{o.operator ? ` · ${o.operator}` : ""} · {o.rows.length} garments{o.counts ? `, ${(o.counts.pass || 0) + (o.counts.manual || 0)} passed` : ""}</span>
               </button>
             ))}
           </div>
@@ -3190,7 +3190,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
               {boxes.map(b => (
                 <div key={b.bin} style={rowSt}>
                   <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 900, color: b.open ? "#60a5fa" : "#7c8ba1", minWidth: 110, lineHeight: 1, whiteSpace: "nowrap" }}>{of(b)}</div>
-                  <div style={{ flex: 1, fontSize: 16, color: "#e2e8f0" }}>{b.label} <span style={{ color: "#94a3b8" }}>· {b.count} {b.count === 1 ? "jersey" : "jerseys"} · {b.open ? "open" : "closed"}</span></div>
+                  <div style={{ flex: 1, fontSize: 16, color: "#e2e8f0" }}>{b.label} <span style={{ color: "#94a3b8" }}>· {b.count} {b.count === 1 ? "garment" : "garments"} · {b.open ? "open" : "closed"}</span></div>
                   <button style={smBtn} onClick={() => send([[boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label`)}>Label</button>
                   <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin), "binlist"]], `the ${of(b)} list`)}>List</button>
                   <button style={{ ...smBtn, opacity: b.count ? 1 : 0.4 }} disabled={!b.count} onClick={() => send([[boxListJobs(pack, b.bin), "binlist"], [boxLabelJobs(pack, b.bin), "binticket"]], `the ${of(b)} label and list`)}>Both</button>
@@ -3202,13 +3202,13 @@ function PrintModal({ current = null, tagOf, onClose }) {
 
         {pack && (
           <>
-            <div style={secSt}>Jersey stickers · {stickers.length} passed</div>
+            <div style={secSt}>Garment stickers · {stickers.length} passed</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <input value={pick} onChange={e => setPick(e.target.value)} onFocus={() => setKeys("pick")} onBlur={() => setKeys(k => (k === "pick" ? null : k))} onKeyDown={e => e.stopPropagation()} placeholder="jersey number or name" style={{ ...inputSt, width: 260, padding: "8px 12px" }} />
+              <input value={pick} onChange={e => setPick(e.target.value)} onFocus={() => setKeys("pick")} onBlur={() => setKeys(k => (k === "pick" ? null : k))} onKeyDown={e => e.stopPropagation()} placeholder="garment number or name" style={{ ...inputSt, width: 260, padding: "8px 12px" }} />
               <button style={{ ...smBtn, opacity: stickers.length ? 1 : 0.4 }} disabled={!stickers.length} onClick={() => many(stickers.length, "stickers") && send([[stickerJobs(pack), "jersey"]], "every sticker")}>All {stickers.length} stickers</button>
             </div>
             {keys === "pick" && <div style={{ maxWidth: 560 }}><ScreenKeys layout="search" onKey={k => setPick(v => typeKey(v, k))} onEnter={leave} enterLabel="Done" /></div>}
-            {needle && picked.length === 0 && <div style={{ marginTop: 6, color: "#fbbf24" }}>No passed jersey matches “{pick.trim()}”.</div>}
+            {needle && picked.length === 0 && <div style={{ marginTop: 6, color: "#fbbf24" }}>No passed garment matches “{pick.trim()}”.</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
               {picked.map(r => (
                 <div key={r._id} style={rowSt}>
@@ -3284,8 +3284,8 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
         <div style={{ fontSize: 34, fontWeight: 900, color: "#e2e8f0", marginBottom: 8 }}>🏁 Finish order {orderNumber || "—"}?</div>
         <div style={{ fontSize: 18, color: "#cbd5e1", marginBottom: 14, lineHeight: 1.4 }}>
           {remaining
-            ? `${remaining} ${remaining === 1 ? "jersey is" : "jerseys are"} not scanned yet. You can finish anyway; the supervisor keeps this order's record and sheets.`
-            : "Every jersey is scanned. The supervisor keeps this order's record and sheets."}
+            ? `${remaining} ${remaining === 1 ? "garment is" : "garments are"} not scanned yet. You can finish anyway; the supervisor keeps this order's record and sheets.`
+            : "Every garment is scanned. The supervisor keeps this order's record and sheets."}
           {scans === 0 ? " Nothing was scanned on it." : ""}
           {shipWith.length ? ` Ships with order ${shipWith.join(", ")}: a box that is not full stays open for it.` : binLists > 0 ? ` Every open box is closed and its list prints: ${binLists} ${binLists === 1 ? "label" : "labels"}.` : ""}
         </div>
@@ -3293,7 +3293,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
         <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", margin: "0 -8px", padding: "0 8px" }}>
         {lacking > 0 && (
           <div style={{ marginBottom: 12, padding: "12px 16px", borderRadius: 10, border: "2px solid #f59e0b", background: "rgba(245,158,11,0.1)", textAlign: "left" }}>
-            <div style={{ fontSize: 19, fontWeight: 900, color: "#fbbf24", marginBottom: 6 }}>⚠ Before the boxes are sealed: {lacking} {lacking === 1 ? "jersey is" : "jerseys are"} in no box</div>
+            <div style={{ fontSize: 19, fontWeight: 900, color: "#fbbf24", marginBottom: 6 }}>⚠ Before the boxes are sealed: {lacking} {lacking === 1 ? "garment is" : "garments are"} in no box</div>
             {short.map(x => (
               <div key={x.bin} style={{ fontSize: 16, color: "#e2e8f0", lineHeight: 1.45 }}>
                 <strong style={{ color: "#60a5fa" }}>Box {x.bin}</strong> · {x.label}:{" "}
@@ -3313,7 +3313,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
                 return (
                   <div key={b.bin} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 8, background: "#0d1117" }}>
                     <span style={{ fontWeight: 800, color: "#60a5fa", minWidth: 70 }}>Box {b.bin}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 16 }}>{b.label} · {b.count} {b.count === 1 ? "jersey" : "jerseys"}{b.box ? <span style={{ color: "#94a3b8" }}> · {b.box}</span> : null}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 16 }}>{b.label} · {b.count} {b.count === 1 ? "garment" : "garments"}{b.box ? <span style={{ color: "#94a3b8" }}> · {b.box}</span> : null}</span>
                     <button onClick={() => setKeep(k => { const n = new Set(k); n.add(b.bin); return n; })} style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: open ? "#38bdf8" : "#334155", color: open ? "#fff" : "#94a3b8", background: open ? "rgba(56,189,248,0.25)" : "transparent" }}>{open ? "✓ " : ""}Leave open</button>
                     <button onClick={() => setKeep(k => { const n = new Set(k); n.delete(b.bin); return n; })} style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: !open ? "#22c55e" : "#334155", color: !open ? "#fff" : "#94a3b8", background: !open ? "rgba(34,197,94,0.25)" : "transparent" }}>{!open ? "✓ " : ""}Full — close it</button>
                   </div>
@@ -3327,7 +3327,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
             {bins.map(b => (
               <div key={b.bin} style={{ display: "flex", gap: 12, padding: "5px 14px", borderRadius: 8, background: "#1e293b" }}>
                 <span style={{ fontWeight: 800, color: "#60a5fa", minWidth: 62 }}>Box {b.bin}</span>
-                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.label} · {b.count} {b.count === 1 ? "jersey" : "jerseys"}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.label} · {b.count} {b.count === 1 ? "garment" : "garments"}</span>
                 <span style={{ fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>{b.open ? "" : "closed · "}{b.box}</span>
               </div>
             ))}
@@ -3371,9 +3371,9 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onE
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#161b22", borderRadius: 16, border: `2px solid ${open ? "#f59e0b" : "#22c55e"}`, padding: 44, maxWidth: 640, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
         <div style={{ fontSize: 64, marginBottom: 12 }}>{open ? "📋" : "🎉"}</div>
-        <div style={{ fontSize: 36, fontWeight: 900, color: open ? "#f59e0b" : "#22c55e", marginBottom: 10 }}>{open ? "Every jersey accounted for" : "Order complete"}</div>
+        <div style={{ fontSize: 36, fontWeight: 900, color: open ? "#f59e0b" : "#22c55e", marginBottom: 10 }}>{open ? "Every garment accounted for" : "Order complete"}</div>
         <div style={{ fontSize: 18, color: "#cbd5e1", marginBottom: 8, lineHeight: 1.4 }}>
-          {open ? `${open} still open — with the supervisor, entered by hand, or missing. The box stays open until they are signed off or come back.` : `All ${roster.length} jerseys passed.`}
+          {open ? `${open} still open — with the supervisor, entered by hand, or missing. The box stays open until they are signed off or come back.` : `All ${roster.length} garments passed.`}
         </div>
         {canExport && <div style={{ fontSize: 16, color: "#94a3b8", marginBottom: 26 }}>Review the roster before exporting.</div>}
         <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 28, flexWrap: "wrap" }}>
@@ -3922,7 +3922,7 @@ export default function App() {
     const notInIds = left === 0 ? notInBox(packAfter, bin).map(x => x.row._id) : null;
     const notIn = left === 0 ? notInBoxJobs(packAfter, bin, r.entry.label) : [];
     const lists = [...notIn, ...binListLabels(rows, { bin, label: r.entry.label, orderNumber: ordersIn(bin), by: binFieldOf(binMap), of: carriedIn(bin).length ? 0 : groupSize(roster, binMap, rows) })];
-    const what  = `Box ${bin} closed with ${rows.length} ${rows.length === 1 ? "jersey" : "jerseys"}${carriedIn(bin).length ? ` (${carriedIn(bin).length} from order ${[...new Set(carriedIn(bin).map(x => x.order))].join(", ")})` : ""}. ${left ? `${r.entry.label} now goes in Box ${r.newBin}` : `Nothing of ${r.entry.label} is left to scan`}`;
+    const what  = `Box ${bin} closed with ${rows.length} ${rows.length === 1 ? "garment" : "garments"}${carriedIn(bin).length ? ` (${carriedIn(bin).length} from order ${[...new Set(carriedIn(bin).map(x => x.order))].join(", ")})` : ""}. ${left ? `${r.entry.label} now goes in Box ${r.newBin}` : `Nothing of ${r.entry.label} is left to scan`}`;
     if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}. Box lists are switched off in Settings.` }); return; }
     setBinPrint({ status: "printing", text: what });
     // The next box's label prints here only when it was not among the ones
@@ -4208,7 +4208,7 @@ export default function App() {
         for (let i = 0; i < 3 && uprightRotation(d2.orientation); i++) {
           const turn = uprightRotation(d2.orientation); total = (total + turn) % 360;
           const turned = await rotateDataUrl(frame, turn); if (!turned) break;
-          console.log(`[upright] #${d2.number} on a jersey that is ${d2.orientation} — turning the frame ${turn}° and reading again`);
+          console.log(`[upright] #${d2.number} on a garment that is ${d2.orientation} — turning the frame ${turn}° and reading again`);
           frame = turned; d2 = await readOne(turned.split(",")[1], turned);
         }
         if (d2 !== detected) {
@@ -4261,9 +4261,9 @@ export default function App() {
     // screen: an empty table is learned for hands-free, a pedal press gets a
     // quiet notice for a moment, and the gate re-arms. Nothing in the log.
     if (sc.mode === null) {
-      console.log(`[${auto ? "hands-free" : "scan"}] ${sc.empty ? "nothing on the table — learned it" : "no name or number in view"} — waiting for a jersey`);
+      console.log(`[${auto ? "hands-free" : "scan"}] ${sc.empty ? "nothing on the table — learned it" : "no name or number in view"} — waiting for a garment`);
       if (sc.empty) gateRef.current.learnTable(lastScanFrameRef.current);
-      if (!auto) { setNoJersey(sc.empty ? "No jersey in view" : "No name or number in view"); clearTimeout(noJerseyTimer.current); noJerseyTimer.current = setTimeout(() => setNoJersey(""), 2200); }
+      if (!auto) { setNoJersey(sc.empty ? "No garment in view" : "No name or number in view"); clearTimeout(noJerseyTimer.current); noJerseyTimer.current = setTimeout(() => setNoJersey(""), 2200); }
       armRef.current();
       return;
     }
@@ -4813,7 +4813,7 @@ export default function App() {
   const blanks = useMemo(() => blankGroups(roster), [roster]);
   const countBlank = g => {
     const row = g?.next && roster.find(r => r._id === g.next._id && !r.scanned); if (!row) return;
-    const entry = { id: Date.now(), detected: null, thumb: null, match: row, status: S_PASS, reason: "Counted — blank jersey, nothing to read", ...stamp() };
+    const entry = { id: Date.now(), detected: null, thumb: null, match: row, status: S_PASS, reason: "Counted — blank garment, nothing to read", ...stamp() };
     if (!firstScanTime) setFirstScanTime(Date.now());
     setRoster(prev => prev.map(r => r._id === row._id ? { ...r, scanned: "pass" } : r));
     setLog(prev => [entry, ...prev]);
@@ -5024,10 +5024,10 @@ export default function App() {
         <div style={{ position: "fixed", left: "50%", bottom: 10, transform: "translateX(-50%)", zIndex: 3000, background: "#0d1117", border: "3px solid #f59e0b", borderRadius: 14, padding: "10px 16px", color: "#e2e8f0", fontSize: 15, display: "flex", alignItems: "center", gap: 12, maxWidth: "96vw", boxShadow: "0 10px 30px rgba(0,0,0,0.6)" }}>
           <span style={{ fontWeight: 900, color: "#fcd34d", whiteSpace: "nowrap" }}>▶ Replay {replay.name}</span>
           {replay.error ? <span style={{ color: "#f87171" }}>{replay.error}</span> : (<>
-            <span style={{ whiteSpace: "nowrap", fontWeight: 800 }} title="Jerseys done, as on the station's Done tile">{roster.filter(r => r.scanned).length} / {roster.length}</span>
+            <span style={{ whiteSpace: "nowrap", fontWeight: 800 }} title="Garments done, as on the station's Done tile">{roster.filter(r => r.scanned).length} / {roster.length}</span>
             <span style={{ whiteSpace: "nowrap", color: "#7c8ba1", fontSize: 13 }} title="Steps of yesterday’s record: every scan, flag and mark the operator made (flags, duplicates and marks are steps too)">step {Math.min(replay.i + 1, replay.steps.length)}/{replay.steps.length}</span>
-            <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }} title="Skip until this many jerseys are done (as on the Done tile), with no screens; the roster list catches up">
-              <input type="number" min={1} max={roster.length} value={replaySkip} placeholder="jerseys" onChange={e => setReplaySkip(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") { replaySkipTo(replaySkip); e.currentTarget.blur(); } }} style={{ ...inputSt, width: 78, padding: "4px 6px", fontSize: 14 }} />
+            <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }} title="Skip until this many garments are done (as on the Done tile), with no screens; the roster list catches up">
+              <input type="number" min={1} max={roster.length} value={replaySkip} placeholder="garments" onChange={e => setReplaySkip(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") { replaySkipTo(replaySkip); e.currentTarget.blur(); } }} style={{ ...inputSt, width: 78, padding: "4px 6px", fontSize: 14 }} />
               <button onClick={() => replaySkipTo(replaySkip)} disabled={!sessionStarted || !(Number(replaySkip) > roster.filter(r => r.scanned).length)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 14, opacity: sessionStarted && Number(replaySkip) > roster.filter(r => r.scanned).length ? 1 : 0.5 }}>⏭ Skip to</button>
             </span>
             <span style={{ color: "#94a3b8", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replayStep ? replayStep.label : "done"}</span>
@@ -5049,7 +5049,7 @@ export default function App() {
 
       {retried && !overlay && !noJersey && (
         <div style={{ position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 1950, background: "#1e293b", color: "#fcd34d", border: "2px solid #f59e0b", borderRadius: 999, padding: "10px 22px", fontSize: 20, fontWeight: 800, boxShadow: "0 8px 30px rgba(0,0,0,0.5)", whiteSpace: "nowrap" }}>
-          ↻ Scanned again · {retried.number || retried.name ? `#${retried.number || "?"}${retried.name ? " " + retried.name : ""} is` : "that jersey is"} NOT checked — no sticker, no box
+          ↻ Scanned again · {retried.number || retried.name ? `#${retried.number || "?"}${retried.name ? " " + retried.name : ""} is` : "that garment is"} NOT checked — no sticker, no box
         </div>
       )}
       {noJersey && (
@@ -5080,7 +5080,7 @@ export default function App() {
               { n: s.missing, label: "Missing", colour: "#fbbf24" },
             ]; return (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 20, color: "#e2e8f0", fontWeight: 700, marginBottom: 10 }}>{s.done} of {s.total} jerseys are done.</div>
+                <div style={{ fontSize: 20, color: "#e2e8f0", fontWeight: 700, marginBottom: 10 }}>{s.done} of {s.total} garments are done.</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 12 }}>
                   {tiles.map(t => (
                     <div key={t.label} style={{ borderRadius: 10, background: "#0d1117", border: "1px solid #30363d", padding: "10px 6px", textAlign: "center" }}>
@@ -5095,7 +5095,7 @@ export default function App() {
                   return <div style={{ marginBottom: 10 }}>{line("Waiting on repair", g.flag, "#fca5a5")}{line("Missing", g.missing, "#fcd34d")}{line("Extra, with the supervisor", g.extra, "#f9a8d4")}</div>;
                 })()}
                 <div style={{ fontSize: 17, color: "#cbd5e1", lineHeight: 1.45 }}>
-                  The order is saved on the server, with everything done so far. When the jerseys come back, at any station: <strong>Unfinished orders</strong> on the order screen, tap this order, and scan them. A jersey that will not come back, the supervisor marks <strong>Ship short</strong> on the board.
+                  The order is saved on the server, with everything done so far. When the garments come back, at any station: <strong>Unfinished orders</strong> on the order screen, tap this order, and scan them. A garment that will not come back, the supervisor marks <strong>Ship short</strong> on the board.
                 </div>
               </div>
             ); })()}
@@ -5140,7 +5140,7 @@ export default function App() {
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "0 16px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "nowrap", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 18, whiteSpace: "nowrap" }}>🏭 Jersey QC</div>
+            <div style={{ fontWeight: 700, fontSize: 18, whiteSpace: "nowrap" }}>🏭 Garment QC</div>
             {rosterFile && (
               <div style={{ fontSize: 13, color: "#94a3b8", whiteSpace: "nowrap", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>
                 {rosterFile}{operatorName ? ` · ${operatorName}` : ""}{role ? ` (${role})` : ""}
@@ -5152,19 +5152,19 @@ export default function App() {
             style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #3f4b5c", background: "#1e293b", color: "#e2e8f0", fontSize: 16, fontWeight: 700, width: 140 }} />
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flex: 1, minWidth: 0, overflow: "hidden", justifyContent: "flex-end" }}>
-          <Pill color="#22c55e" active={rosterFilter === "pass"} onClick={() => filterRoster("pass")} title="Show the passed jerseys">{passCount} Pass</Pill>
-          <Pill color="#ef4444" active={rosterFilter === "flag"} onClick={() => filterRoster("flag")} title="Show the flagged jerseys">{flagCount} Flag</Pill>
+          <Pill color="#22c55e" active={rosterFilter === "pass"} onClick={() => filterRoster("pass")} title="Show the passed garments">{passCount} Pass</Pill>
+          <Pill color="#ef4444" active={rosterFilter === "flag"} onClick={() => filterRoster("flag")} title="Show the flagged garments">{flagCount} Flag</Pill>
           {sorting && <span title="Signed in as a sorter: sorting only, no inspection"><Pill color="#a78bfa">Sorting</Pill></span>}
-          {!sorting && checksLeft > 0 && <span title="After a mistake the next jerseys are read twice and must agree before a green"><Pill color="#60a5fa">Checking · {checksLeft}</Pill></span>}
+          {!sorting && checksLeft > 0 && <span title="After a mistake the next garments are read twice and must agree before a green"><Pill color="#60a5fa">Checking · {checksLeft}</Pill></span>}
           {!sorting && sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect, CHECKS)}</Pill></span>}
-          {manualCount > 0 && <Pill color="#f59e0b" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the jerseys entered by hand">{manualCount} By hand</Pill>}
+          {manualCount > 0 && <Pill color="#f59e0b" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the garments entered by hand">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
           {saveOk === false && <Pill color="#f87171" title="This PC's storage is full or blocked: the order is not being saved, so a reload or a crash would lose the work since. Tell the supervisor; do not close or reload this page.">⚠ NOT SAVING — tell the supervisor</Pill>}
           {openCount - flagCount > 0 && <Pill color="#f59e0b">{openCount - flagCount} Missing</Pill>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
           {sessionStarted && <button onClick={() => setShowPrint(true)} title="Print any label of this order again, or of an order done before" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>🖨 Print</button>}
-          {sessionStarted && <button onClick={() => setShowPark(true)} title="Put this order aside: it is saved on the server until the jerseys come back. Any station opens it again from Unfinished orders" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>⏸ Finish later</button>}
+          {sessionStarted && <button onClick={() => setShowPark(true)} title="Put this order aside: it is saved on the server until the garments come back. Any station opens it again from Unfinished orders" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>⏸ Finish later</button>}
           {sessionStarted && <button onClick={askFinish} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "#22c55e", color: "#4ade80" }}>🏁 Finish order</button>}
           {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
           <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>
@@ -5188,7 +5188,7 @@ export default function App() {
       )}
       {sessionStarted && newRosters.length > 0 && (
         <div style={{ background: "rgba(59,130,246,0.12)", borderBottom: "1px solid rgba(59,130,246,0.4)", padding: "9px 16px", fontSize: 16, color: "#bfdbfe", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <span>📋 <strong>{newRosters.map(r => `Order ${r.orderNumber || "—"} from ${r.by || "the supervisor"} (${r.rowCount} ${r.rowCount === 1 ? "jersey" : "jerseys"}${r.forStation ? ", for this station" : ""})`).join(" · ")}</strong> is waiting for you — it is offered when this order ends, or on Finish order.</span>
+          <span>📋 <strong>{newRosters.map(r => `Order ${r.orderNumber || "—"} from ${r.by || "the supervisor"} (${r.rowCount} ${r.rowCount === 1 ? "garment" : "garments"}${r.forStation ? ", for this station" : ""})`).join(" · ")}</strong> is waiting for you — it is offered when this order ends, or on Finish order.</span>
           <button onClick={() => setNewRosters([])} title="Hide" style={{ background: "transparent", border: 0, color: "#bfdbfe", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 8px" }}>✕</button>
         </div>
       )}
@@ -5252,10 +5252,10 @@ export default function App() {
                       <>
                         <div style={{ position: "absolute", top: 10, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(0,0,0,0.65)", padding: "8px 16px", borderRadius: 999 }}>
                           <div style={{ width: 12, height: 12, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused || (waitPedal && handsFree) ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused || (waitPedal && handsFree) ? "#94a3b8" : "#22c55e"}` }} />
-                          <span style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9" }}>{armed && handsFree ? "Waiting for the next jersey…" : handsFreePaused ? `Hands-free paused — ${keyLabel} to scan` : !settings.autoScan ? `Hands-free off — ${keyLabel} to scan` : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : waitPedal ? `Flagged — press ${keyLabel} to scan the next jersey` : "Ready"}</span>
+                          <span style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9" }}>{armed && handsFree ? "Waiting for the next garment…" : handsFreePaused ? `Hands-free paused — ${keyLabel} to scan` : !settings.autoScan ? `Hands-free off — ${keyLabel} to scan` : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : waitPedal ? `Flagged — press ${keyLabel} to scan the next garment` : "Ready"}</span>
                         </div>
                         {!sorting && checksLeft > 0 && (
-                          <div title="After a mistake the next jerseys are read twice and must agree before a green" style={{ position: "absolute", top: 54, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(37,99,235,0.85)", padding: "8px 16px", borderRadius: 999 }}>
+                          <div title="After a mistake the next garments are read twice and must agree before a green" style={{ position: "absolute", top: 54, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(37,99,235,0.85)", padding: "8px 16px", borderRadius: 999 }}>
                             <span style={{ fontSize: 17, fontWeight: 700, color: "#fff" }}>Double-checking · {checksLeft} to go</span>
                           </div>
                         )}
@@ -5278,10 +5278,10 @@ export default function App() {
                           </button>
                         </>
                     }
-                    <button onClick={() => { gateRef.current.disarm(); setArmed(false); actions.manual(); }} disabled={scanning || anyDialogOpen} title="Type the jersey in — when the camera cannot read it"
+                    <button onClick={() => { gateRef.current.disarm(); setArmed(false); actions.manual(); }} disabled={scanning || anyDialogOpen} title="Type the garment in — when the camera cannot read it"
                       style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, whiteSpace: "nowrap" }}>⌨ By hand</button>
                     {blanks.length > 0 && (
-                      <button onClick={() => { gateRef.current.disarm(); setArmed(false); setShowBlanks(true); }} title="Jerseys with no name and no number: count them in by team and size"
+                      <button onClick={() => { gateRef.current.disarm(); setArmed(false); setShowBlanks(true); }} title="Garments with no name and no number: count them in by team and size"
                         style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", borderColor: "#22c55e", color: "#4ade80" }}>Blanks · {blanks.reduce((t, g) => t + (g.total - g.done - g.flagged), 0)}</button>
                     )}
                   </div>
@@ -5317,13 +5317,13 @@ export default function App() {
                     <button onClick={() => unscan(lastConfirmed.match._id)} title="Un-check it; it must be scanned again" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d", whiteSpace: "nowrap" }}>↶ Undo</button>
                   )}
                   {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && (r.scanned === "pass" || r.scanned === "manual")) && (
-                    <button onClick={actions.reopenLast} title="Found a problem after confirming? Flag this jersey" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#ef4444", color: "#fca5a5", whiteSpace: "nowrap" }}>🚩 Flag it</button>
+                    <button onClick={actions.reopenLast} title="Found a problem after confirming? Flag this garment" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#ef4444", color: "#fca5a5", whiteSpace: "nowrap" }}>🚩 Flag it</button>
                   )}
                   {settings.stickers && (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, whiteSpace: "nowrap", color: sticker?.id === lastConfirmed.id && sticker.status === "done" ? "#4ade80" : sticker?.id === lastConfirmed.id ? "#fbbf24" : "#7c8ba1" }}>
                       {sticker?.id !== lastConfirmed.id ? "🖨 Printing the sticker…" : sticker.status === "done" ? "🖨 Sticker printed" : sticker.status === "none" ? "🖨 No label printer for this station" : `🖨 Sticker not printed: ${sticker.message}`}
                       {sticker?.id === lastConfirmed.id && (
-                        <button onClick={() => { setSticker(null); printSticker(lastConfirmed); }} title="Print this jersey's sticker again" style={{ ...btnGhost, padding: "4px 10px", fontSize: 13, whiteSpace: "nowrap" }}>Reprint</button>
+                        <button onClick={() => { setSticker(null); printSticker(lastConfirmed); }} title="Print this garment's sticker again" style={{ ...btnGhost, padding: "4px 10px", fontSize: 13, whiteSpace: "nowrap" }}>Reprint</button>
                       )}
                     </span>
                   )}
@@ -5340,8 +5340,8 @@ export default function App() {
               {/* Bottom-left, under the last pass: the order's history, where the hand already is. */}
               {sessionStarted && (
                 <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>{/* one line, short labels, never under the roster (the owner, 19 Nov 2026) */}
-                  {pickedUp && stillOut.total > 0 && <button onClick={() => setShowStillOut(true)} title="The jerseys this order is waiting for: back from repair, missing, extra. Scan one when it comes back, or pass it here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", borderColor: "#38bdf8", color: "#7dd3fc" }}>🔧 Still out · {stillOut.total}</button>}
-                  <button onClick={() => setShowHistory(true)} title="Every jersey scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
+                  {pickedUp && stillOut.total > 0 && <button onClick={() => setShowStillOut(true)} title="The garments this order is waiting for: back from repair, missing, extra. Scan one when it comes back, or pass it here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", borderColor: "#38bdf8", color: "#7dd3fc" }}>🔧 Still out · {stillOut.total}</button>}
+                  <button onClick={() => setShowHistory(true)} title="Every garment scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({log.filter(l => l.match && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).length})</button>
                   <button onClick={() => setShowPacking(true)} title="Packing: what to do next, each box with its list (Print list, Box full), and the order summary" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#22c55e", color: "#86efac" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Packing"}</button>
                   <button onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: issues.missing.length + issues.dups.length + issues.flagged.length ? "#f59e0b" : "#334155" }}>
                     ⚠ Mis <span style={{ color: "#fbbf24" }}>{issues.missing.length}</span> · Dup <span style={{ color: "#c084fc" }}>{issues.dups.length}</span> · Flag <span style={{ color: "#f87171" }}>{issues.flagged.length}</span>
@@ -5393,7 +5393,7 @@ export default function App() {
                   </button>
                   {log.some(l => l.status === S_FLAGGED) && (
                     <button onClick={() => exportDamageReportXLSX(buildDamageRows(log, { operatorName, orderNumber, jerseyType, typeLabel: jerseyTypeLabel }), { name: orderNumber || "order", title: `Damage report — order ${orderNumber || "—"}${jerseyType ? " · " + jerseyTypeLabel(jerseyType) : ""}` }).catch(e => setError(e.message))}
-                      title="Every flagged jersey of this order with its photo, as Excel" style={{ ...btnGhost, padding: "6px 14px", fontSize: 14, borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>
+                      title="Every flagged garment of this order with its photo, as Excel" style={{ ...btnGhost, padding: "6px 14px", fontSize: 14, borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>
                   )}
                 </>
               )}
@@ -5411,7 +5411,7 @@ export default function App() {
                       while the cursor is in a box the scan key types, it does not scan. */}
                   <span style={{ position: "relative", display: "flex", alignItems: "center" }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true" style={{ position: "absolute", left: 9, pointerEvents: "none" }}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-                    <input ref={searchRef} value={rosterSearch} onChange={e => setRosterSearch(e.target.value)} onFocus={() => setSearchKeys(true)} onBlur={() => setSearchKeys(false)} placeholder="Number or name" aria-label="Find a jersey by number or name" title="Find a jersey: 57, smith, or 57 smith. Enter keeps it, Esc clears it."
+                    <input ref={searchRef} value={rosterSearch} onChange={e => setRosterSearch(e.target.value)} onFocus={() => setSearchKeys(true)} onBlur={() => setSearchKeys(false)} placeholder="Number or name" aria-label="Find a garment by number or name" title="Find a garment: 57, smith, or 57 smith. Enter keeps it, Esc clears it."
                       onKeyDown={e => { e.stopPropagation(); if (e.key === "Escape") { setRosterSearch(""); e.currentTarget.blur(); } else if (e.key === "Enter") e.currentTarget.blur(); }}
                       style={{ width: 190, boxSizing: "border-box", padding: "5px 26px 5px 30px", borderRadius: 6, border: `1px solid ${rosterSearch ? "#60a5fa" : "#3f4b5c"}`, background: "#1e293b", color: "#e2e8f0", fontSize: 15, fontWeight: rosterSearch ? 800 : 500 }} />
                     {rosterSearch && <button onMouseDown={e => e.preventDefault()} onClick={() => setRosterSearch("")} aria-label="Clear the search" title="Clear the search" style={{ position: "absolute", right: 4, border: "none", background: "transparent", color: "#94a3b8", fontSize: 16, lineHeight: 1, cursor: "pointer", padding: "2px 5px" }}>×</button>}
@@ -5427,7 +5427,7 @@ export default function App() {
                     </select>
                   </label>
                   {(rosterSort === "status" || rosterSort === "bin") && (
-                    <button onClick={() => setDoneFirst(d => !d)} title="Which end the finished jerseys sit at" style={{ ...btnGhost, padding: "3px 10px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>⇅ {doneFirst ? "Done first" : "To do first"}</button>
+                    <button onClick={() => setDoneFirst(d => !d)} title="Which end the finished garments sit at" style={{ ...btnGhost, padding: "3px 10px", fontSize: 14, borderColor: "#f59e0b", color: "#fcd34d" }}>⇅ {doneFirst ? "Done first" : "To do first"}</button>
                   )}
                   {(() => {
                     // The filters sit behind one funnel button, like a shop's search page: the
@@ -5504,7 +5504,7 @@ export default function App() {
                       {shownRows.map(r => <RosterRow key={r._id} r={r} cols={rosterColsStable} hasBins={!!binMap} bin={binMap ? binOf(r) : null} canSupervise={canSupervise} onMark={onMarkRow} />)}
                       {shownRows.length === 0 && !(rosterFilter === "flag" && offRosterFlags > 0) && (
                         <tr><td colSpan={rosterColsStable.length + (binMap ? 3 : 2)} style={{ ...tdSt, textAlign: "center", color: "#94a3b8", padding: "28px 12px", fontSize: 17 }}>
-                          No jersey on this order matches{rosterSearch.trim() ? ` “${rosterSearch.trim()}”` : " these filters"}. Press Show all to see the whole roster.
+                          No garment on this order matches{rosterSearch.trim() ? ` “${rosterSearch.trim()}”` : " these filters"}. Press Show all to see the whole roster.
                         </td></tr>
                       )}
                     </tbody>

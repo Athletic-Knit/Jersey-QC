@@ -7,7 +7,7 @@ import { safeFilename, localDateStamp } from "./export.js";
 // "Photo" is the scan (what the camera read, the back of the jersey); "Damage
 // photo" is what the operator showed the camera after flagging. A jersey with
 // more than one damage photo gets further columns ("Damage photo 2", ...).
-export const DAMAGE_COLUMNS = ["Date", "Time", "Station", "Order", "Jersey type", "Operator", "Number", "Name", "Team / colour", "Size", "Status", "Reason", "Resolution", "Photo", "Damage photo"];
+export const DAMAGE_COLUMNS = ["Date", "Time", "Station", "Order", "Garment type", "Operator", "Number", "Name", "Team / colour", "Size", "Status", "Reason", "Resolution", "Photo", "Damage photo"];
 
 // Events as the hub ledger or a station log holds them → one row per flagged
 // jersey, newest last. Accepts both shapes: ledger events ({ t, station,
@@ -82,7 +82,7 @@ export function buildDamageWorkbook(rows, { title = "Damage report" } = {}, XL) 
   const most = rows.reduce((n, r) => Math.max(n, (r.damagePhotos || []).length), 0);
   const cols = [...DAMAGE_COLUMNS, ...Array.from({ length: Math.max(0, most - 1) }, (_, i) => `Damage photo ${i + 2}`)];
   const PHOTO_COL = DAMAGE_COLUMNS.length - 2;   // 0-based column of the scan photo; the damage photos follow it
-  ws.addRow([title + (rows.length ? ` — ${rows.length} flagged ${rows.length === 1 ? "jersey" : "jerseys"}` : " — nothing flagged"), ...Array(cols.length - 1).fill("")]);
+  ws.addRow([title + (rows.length ? ` — ${rows.length} flagged ${rows.length === 1 ? "garment" : "garments"}` : " — nothing flagged"), ...Array(cols.length - 1).fill("")]);
   ws.getRow(1).font = { bold: true, size: 13 };
   ws.addRow(cols);
   ws.getRow(2).font = { bold: true };

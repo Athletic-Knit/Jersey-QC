@@ -6,7 +6,7 @@ import { binListLabels, binListZPL, jerseyLabel, binLabels, binLabelZPL, labelSi
 import { buildBinsSheet } from "../export.js";
 
 describe("the box a bin is packed in", () => {
-  it("is the smallest one that holds the jerseys", () => {
+  it("is the smallest one that holds the garments", () => {
     expect(boxFor(0)).toBe(null);
     expect(boxFor(1).label).toBe("Bag");
     expect(boxFor(2).label).toBe("Small box");
@@ -103,7 +103,7 @@ describe("the box size is not on the box list; the Bins sheet", () => {
       { bin: "1.1", label: "Navy", count: 12, box: "Medium box", open: false, closedAt: 5 },
       { bin: "1.2", label: "Navy", count: 1, box: "Bag", open: true },
     ], t => `t${t}`);
-    expect(sheet[0]).toEqual(["Box", "Holds", "Jerseys", "Box size", "State", "Closed at"]);
+    expect(sheet[0]).toEqual(["Box", "Holds", "Garments", "Box size", "State", "Closed at"]);
     expect(sheet[1]).toEqual(["1.1", "Navy", 12, "Medium box", "Closed (full)", "t5"]);
     expect(sheet[2]).toEqual(["1.2", "Navy", 1, "Bag", "Open", ""]);
     expect(sheet[4]).toEqual(["Total", "", 13]);
@@ -116,7 +116,7 @@ describe("long names on the bin list", () => {
   const rows = [["MACDONALD", 11, "A-XL"], ["VANDENBERGHE", 23, "A-2XL"], ["KONSTANTINOPOULOS", 88, "A-3XL"], ["LEE", 3, "A-M"]].map(([name, number, size]) => ({ name, number: String(number), size }));
   const zpl = binListZPL(binListLabels(rows, { bin: 1, label: "WINNIPEG WARRIORS MAROON", orderNumber: "264247", box: "Medium box" })[0], labelSize("2x1"));
   const items = [...zpl.matchAll(/\^FO(\d+),\d+\^A0N,(\d+),(\d+)\^FD([^^]*)\^FS/g)].map(m => ({ x: +m[1], h: +m[2], w: +m[3], text: m[4] }));
-  it("prints each jersey as one field with no wrapping box", () => {
+  it("prints each garment as one field with no wrapping box", () => {
     expect(items.map(i => i.text)).toEqual(expect.arrayContaining(["11-MACDONALD-AXL", "23-VANDENBERGHE-A2XL", "88-KONSTANTINOPOULOS-A3XL", "3-LEE-AM"]));
     expect(zpl.split("\n").filter(l => /MACDONALD|VANDENBERGHE|KONSTANTINOPOULOS|WINNIPEG/.test(l)).every(l => !l.includes("^FB"))).toBe(true);
   });

@@ -114,7 +114,7 @@ describe("reconcile two reads into one screen", () => {
   it("describes a read for the reason line", () => {
     expect(describeRead(read("40", "SAMUEL"))).toBe("#40 SAMUEL");
     expect(describeRead(read("4", "", { number_complete: false }))).toBe("#4 (digit may be hidden)");
-    expect(describeRead({ jersey_present: false })).toBe("no jersey");
+    expect(describeRead({ jersey_present: false })).toBe("no garment");
     expect(describeRead(read("", ""))).toBe("nothing");
   });
 });

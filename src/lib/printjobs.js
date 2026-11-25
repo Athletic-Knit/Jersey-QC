@@ -140,7 +140,7 @@ export function isLastBox(pack, bin) {
 //   missing  marked missing by the operator, and not scanned yet, side by side.
 const byNumber = (a, b) => { const n = x => { const v = parseInt(String(x.number ?? "").replace(/\D/g, ""), 10); return Number.isFinite(v) ? v : 1e9; }; return n(a) - n(b) || String(a.name ?? "").localeCompare(String(b.name ?? "")); };
 // "#7 SMITH White A-L": a jersey on one line of a label.
-const who = x => [String(x?.number ?? "").trim() ? `#${String(x.number).trim()}` : "", x?.name, x?.team, x?.size].map(v => String(v ?? "").trim()).filter(Boolean).join(" ") || "Jersey";
+const who = x => [String(x?.number ?? "").trim() ? `#${String(x.number).trim()}` : "", x?.name, x?.team, x?.size].map(v => String(v ?? "").trim()).filter(Boolean).join(" ") || "Garment";
 export function orderSummary(pack) {
   const roster = pack?.roster || [], binMap = pack?.binMap || null, closed = pack?.closedBins || [];
   const passed = roster.filter(inBin).sort(byNumber).map(row => ({ row, bin: binMap ? binOfRow(binMap, closed, row) : null }));
@@ -223,7 +223,7 @@ export function damagedItems(pack) {
 // Its list (kind "binlist") and its own label (kind "binticket").
 export function damagedListJobs(pack) { return damagedListLabels(damagedItems(pack), { orderNumber: pack?.orderNumber }); }
 // The DAMAGED box's label: printed with the order's first flag, once an order.
-export const damagedBoxLabel = pack => ({ bin: "DAMAGED", title: "DAMAGED", label: "Flagged jerseys", by: "", count: 0, orderNumber: String(pack?.orderNumber || "") });
+export const damagedBoxLabel = pack => ({ bin: "DAMAGED", title: "DAMAGED", label: "Flagged garments", by: "", count: 0, orderNumber: String(pack?.orderNumber || "") });
 
 // One of the hub's order records (GET /api/hub/orders) → a pack. Its box
 // names are left as they were recorded: an order from before the boxes had

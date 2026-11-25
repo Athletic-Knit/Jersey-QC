@@ -18,14 +18,14 @@ const pack = {
 };
 
 describe("what is in the DAMAGED box", () => {
-  it("every jersey flagged right now, with its newest reason, in number order", () => {
+  it("every garment flagged right now, with its newest reason, in number order", () => {
     expect(damagedItems(pack).map(({ number, name, team, reason }) => ({ number, name, team, reason }))).toEqual([   // _id and size come along too (the order summary, 24 Nov 2026)
       { number: "7", name: "SMITH", team: "Navy", reason: "Twill peeling — found after it passed" },
       { number: "21", name: "LEACH", team: "Red", reason: "Hole or snag" },
       { number: "88", name: "STRAY", team: "", reason: "Not on the roster" },
     ]);
   });
-  it("a jersey that passed after its flag is out; so is an off-roster flag the supervisor resolved", () => {
+  it("a garment that passed after its flag is out; so is an off-roster flag the supervisor resolved", () => {
     expect(damagedItems(pack).some(x => x.name === "ROY")).toBe(false);
     const resolved = { ...pack, flags: pack.flags.map(f => f.id === 50 ? { ...f, resolution: "Rejected" } : f) };
     expect(damagedItems(resolved).some(x => x.name === "STRAY")).toBe(false);
@@ -69,7 +69,7 @@ describe("the DAMAGED box's list and label", () => {
     expect(labels.map(l => [l.page, l.items.length])).toEqual([[3, 2], [2, 7], [1, 7]]);
     expect(labelsZPL(labels, labelSize("2x1"), "binlist")).toContain("^FD16 pcs  3/3^FS");
     expect(damagedListLabels([], { orderNumber: "5" })).toEqual([]);
-    expect(damagedListLabels([{ number: "", name: "", team: "", reason: "" }])[0].items).toEqual([{ who: "Jersey", reason: "Flagged" }]);
+    expect(damagedListLabels([{ number: "", name: "", team: "", reason: "" }])[0].items).toEqual([{ who: "Garment", reason: "Flagged" }]);
   });
   it("a long line is squeezed, never wrapped: no row is in a wrapping box", () => {
     const [l] = damagedListLabels([{ number: 23, name: "VANDENBERGHE", team: "MISSISSAUGA STEELHEADS", reason: "Dirt that will not come out" }], { orderNumber: "264247" });
@@ -78,7 +78,7 @@ describe("the DAMAGED box's list and label", () => {
   });
   it("the box's own label says DAMAGED, not a box number", () => {
     const l = damagedBoxLabel({ orderNumber: "264247" });
-    expect(l).toMatchObject({ title: "DAMAGED", label: "Flagged jerseys", orderNumber: "264247" });
+    expect(l).toMatchObject({ title: "DAMAGED", label: "Flagged garments", orderNumber: "264247" });
     const z = labelsZPL([l], labelSize("2x1"), "binticket");
     expect(z).toContain("^FDDAMAGED^FS");
     expect(z).not.toContain("BOX");

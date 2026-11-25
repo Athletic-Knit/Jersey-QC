@@ -606,7 +606,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
             checkedOff: prev?.checkedOff || [], closed: out.length ? null : (prev?.closed ?? null),
           };
           pool[entry.id] = entry; save();
-          console.log(`[hub] ${time} ${station}: parked order ${order} unfinished, ${out.length} jersey${out.length === 1 ? "" : "s"} out${prev ? " (again)" : ""}`);
+          console.log(`[hub] ${time} ${station}: parked order ${order} unfinished, ${out.length} garment${out.length === 1 ? "" : "s"} out${prev ? " (again)" : ""}`);
           return json(res, 200, { id: entry.id, entry });
         }
         // The station finished the order the normal way. Gone already is fine.
@@ -672,7 +672,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
             if (!u.out.length) u.closed = { by, at };
             checkOffInLedger(u, off, by, at, as);
             save();
-            console.log(`[hub] ${time} ${u.station}: ${off.length} jersey${off.length === 1 ? "" : "s"} of unfinished order ${u.order} ${as === "short" ? "shipped short" : "checked off"}${by ? " by " + by : ""}${u.closed ? ", order closed" : ""}`);
+            console.log(`[hub] ${time} ${u.station}: ${off.length} garment${off.length === 1 ? "" : "s"} of unfinished order ${u.order} ${as === "short" ? "shipped short" : "checked off"}${by ? " by " + by : ""}${u.closed ? ", order closed" : ""}`);
           }
           return json(res, 200, { entry: u });
         }

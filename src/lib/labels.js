@@ -369,7 +369,7 @@ function binCountZPL(l, size) {
 export const DAMAGED_PER_LABEL = 7;
 export function damagedListLabels(entries, { orderNumber = "" } = {}) {
   const items = (entries || []).map(e => ({
-    who: [String(e.number ?? "").trim() ? `#${String(e.number).trim()}` : "", String(e.name ?? "").trim(), String(e.team ?? "").trim()].filter(Boolean).join(" ") || "Jersey",
+    who: [String(e.number ?? "").trim() ? `#${String(e.number).trim()}` : "", String(e.name ?? "").trim(), String(e.team ?? "").trim()].filter(Boolean).join(" ") || "Garment",
     reason: String(e.reason || "").replace(/ — found after it passed$/, "").trim() || "Flagged",
   }));
   if (!items.length) return [];
@@ -407,7 +407,7 @@ function summaryCountZPL(l, size) {
   const big   = Math.round(a * 0.3), mid = Math.round(a * 0.17), small = Math.max(12, Math.round(a * 0.12));
   const c     = l.counts || {};
   const head  = l.orderNumber ? `Order ${l.orderNumber}` : "Order";
-  const what  = `SUMMARY   ${c.total ?? 0} ${c.total === 1 ? "jersey" : "jerseys"}${c.extra ? `   +${c.extra} extra` : ""}`;   // extra: flags with no roster row (not on the roster, a duplicate), apart from the order's count; on this line so the tally keeps its size (review, 24 Nov 2026)
+  const what  = `SUMMARY   ${c.total ?? 0} ${c.total === 1 ? "garment" : "garments"}${c.extra ? `   +${c.extra} extra` : ""}`;   // extra: flags with no roster row (not on the roster, a duplicate), apart from the order's count; on this line so the tally keeps its size (review, 24 Nov 2026)
   const tally = `${c.passed ?? 0} passed   ${c.failed ?? 0} failed   ${c.missing ?? 0} missing`;
   const foot  = [l.station, l.date].filter(Boolean).join("   ");
   const out = ["^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",

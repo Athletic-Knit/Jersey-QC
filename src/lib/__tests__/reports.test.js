@@ -51,7 +51,7 @@ describe("defect categories", () => {
   });
   it("the sheet counts flags by category, then by reason", () => {
     const s = buildDefectsSheet(day1, reasonCategory);
-    expect(s[0]).toEqual(["Category", "Jerseys", "Share of flags %"]);
+    expect(s[0]).toEqual(["Category", "Garments", "Share of flags %"]);
     const cats = Object.fromEntries(s.slice(1, 4).map(r => [r[0], r[1]]));
     expect(cats).toEqual({ Sewing: 1, Artwork: 1, Order: 1 });
     expect(s[4]).toEqual(["All flags", 3, 100]);
@@ -62,7 +62,7 @@ describe("defect categories", () => {
 
 describe("the day sheet: rates and operators", () => {
   const s = buildDaySheets({ date: "2026-11-10", events: day1, orders: [{ station: "st-station1", order: "25", operator: "Jordan", counts: { total: 4, remaining: 0 } }] }, id => id, { categoryOf: reasonCategory });
-  it("flag rate and pass rate per station: of the jerseys inspected", () => {
+  it("flag rate and pass rate per station: of the garments inspected", () => {
     const head = s.summary[4], st1 = s.summary[5];
     expect(st1[head.indexOf("Flag rate %")]).toBe(25);      // 1 of 4 inspected (2 passed, 1 by hand, 1 flagged)
     expect(st1[head.indexOf("Pass rate %")]).toBe(50);
@@ -106,7 +106,7 @@ describe("the order's summary sheet", () => {
   const val = label => s.find(r => r[0] === label)?.[1];
   it("counts, rates and pace", () => {
     expect(val("Order")).toBe("264247");
-    expect(val("Jerseys on the order")).toBe(6);
+    expect(val("Garments on the order")).toBe(6);
     expect(val("Passed")).toBe(2);
     expect(val("Entered by hand")).toBe(1);
     expect(val("Sent to the supervisor")).toBe(1);
@@ -117,7 +117,7 @@ describe("the order's summary sheet", () => {
     expect(val("Active minutes")).toBe(2);
     expect(val("Operators")).toBe("Jordan");
   });
-  it("the defects, and every jersey that is in no box", () => {
+  it("the defects, and every garment that is in no box", () => {
     expect(s).toEqual(expect.arrayContaining([["Decoration", 1, 100]]));
     expect(s.find(r => String(r[0]).startsWith("Not in a box"))[0]).toBe("Not in a box: 3");
     expect(s).toEqual(expect.arrayContaining([["FLAGGED", "#3 C", "Navy", "A-L"], ["MISSING", "#5 E", "Red", "A-XL"], ["NOT SCANNED", "#6 F", "Red", "A-XL"]]));

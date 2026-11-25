@@ -21,10 +21,10 @@ import { rotated180 } from "./match.js";
 export const CHECKS_AFTER_MISTAKE = 5;
 
 export const MISTAKES = {
-  greenOverridden: "a green was not this jersey",
-  notOnList:       "the right jersey was not on the list",
-  couldNotRead:    "the camera could not read a jersey the operator then typed",
-  unchecked:       "a passed jersey was un-checked",
+  greenOverridden: "a green was not this garment",
+  notOnList:       "the right garment was not on the list",
+  couldNotRead:    "the camera could not read a garment the operator then typed",
+  unchecked:       "a passed garment was un-checked",
 };
 
 // The self-check's state for one station: noteMistake() starts (or restarts)
@@ -38,7 +38,7 @@ export function createVigilance({ checks = CHECKS_AFTER_MISTAKE, log } = {}) {
     get last()      { return last; },
     noteMistake(kind) {
       mistakes++; last = { kind, at: Date.now() }; remaining = checks;
-      log?.(`[self-check] ${MISTAKES[kind] || kind} — double-checking the next ${checks} jerseys`);
+      log?.(`[self-check] ${MISTAKES[kind] || kind} — double-checking the next ${checks} garments`);
     },
     // One scan was shown to the operator (any colour). Returns true when that
     // scan was one of the double-checked ones.
@@ -86,8 +86,8 @@ export function reconcile(d1, m1, d2, m2) {
   for (const r of [...rowsOf(m1), ...rowsOf(m2)]) if (r && !seen.has(r._id)) { seen.add(r._id); candidates.push(r); }
   const a = describeRead(d1), b = describeRead(d2);
   const reason = a === b
-    ? `Double-check: the two reads agree on ${a} but not on which row — which jersey is this?`
-    : `Double-check: the camera read ${a} and then ${b}. Which jersey is this?`;
+    ? `Double-check: the two reads agree on ${a} but not on which row — which garment is this?`
+    : `Double-check: the camera read ${a} and then ${b}. Which garment is this?`;
   if (!candidates.length) return { match: { type: "none", reason: `Double-check: ${a} then ${b} — neither is on the roster`, soft: true }, checked: true, agreed: false };
   return { match: { type: "pick", candidates, reason, soft: true, disagreed: true }, checked: true, agreed: false };
 }
@@ -130,14 +130,14 @@ export function settleTurned(first, m1, upright, m2) {
   // really a 6: that agreement is never a green.
   const anchored = rc.match?.type === "exact" && nameMatches(norm(rc.read?.name), rc.match.match?.name);   // the name pins the row: a turn cannot change it
   if (rc.agreed && rc.match?.type === "exact" && upright?.orientation !== "upright" && !anchored) {
-    return { match: { type: "pick", candidates: [rc.match.match], reason: `Read #${n2 || n1} on a jersey that is not the right way up — check the number. Is it this one?`, soft: true }, read: rc.read, checked: true, agreed: false };
+    return { match: { type: "pick", candidates: [rc.match.match], reason: `Read #${n2 || n1} on a garment that is not the right way up — check the number. Is it this one?`, soft: true }, read: rc.read, checked: true, agreed: false };
   }
   return rc;
 }
 
 // A read in a few words for the log and the reasons ("#23 SMITH", "no jersey").
 export function describeRead(d) {
-  if (!d || d.jersey_present === false) return "no jersey";
+  if (!d || d.jersey_present === false) return "no garment";
   const n = String(d.number ?? "").trim(), s = String(d.name ?? "").trim();
   if (!n && !s) return "nothing";
   return `${n ? "#" + n : ""}${n && s ? " " : ""}${s}${d.number_complete === false ? " (digit may be hidden)" : ""}`.trim();
@@ -176,11 +176,11 @@ export function createInspection({ full = INSPECT_FULL, every = INSPECT_EVERY, l
         // The quick look's count carries on (the owner, 20 Nov 2026: 5/10 stays 5/10);
         // a spot check that found it is done, and a new run of 10 starts.
         if (phase === "sample") { phase = "quick"; clean = 0; }
-        log?.(`[inspect] defect found — check ${check} on the next ${full} jerseys`);
+        log?.(`[inspect] defect found — check ${check} on the next ${full} garments`);
         return;
       }
       phase = "full"; remaining = full; clean = 0;
-      log?.(`[inspect] defect found — inspect the next ${full} jerseys fully`);
+      log?.(`[inspect] defect found — inspect the next ${full} garments fully`);
     },
     // A jersey passed (confirmed, or entered by hand).
     jerseyDone() {

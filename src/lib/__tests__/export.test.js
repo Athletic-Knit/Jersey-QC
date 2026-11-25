@@ -69,8 +69,8 @@ describe("day sheet", () => {
     expect(col("To supervisor")).toBe(1);
     expect(col("Un-checked")).toBe(1);
     expect(col("Active minutes")).toBe(2);
-    expect(col("Jerseys per active hour")).toBe(60);
-    expect(col("Median seconds per jersey")).toBe(45);
+    expect(col("Garments per active hour")).toBe(60);
+    expect(col("Median seconds per garment")).toBe(45);
     expect(s.flags[1]).toEqual(["Stitching or seam", 1]);
     expect(s.orders[1][0]).toBe("Line 1");
     expect(s.events).toHaveLength(6);
