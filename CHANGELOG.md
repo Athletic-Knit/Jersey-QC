@@ -605,3 +605,9 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 
 ## 2026-11-25 · Merge of feature/packing-labels into development
 - **What:** the three packing label kinds (packing labels 1-4) merged onto the co-op's notes after test 2 and the By hand key. Only this file conflicted (two entries added at the end on each side; both kept). The code merged by itself; 976 tests pass on the result. The owner saw one copy of each label from the branch on the 2 x 3 in roll on AK-NB-165 and said merge (25 Nov 2026).
+
+
+## 2026-11-25 · One garment: the number typed by hand goes green too
+- **Finding (the co-op, order 2555 on the test server):** #3 typed by hand with two U16 MENS and two U18 MENS A-M #3 open still showed the list; typed entries had been left out of the one-garment rule.
+- **What changed:** `oneGarment` takes a typed number as it takes a clean camera read; the row colour is read with `rowColourText` (the colour column, whatever its header). A doubtful camera read still stays a list (N1): the #1 scan on the same order was read as off-centre or not laid flat ("a digit may be hidden").
+- **Checks:** lint clean; 949 tests pass; operator simulation (1500 orders) WRONG GREEN 0. On the test server: #10 typed with five open Y-L #10 on five teams went green on Eagles, Box 2.1.
