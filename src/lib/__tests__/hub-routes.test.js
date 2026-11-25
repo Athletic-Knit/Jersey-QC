@@ -320,6 +320,20 @@ describe("box answers on the hub", () => {
   });
 });
 
+describe("the customer on a sent roster (the outside label and the sign-off ticket)", () => {
+  it("is kept and returned, trimmed; none is an empty text; a station's report keeps it on the order's record", async () => {
+    const { call } = makeHub();
+    const { body: { id } } = await call("POST", "/rosters", { orderNumber: "1", rows, customer: "  Source for Sports " });
+    expect((await call("GET", "/rosters")).body.rosters[0]).toMatchObject({ customer: "Source for Sports" });
+    expect((await call("GET", `/rosters/${id}`)).body).toMatchObject({ customer: "Source for Sports" });
+    const { body: { id: none } } = await call("POST", "/rosters", { orderNumber: "2", rows });
+    expect((await call("GET", `/rosters/${none}`)).body.customer).toBe("");
+    await call("POST", "/stations/st-a", report("264247", 1000, 2, { customer: "Source for Sports" }));
+    const led = (await call("GET", "/ledger")).body;
+    expect(Object.values(led.orders || {})[0] ?? (led.orders || [])[0]).toMatchObject({ customer: "Source for Sports" });
+  });
+});
+
 describe("the order's garment on a sent roster", () => {
   it("is kept and returned (the list and the roster itself); an unknown one is dropped", async () => {
     const { call } = makeHub();
