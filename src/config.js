@@ -136,6 +136,12 @@ export const DEFAULT_SETTINGS = {
   stickers: false,        // print a sticker (bin + team or size) on the server's label printer for every passed jersey. Off unless a station turns it on (the owner, 17 Nov 2026)
   flagTickets: true,      // print a flag ticket (2 x 1 in: where it goes and why) for every flagged jersey
   binLists: true,         // print what is in a box (2 x 1 in: a count label, then fourteen jerseys a label) when it is closed: full, or the order finished
+  // Which roll each kind of label prints on (Settings → Label printer; the owner, 25 Nov 2026: 2 x 4 for all by default).
+  // The station sends it with every print; the hub lays the label out for that roll and sends a 1 x 0.5 one to the
+  // station's sticker printer, the others to its ticket printer (JERSEY_FLAG_PRINTER…, else the sticker printer).
+  stickerRoll: "2x4",     // stickers on passed jerseys
+  flagRoll: "2x4",        // flag tickets
+  boxRoll: "2x4",         // box labels, box lists, count labels, the DAMAGED list
   boxWeights: false,      // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station
   boxWeightCap: 45,       // lb: no box heavier than this, when boxWeights is on (src/lib/boxmodel.js)
   listSort: "size",       // the pick list's order: "size" | "team" | "number" (LIST_SORTS in roster.js; the owner, 19 Nov 2026: by size, the tag is all the operator checks)
@@ -204,3 +210,12 @@ export function severityOf(reason) {
   const s = SEVERITY.find(x => x.test.test(route)) || SEVERITY[SEVERITY.length - 1];
   return { tag: s.tag, weight: s.weight, colour: s.colour, route };
 }
+
+// The label rolls a station can choose in Settings → Label printer (the owner, 25 Nov 2026).
+// The hub accepts the same four (LABEL_ROLLS in hub-plugin.js).
+export const LABEL_ROLLS = [
+  { id: "2x4",   label: "2 × 4 in" },
+  { id: "2x3",   label: "2 × 3 in" },
+  { id: "2x1",   label: "2 × 1 in" },
+  { id: "1x0.5", label: "1 × ½ in" },
+];

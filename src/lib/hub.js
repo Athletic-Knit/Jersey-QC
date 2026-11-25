@@ -56,6 +56,15 @@ let printsHeld = "";
 // Holds every print: printLabels fails at once with `reason` (status 423). "" lets prints through again.
 export function holdPrints(reason = "") { printsHeld = String(reason || ""); }
 
+// The roll each kind of label prints on, from the station's Settings (stickerRoll,
+// flagRoll, boxRoll; the owner, 25 Nov 2026). App sets it whenever the settings
+// change; every print sends it as `roll`, unless the caller gave one.
+let printRolls = {};
+export function setPrintRolls(s = {}) { printRolls = { stickerRoll: s.stickerRoll, flagRoll: s.flagRoll, boxRoll: s.boxRoll }; }
+export function rollFor(kind) {
+  return kind === "flag" ? printRolls.flagRoll : kind === "binlist" || kind === "binticket" ? printRolls.boxRoll : printRolls.stickerRoll;
+}
+
 export const hub = {
   report:        (id, snapshot) => call(`/api/hub/stations/${id}`, { method: "POST", body: JSON.stringify(snapshot) }),
   stations:      ()             => call("/api/hub/stations"),
@@ -69,7 +78,7 @@ export const hub = {
   takeRoster:    (id, body)     => call(`/api/hub/rosters/${id}/take`, { method: "POST", body: JSON.stringify(body) }),     // a station starts it; throws "already taken" with .takenBy
   releaseRoster: id             => call(`/api/hub/rosters/${id}/release`, { method: "POST" }),                            // supervisor frees it for another station
   printStatus:   station       => call(`/api/hub/print${station ? "?station=" + encodeURIComponent(station) : ""}`),        // { printer, printers } — the label printer for this station
-  printLabels:   (labels, o = {}) => (printsHeld ? Promise.reject(Object.assign(new Error(printsHeld), { status: 423 })) : call("/api/hub/print", { method: "POST", body: JSON.stringify({ labels, ...o }) })),    // o: { kind: "jersey" | "flag" | "bin", station }; throws 503 "no label printer"
+  printLabels:   (labels, o = {}) => (printsHeld ? Promise.reject(Object.assign(new Error(printsHeld), { status: 423 })) : call("/api/hub/print", { method: "POST", body: JSON.stringify({ labels, ...(rollFor(o.kind) ? { roll: rollFor(o.kind) } : {}), ...o }) })),    // o: { kind: "jersey" | "flag" | "binlist" | "binticket" | "bin", station, roll }; throws 503 "no label printer"
   replayRuns:    q              => call(`/api/replay?q=${encodeURIComponent(q)}`),                                        // development and testing only: the runs of a floor order, to replay (replay-plugin.js)
   openBoxes:     orders         => call(`/api/hub/openboxes?orders=${encodeURIComponent([].concat(orders || []).join(","))}`),   // boxes left open for orders that ship together → { boxes }
   leaveBoxesOpen: body          => call("/api/hub/openboxes", { method: "POST", body: JSON.stringify(body) }),          // { boxes, station, order } → { ids }

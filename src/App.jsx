@@ -35,7 +35,7 @@ import { playTone } from "./lib/audio.js";
 import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel, checksFor } from "./lib/vigilance.js";
-import { hub, stationId, snapshotOf, stationUse, holdPrints } from "./lib/hub.js";
+import { hub, stationId, snapshotOf, stationUse, holdPrints, setPrintRolls } from "./lib/hub.js";
 import { ofRun, pickRun, orderDone, doneAt, eventsAsLog } from "./lib/ledgerview.js";
 import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
@@ -44,7 +44,7 @@ import { duplicateOptions } from "./lib/dupoptions.js";
 import { matchRead, screenFor } from "./lib/scanpolicy.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels, boxesListLabels, listChunks, cleanSpots, repageLists, labelSize as labelDots, DEFAULT_FLAG_LABEL_SIZE } from "./lib/labels.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel } from "./lib/printjobs.js";
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG, GARMENT_MENU, DEFAULT_ORDER_GARMENT } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG, GARMENT_MENU, DEFAULT_ORDER_GARMENT, LABEL_ROLLS } from "./config.js";
 import { garment as garmentShape, garmentOf, garmentView, toView, fromView, spotAt, spotWords, rosterGarment, orderGarmentOf, SIDES, SIDE_LABELS, MAX_SPOTS } from "./lib/garments.js";
 
 
@@ -2448,18 +2448,22 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
 
         <div style={{ marginBottom: 18 }}>
           <div style={labelSt}>Label printer</div>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginBottom: 8 }}>
-            <input type="checkbox" checked={temp.stickers !== false} onChange={e => setTemp(t => ({ ...t, stickers: e.target.checked }))} />
-            Print a sticker for every passed jersey (its box, and the team or size) — the 1 × ½ in roll
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer" }}>
-            <input type="checkbox" checked={temp.flagTickets !== false} onChange={e => setTemp(t => ({ ...t, flagTickets: e.target.checked }))} />
-            Print a flag ticket for every flagged jersey (where it goes and why) — the 2 × 1 in roll
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginTop: 8 }}>
-            <input type="checkbox" checked={temp.binLists !== false} onChange={e => setTemp(t => ({ ...t, binLists: e.target.checked }))} />
-            Print what is in a box when it is closed (full, or the order finished): a count label and fourteen jerseys a label — the 2 × 1 in roll
-          </label>
+          {[
+            { on: "stickers", roll: "stickerRoll", text: "Print a sticker for every passed jersey (its box, and the team or size)" },
+            { on: "flagTickets", roll: "flagRoll", text: "Print a flag ticket for every flagged jersey (where it goes and why)" },
+            { on: "binLists", roll: "boxRoll", text: "Print what is in a box when it is closed (full, or the order finished): a count label and the jerseys in it. Box labels print on this roll too" },
+          ].map(o => (
+            <div key={o.on} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", flex: 1 }}>
+                <input type="checkbox" checked={temp[o.on] !== false} onChange={e => setTemp(t => ({ ...t, [o.on]: e.target.checked }))} />
+                {o.text}
+              </label>
+              <select aria-label="Roll" title="The label roll this prints on" value={temp[o.roll] || DEFAULT_SETTINGS[o.roll]} onChange={e => { setTemp(t => ({ ...t, [o.roll]: e.target.value })); e.target.blur(); }} style={{ ...selSt, flexShrink: 0 }}>
+                {LABEL_ROLLS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+            </div>
+          ))}
+          <div style={{ fontSize: 14, color: "#7c8ba1" }}>The roll in the printer: the label is laid out for it. A 1 × ½ in label goes to this station's sticker printer, the others to its ticket printer.</div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -3447,6 +3451,7 @@ export default function App() {
   const gateRef         = useRef(createMotionGate({ log: m => console.log("[hands-free] " + m) }));
 
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...(loadSettings() || {}) }));
+  setPrintRolls(settings);   // every print sends the roll chosen for its kind (Settings → Label printer); set during render so the first print already has it
   useEffect(() => { gateRef.current.setGrace(Math.round((Number(settings.autoScanDelay) || 0) * 5)); }, [settings.autoScanDelay]);   // 200 ms ticks
   const { scanKey, confirmKey, cancelKey, upKey, retryKey, byHandKey } = settings;
 

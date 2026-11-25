@@ -43,6 +43,9 @@ import { Buffer } from "node:buffer";
 import { printJob, labelSize as labelDots, cleanSpots, DEFAULT_LABEL_SIZE, DEFAULT_FLAG_LABEL_SIZE } from "./src/lib/labels.js";
 import { GARMENT_IDS } from "./src/lib/garments.js";
 import { PRIOR as BOX_PRIOR, FEATURES as BOX_FEATURES, BOXES, MORE, fitBoxModel } from "./src/lib/boxmodel.js";
+
+// The rolls a station may choose for its labels (LABEL_ROLLS in src/config.js, which the hub does not import).
+export const LABEL_ROLLS = ["2x4", "2x3", "2x1", "1x0.5"];
 // The garment an order is (the outline of the "where is the damage" step):
 // one of garments.js's kinds, or "" (the station then draws a hockey jersey).
 const knownGarment = g => (typeof g === "string" && GARMENT_IDS.includes(g) ? g : "");
@@ -785,12 +788,18 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           const labels = Array.isArray(body.labels) ? body.labels.slice(0, 100).filter(l => l && typeof l === "object") : [];
           if (!labels.length) return json(res, 400, { error: "labels required" });
           const kind = ["jersey", "flag", "binlist", "binticket"].includes(body.kind) ? body.kind : "bin";
-          const onTicketRoll = kind === "flag" || kind === "binlist" || kind === "binticket";   // the 2 x 1 in roll: flag tickets, bin lists, the label of a bin opened mid-order
+          // The roll the station chose for this kind of label (Settings → Label printer;
+          // the owner, 25 Nov 2026): the label is laid out for it, and a 1 x 0.5 one goes
+          // to the station's sticker printer, the others to its ticket printer. With no
+          // roll sent (an older station) it is as before: flag tickets, lists and box
+          // labels on the ticket roll, stickers on the sticker roll, sizes from .env.local.
+          const roll = LABEL_ROLLS.includes(body.roll) ? body.roll : null;
+          const onTicketRoll = roll ? roll !== "1x0.5" : kind === "flag" || kind === "binlist" || kind === "binticket";
           const name = await (onTicketRoll ? ticketPrinter : labelPrinter)(body.station); if (!name) return json(res, 503, { error: "no label printer" });
           // `count`: the labels that really come out. On a tall roll the lists are
           // re-paged (repageLists) onto fewer labels than were sent; the station
           // says this number, not its own.
-          const spec = onTicketRoll ? flagSpecOf(body.station) : labelSpec;
+          const spec = roll || (onTicketRoll ? flagSpecOf(body.station) : labelSpec);
           const job = printJob(labels, labelDots(spec), kind), n = job.count;
           try { await print(name, job.zpl); }
           catch (e) { console.error(`[hub] print on ${name} failed: ${e.message}`); return json(res, 502, { error: `print failed: ${e.message}` }); }
@@ -798,7 +807,7 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
             : kind === "flag" ? (n === 1 ? `flag ticket #${labels[0].number || "?"} ${labels[0].tag || ""}${labels[0].spots?.length ? ` (${labels[0].spots.length} marked)` : ""}` : `${n} flag tickets`)
             : kind === "binlist" ? `${n} bin list label${n === 1 ? "" : "s"} (bin ${[...new Set(labels.map(l => l.bin))].join(", ")})`
             : `${n} bin label${n === 1 ? "" : "s"}`;
-          console.log(`[hub] ${new Date().toLocaleTimeString()} ${body.station ? body.station + ": " : ""}printed ${what} on ${name}${onTicketRoll ? ` (${spec} in)` : ""}${labels[0]?.orderNumber ? ` for order ${labels[0].orderNumber}` : ""}`);
+          console.log(`[hub] ${new Date().toLocaleTimeString()} ${body.station ? body.station + ": " : ""}printed ${what} on ${name} (${spec} in)${labels[0]?.orderNumber ? ` for order ${labels[0].orderNumber}` : ""}`);
           return json(res, 200, { ok: true, printer: name, count: n });
         }
       }
