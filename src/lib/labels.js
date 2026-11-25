@@ -379,21 +379,16 @@ export function damagedListLabels(entries, { orderNumber = "" } = {}) {
     items: items.slice(i * DAMAGED_PER_LABEL, (i + 1) * DAMAGED_PER_LABEL),
   })).reverse();
 }
-// A list of boxes (the owner, 19 Nov 2026): the boxes that are done (full or
-// their team complete) or the ones that are not, a line a box — "Box 1.1  10U A
-// 17 pcs" — seven to a 2 x 1 in label, drawn like the DAMAGED list. `lines`:
-// the text of each line. → the labels in print order, the last page first.
-export function boxesListLabels(lines, { title = "BOXES", orderNumber = "" } = {}) { return listLabels(lines, { title, orderNumber, unit: "box" }); }
 // Any list of lines under a title, seven to a 2 x 1 in label, drawn like the
 // DAMAGED list: the FAILED, MISSING and PASSED lists of the order summary and a
-// box's NOT IN BOX list (the owner, 24 Nov 2026). `unit`: "pc" (default) or
-// "box", for the count in the header. → the labels in print order, the last page first.
-export function listLabels(lines, { title = "LIST", orderNumber = "", unit = "pc" } = {}) {
+// box's NOT IN BOX list (the owner, 24 Nov 2026). → the labels in print order,
+// the last page first.
+export function listLabels(lines, { title = "LIST", orderNumber = "" } = {}) {
   const items = (lines || []).map(t => ({ text: String(t) }));
   if (!items.length) return [];
   const pages = Math.ceil(items.length / DAMAGED_PER_LABEL);
   return Array.from({ length: pages }, (_, i) => ({
-    damaged: true, head: String(title), unit, bin: String(title), orderNumber: String(orderNumber || ""), page: i + 1, pages, count: items.length,
+    damaged: true, head: String(title), bin: String(title), orderNumber: String(orderNumber || ""), page: i + 1, pages, count: items.length,
     items: items.slice(i * DAMAGED_PER_LABEL, (i + 1) * DAMAGED_PER_LABEL),
   })).reverse();
 }
@@ -431,6 +426,8 @@ function damagedListZPL(l, size) {
   const head = Math.max(12, Math.round(a * 0.12));
   const x0   = Math.round((size.dpi || 203) * BIN_LIST_LEFT_MM / 25.4) + pad;
   const fullW = w - x0 - pad;
+  // `unit: "box"` comes only from a station page loaded before 25 Nov 2026 and not reloaded since (its
+  // Done / Not done boxes lists, removed with the Packing screen): the hub builds the ZPL it sends.
   const unit  = l.unit === "box" ? (l.count === 1 ? "box" : "boxes") : (l.count === 1 ? "pc" : "pcs");
   const right = `${l.count} ${unit}${l.pages > 1 ? `  ${l.page}/${l.pages}` : ""}`;
   const rw = Math.round(fullW * 0.3), lw = fullW - rw;

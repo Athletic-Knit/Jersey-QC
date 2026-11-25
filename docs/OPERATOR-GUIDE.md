@@ -163,12 +163,13 @@ Tap **📦 Packing** (bottom left, beside History; it is also the main button wh
 - **Now: keep scanning · N to go**: jerseys are still to scan. Close, and carry on.
 - **Now: print the box lists and seal the boxes**: every jersey is accounted for. **🖨 Print every list** prints the list of each open box that has jerseys. Nothing is closed.
 - **Now: finish the order**: every list is printed. **🏁 Finish order** opens the confirm.
+- **The order is finished**: you opened Packing from the "Order is done" screen. Reprint a box's list from its row if you need it.
 
 Under the sentence: "39 of 41 passed · 2 with the supervisor · 0 missing". The pedal (Enter) does nothing on this screen: touch the button.
 
 Each box has a row: its name, the team or size, "12 scanned · 3 to scan", and the box it is expected to fill (→ Medium).
 
-- **🖨 Print list** prints what is in the box now and leaves the box **open**. It asks "What box is it in?" (small, medium, large; the suggested one is marked; **Just print** skips the answer). Your answer teaches the app how many jerseys fit in each box. The row then says **✓ List printed · 12 pcs** and the button reads **Print again**. If more jerseys go in afterwards, it reads **Print list (changed)**. Finish order does not print a list that is already printed and unchanged.
+- **🖨 Print list** prints what is in the box now and leaves the box **open**. It asks "What box is it in?" (small, medium, large; the suggested one is marked; **Just print** skips the answer). Your answer teaches the app how many jerseys fit in each box. The row then says **✓ List printed · 12 pcs** and the button reads **Print again**. If more jerseys go in afterwards, or a jersey of its team is flagged or marked missing, it reads **Print list (changed)**. Finish order does not print a list that is already printed and unchanged.
 - **Box full** closes the box: answer "What size is Box 5.1?", its list prints, tape the box and stick the labels on it. That team carries on in the next box (5.2); its label prints if it was not printed before.
 
 A closed box has **Print list again**. The DAMAGED box has its own **Print list**. A row warns **⚠ Short** when jerseys of its team or size are in no box yet (not scanned, flagged or missing). Check before you seal.

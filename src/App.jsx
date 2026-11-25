@@ -44,7 +44,7 @@ import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel
 import { duplicateOptions } from "./lib/dupoptions.js";
 import { matchRead, screenFor } from "./lib/scanpolicy.js";
 import { binLabels, jerseyLabel, flagLabel, binListLabels } from "./lib/labels.js";
-import { nowStep, listUnchanged, boxIds } from "./lib/packing.js";
+import { nowStep, listUnchanged, listIds } from "./lib/packing.js";
 import { photoSet, photoCaption } from "./lib/photoset.js";
 import { packBoxes, boxLabelJobs, boxListJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, MARK_STAYS, NO_SIZE_TAG } from "./config.js";
@@ -2660,7 +2660,9 @@ function flaggedAs(o) {
 //                and teaches the box model like Box full); nothing closes and no next label prints.
 //   Box full     today's flow: the size question, closes the box, prints its list, opens X.2.
 const BOX_CHOICES = BOXES;   // a box on the floor is one box: small, medium or large
-const PackingRow = memo(function PackingRow({ b, sh, cap, asking, unfolded, onAsk, onUnfold, onFull, onList }) {
+// A plain function, not memo: `open` and `short` are rebuilt on every roster change, and an
+// order has a handful of open boxes (review, 25 Nov 2026).
+function PackingRow({ b, sh, cap, asking, unfolded, onAsk, onUnfold, onFull, onList }) {
   const toScan = sh?.toScan || 0, shortN = sh?.short?.length || 0, st = b.listState;
   const choices = (title, pick, cancel) => (
     <div style={{ flexBasis: "100%" }}>
@@ -2686,7 +2688,7 @@ const PackingRow = memo(function PackingRow({ b, sh, cap, asking, unfolded, onAs
           <span><strong style={{ color: "#4ade80" }}>{b.count}</strong> scanned · <strong style={{ color: toScan > 0 ? "#fbbf24" : "#4ade80" }}>{toScan}</strong> to scan{b.count > 0 && cap ? ` · about ${Math.round(b.weight)} lb of ${cap}` : ""}</span>
           {b.box && <span title="The size of box this many jerseys fill" style={{ fontWeight: 800, color: "#fcd34d", whiteSpace: "nowrap" }}>→ {b.box}</span>}
           {st === "printed" && <span style={{ fontSize: 16, fontWeight: 800, color: "#86efac", border: "1px solid #22c55e", borderRadius: 999, padding: "2px 12px", background: "rgba(34,197,94,0.12)", whiteSpace: "nowrap" }}>✓ List printed · {b.count} pcs</span>}
-          {toScan > 0 && <button onClick={() => onUnfold(b.bin)} title="The jerseys still to scan for this box" style={{ ...btnGhost, fontSize: 14, padding: "3px 10px" }}>{unfolded ? "▲ Hide" : "▼ Show"} the {toScan} left</button>}
+          {toScan > 0 && <button onClick={() => onUnfold(b.bin)} title="The jerseys still to scan for this box" style={{ ...btnGhost, fontSize: 15, padding: "4px 12px" }}>{unfolded ? "▲ Hide" : "▼ Show"} the {toScan} left</button>}
         </div>
         {unfolded && (sh?.waiting || []).length > 0 && (
           <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 4 }}>
@@ -2720,9 +2722,11 @@ const PackingRow = memo(function PackingRow({ b, sh, cap, asking, unfolded, onAs
       {asking === "list" && choices(`What box is Box ${b.bin} in?`, id => onList(b.bin, id), "Cancel")}
     </div>
   );
-});
+}
 
-function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short = {}, damaged = [], toScan = 0, summary, stats, status, summaryLabels = 0,
+// `finished`: opened from the "Order N is done" screen; the Now strip only says so (the lists
+// printed at Finish are not in `listPrinted`, and nothing is left to scan or finish).
+function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short = {}, damaged = [], toScan = 0, summary, stats, status, summaryLabels = 0, finished = false,
   onPrintList, onPrintAll, onFull, onReprint, onDamagedList, onLabels, onExport, onPrintSummary, onFinish, onClose }) {
   const [asking, setAsking] = useState(null);       // { bin, mode: "full" | "list" }
   const [unfolded, setUnfolded] = useState(null);   // the box whose jerseys still to scan are listed
@@ -2736,11 +2740,12 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
     window.addEventListener("keydown", h, true);
     return () => window.removeEventListener("keydown", h, true);
   }, [onClose]);
-  const onAsk = useCallback((bin, mode) => setAsking(bin === null ? null : { bin, mode }), []);
-  const onUnfold = useCallback(bin => setUnfolded(u => (u === bin ? null : bin)), []);
-  const now = nowStep({ toScan, openBoxes: open.map(b => ({ bin: b.bin, count: b.count, printed: b.listState === "printed" })) });
+  const onAsk = (bin, mode) => setAsking(bin === null ? null : { bin, mode });
+  const onUnfold = bin => setUnfolded(u => (u === bin ? null : bin));
+  const now = finished ? { step: "done", text: "The order is finished" }
+    : nowStep({ toScan, openBoxes: open.map(b => ({ count: b.count, printed: b.listState === "printed" })) });
   const c = summary.counts, printing = status?.status === "printing";
-  const tone = { scan: "#f59e0b", print: "#3b82f6", finish: "#22c55e" }[now.step];
+  const tone = { scan: "#f59e0b", print: "#3b82f6", finish: "#22c55e", done: "#22c55e" }[now.step];
   const rowSt = { display: "flex", alignItems: "center", gap: 16, padding: "12px 18px", borderRadius: 12, background: "#1e293b", border: "1px solid #3f4b5c" };
   const bigBtn = { ...btnPri, fontSize: 20, padding: "14px 28px", whiteSpace: "nowrap", background: tone, color: "#0d1117" };
   const pcs = n => `${n} ${n === 1 ? "jersey" : "jerseys"}`;
@@ -2756,14 +2761,14 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
         {/* The Now strip: one sentence, one button that does it. */}
         <div style={{ marginTop: 16, padding: "14px 20px", borderRadius: 14, border: `2px solid ${tone}`, background: "rgba(34,197,94,0.08)", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 260 }}>
-            <div style={{ fontSize: 26, fontWeight: 900, color: "#e2e8f0" }}>{now.step === "finish" && !onFinish ? "The order is finished" : now.text}</div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#e2e8f0" }}>{now.text}</div>
             <div style={{ fontSize: 18, color: "#cbd5e1", marginTop: 2 }}>
               <strong style={{ color: "#4ade80" }}>{c.passed}</strong> of {c.total} passed · <strong style={{ color: c.failed ? "#f87171" : "#cbd5e1" }}>{c.failed}</strong> with the supervisor · <strong style={{ color: c.missing ? "#fbbf24" : "#cbd5e1" }}>{c.missing}</strong> missing
             </div>
           </div>
           {now.step === "scan" && <button onClick={onClose} style={bigBtn}>Close</button>}
           {now.step === "print" && <button onClick={onPrintAll} disabled={printing} style={{ ...bigBtn, opacity: printing ? 0.5 : 1 }}>🖨 Print every list</button>}
-          {now.step === "finish" && onFinish && <button onClick={onFinish} style={bigBtn}>🏁 Finish order</button>}
+          {now.step === "finish" && <button onClick={onFinish} style={bigBtn}>🏁 Finish order</button>}
         </div>
         {status && (
           <div style={{ marginTop: 12, fontSize: 18, fontWeight: 600, color: status.status === "done" ? "#4ade80" : status.status === "printing" ? "#94a3b8" : "#fbbf24" }}>
@@ -2771,7 +2776,7 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
           </div>
         )}
         {open.length > 0 && <div style={{ fontSize: 16, color: "#94a3b8", margin: "14px 0 8px" }}>
-          {by === "all" ? "The whole order, box after box" : `Sorted by ${by}`}. Print list prints what is in a box now and leaves it open; Box full closes it and carries on in the next box (5.1, then 5.2).
+          {by === "all" ? "The whole order, box after box" : `Sorted by ${by}`}. Print list prints what is in the box now. The box stays open. Box full closes the box and starts the next one (5.1, then 5.2).
         </div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {open.map(b => (
@@ -3577,9 +3582,6 @@ export default function App() {
   const heavyBin   = openBins.find(b => b.heavy >= 0.95) || null;   // an open bin at the weight limit
   // What each open box lacks before it is sealed (roster.js): for the Packing and Finish screens.
   const shortList  = useMemo(() => shortages(roster, binMap, closedBins), [roster, binMap, closedBins]);
-  // Each open box with the state of its list (packing.js): "none" (never printed from Packing),
-  // "printed" (with the jerseys it holds now) or "changed" (it holds others since).
-  const packOpen   = useMemo(() => openBins.map(b => { const was = listPrinted[b.bin]; return { ...b, listState: !Array.isArray(was) ? "none" : listUnchanged(was, boxIds(inBox(b.bin))) ? "printed" : "changed" }; }), [openBins, listPrinted, inBox]);
   const shortByBox = useMemo(() => Object.fromEntries(shortList.map(x => [x.bin, x])), [shortList]);
   const flaggedRows = useMemo(() => roster.filter(r => r.scanned === "flag"), [roster]);   // what is in the DAMAGED box
   // What the matcher sees. On an order picked up again a flagged jersey that comes back from
@@ -3855,15 +3857,25 @@ export default function App() {
   }, []);
   // The order as printjobs.js takes it, right now (the Print menu's `printPack` is the same with more).
   const packNow = useMemo(() => ({ orderNumber, roster, binMap, closedBins, flags: log.filter(l => l.status === S_FLAGGED) }), [orderNumber, roster, binMap, closedBins, log]);
+  // What an open box's printed list carries (packing.js): its jerseys and, with `withNotIn`, the ones its
+  // NOT IN BOX list names. Print list sends that list with the group's last box (isLastBox); Finish order
+  // with every open box that has jerseys. Kept in `listPrinted` when it prints (review, 25 Nov 2026).
+  const listIdsOf = useCallback((bin, withNotIn) => listIds(inBox(bin), withNotIn ? notInBox(packNow, bin) : []), [inBox, packNow]);
+  // Each open box with the state of its list: "none" (never printed from Packing), "printed" (what
+  // Print list would print now is what it printed) or "changed" (it would print something else now).
+  const packOpen = useMemo(() => openBins.map(b => {
+    const was = listPrinted[b.bin];
+    return { ...b, listState: !Array.isArray(was) ? "none" : listUnchanged(was, listIdsOf(b.bin, isLastBox(packNow, b.bin))) ? "printed" : "changed" };
+  }), [openBins, listPrinted, listIdsOf, packNow]);
   // What Finish order prints: the list of every bin still open with something in it, each with its
   // NOT IN BOX list (the open box is the group's last), the DAMAGED list, and the order summary
   // (count label, FAILED, MISSING; the owner, 24 Nov 2026: "print on request and after every order is finished").
   const finishLists = useMemo(() => !settings.binLists || !binMap ? []
-    : [...openBins.flatMap(b => b.count > 0 && listUnchanged(listPrinted[b.bin], boxIds(inBox(b.bin))) ? []   // printed from the Packing screen with the same jerseys in it: not again (the owner, 25 Nov 2026; its NOT IN BOX list went with it)
+    : [...openBins.flatMap(b => b.count > 0 && listUnchanged(listPrinted[b.bin], listIdsOf(b.bin, true)) ? []   // printed from the Packing screen and nothing on it changed since, its NOT IN BOX list included: not again (the owner, 25 Nov 2026)
          : [...finishNotInBoxJobs(packNow, b.bin, b.label, b.count), ...(b.count > 0 ? listOf(b.bin, b.label) : [])]),   // an empty open box: what its team lacks, under the name of the box on the floor, only when Box full did not print it already (printjobs.js; the third check, 24 Nov 2026). Before: an empty open box still says what its team lacks (review, 24 Nov 2026: a team flagged or marked missing after its last full box)
        ...damagedListJobs(packNow),   // and what is in the DAMAGED box
        ...summaryJobs(packNow, { station: stationLabel(stationId()), date: localDateStamp() })],
-  [settings.binLists, binMap, openBins, packNow, listOf, listPrinted, inBox]);
+  [settings.binLists, binMap, openBins, packNow, listOf, listPrinted, listIdsOf]);
   // The summary on the Packing screen and its printing.
   const summaryNow = useMemo(() => orderSummary(packNow), [packNow]);
   // Pass rate, flag rate and pace, as the order sheet's Summary has them. From the station's
@@ -3927,30 +3939,30 @@ export default function App() {
   // the group's last box (as boxListJobs does). Nothing closes and no next label prints. `boxId` is what the
   // operator said the box is in (teaches the model, as Box full does); null: just print. The jerseys it
   // named are kept in `listPrinted`, so the row says "List printed" and Finish order skips it unless it changed.
-  const printBoxList = useCallback((bin, boxId = null) => {
-    const b = openBins.find(x => x.bin === bin); if (!b || b.count === 0) return;
-    const rows = inBox(bin), what = `Box ${bin} list`;
-    teachBox(bin, rows, boxId, boxOf(rows));
+  // `printOpenLists` prints the lists of `boxes` (open boxes from `packOpen`) in one job and keeps what each carried.
+  const printOpenLists = useCallback((boxes, what) => {
     if (!settings.binLists) { setBinPrint({ status: "off", text: `${what}: box lists are switched off in Settings.` }); return; }
-    const lists = [...(isLastBox(packNow, bin) ? notInBoxJobs(packNow, bin, b.label) : []), ...listOf(bin, b.label)], ids = boxIds(rows);
+    const jobs = boxes.map(b => { const last = isLastBox(packNow, b.bin); return { bin: b.bin, ids: listIdsOf(b.bin, last), lists: [...(last ? notInBoxJobs(packNow, b.bin, b.label) : []), ...listOf(b.bin, b.label)] }; });
+    const lists = jobs.flatMap(j => j.lists);
     setBinPrint({ status: "printing", text: what });
     printOnTicketRoll(lists, "binlist")
-      .then(res => { setListPrinted(p => ({ ...p, [bin]: ids })); setBinPrint({ status: "done", text: `${what} printed: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}. The box stays open.` }); })
+      .then(res => {
+        setListPrinted(p => ({ ...p, ...Object.fromEntries(jobs.map(j => [j.bin, j.ids])) }));
+        setBinPrint({ status: "done", text: `${what} printed: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}. ${boxes.length === 1 ? "The box stays" : "The boxes stay"} open.` });
+      })
       .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
-  }, [openBins, inBox, boxOf, teachBox, settings.binLists, packNow, listOf, printOnTicketRoll]);
-  // "Print every list": one job with the list of every open box that has jerseys and whose list is not
-  // printed with what it holds now. Closes nothing.
+  }, [settings.binLists, packNow, listIdsOf, listOf, printOnTicketRoll]);
+  const printBoxList = useCallback((bin, boxId = null) => {
+    const b = packOpen.find(x => x.bin === bin); if (!b || b.count === 0) return;
+    const rows = inBox(bin);
+    teachBox(bin, rows, boxId, boxOf(rows));
+    printOpenLists([b], `Box ${bin} list`);
+  }, [packOpen, inBox, boxOf, teachBox, printOpenLists]);
+  // "Print every list": every open box with jerseys whose list is not printed with what it would carry now.
   const printAllLists = useCallback(() => {
-    const todo = openBins.filter(b => b.count > 0 && !listUnchanged(listPrinted[b.bin], boxIds(inBox(b.bin))));
-    if (!todo.length) return;
-    if (!settings.binLists) { setBinPrint({ status: "off", text: "Box lists are switched off in Settings." }); return; }
-    const lists = todo.flatMap(b => [...(isLastBox(packNow, b.bin) ? notInBoxJobs(packNow, b.bin, b.label) : []), ...listOf(b.bin, b.label)]);
-    const ids = Object.fromEntries(todo.map(b => [b.bin, boxIds(inBox(b.bin))])), what = `${todo.length} box ${todo.length === 1 ? "list" : "lists"}`;
-    setBinPrint({ status: "printing", text: what });
-    printOnTicketRoll(lists, "binlist")
-      .then(res => { setListPrinted(p => ({ ...p, ...ids })); setBinPrint({ status: "done", text: `${what} printed: ${lists.length} ${lists.length === 1 ? "label" : "labels"} on ${res.printer}. The boxes stay open.` }); })
-      .catch(e => setBinPrint({ status: "error", text: `${what}. ${printProblem(e)}` }));
-  }, [openBins, listPrinted, inBox, settings.binLists, packNow, listOf, printOnTicketRoll]);
+    const todo = packOpen.filter(b => b.count > 0 && b.listState !== "printed");
+    if (todo.length) printOpenLists(todo, `${todo.length} box ${todo.length === 1 ? "list" : "lists"}`);
+  }, [packOpen, printOpenLists]);
   const reprintBinList = useCallback(bin => {
     const c = closedBins.find(x => x.bin === bin); if (!c) return;
     const lists = [...(isLastBox(packNow, bin) ? notInBoxJobs(packNow, bin, c.label) : []), ...listOf(bin, c.label)];
@@ -5042,11 +5054,12 @@ export default function App() {
           {noJersey}
         </div>
       )}
+      {/* No Box labels on the done screen: the set-out screen (z 1500) would open under it; the Print menu has them (review, 25 Nov 2026). */}
       {showPacking && (
         <PackingScreen orderNumber={orderNumber} by={binFieldOf(binMap)} open={packOpen} closed={closedList} cap={boxCap} short={shortByBox} damaged={flaggedRows}
-          toScan={summaryNow.counts.notScanned} summary={summaryNow} stats={summaryStats} status={binPrint} summaryLabels={summaryLabelCount}
+          toScan={summaryNow.counts.notScanned} summary={summaryNow} stats={summaryStats} status={binPrint} summaryLabels={summaryLabelCount} finished={!!finished}
           onPrintList={printBoxList} onPrintAll={printAllLists} onFull={binFull} onReprint={reprintBinList} onDamagedList={printDamagedList}
-          onLabels={() => { setShowPacking(false); setBoxAuto(false); setShowBinSetup(true); }}
+          onLabels={finished ? null : () => { setShowPacking(false); setBoxAuto(false); setShowBinSetup(true); }}
           onExport={canSupervise ? () => exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf) : null}
           onPrintSummary={printSummary}
           onFinish={finished ? null : () => { setShowPacking(false); askFinish(); }}
