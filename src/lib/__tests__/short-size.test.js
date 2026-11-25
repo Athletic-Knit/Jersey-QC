@@ -12,7 +12,7 @@ describe("shortSize", () => {
     expect(shortSize("Ladies S")).toBe("L-S");
     expect(shortSize("ladies small")).toBe("L-S");
     expect(shortSize("LADIES LARGE")).toBe("L-L");
-    expect(shortSize("Women's M".replace("'", ""))).toBe("L-M");
+    expect(shortSize("Womens M")).toBe("L-M");
     expect(shortSize("Youth M")).toBe("Y-M");
     expect(shortSize("youth-xl")).toBe("Y-XL");
     expect(shortSize("Adult 2XL")).toBe("A-2XL");

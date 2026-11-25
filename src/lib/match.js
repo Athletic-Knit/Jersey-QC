@@ -487,20 +487,22 @@ function findMatchesInner(roster, name, number, read = {}) {
     return { type: "pick", candidates: dedupe([...byName, ...byNum]), reason };
   }
 
-  // Number read and no name read. (A name read on a number-only roster is a
-  // question, rule NN: the next branch.)
+  // Number read and no name read. (A name read on a nameless row is a
+  // question, rule NN: the next branch; on a roster with no names at all only
+  // when the number has more than one open row, 5h.)
   if (byNum.length >= 1 && nName === "") {
     return single(byNum) || sameReadRows(byNum, read, "More than one row with this number — check size and team", byNum.filter(r => !norm(r.name)));
   }
 
   // Number is on the roster but the name read agrees with no row: a misread
   // name, a jersey whose name is not the roster's (N4), or a name printed on a
-  // jersey whose row has no name (rule NN, also on a roster with no names).
+  // jersey whose row has no name (rule NN; on a roster with no names, see 5h).
   if (byNum.length >= 1) {
     // 5h (the owner, 25 Nov 2026): on a roster with no names at all, a name the camera read is
-    // noise (a sponsor, a tag, a stray word): the number has the one open row, so it is green,
-    // whatever name or team the camera read. A doubtful read stays a question (N1), and a
-    // roster WITH names keeps rule NN below.
+    // noise (a sponsor, a tag, a stray word): when the number has exactly one open row it is
+    // green, whatever name or team the camera read. Accepted risk, the owner's: a stray garment
+    // from another order with that number goes green too. A doubtful read stays a question (N1),
+    // a typed entry is unchanged, and a roster WITH names keeps rule NN below.
     if (numberOnly && !typed && !isDoubtfulRead(number, read)) {
       const open = byNum.filter(r => !isDone(r));
       if (open.length === 1) return { type: "exact", match: open[0] };

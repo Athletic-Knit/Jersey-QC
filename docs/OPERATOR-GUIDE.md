@@ -165,7 +165,7 @@ Tap **📦 Packing** (bottom left, beside History; it is also the main button wh
 - **Now: finish the order**: every list is printed. **🏁 Finish order** opens the confirm.
 - **The order is finished**: you opened Packing from the "Order is done" screen. Reprint a box's list from its row if you need it.
 
-Under the sentence: "39 of 41 passed · 2 with the supervisor · 0 unscanned". The pedal (Enter) does nothing on this screen: touch the button.
+Under the sentence: "39 of 41 passed · 2 with the supervisor · 0 unscanned" (and "· 1 marked missing" when you marked one Missing). The pedal (Enter) does nothing on this screen: touch the button.
 
 Each box has a row: its name, the team or size, "12 scanned · 3 to scan", and the box it is expected to fill (→ Medium).
 
@@ -174,7 +174,7 @@ Each box has a row: its name, the team or size, "12 scanned · 3 to scan", and t
 
 A closed box has **Print list again**. The DAMAGED box has its own **Print list**. A row warns **⚠ Short** when garments of its team or size are in no box yet (unscanned, flagged or missing). Check before you seal.
 
-**Summary ▸** (folded) opens every garment that passed (with its box), every one that failed (with why) and the unscanned ones (marked missing, or not scanned). **⬇ Excel** (supervisors) and **🖨 Print summary** (the count label, the FAILED list and the UNSCANNED list) are beside it.
+**Summary ▸** (folded) opens every garment that passed (with its box), every one that failed (with why) and the ones not in a box: unscanned (not scanned yet) and marked missing, each with its count. **⬇ Excel** (supervisors) and **🖨 Print summary** (the count label, the FAILED list, the MISSING list and the UNSCANNED list) are beside it.
 
 ### Mark a garment missing
 

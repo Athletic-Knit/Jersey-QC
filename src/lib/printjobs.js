@@ -159,16 +159,19 @@ export function orderSummary(pack) {
 }
 // The summary's labels (kind "binlist"), in print order: the PASSED list (only
 // `withPassed`: on a 500-jersey order it is 70 labels by itself, and the box
-// lists carry every passed jersey), the MISSING list, the FAILED list, then the
-// count label — so the strip off the printer reads count label, FAILED,
-// MISSING, PASSED. Finish order prints it without the passed list; the Print
-// menu and the summary screen print it on request.
+// lists carry every passed jersey), the UNSCANNED list, the MISSING list, the
+// FAILED list, then the count label — so the strip off the printer reads count
+// label, FAILED, MISSING, UNSCANNED, PASSED. Unscanned (not scanned yet) and
+// Missing (the operator's mark) are two lists (the owner, 25 Nov 2026). Finish
+// order prints it without the passed list; the Print menu and the summary
+// screen print it on request.
 export function summaryJobs(pack, { withPassed = false, station = "", date = "" } = {}) {
   const s = orderSummary(pack), o = pack?.orderNumber;
-  const passed  = withPassed ? listLabels(s.passed.map(p => `${who(p.row)}${p.bin ? "  Box " + p.bin : ""}`), { title: "PASSED", orderNumber: o }) : [];
-  const missing = listLabels([...s.missing.marked.map(r => `${who(r)}: marked missing`), ...s.missing.notScanned.map(r => `${who(r)}: unscanned`)], { title: "UNSCANNED", orderNumber: o });
-  const failed  = listLabels([...s.failed, ...s.extra].map(x => `${who(x)}: ${x.reason || "flagged"}`), { title: "FAILED", orderNumber: o });   // the extras' reasons say what they are (Duplicate, Not on the roster, No size tag): no suffix
-  return [...passed, ...missing, ...failed, { summary: true, orderNumber: String(o || ""), station: String(station || ""), date: String(date || ""), counts: s.counts }];
+  const passed    = withPassed ? listLabels(s.passed.map(p => `${who(p.row)}${p.bin ? "  Box " + p.bin : ""}`), { title: "PASSED", orderNumber: o }) : [];
+  const unscanned = listLabels(s.missing.notScanned.map(who), { title: "UNSCANNED", orderNumber: o });
+  const missing   = listLabels(s.missing.marked.map(who), { title: "MISSING", orderNumber: o });
+  const failed    = listLabels([...s.failed, ...s.extra].map(x => `${who(x)}: ${x.reason || "flagged"}`), { title: "FAILED", orderNumber: o });   // the extras' reasons say what they are (Duplicate, Not on the roster, No size tag): no suffix
+  return [...passed, ...unscanned, ...missing, ...failed, { summary: true, orderNumber: String(o || ""), station: String(station || ""), date: String(date || ""), counts: s.counts }];
 }
 
 // The jerseys that have a sticker: passed by the camera or by hand.

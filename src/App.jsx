@@ -25,7 +25,7 @@
 //                                    order start and finish, the station layout
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
 import { flushSync } from "react-dom";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeLetter, shortSize, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, shipParts, shipNorm, shipPress, shipRemove, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeLetter, shortSize, sizeChoiceGroups, LIST_SORTS, groupSize, shipWithOf, orderList, shipParts, shipJoin, shipNorm, shipPress, shipRemove, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum, norm, nameMatches } from "./lib/text.js";
 import { summarise, summariseLog, exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
@@ -164,8 +164,11 @@ function ShipWithField({ value, onChange, placeholder }) {
           </span>
         ))}
         <input ref={ref} value={cur} inputMode="numeric" placeholder={done.length ? "next number" : placeholder}
-          onChange={e => onChange(shipNorm(done.map(n => n + ", ").join("") + e.target.value))}
-          onKeyDown={e => { if (e.key === "Backspace" && !cur && done.length) { e.preventDefault(); onChange(shipPress(value, "⌫")); } }}
+          onChange={e => onChange(shipNorm(shipJoin(done, e.target.value)))}
+          onKeyDown={e => {
+            if (e.key === "Backspace" && !cur && done.length) { e.preventDefault(); onChange(shipPress(value, "⌫")); }
+            else if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); e.currentTarget.blur(); }   // leave the box, like the search box; the keypad goes with it
+          }}
           onFocus={() => setKeys(true)} onBlur={() => setKeys(false)}
           style={{ flex: 1, minWidth: 130, border: "none", outline: "none", background: "transparent", color: "#e2e8f0", fontSize: 17, padding: "5px 2px" }} />
       </div>
@@ -434,7 +437,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
           keypad on the right. On a narrow screen the columns stack. */}
       <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED ? 940 : 560, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <div style={{ fontWeight: 900, fontSize: 26 }}>🏭 Garment QC Scanner</div>
+          <div style={{ fontWeight: 900, fontSize: 26 }}>🏭 Jersey QC Scanner</div>
           <div style={{ fontSize: 16, color: "#94a3b8" }}>{title || "Sign in once per shift"}</div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 32px", alignItems: "flex-start" }}>
@@ -2441,7 +2444,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginTop: 8 }}>
             <input type="checkbox" checked={temp.boxAutoPrint === true} onChange={e => setTemp(t => ({ ...t, boxAutoPrint: e.target.checked }))} />
-            Box labels print by themselves when an order starts (off: the set-out screen prints them from its button)
+            Print the box labels by themselves when an order starts (off: the set-out screen's button prints them) — the 2 × 1 in roll
           </label>
         </div>
 
@@ -2476,10 +2479,11 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
 
 // ── Bin setup modal ───────────────────────────────────────────────────────────
 // The "Set out N boxes" screen: each team or size with how many boxes it is
-// expected to fill (the box model). Opens when an order starts. With `autoPrint` (a new order) the box labels
-// print as the screen opens, nobody has to ask (owner, 12 Nov 2026); the
-// button prints them again. Opened later from the Boxes dialog it only prints
-// on the button.
+// expected to fill (the box model). Opens when an order starts. The box labels
+// print from its button (the owner, 25 Nov 2026); with `autoPrint` (a new order
+// on a station whose Settings → Label printer switch is on, `boxAutoPrint`) they
+// print as the screen opens, as they all did from 12 Nov 2026, and the button
+// prints them again. Opened later from the Boxes dialog it only prints on the button.
 function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, onPrinted, onConfirm }) {
   const [print, setPrint] = useState({ status: autoPrint && labels.length ? "printing" : "idle" });
   const fired = useRef(false);
@@ -2791,7 +2795,7 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
           <div style={{ flex: 1, minWidth: 260 }}>
             <div style={{ fontSize: 26, fontWeight: 900, color: "#e2e8f0" }}>{now.text}</div>
             <div style={{ fontSize: 18, color: "#cbd5e1", marginTop: 2 }}>
-              <strong style={{ color: "#4ade80" }}>{c.passed}</strong> of {c.total} passed · <strong style={{ color: c.failed ? "#f87171" : "#cbd5e1" }}>{c.failed}</strong> with the supervisor · <strong style={{ color: c.missing ? "#fbbf24" : "#cbd5e1" }}>{c.missing}</strong> unscanned
+              <strong style={{ color: "#4ade80" }}>{c.passed}</strong> of {c.total} passed · <strong style={{ color: c.failed ? "#f87171" : "#cbd5e1" }}>{c.failed}</strong> with the supervisor · <strong style={{ color: c.notScanned ? "#fbbf24" : "#cbd5e1" }}>{c.notScanned}</strong> unscanned{c.marked > 0 && <> · <strong style={{ color: "#fbbf24" }}>{c.marked}</strong> marked missing</>}
             </div>
           </div>
           {now.step === "scan" && <button onClick={onClose} style={bigBtn}>Close</button>}
@@ -2952,10 +2956,11 @@ function OrderSummaryBody({ summary, bins = [] }) {
             {summary.extra.map((f, i) => line("x" + i, f, f.reason || "flagged", "#fecaca"))}
           </div>
         ) : null)}
-        {col(`Unscanned · ${c.missing}`, "#fbbf24", [], "", (
+        {/* Unscanned (not scanned yet) and Missing (the operator's mark) are counted apart (the owner, 25 Nov 2026). */}
+        {col(`Unscanned ${c.notScanned} · Missing ${c.marked}`, "#fbbf24", [], "", (
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            {sub(`Marked missing · ${c.marked}`, summary.missing.marked.map(r => line("m" + r._id, r, "", "")), "None.")}
             {sub(`Unscanned · ${c.notScanned}`, summary.missing.notScanned.map(r => line("n" + r._id, r, "", "")), "None.")}
+            {sub(`Marked missing · ${c.marked}`, summary.missing.marked.map(r => line("m" + r._id, r, "", "")), "None.")}
           </div>
         ))}
       </div>
@@ -2963,7 +2968,7 @@ function OrderSummaryBody({ summary, bins = [] }) {
   );
 }
 
-// The counts and the rates on one line: jerseys, passed, failed, missing, the
+// The counts and the rates on one line: jerseys, passed, failed, unscanned, marked missing, the
 // extras, then pass rate, flag rate and pace (`stats`: summarise() of the order's
 // events, src/lib/export.js). The Packing screen's summary and the board's
 // order view both draw it.
@@ -2971,7 +2976,7 @@ function SummaryCounts({ summary, stats = null }) {
   const c = summary.counts, num = v => v !== "" && v !== null && v !== undefined;
   return (
     <div style={{ fontSize: 17, color: "#cbd5e1", flex: 1 }}>
-      {c.total} {c.total === 1 ? "garment" : "garments"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.missing} unscanned</span>{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} with no roster row</span>}
+      {c.total} {c.total === 1 ? "garment" : "garments"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.notScanned} unscanned</span>{c.marked > 0 && <span style={{ color: "#fbbf24", fontWeight: 800 }}> · {c.marked} marked missing</span>}{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} with no roster row</span>}
       {stats && (num(stats.passRate) || num(stats.flagRate) || num(stats.perHour)) && (
         <div style={{ fontSize: 14, color: "#94a3b8", marginTop: 2 }}>
           {num(stats.passRate) ? <>pass rate <strong style={{ color: "#e2e8f0" }}>{stats.passRate}%</strong></> : null}
@@ -3251,9 +3256,9 @@ function PrintModal({ current = null, tagOf, onClose }) {
               <button style={{ ...smBtn, opacity: inDamaged.length ? 1 : 0.4 }} disabled={!inDamaged.length} onClick={() => send([[damagedListJobs(pack), "binlist"]], "the DAMAGED box list")}>Its list</button>
               <button style={smBtn} onClick={() => send([[[damagedBoxLabel(pack)], "binticket"]], "the DAMAGED box label")}>Its label</button>
             </div>
-            <div style={secSt}>Order summary · {sum.counts.passed} passed · {sum.counts.failed} failed · {sum.counts.missing} unscanned</div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{/* the count label, FAILED and MISSING; the passed list on request (the owner, 24 Nov 2026) */}
-              <button style={smBtn} onClick={() => { const l = summaryJobs(pack, { station: stationLabel(pack.station), date: localDateStamp() }); if (many(l.length, "summary labels")) send([[l, "binlist"]], "the order summary"); }}>Summary (failed + unscanned) ·{summaryJobs(pack).length}</button>
+            <div style={secSt}>Order summary · {sum.counts.passed} passed · {sum.counts.failed} failed · {sum.counts.notScanned} unscanned{sum.counts.marked ? ` · ${sum.counts.marked} marked missing` : ""}</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{/* the count label, FAILED, MISSING and UNSCANNED; the passed list on request (the owner, 24 Nov 2026) */}
+              <button style={smBtn} onClick={() => { const l = summaryJobs(pack, { station: stationLabel(pack.station), date: localDateStamp() }); if (many(l.length, "summary labels")) send([[l, "binlist"]], "the order summary"); }}>Summary (failed, unscanned, missing) · {summaryJobs(pack).length}</button>
               <button style={smBtn} onClick={() => { const l = summaryJobs(pack, { withPassed: true, station: stationLabel(pack.station), date: localDateStamp() }); if (many(l.length, "summary labels")) send([[l, "binlist"]], "the order summary with the passed list"); }}>With the passed list · {summaryJobs(pack, { withPassed: true }).length}</button>
             </div>
             <div style={secSt}>Flag tickets · {flags.length}</div>
@@ -3648,7 +3653,7 @@ export default function App() {
   }), [roster, binMap, closedBins, boxOf, carried, carriedIn]);
   // A carried box has its label inside already: only the boxes after it print.
   const boxPlanLabels = useMemo(() => { const has = new Set(carried.map(c => c.bin)); return binLabels(roster, binMap, { orderNumber, boxes: Object.fromEntries(boxPlan.map(e => [e.bin, e.boxes])) }).filter(l => !has.has(String(l.bin))); }, [roster, binMap, orderNumber, boxPlan, carried]);
-  const [boxAuto,     setBoxAuto]     = useState(false);   // the box screen is open for a new order: its labels print by themselves
+  const [boxAuto,     setBoxAuto]     = useState(false);   // the box screen is open for a new order on a station with boxAutoPrint on: its labels print by themselves
   const [showPrint,   setShowPrint]   = useState(false);   // the Print menu
   const [showBlanks,  setShowBlanks]  = useState(false);   // the blank-jersey counting screen
   const [boxLabelled, setBoxLabelled] = useState([]);   // the boxes whose label has been printed (saved in the session)
@@ -5168,7 +5173,7 @@ export default function App() {
       <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "0 16px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "nowrap", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 18, whiteSpace: "nowrap" }}>🏭 Garment QC</div>
+            <div style={{ fontWeight: 700, fontSize: 18, whiteSpace: "nowrap" }}>🏭 Jersey QC</div>
             {rosterFile && (
               <div style={{ fontSize: 13, color: "#94a3b8", whiteSpace: "nowrap", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>
                 {rosterFile}{operatorName ? ` · ${operatorName}` : ""}{role ? ` (${role})` : ""}

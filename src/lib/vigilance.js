@@ -135,7 +135,7 @@ export function settleTurned(first, m1, upright, m2) {
   return rc;
 }
 
-// A read in a few words for the log and the reasons ("#23 SMITH", "no jersey").
+// A read in a few words for the log and the reasons ("#23 SMITH", "no garment").
 export function describeRead(d) {
   if (!d || d.jersey_present === false) return "no garment";
   const n = String(d.number ?? "").trim(), s = String(d.name ?? "").trim();

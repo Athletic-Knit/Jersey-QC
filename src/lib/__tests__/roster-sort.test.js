@@ -2,7 +2,7 @@
 // order, by default), its filters' choices, and its search box ("7" is #7
 // exactly, never #70; the owner, 17 Nov 2026).
 import { describe, it, expect } from "vitest";
-import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices, rosterMatches, sortCandidates, sameSize, lastSizeRank, lastSizeFamily } from "../roster.js";
+import { sortRoster, ROSTER_SORTS, buildBinMap, rosterChoices, rosterMatches, sortCandidates, sameSize, lastSizeRank, lastSizeLetter } from "../roster.js";
 
 const roster = [
   { _id: 1, name: "ZED",   number: "10", team: "Red",  size: "A-L",  scanned: "pass" },
@@ -107,8 +107,8 @@ describe("the pick list follows the last confirmed jersey's size (25 Nov 2026)",
     expect(lastSizeRank("A-M", "L-S")).toBe(2);
     expect(lastSizeRank("A-M", "")).toBe(0);
     expect(lastSizeRank("XL", "OSFA")).toBe(2);   // no family
-    expect(lastSizeFamily("L-S")).toBe("Ladies");
-    expect(lastSizeFamily("Youth M")).toBe("Youth");
-    expect(lastSizeFamily("XL")).toBe("");
+    expect(lastSizeLetter("L-S")).toBe("L-");      // "L- sizes first" (the owner, 25 Nov 2026: the short form)
+    expect(lastSizeLetter("Youth M")).toBe("Y-");
+    expect(lastSizeLetter("XL")).toBe("");
   });
 });

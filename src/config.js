@@ -136,7 +136,7 @@ export const DEFAULT_SETTINGS = {
   flagTickets: true,      // print a flag ticket (2 x 1 in: where it goes and why) for every flagged jersey
   binLists: true,         // print what is in a box (2 x 1 in: a count label, then fourteen jerseys a label) when it is closed: full, or the order finished
   boxAutoPrint: false,    // the set-out screen prints the box labels by itself when an order starts. Off: only its button prints them (the owner, 25 Nov 2026)
-  boxWeights: false,     // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station
+  boxWeights: false,      // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station
   boxWeightCap: 45,       // lb: no box heavier than this, when boxWeights is on (src/lib/boxmodel.js)
   listSort: "size",       // the pick list's order: "size" | "team" | "number" (LIST_SORTS in roster.js; the owner, 19 Nov 2026: by size, the tag is all the operator checks)
 };

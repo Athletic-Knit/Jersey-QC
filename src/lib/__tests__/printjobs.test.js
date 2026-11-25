@@ -124,18 +124,20 @@ describe("the order summary", () => {
     expect(s.missing.notScanned.map(r => r.number)).toEqual(["7"]);
     expect(s.counts).toEqual({ total: 8, passed: 5, failed: 1, extra: 0, missing: 2, marked: 1, notScanned: 1 });
   });
-  it("its labels: FAILED and MISSING pages then the count label; the PASSED list only on request", () => {
+  it("its labels: UNSCANNED, MISSING and FAILED pages then the count label; the PASSED list only on request", () => {
     const jobs = summaryJobs(pack2, { station: "Station 1", date: "2026-11-24" });
-    expect(jobs.map(l => l.summary ? "count" : l.head)).toEqual(["UNSCANNED", "FAILED", "count"]);
-    expect(jobs[0].items.map(i => i.text)).toEqual(["#8 P7 Red A-L: marked missing", "#7 P6 Red A-L: unscanned"]);
-    expect(jobs[1].items.map(i => i.text)).toEqual(["#6 P5 Red A-L: Loose thread"]);
-    expect(jobs[2]).toMatchObject({ summary: true, orderNumber: "264247", station: "Station 1", date: "2026-11-24", counts: { total: 8, passed: 5, failed: 1, missing: 2 } });
+    expect(jobs.map(l => l.summary ? "count" : l.head)).toEqual(["UNSCANNED", "MISSING", "FAILED", "count"]);   // unscanned and marked missing are two lists (the owner, 25 Nov 2026)
+    expect(jobs[0].items.map(i => i.text)).toEqual(["#7 P6 Red A-L"]);
+    expect(jobs[1].items.map(i => i.text)).toEqual(["#8 P7 Red A-L"]);
+    expect(jobs[2].items.map(i => i.text)).toEqual(["#6 P5 Red A-L: Loose thread"]);
+    expect(jobs[3]).toMatchObject({ summary: true, orderNumber: "264247", station: "Station 1", date: "2026-11-24", counts: { total: 8, passed: 5, failed: 1, notScanned: 1, marked: 1 } });
     const withPassed = summaryJobs(pack2, { withPassed: true });
-    expect(withPassed.map(l => l.summary ? "count" : l.head)).toEqual(["PASSED", "UNSCANNED", "FAILED", "count"]);
+    expect(withPassed.map(l => l.summary ? "count" : l.head)).toEqual(["PASSED", "UNSCANNED", "MISSING", "FAILED", "count"]);
     expect(withPassed[0].items[0].text).toBe("#1 P0 Navy A-L  Box 1.1");
-    const z = binListZPL(jobs[2]);
+    const z = binListZPL(jobs[3]);
     expect(z).toContain("^FDOrder 264247^FS");
-    expect(z).toContain("^FD5 passed   1 failed   2 unscanned^FS");
+    expect(z).toContain("^FD5 passed   1 failed   1 unscanned   1 missing^FS");
+    expect(binListZPL({ summary: true, counts: { passed: 5, failed: 1, missing: 2 } })).toContain("^FD5 passed   1 failed   2 missing^FS");   // a label from a page loaded before: its old word
     expect(z).toContain("^FDStation 1   2026-11-24^FS");
   });
 });

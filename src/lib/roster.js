@@ -91,7 +91,7 @@ export function shipParts(text) {
   const typing = runs.length && !/\D$/.test(v);
   return { done: typing ? runs.slice(0, -1) : runs, cur: typing ? runs[runs.length - 1] : "" };
 }
-const shipJoin = (done, cur) => done.map(n => n + ", ").join("") + cur;
+export const shipJoin = (done, cur) => done.map(n => n + ", ").join("") + cur;
 // What the text becomes after typing: only digits and separators, a run longer than six
 // digits split into orders (as orderList reads it), and a comma after every full six
 // digits and after a number the "Next number" key or a typed comma ended.
@@ -441,15 +441,14 @@ export const sameSize = (a, b) => sizeRank(a || "")[2] === sizeRank(b || "")[2];
 // then the rest; within a rank the order is as chosen. A size with no family
 // (XL, OSFA) only brings its own rows up.
 // Where a row's size stands to the last confirmed jersey's: 0 the same size,
-// 1 the same family, 2 neither (or no last size). `lastSizeFamily` names the
-// family ("Ladies") for the line under the list's header, "" when it has none.
+// 1 the same family, 2 neither (or no last size). `lastSizeLetter` names the
+// family for the line under the list's header as the short form writes it
+// ("L- sizes first", the owner, 25 Nov 2026; it said "Ladies" before), "" when it has none.
 export const lastSizeRank = (size, lastSize) => {
   if (!lastSize) return 0;
   const fam = sizeRank(lastSize)[0];
   return sameSize(size, lastSize) ? 0 : fam < 3 && sizeRank(size || "")[0] === fam ? 1 : 2;
 };
-export const lastSizeFamily = lastSize => SIZE_GROUPS[sizeRank(lastSize || "")[0]]?.label || "";
-// The family as the short form writes it: "Y-", "A-", "L-" ("L- sizes first"), "" for XL or OSFA.
 export const lastSizeLetter = lastSize => { const g = SIZE_GROUPS[sizeRank(lastSize || "")[0]]; return g ? `${g.key}-` : ""; };
 export function sortCandidates(rows, by = "size", { lastSize = "" } = {}) {
   const rank = r => lastSizeRank(r.size, lastSize);

@@ -35,7 +35,10 @@ describe("the board's order view: Summary tab", () => {
     expect(tabs[1]).toMatch(/^Roster/);
     expect(screen.getByText(/Failed · 1/)).toBeTruthy();
     expect(screen.getByText("Twill peeling")).toBeTruthy();
-    expect(screen.getAllByText(/Unscanned · 1/).length).toBe(2);   // the column and its "unscanned" half
+    expect(screen.getByText("Unscanned 1 · Missing 0")).toBeTruthy();   // the column: unscanned and marked missing counted apart (the owner, 25 Nov 2026)
+    expect(screen.getByText(/Unscanned · 1/)).toBeTruthy();             // its unscanned half
+    expect(screen.getByText(/1 unscanned/)).toBeTruthy();               // the counts line; nothing marked, so no "marked missing"
+    expect(screen.queryByText(/marked missing/)).toBeNull();
     expect(screen.getAllByText(/Box 1\.1/).length).toBeGreaterThan(0);   // the boxes strip and the passed rows' box
     expect(screen.getByText(/pass rate/)).toBeTruthy();
     expect(screen.getByText(/1 with the supervisor/)).toBeTruthy();

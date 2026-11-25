@@ -315,8 +315,8 @@ const byNumber = (a, b) => {
 export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "team", of = 0 } = {}) {
   const items = [...(rows || [])].sort(byNumber).map(binListItem);
   if (!items.length) return [];
-  const cols = (rows || []).some(r => String(r?.name ?? "").trim()) ? 2 : 3;   // no name on any row: three columns
-  const per = BIN_LIST_ROWS * cols;
+  const per = (rows || []).some(r => String(r?.name ?? "").trim()) ? BIN_LIST_PER_LABEL : BIN_LIST_PER_LABEL_NUMBERS;
+  const cols = per / BIN_LIST_ROWS;                                 // no name on any row: three columns of seven
   const pages = Math.ceil(items.length / per);
   // What the customer checks the box against: how many of each size (or, in
   // an order sorted by size, of each team). "Y-M 4   A-L 12   A-XL 8".
@@ -388,7 +388,7 @@ export function damagedListLabels(entries, { orderNumber = "" } = {}) {
   })).reverse();
 }
 // Any list of lines under a title, seven to a 2 x 1 in label, drawn like the
-// DAMAGED list: the FAILED, MISSING and PASSED lists of the order summary and a
+// DAMAGED list: the FAILED, UNSCANNED, MISSING and PASSED lists of the order summary and a
 // box's NOT IN BOX list (the owner, 24 Nov 2026). → the labels in print order,
 // the last page first.
 export function listLabels(lines, { title = "LIST", orderNumber = "" } = {}) {
@@ -402,10 +402,10 @@ export function listLabels(lines, { title = "LIST", orderNumber = "" } = {}) {
 }
 
 // The order summary's count label (the owner, 24 Nov 2026): the order number
-// big, SUMMARY and how many jerseys, then passed · failed · missing, the
-// station and the day small at the bottom. It prints last, so the strip off
-// the printer reads it first, then FAILED, MISSING and (on request) PASSED.
-// `l`: { summary: true, orderNumber, station, date, counts: { total, passed, failed, missing } }.
+// big, SUMMARY and how many jerseys, then passed · failed · unscanned · missing,
+// the station and the day small at the bottom. It prints last, so the strip off
+// the printer reads it first, then FAILED, UNSCANNED, MISSING and (on request) PASSED.
+// `l`: { summary: true, orderNumber, station, date, counts: { total, passed, failed, notScanned, marked } }.
 function summaryCountZPL(l, size) {
   const { w: full, h, top = 0, dpi = 203 } = size;
   const side  = full >= 300 ? Math.round(dpi * 2 / 25.4) : 0;
@@ -416,7 +416,10 @@ function summaryCountZPL(l, size) {
   const c     = l.counts || {};
   const head  = l.orderNumber ? `Order ${l.orderNumber}` : "Order";
   const what  = `SUMMARY   ${c.total ?? 0} ${c.total === 1 ? "garment" : "garments"}${c.extra ? `   +${c.extra} extra` : ""}`;   // extra: flags with no roster row (not on the roster, a duplicate), apart from the order's count; on this line so the tally keeps its size (review, 24 Nov 2026)
-  const tally = `${c.passed ?? 0} passed   ${c.failed ?? 0} failed   ${c.missing ?? 0} unscanned`;
+  // Unscanned (not scanned yet) and Missing (the operator's mark) are two counts (the owner, 25 Nov 2026);
+  // a station page loaded before that sends only `missing`, both together, and keeps its old word.
+  const left  = c.notScanned === undefined ? [`${c.missing ?? 0} missing`] : [`${c.notScanned} unscanned`, ...(c.marked ? [`${c.marked} missing`] : [])];
+  const tally = [`${c.passed ?? 0} passed`, `${c.failed ?? 0} failed`, ...left].join("   ");
   const foot  = [l.station, l.date].filter(Boolean).join("   ");
   const out = ["^XA", "^CI28", `^PW${full}`, `^LL${h}`, "^LH0,0", "^LT0",
     line(side, top + pad, fit(head, w, big), w, "C", head),

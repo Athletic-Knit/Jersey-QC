@@ -463,3 +463,16 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests:** `short-size.test.js`, 8 tests: the conversions, the cases left alone, `sameSize` unchanged, `lastSizeLetter`, the box label, sticker, ticket, list line, count label mix and summary lines.
 - **Checks:** lint clean; 593 tests pass. Not clicked through in a browser by this session.
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · Clean-up of stage 5 (5·0, 5a, 5b, 5e, 5f, 5h, 5i)
+- **Why:** a second read of the seven commits above.
+- **5e, Unscanned and Missing kept apart:** the owner's rule is that "Unscanned" means not scanned yet and the operator's mark stays "Missing", but `counts.missing` (the two added together) was shown as "N unscanned". Now the summary column reads "Unscanned N · Missing M" with its two halves, unscanned first; the counts line, the Packing screen's Now line and the Print menu's line say "7 unscanned · 2 marked missing" (the second part only when something is marked); the count label's tally is "5 passed   1 failed   7 unscanned   2 missing" (a label from a page loaded before keeps its old "N missing"); the printed list is two lists, UNSCANNED and MISSING, the title saying which, so the lines carry no suffix. The Print menu's button says "Summary (failed, unscanned, missing)" and got its space back.
+- **5·0:** the station header and the sign-in screen said "🏭 Garment QC": the app's name is Jersey QC again there. A comment's "no jersey" follows its string.
+- **5a:** `ShipWithField` uses `shipJoin` (now exported) instead of a copy of it; Enter or Esc in its box leaves the box and puts the keypad away, as in the search box.
+- **5b:** the set-out screen's comment and `boxAuto` say the labels print from the button unless `boxAutoPrint` is on; the Settings line is worded like its neighbours; a comment's alignment in config.js.
+- **5f:** `binListLabels` takes the per-label count from `BIN_LIST_PER_LABEL` / `BIN_LIST_PER_LABEL_NUMBERS` and the columns from it, so the constants are what decides. CLAUDE.md: "15 named jerseys are 3 labels, 15 numbers-only 2", and a label without `cols` prints two columns.
+- **5h:** the comment names the owner's accepted risk (a stray garment of another order with that number); the comments of rule NN say where 5h applies. Invariant 8 is as narrow as the rule: a name read on a nameless row only on a roster with no names AND one open row of the number.
+- **5i:** `lastSizeFamily` was used only by a test: removed, the test reads `lastSizeLetter`; CLAUDE.md's pick-list line says "L- sizes first".
+- **Tests:** printjobs (the UNSCANNED and MISSING lists, the tally, an old label's word), the board's order-view summary, roster-sort, short-size.
+- **Checks:** lint clean; 593 tests pass. Not clicked through in a browser.
+- **Branch:** `feature/result-screens`.
