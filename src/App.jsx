@@ -2437,7 +2437,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginTop: 8 }}>
             <input type="checkbox" checked={temp.binLists !== false} onChange={e => setTemp(t => ({ ...t, binLists: e.target.checked }))} />
-            Print what is in a box when it is closed (full, or the order finished): a count label and fourteen garments a label — the 2 × 1 in roll
+            Print what is in a box when it is closed (full, or the order finished): a count label and fourteen garments a label (twenty-one when no garment on the list has a name) — the 2 × 1 in roll
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, color: "#cbd5e1", cursor: "pointer", marginTop: 8 }}>
             <input type="checkbox" checked={temp.boxAutoPrint === true} onChange={e => setTemp(t => ({ ...t, boxAutoPrint: e.target.checked }))} />

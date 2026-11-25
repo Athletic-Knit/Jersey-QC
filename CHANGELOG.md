@@ -442,3 +442,10 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tests:** the strings in export, printjobs, reports and the board's order-view tests.
 - **Checks:** lint clean; 582 tests pass.
 - **Branch:** `feature/result-screens`.
+
+## 2026-11-25 · 5f · Three columns on a box list when no row has a name
+- **Asked for:** the owner, 25 Nov 2026: three columns on the box list when the order is numbers only.
+- **What changed:** `binListLabels` gives a list in which no row has a name `cols: 3` and 21 items a label (`BIN_LIST_PER_LABEL_NUMBERS`); a list with any name stays at two columns and 14 (`BIN_LIST_PER_LABEL`, unchanged). `binListZPL` lays the rows out in `cols` columns of seven (the column width is the label's width divided by `cols`), each line squeezed to its column by the same `tight` rule. A 15-garment numbers-only box is one label of rows and the count label; a named one is two and the count label. The count label, the NOT IN BOX and the other lists are untouched. The Settings line says twenty-one.
+- **Tests:** labels.test.js: 15 numbers-only rows are one label (a named list two), 22 are 21 and 1, one name makes the list two columns; the ZPL of a three-column page has three x positions and 21 lines.
+- **Checks:** lint clean; 584 tests pass. Left open: the brief names `repageLists` in hub-plugin.js, which this branch does not have (it is not in `feature/result-screens`; nothing in the hub re-pages lists), so there was nothing to change there. If it arrives from another branch it must carry `cols` over.
+- **Branch:** `feature/result-screens`.

@@ -290,6 +290,11 @@ export function binLabelZPL(l, size = labelSize()) {
 // The rows start 2 mm in from the left edge: the ZD411 cut that much off the
 // left of the 2 x 1 in roll (seen on the floor, 10 Nov 2026).
 export const BIN_LIST_PER_LABEL = 14;
+// A list in which no row has a name is only numbers and sizes ("23-AXL"): short, so three
+// columns of seven fit a label, 21 a label (the owner, 25 Nov 2026: a 15-garment numbers-only
+// box was two labels).
+export const BIN_LIST_PER_LABEL_NUMBERS = 21;
+const BIN_LIST_ROWS = 7;
 export const BIN_LIST_LEFT_MM = 2;
 const squash = s => String(s ?? "").trim().replace(/[\s-]+/g, "");
 export function binListItem(row) {
@@ -309,7 +314,9 @@ const byNumber = (a, b) => {
 export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "team", of = 0 } = {}) {
   const items = [...(rows || [])].sort(byNumber).map(binListItem);
   if (!items.length) return [];
-  const pages = Math.ceil(items.length / BIN_LIST_PER_LABEL);
+  const cols = (rows || []).some(r => String(r?.name ?? "").trim()) ? 2 : 3;   // no name on any row: three columns
+  const per = BIN_LIST_ROWS * cols;
+  const pages = Math.ceil(items.length / per);
   // What the customer checks the box against: how many of each size (or, in
   // an order sorted by size, of each team). "Y-M 4   A-L 12   A-XL 8".
   const other = by === "size" ? "team" : "size", tally = new Map();
@@ -319,8 +326,8 @@ export function binListLabels(rows, { bin, label = "", orderNumber = "", by = "t
     t.n++; tally.set(k, t);
   });
   const mix = [...tally.values()].sort((a, b) => (other === "size" ? bySize(a.shown, b.shown) : a.shown.localeCompare(b.shown, undefined, { sensitivity: "base" }))).map(t => `${t.shown} ${t.n}`).join("   ");
-  const base  = { bin, label: String(label || ""), orderNumber: String(orderNumber || ""), pages, count: items.length, by, mix, of: Number(of) || 0 };
-  const lists = Array.from({ length: pages }, (_, i) => ({ ...base, page: i + 1, items: items.slice(i * BIN_LIST_PER_LABEL, (i + 1) * BIN_LIST_PER_LABEL) }));
+  const base  = { bin, label: String(label || ""), orderNumber: String(orderNumber || ""), pages, count: items.length, by, mix, of: Number(of) || 0, cols };
+  const lists = Array.from({ length: pages }, (_, i) => ({ ...base, page: i + 1, items: items.slice(i * per, (i + 1) * per) }));
   return [...lists.reverse(), { ...base, title: true, page: 0, items: [] }];
 }
 
@@ -461,13 +468,14 @@ export function binListZPL(l, size = labelSize(DEFAULT_FLAG_LABEL_SIZE)) {
   const { w, h, top = 0 } = size;
   const a    = h - top;                                           // the printable height
   const pad  = Math.max(3, Math.round(a * 0.03));
-  const rows = BIN_LIST_PER_LABEL / 2;
+  const cols = l.cols === 3 ? 3 : 2;                              // three columns when no row has a name
+  const rows = BIN_LIST_ROWS;
   const y0   = top + pad;
   const rowH = Math.floor((h - pad - y0) / rows);
   const x0   = Math.round((size.dpi || 203) * BIN_LIST_LEFT_MM / 25.4) + pad;   // where the rows start
-  const colW = Math.floor((w - x0 - pad - pad) / 2);
+  const colW = Math.floor((w - x0 - cols * pad) / cols);
   const out = ["^XA", "^CI28", `^PW${w}`, `^LL${h}`, "^LH0,0", "^LT0"];
-  (l.items || []).slice(0, BIN_LIST_PER_LABEL).forEach((text, i) => {
+  (l.items || []).slice(0, rows * cols).forEach((text, i) => {
     const col = Math.floor(i / rows), row = i % rows;            // down the left column, then down the right
     out.push(tight(x0 + col * (colW + pad), y0 + row * rowH, Math.max(10, rowH - 3), colW, text));
   });

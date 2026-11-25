@@ -1,6 +1,6 @@
 // Bin labels for the Zebra: what each label says, and the ZPL that says it.
 import { describe, it, expect } from "vitest";
-import { binLabels, labelSize, binLabelZPL, labelsZPL, jerseyLabel, jerseyLabelZPL, flagLabel, flagLabelZPL, FLAG_COPIES, binListItem, binListLabels, binListZPL, BIN_LIST_PER_LABEL } from "../labels.js";
+import { binLabels, labelSize, binLabelZPL, labelsZPL, jerseyLabel, jerseyLabelZPL, flagLabel, flagLabelZPL, FLAG_COPIES, binListItem, binListLabels, binListZPL, BIN_LIST_PER_LABEL, BIN_LIST_PER_LABEL_NUMBERS } from "../labels.js";
 import { buildBinMap } from "../roster.js";
 
 const roster = [
@@ -347,6 +347,30 @@ describe("box list", () => {
     expect(binListItem({ number: "23", name: "James", size: "A-XL" })).toBe("23-James-AXL");
     expect(binListItem({ number: "7", name: "", size: "Y-M" })).toBe("7-YM");
     expect(binListItem({ number: "7", name: "LEE", size: "" })).toBe("7-LEE");
+  });
+  it("a list with no name on any row is three columns of seven: 21 a label, 15 are one label", () => {
+    expect(BIN_LIST_PER_LABEL_NUMBERS).toBe(21);
+    const numbers = n => Array.from({ length: n }, (_, i) => ({ _id: i, number: String(i + 1), name: "", team: "Navy", size: "A-L" }));
+    const named = n => numbers(n).map(r => ({ ...r, name: "P" + r.number }));
+    const one = binListLabels(numbers(15), { bin: "1.1", label: "Navy" });
+    expect(one.map(l => l.title ? "count" : l.items.length)).toEqual([15, "count"]);   // one label of rows and the count label
+    expect(one[0].cols).toBe(3);
+    const two = binListLabels(named(15), { bin: "1.1", label: "Navy" });
+    expect(two.map(l => l.title ? "count" : l.items.length)).toEqual([1, 14, "count"]);   // a named list: 14 a label, two labels of rows
+    expect(two[0].cols).toBe(2);
+    expect(binListLabels(numbers(22), { bin: "1.1" }).map(l => l.title ? "count" : l.items.length)).toEqual([1, 21, "count"]);
+    expect(binListLabels([...numbers(14), { _id: 99, number: "99", name: "LEE", team: "Navy", size: "A-L" }], { bin: "1.1" })[0].cols).toBe(2);   // one name makes it a named list
+  });
+  it("the ZPL of a three-column page has the rows in three columns, each line squeezed to its column", () => {
+    const numbers = Array.from({ length: 21 }, (_, i) => ({ _id: i, number: String(100 + i), name: "", team: "Navy", size: "A-XXL" }));
+    const l = binListLabels(numbers, { bin: "1.1" })[0];
+    const z = binListZPL(l, labelSize("2x1"));
+    const xs = [...z.matchAll(/\^FO(\d+),/g)].map(m => Number(m[1]));
+    expect(new Set(xs).size).toBe(3);                                   // three columns
+    expect(xs.length).toBe(21);
+    expect(z).toContain("^FD100-AXXL^FS");                                // the first number, the size without its hyphen
+    const two = binListZPL(binListLabels(numbers.map(r => ({ ...r, name: "X" })), { bin: "1.1" })[1], labelSize("2x1"));
+    expect(new Set([...two.matchAll(/\^FO(\d+),/g)].map(m => Number(m[1]))).size).toBe(2);
   });
   it("fourteen to a label in garment-number order; printed last page first, the count label last", () => {
     expect(BIN_LIST_PER_LABEL).toBe(14);
