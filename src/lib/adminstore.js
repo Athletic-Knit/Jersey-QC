@@ -29,6 +29,7 @@ export function cleanAdmin(raw) {
   const given = o.settings && typeof o.settings === "object" && !Array.isArray(o.settings) ? o.settings : {};
   const settings = {};
   if (Array.isArray(given.operators)) { const ops = cleanOperators(given.operators); if (!ops.error && ops.list.length) settings.operators = ops.list; }
+  if (given.printers && typeof given.printers === "object") { const pr = cleanPrinters(given.printers); if (!pr.error && Object.keys(pr.map).length) settings.printers = pr.map; }
   const configVersion = Number.isFinite(o.configVersion) && o.configVersion >= 0 ? Math.floor(o.configVersion) : 0;
   return { version: 1, configVersion, audit: audit.slice(-AUDIT_MAX), settings };
 }
@@ -85,4 +86,28 @@ export function cleanOperators(list) {
   }
   if (out.length > MAX_OPERATORS) return { list: [], error: `At most ${MAX_OPERATORS} names.` };
   return { list: out, error: "" };
+}
+
+// Which print queue each station uses (phase 3, 26 Nov 2026): { "*": { sticker, ticket },
+// "st-station1": { sticker, ticket } }. "*" is every station without its own. A queue is a
+// Windows printer name as this server PC knows it (a shared one is \\PC\Name). Empty
+// values are dropped; a station left with nothing is dropped.
+export const PRINTER_SLOTS = ["sticker", "ticket"];
+export function cleanPrinters(map) {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return { map: {}, error: "The printers must be a map of stations." };
+  const out = {};
+  for (const [k, v] of Object.entries(map)) {
+    const st = String(k).trim().toLowerCase();
+    if (st !== "*" && !/^st-[a-z0-9-]{1,40}$/.test(st)) return { map: {}, error: `"${k}" is not a station.` };
+    if (!v || typeof v !== "object") continue;
+    const slot = {};
+    for (const which of PRINTER_SLOTS) {
+      const q = String(v[which] ?? "").trim();
+      if (!q) continue;
+      if (q.length > 200 || [...q].some(c => c.charCodeAt(0) < 32) || /["<>|]/.test(q)) return { map: {}, error: `"${q.slice(0, 40)}" is not a printer name.` };
+      slot[which] = q;
+    }
+    if (Object.keys(slot).length) out[st] = slot;
+  }
+  return { map: out, error: "" };
 }

@@ -22,7 +22,7 @@ import path from "node:path";
 import process from "node:process";
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
-import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators } from "./src/lib/adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators, cleanPrinters } from "./src/lib/adminstore.js";
 
 export const SESSION_MS = 8 * 60 * 60 * 1000;
 export const TRIES = 5, LOCK_MS = 10 * 60 * 1000;
@@ -97,7 +97,9 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
   // station knows when to fetch them again.
   const fallbackOperators = String(env.VITE_OPERATORS || "Person 1,Person 2,Person 3").split(",").map(x => x.trim()).filter(Boolean);
   const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [] });
-  (globalThis.__jqcAdminConfig ||= new Map()).set(path.resolve(dataFile), { version: () => store.data.configVersion || 0 });
+  (globalThis.__jqcAdminConfig ||= new Map()).set(path.resolve(dataFile), { version: () => store.data.configVersion || 0, printers: () => store.data.settings.printers || {} });
+  const hubPrinting = () => hubs?.()?.get?.(path.resolve(dataFile))?.printing || null;
+  const STATION_IDS = ["st-station1", "st-station2", "st-station3"];   // the floor's stations (config.js STATIONS); the page cannot be imported here
   // A change to the settings: saved with the change log line in one write, version up.
   const change = (req, me, what, settings, before, after) => {
     if (!writable) return { code: 403, error: "This server's admin panel is read only (production: JQC_ADMIN_WRITE=1 in .env.local allows changes)." };
@@ -205,6 +207,41 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
         const bad = change(req, me, list.length ? "operator names" : "operator names: back to the .env.local list", settings, before.length ? before : `(.env.local) ${fallbackOperators.join(", ")}`, list.length ? list : `(.env.local) ${fallbackOperators.join(", ")}`);
         if (bad) return send(res, bad.code, { error: bad.error });
         return send(res, 200, { ...floorConfig(), fallbackOperators, writable });
+      }
+      if (route === "/printers" && req.method === "GET") {
+        const pr = hubPrinting();
+        if (!pr) return send(res, 503, { error: "No hub is running for this data file, so there are no printers to show." });
+        let queues = [], queueError = "";
+        try { queues = await pr.queues(); } catch (e) { queueError = e.message; }
+        const known = Object.keys(hubs?.()?.get?.(path.resolve(dataFile))?.state?.()?.stations || {});
+        const ids = [...new Set([...STATION_IDS, ...known.filter(k => /^st-station\d+$/i.test(k))])].sort();
+        const stations = await Promise.all(ids.map(async id => ({ id, label: id.replace(/^st-station/i, "Station "), sticker: await pr.why(id, "sticker"), ticket: await pr.why(id, "ticket") })));
+        return send(res, 200, { queues: queues.map(q => ({ ...q, zebra: /zebra|zd4|zdesigner/i.test(`${q.name} ${q.driver}`) })), queueError, stations, overrides: store.data.settings.printers || {}, env: pr.env, last: pr.last(), writable, stage, printing: stage === "production" ? "on" : (String(env.JQC_STAGE_PRINT || "").trim() === "1" ? "on" : "off") });
+      }
+      if (route === "/settings/printers" && req.method === "PUT") {
+        const body = await readJson(req);
+        const { map, error } = cleanPrinters(body.printers);
+        if (error) return send(res, 400, { error });
+        const before = store.data.settings.printers || {};
+        if (JSON.stringify(before) === JSON.stringify(map)) return send(res, 200, { overrides: map, unchanged: true });
+        const settings = { ...store.data.settings };
+        if (Object.keys(map).length) settings.printers = map; else delete settings.printers;
+        const show = m => Object.keys(m).length ? Object.entries(m).map(([k, v]) => `${k === "*" ? "every station" : k.replace(/^st-station/, "Station ")}: ${Object.entries(v).map(([w, q]) => `${w} ${q}`).join(", ")}`) : "(.env.local)";
+        const bad = change(req, me, "printers", settings, show(before), show(map));
+        if (bad) return send(res, bad.code, { error: bad.error });
+        return send(res, 200, { overrides: map });
+      }
+      if (route === "/printers/test" && req.method === "POST") {
+        if (!writable) return send(res, 403, { error: "This server's admin panel is read only (production: JQC_ADMIN_WRITE=1 in .env.local allows changes)." });
+        const pr = hubPrinting();
+        if (!pr) return send(res, 503, { error: "No hub is running for this data file." });
+        const body = await readJson(req);
+        const queue = String(body.queue || "").trim(), roll = String(body.roll || "");
+        if (!queue || queue.length > 200) return send(res, 400, { error: "Pick a printer." });
+        if (!["2x4", "2x3", "2x1", "1x0.5"].includes(roll)) return send(res, 400, { error: "Pick a roll." });
+        const r = await pr.test(queue, roll, me.name);
+        log(req, me.name, `test label on ${queue} (${roll} in): ${r.ok ? "sent" : "failed: " + r.error}`);
+        return r.ok ? send(res, 200, { ok: true, last: pr.last() }) : send(res, 502, { error: r.error, last: pr.last() });
       }
       if (route === "/audit" && req.method === "GET") return send(res, 200, { entries: store.data.audit.slice(-300).reverse(), error: store.error || "" });
       return send(res, 404, { error: `no such admin route: ${req.method} ${route}` });

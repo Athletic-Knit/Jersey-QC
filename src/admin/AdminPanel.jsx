@@ -253,6 +253,108 @@ function Operators() {
   );
 }
 
+// Printers (phase 3): which queue each station's stickers and tickets go to, and why; the
+// queues this server PC has; the last print; a test label on any queue and roll. A queue set
+// here is used before .env.local (the station's own, then "every station"); a blank box
+// means .env.local as before. Changes take effect with the next print, no restart.
+const ROLLS = [{ id: "2x4", label: "2 × 4 in" }, { id: "2x3", label: "2 × 3 in" }, { id: "2x1", label: "2 × 1 in" }, { id: "1x0.5", label: "1 × ½ in" }];
+function Printers() {
+  const [p, setP] = useState(null);
+  const [draft, setDraft] = useState({});
+  const [msg, setMsg] = useState({ tone: "", text: "" });
+  const [busy, setBusy] = useState(false);
+  const [test, setTest] = useState({ queue: "", roll: "2x4" });
+  const load = useCallback(() => api("/printers").then(r => { setP(r); setDraft(r.overrides || {}); setTest(t => ({ ...t, queue: t.queue || r.stations[0]?.ticket?.name || r.queues.find(q => q.zebra)?.name || "" })); }).catch(e => setMsg({ tone: "fail", text: e.message })), []);
+  useEffect(() => { load(); }, [load]);
+  if (!p) return <section style={st.card}>{msg.text ? <span style={{ color: "var(--fail-text)" }}>{msg.text}</span> : "Loading…"}</section>;
+  const rows = [{ id: "*", label: "Every station" }, ...p.stations.map(s => ({ id: s.id, label: s.label }))];
+  const val = (id, which) => draft[id]?.[which] || "";
+  const set = (id, which, v) => setDraft(d => { const n = { ...d, [id]: { ...(d[id] || {}), [which]: v } }; if (!v) delete n[id][which]; if (!Object.keys(n[id]).length) delete n[id]; return n; });
+  const changed = JSON.stringify(draft) !== JSON.stringify(p.overrides || {});
+  const save = async () => {
+    setBusy(true); setMsg({ tone: "", text: "" });
+    try { const r = await api("/settings/printers", { method: "PUT", body: JSON.stringify({ printers: draft }) }); setMsg({ tone: "pass", text: r.unchanged ? "Nothing to save." : "Saved. The next print uses it." }); await load(); }
+    catch (e) { setMsg({ tone: "fail", text: e.message }); }
+    finally { setBusy(false); }
+  };
+  const sendTest = async () => {
+    setBusy(true); setMsg({ tone: "", text: "" });
+    try { await api("/printers/test", { method: "POST", body: JSON.stringify(test) }); setMsg({ tone: "pass", text: `Test label sent to ${test.queue}.` }); }
+    catch (e) { setMsg({ tone: "fail", text: e.message }); }
+    finally { setBusy(false); load(); }
+  };
+  const cell = { padding: "8px", borderBottom: "1px solid var(--line)", verticalAlign: "top" };
+  const Who = ({ w }) => <><strong style={{ overflowWrap: "anywhere" }}>{w?.name || "none"}</strong><div style={{ color: "var(--text-dim)", fontSize: 13 }}>{w?.why}</div></>;
+  return (
+    <>
+      {msg.text && <div role="status" style={{ ...st.card, borderColor: `var(--${msg.tone || "info"})`, background: `var(--${msg.tone || "info"}-bg)`, color: `var(--${msg.tone || "info"}-text)` }}>{msg.text}</div>}
+      <section style={st.card}>
+        <h2 style={st.h2}>Where each station prints now</h2>
+        <p style={{ margin: "0 0 10px", color: "var(--text-dim)" }}>Stickers are the 1 × ½ in roll; tickets are the flag tickets, box labels and lists (any taller roll). Printing on this server: <strong style={{ color: "var(--text)" }}>{p.printing}</strong>{p.printing === "off" && " (JQC_STAGE_PRINT=1 in .env.local turns it on)"}.</p>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>
+            <thead><tr>{["Station", "Stickers", "Tickets and lists"].map(h => <th key={h} style={{ ...cell, textAlign: "left", color: "var(--text-dim)", borderBottom: "2px solid var(--line-strong)" }}>{h}</th>)}</tr></thead>
+            <tbody>{p.stations.map(s => <tr key={s.id}><td style={{ ...cell, fontWeight: 700 }}>{s.label}</td><td style={cell}><Who w={s.sticker} /></td><td style={cell}><Who w={s.ticket} /></td></tr>)}</tbody>
+          </table>
+        </div>
+        {p.last && <p style={{ margin: "10px 0 0" }}>Last print: {when(p.last.at)} on <strong>{p.last.printer}</strong> ({p.last.what}{p.last.station ? `, ${p.last.station.replace(/^st-station/, "Station ")}` : ""}) {p.last.ok ? <Pill tone="pass">printed</Pill> : <><Pill tone="fail">failed</Pill> <span style={{ color: "var(--fail-text)" }}>{p.last.error}</span></>}</p>}
+      </section>
+
+      <section style={st.card}>
+        <h2 style={st.h2}>Choose the printers</h2>
+        <p style={{ margin: "0 0 10px", color: "var(--text-dim)" }}>Pick a queue to use it before .env.local; leave a box blank for .env.local as before. "Every station" is for any station without its own. A printer shared from another PC is written \\PC\Name.</p>
+        <datalist id="adm-queues">{p.queues.map(q => <option key={q.name} value={q.name} />)}</datalist>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, max-content) minmax(0, 1fr) minmax(0, 1fr)", gap: "8px 12px", alignItems: "center", maxWidth: 820 }}>
+          <span /><strong style={{ color: "var(--text-dim)" }}>Stickers</strong><strong style={{ color: "var(--text-dim)" }}>Tickets and lists</strong>
+          {rows.map(r => (
+            <div key={r.id} style={{ display: "contents" }}>
+              <label style={{ fontWeight: 700 }} htmlFor={`pr-${r.id}-sticker`}>{r.label}</label>
+              {["sticker", "ticket"].map(w => (
+                <input key={w} id={`pr-${r.id}-${w}`} list="adm-queues" style={st.input} value={val(r.id, w)} disabled={!p.writable} placeholder={r.id === "*" ? "(.env.local)" : "(every station / .env.local)"} onChange={e => set(r.id, w, e.target.value)} aria-label={`${r.label} ${w === "sticker" ? "stickers" : "tickets and lists"}`} />
+              ))}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+          {p.writable ? <>
+            <button style={changed ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!changed || busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>
+            {changed && <button style={st.btn} onClick={() => setDraft(p.overrides || {})}>Undo changes</button>}
+            {Object.keys(p.overrides || {}).length > 0 && !changed && <button style={st.btn} onClick={() => setDraft({})}>Clear all (back to .env.local)</button>}
+          </> : <Pill>Read only on this server</Pill>}
+        </div>
+      </section>
+
+      <section style={st.card}>
+        <h2 style={st.h2}>Test label</h2>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 260px", minWidth: 0 }}>
+            <label htmlFor="adm-test-q" style={{ fontWeight: 700 }}>Printer</label>
+            <input id="adm-test-q" list="adm-queues" style={st.input} value={test.queue} onChange={e => setTest(t => ({ ...t, queue: e.target.value }))} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label htmlFor="adm-test-r" style={{ fontWeight: 700 }}>Roll</label>
+            <select id="adm-test-r" style={{ ...st.input, width: "auto" }} value={test.roll} onChange={e => setTest(t => ({ ...t, roll: e.target.value }))}>{ROLLS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}</select>
+          </div>
+          <button style={st.pri} disabled={!p.writable || busy || !test.queue} onClick={sendTest}>Print a test label</button>
+        </div>
+        <p style={{ margin: "8px 0 0", color: "var(--text-dim)", fontSize: 14 }}>One small label: "Jersey QC test", the printer, the roll and the time. It goes in the change log.</p>
+      </section>
+
+      <section style={st.card}>
+        <h2 style={st.h2}>Print queues on {p.stage === "production" ? "the server PC" : "this server's PC"}</h2>
+        {p.queueError && <div role="alert" style={{ color: "var(--fail-text)" }}>Could not list them: {p.queueError}</div>}
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 14 }}>
+            <thead><tr>{["Name", "Driver", "Port", "Status"].map(h => <th key={h} style={{ ...cell, textAlign: "left", color: "var(--text-dim)", borderBottom: "2px solid var(--line-strong)" }}>{h}</th>)}</tr></thead>
+            <tbody>{p.queues.map(q => <tr key={q.name}><td style={cell}><strong>{q.name}</strong> {q.zebra && <Pill tone="pass">label printer</Pill>}</td><td style={cell}>{q.driver}</td><td style={cell}>{q.port}</td><td style={cell}>{String(q.status ?? "")}</td></tr>)}</tbody>
+          </table>
+        </div>
+        <p style={{ margin: "10px 0 0", color: "var(--text-dim)", fontSize: 14 }}>From .env.local: JERSEY_PRINTER {p.env.printer || "(not set)"}, JERSEY_FLAG_PRINTER {p.env.flagPrinter || "(not set)"}{Object.keys(p.env.stations).length ? `, per station: ${Object.entries(p.env.stations).map(([k, v]) => `${k} ${v}`).join(", ")}` : ""}.</p>
+      </section>
+    </>
+  );
+}
+
 function Appearance() {
   const [choice, setChoice] = useState(loadTheme);
   const pick = id => { setChoice(id); saveTheme(id); };
@@ -269,7 +371,7 @@ function Appearance() {
   );
 }
 
-const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
+const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "printers", label: "Printers" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
 
 export default function AdminPanel() {
   const [s, setS] = useState(null);         // the session answer: stage, setup, signedIn …
@@ -308,6 +410,7 @@ export default function AdminPanel() {
               </nav>
               {tab === "health" && <Health h={h} onRefresh={loadHealth} />}
               {tab === "operators" && <Operators />}
+              {tab === "printers" && <Printers />}
               {tab === "log" && <ServerLog />}
               {tab === "changes" && <ChangeLog />}
               {tab === "look" && <Appearance />}

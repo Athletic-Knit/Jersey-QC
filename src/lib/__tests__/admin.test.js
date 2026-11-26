@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { Buffer } from "node:buffer";
-import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX, cleanOperators } from "../adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX, cleanOperators, cleanPrinters } from "../adminstore.js";
 import { operatorsFrom } from "../hub.js";
 import { createAdmin, TRIES } from "../../../admin-plugin.js";
 import { resolveTheme } from "../theme.js";
@@ -215,6 +215,67 @@ describe("phase 2: operator names", () => {
     await call(a.handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv"] } });
     const r = await call(h.handle, "POST", "/stations/st-station1", { body: { operatorName: "Shiv", roster: [], log: [] } });
     expect(r.body).toMatchObject({ ok: true, configVersion: 1 });
+    h.close();
+  });
+});
+
+describe("phase 3: printers", () => {
+  const QUEUES = [{ name: "ZDesigner ZD411-203dpi ZPL", driver: "ZDesigner ZD411", port: "USB001", status: 0 }, { name: "Office Laser", driver: "HP", port: "IP_10", status: 0 }];
+  let hubFile, h, a, c, printed, failNext;
+  beforeEach(async () => {
+    hubFile = path.join(tmp(), "hub-p.json"); printed = []; failNext = "";
+    h = (await import("../../../hub-plugin.js")).createHub({ file: hubFile, printer: String.raw`\\OTHER-PC\Zebra`, printers: { "st-station2": "Station2 Zebra" }, print: async (q, zpl) => { if (failNext) throw new Error(failNext); printed.push({ q, zpl }); }, listPrinters: async () => QUEUES });
+    a = createAdmin({ dataFile: hubFile, stage: "development", env: ENV, git: () => ({}) });
+    c = cookieFrom(await call(a.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+  });
+  const stationsNow = async () => Object.fromEntries((await call(a.handle, "GET", "/printers", { cookie: c })).body.stations.map(s => [s.id, s]));
+
+  it("cleans the map: stations or *, sticker and ticket only, blanks dropped, odd names refused", () => {
+    expect(cleanPrinters({ "*": { sticker: " A ", ticket: "" }, "ST-Station1": { ticket: String.raw`\\PC\Zebra`, other: "x" }, "st-station3": {} })).toEqual({ map: { "*": { sticker: "A" }, "st-station1": { ticket: String.raw`\\PC\Zebra` } }, error: "" });
+    expect(cleanPrinters({ "kitchen": { sticker: "A" } }).error).toBeTruthy();
+    expect(cleanPrinters({ "*": { sticker: "a|b" } }).error).toBeTruthy();
+    expect(cleanPrinters({ "*": { sticker: "a\u0007" } }).error).toBeTruthy();
+  });
+  it("with nothing set, each station prints where .env.local says, and the page says why", async () => {
+    const s = await stationsNow();
+    expect(s["st-station1"].sticker).toMatchObject({ name: "ZDesigner ZD411-203dpi ZPL", why: expect.stringMatching(/Zebra on this PC/) });
+    expect(s["st-station2"].sticker).toMatchObject({ name: "Station2 Zebra", why: expect.stringMatching(/JERSEY_PRINTER_STATION2/) });
+    expect(s["st-station1"].ticket.why).toMatch(/sticker printer/);
+  });
+  it("a queue set in the panel comes first, the station's own before every station's, and the next print goes there", async () => {
+    const r = await call(a.handle, "PUT", "/settings/printers", { cookie: c, body: { printers: { "*": { ticket: "Office Laser" }, "st-station2": { sticker: "Panel Zebra" } } } });
+    expect(r.status).toBe(200);
+    const s = await stationsNow();
+    expect(s["st-station2"].sticker).toMatchObject({ name: "Panel Zebra", why: expect.stringMatching(/this station/) });
+    expect(s["st-station1"].ticket).toMatchObject({ name: "Office Laser", why: expect.stringMatching(/every station/) });
+    expect(s["st-station1"].sticker.name).toBe("ZDesigner ZD411-203dpi ZPL");   // not set in the panel: .env.local as before
+    await call(h.handle, "POST", "/print", { body: { station: "st-station2", kind: "jersey", roll: "1x0.5", labels: [{ bin: "1.1", value: "Hawks" }] } });
+    expect(printed.at(-1).q).toBe("Panel Zebra");
+    const log = (await call(a.handle, "GET", "/audit", { cookie: c })).body.entries[0];
+    expect(log).toMatchObject({ what: "printers", before: "(.env.local)" });
+    expect(log.after.join(" ")).toMatch(/Station 2: sticker Panel Zebra/);
+  });
+  it("a test label goes to the queue picked, on the roll picked, and into the change log; a failed one says why", async () => {
+    const r = await call(a.handle, "POST", "/printers/test", { cookie: c, body: { queue: "Office Laser", roll: "2x3" } });
+    expect(r.status).toBe(200);
+    expect(printed.at(-1).q).toBe("Office Laser");
+    expect(printed.at(-1).zpl).toMatch(/\^PW406\^LL609/);
+    expect(printed.at(-1).zpl).toMatch(/Jersey QC test/);
+    failNext = "Printing is off on the development server";
+    const bad = await call(a.handle, "POST", "/printers/test", { cookie: c, body: { queue: "Office Laser", roll: "2x4" } });
+    expect(bad.status).toBe(502);
+    expect(bad.body.error).toMatch(/off/);
+    expect((await call(a.handle, "GET", "/printers", { cookie: c })).body.last).toMatchObject({ ok: false, printer: "Office Laser" });
+    const what = (await call(a.handle, "GET", "/audit", { cookie: c })).body.entries.map(e => e.what);
+    expect(what[0]).toMatch(/test label on Office Laser \(2x4 in\): failed/);
+    expect(what[1]).toMatch(/test label on Office Laser \(2x3 in\): sent/);
+  });
+  it("production refuses changes and test labels unless JQC_ADMIN_WRITE=1", async () => {
+    const ro = createAdmin({ dataFile: hubFile, stage: "production", env: ENV, git: () => ({}) });
+    const rc = cookieFrom(await call(ro.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(ro.handle, "PUT", "/settings/printers", { cookie: rc, body: { printers: { "*": { sticker: "X" } } } })).status).toBe(403);
+    expect((await call(ro.handle, "POST", "/printers/test", { cookie: rc, body: { queue: "X", roll: "2x4" } })).status).toBe(403);
+    expect((await call(ro.handle, "GET", "/printers", { cookie: rc })).status).toBe(200);   // looking is fine
     h.close();
   });
 });

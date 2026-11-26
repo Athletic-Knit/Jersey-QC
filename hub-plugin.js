@@ -290,8 +290,40 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
     const here = list.find(p => isLabelPrinter(p) && !String(p.name).startsWith("\\\\"));
     return here?.name || name || list.find(isLabelPrinter)?.name || null;
   };
-  const labelPrinter = async station => perStation[String(station || "").trim().toLowerCase()] || hubPrinter(printerName);
-  const ticketPrinter = async station => perStationFlag[String(station || "").trim().toLowerCase()] || (flagName ? hubPrinter(flagName) : labelPrinter(station));
+  // The admin panel's printers (phase 3, 26 Nov 2026), from its file through
+  // globalThis.__jqcAdminConfig (admin-plugin.js): { "st-station1": { sticker, ticket }, "*": {…} }.
+  // A queue named there is used as written, before .env.local: the station's own, then
+  // every station's ("*"); without one, .env.local as before (JERSEY_PRINTER_STATIONn,
+  // then JERSEY_PRINTER with the local-Zebra rule above). `whyPrinter` says which one won.
+  const adminPrinters = () => globalThis.__jqcAdminConfig?.get(key)?.printers?.() || {};
+  const fromPanel = (station, which) => { const a = adminPrinters(), st = String(station || "").trim().toLowerCase(); return a[st]?.[which] ? { name: a[st][which], why: "set in the admin panel for this station" } : a["*"]?.[which] ? { name: a["*"][which], why: "set in the admin panel for every station" } : null; };
+  const whyPrinter = async (station, which) => {
+    const st = String(station || "").trim().toLowerCase();
+    const panel = fromPanel(st, which); if (panel) return panel;
+    if (which === "ticket") {
+      if (perStationFlag[st]) return { name: perStationFlag[st], why: `.env.local JERSEY_FLAG_PRINTER_${st.replace(/^st-/, "").toUpperCase()}` };
+      if (flagName) { const n = await hubPrinter(flagName); return { name: n, why: n === flagName ? ".env.local JERSEY_FLAG_PRINTER" : `the Zebra on this PC (JERSEY_FLAG_PRINTER names ${flagName}, on another PC)` }; }
+      const s2 = await whyPrinter(st, "sticker"); return { name: s2.name, why: `the sticker printer (no ticket printer set): ${s2.why}` };
+    }
+    if (perStation[st]) return { name: perStation[st], why: `.env.local JERSEY_PRINTER_${st.replace(/^st-/, "").toUpperCase()}` };
+    const n = await hubPrinter(printerName);
+    return { name: n, why: !n ? "none: no queue named and no Zebra on this PC" : n === printerName ? ".env.local JERSEY_PRINTER" : printerName ? `the Zebra on this PC (JERSEY_PRINTER names ${printerName}, on another PC)` : "the first Zebra queue on this PC" };
+  };
+  const labelPrinter = async station => (await whyPrinter(station, "sticker")).name;
+  const ticketPrinter = async station => (await whyPrinter(station, "ticket")).name;
+  // The last print, good or not, for the admin panel's printer page.
+  let lastPrint = null;
+  // A test label on any queue and roll (the admin panel, phase 3): the stage's own print, so
+  // development and testing refuse it unless JQC_STAGE_PRINT=1, like every other print.
+  const testPrint = async (queue, roll, who = "") => {
+    const d = labelDots(roll);
+    const big = Math.max(18, Math.round(Math.min(d.h * 0.22, d.w * 0.12))), small = Math.max(14, Math.round(big * 0.55));
+    const safeText = t => String(t ?? "").replace(/[\^~]/g, " ").slice(0, 60);
+    const x = Math.round(d.dpi * 2 / 25.4), y = d.top || 16;
+    const zpl = `^XA^CI28^PW${d.w}^LL${d.h}^LT0^FO${x},${y}^A0N,${big},${big}^FDJersey QC test^FS^FO${x},${y + big + 6}^A0N,${small},${small}^FD${safeText(queue)}^FS^FO${x},${y + big + small + 12}^A0N,${small},${small}^FD${roll} in  ${new Date(now_()).toLocaleTimeString("en-CA", { hour12: false })}${who ? "  " + safeText(who) : ""}^FS^XZ`;
+    try { await print(queue, zpl); lastPrint = { at: now_(), ok: true, printer: queue, what: `test label (${roll} in)` }; console.log(`[hub] test label on ${queue} (${roll} in)${who ? " by " + who : ""}`); return { ok: true }; }
+    catch (e) { lastPrint = { at: now_(), ok: false, printer: queue, what: `test label (${roll} in)`, error: e.message }; console.error(`[hub] test label on ${queue} failed: ${e.message}`); return { ok: false, error: e.message }; }
+  };
   // The box model: every "this bin went in that box" answer from every
   // station is kept (the newest 3000) and the model is fitted to the newest
   // 600, so all stations learn from the same floor.
@@ -803,7 +835,8 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           const spec = roll || (onTicketRoll ? flagSpecOf(body.station) : labelSpec);
           const job = printJob(labels, labelDots(spec), kind), n = job.count;
           try { await print(name, job.zpl); }
-          catch (e) { console.error(`[hub] print on ${name} failed: ${e.message}`); return json(res, 502, { error: `print failed: ${e.message}` }); }
+          catch (e) { lastPrint = { at: now_(), ok: false, printer: name, station: body.station || "", what: kind, error: e.message }; console.error(`[hub] print on ${name} failed: ${e.message}`); return json(res, 502, { error: `print failed: ${e.message}` }); }
+          lastPrint = { at: now_(), ok: true, printer: name, station: body.station || "", what: kind };
           const what = kind === "jersey" ? (n === 1 ? `sticker bin ${labels[0].bin || "—"} ${labels[0].value || ""}` : `${n} stickers`)
             : kind === "flag" ? (n === 1 ? `flag ticket #${labels[0].number || "?"} ${labels[0].tag || ""}${labels[0].spots?.length ? ` (${labels[0].spots.length} marked)` : ""}` : `${n} flag tickets`)
             : kind === "binlist" ? `${n} bin list label${n === 1 ? "" : "s"} (bin ${[...new Set(labels.map(l => l.bin))].join(", ")})`
@@ -841,7 +874,9 @@ Connection: close
     });
   };
 
-  hubs.set(key, { close, handle, flush, blocked: () => blocked, state: () => state });   // the admin panel reads these (admin-plugin.js), read only
+  hubs.set(key, { close, handle, flush, blocked: () => blocked, state: () => state,
+    // the admin panel's printer page (phase 3): the queues, which one each station uses and why, the last print, a test label
+    printing: { queues: () => printerList(), why: whyPrinter, last: () => lastPrint, test: testPrint, env: { printer: printerName, flagPrinter: flagName, stations: { ...perStation }, flagStations: { ...perStationFlag }, labelSize: labelSpec, flagLabelSize: flagSpec } } });   // the admin panel reads these (admin-plugin.js), read only
   return { handle, redirectPlainHttp, state: () => state, flush: writeNow, close, blocked: () => blocked };
 }
 
