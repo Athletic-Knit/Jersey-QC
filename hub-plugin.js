@@ -840,7 +840,7 @@ Connection: close
     });
   };
 
-  hubs.set(key, { close, handle, flush });
+  hubs.set(key, { close, handle, flush, blocked: () => blocked, state: () => state });   // the admin panel reads these (admin-plugin.js), read only
   return { handle, redirectPlainHttp, state: () => state, flush: writeNow, close, blocked: () => blocked };
 }
 

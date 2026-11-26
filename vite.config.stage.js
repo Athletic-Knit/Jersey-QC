@@ -12,6 +12,7 @@ import react from '@vitejs/plugin-react'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import hubPlugin from './hub-plugin.js'
 import replayPlugin from './replay-plugin.js'
+import adminPlugin from './admin-plugin.js'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -46,7 +47,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: here,
     cacheDir: path.join(here, `.vite-${name}`),
-    plugins: [react(), basicSsl(), hubPlugin({ file: dataFile, ...printerEnv(env), ...(printOn ? {} : { print: noPrint }) }), replayPlugin({ files: replayFiles })],
+    plugins: [react(), basicSsl(), hubPlugin({ file: dataFile, ...printerEnv(env), ...(printOn ? {} : { print: noPrint }) }), replayPlugin({ files: replayFiles }), adminPlugin({ dataFile, stage: name, port: stage.port, env, root: here })],
     server: {
       host: true, port: stage.port, strictPort: true,
       fs: { strict: false },   // node_modules may be a link into the production folder: the fonts live there

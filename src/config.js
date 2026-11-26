@@ -121,7 +121,7 @@ export function reasonsFor(jerseyType) {
 // Role gate. This is a convenience gate so a passer-by cannot use a station,
 // NOT security: anything in the browser bundle can be read by anyone on the
 // network. Real sign-in arrives with the roster server. Set PINs in .env.local:
-//   VITE_PIN_INSPECTOR=…  VITE_PIN_PACKER=…  VITE_PIN_SUPERVISOR=…  VITE_PIN_ADMIN=…
+//   VITE_PIN_INSPECTOR=…  VITE_PIN_PACKER=…  VITE_PIN_SUPERVISOR=…
 // and VITE_PIN_REQUIRED=false to switch the gate off.
 const env = import.meta.env;
 export const ROLES = [
@@ -132,8 +132,9 @@ export const ROLES = [
   { id: "sorter",     label: "Sorter",     pin: env.VITE_PIN_SORTER     || "4444" },
   { id: "packer",     label: "Packer",     pin: env.VITE_PIN_PACKER     || "2222" },
   { id: "supervisor", label: "Supervisor", pin: env.VITE_PIN_SUPERVISOR || "3333" },
-  { id: "admin",      label: "Admin",      pin: env.VITE_PIN_ADMIN      || "9999" },
 ];
+// There is no Admin role (removed 26 Nov 2026, the co-op): developers use the admin panel
+// (?view=admin), signed in with a password the server checks (admin-plugin.js).
 export const PIN_REQUIRED = (env.VITE_PIN_REQUIRED ?? "true") !== "false";
 
 // The scanning stations. An operator picks their station at sign-in and

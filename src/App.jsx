@@ -385,7 +385,7 @@ const goToStation = id => { const u = new URL(window.location.href); u.searchPar
 // Each inspection station has its own PIN; packer and supervisor have a role
 // PIN. The page's ?station= says where it is: station1..3 for inspectors,
 // "packing" for the packer, "supervisor" for the supervisor's board.
-const ROLE_CHOICES = ROLES.filter(r => r.id !== "admin");
+const ROLE_CHOICES = ROLES;
 // The head of a long dialog (its title and Close) stays at the top while the
 // list under it scrolls, like a frozen header row in Excel (the owner, 19 Nov
 // 2026: no keyboard on the floor, so Esc was a scroll to the end and a click).
@@ -720,7 +720,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     } catch (e) { setError("Could not fetch that roster: " + e.message); }
   };
 
-  const canSupervise = role === "supervisor" || role === "admin";
+  const canSupervise = role === "supervisor";
   // One start at a time. Enter in the order field reaches here while the button is greyed, and
   // a second start found the ship-with boxes already taken by the first and replaced its
   // result with none (code review M14). A ref, not state: two presses in one moment both see
@@ -3839,7 +3839,7 @@ export default function App() {
   };
   const [showBinSetup,       setShowBinSetup]       = useState(false);
   // A supervisor's sign-in is the board and nothing else: no station, no scanning, no saved order to resume.
-  const [showSupervisor,     setShowSupervisor]     = useState(() => savedSignIn?.role === "supervisor" || savedSignIn?.role === "admin");
+  const [showSupervisor,     setShowSupervisor]     = useState(() => savedSignIn?.role === "supervisor");
   const [binMap,             setBinMap]             = useState(null);
   const [firstScanTime,      setFirstScanTime]      = useState(null);
 
@@ -4041,7 +4041,7 @@ export default function App() {
   const flagCount      = roster.filter(r => r.scanned === "flag").length + offRosterFlags;
   const manualCount    = roster.filter(r => r.scanned === "manual").length;
   const teamNames      = useMemo(() => [...new Set(roster.map(r => r.team).filter(Boolean))], [roster]);
-  const canSupervise   = role === "supervisor" || role === "admin";
+  const canSupervise   = role === "supervisor";
   const sorting        = role === "sorter";   // sorts only: no quick look, no full inspection, no double-check (the owner, 19 Nov 2026)
   useEffect(() => { sortingRef.current = sorting; }, [sorting]);
   const openCount      = roster.filter(r => r.scanned === "flag" || r.scanned === "missing" || r.scanned === "short").length;
@@ -5391,7 +5391,7 @@ export default function App() {
         <SignInModal initial={savedSignIn}
           onSignIn={({ role, name }) => {
             setRole(role); setOperatorName(name); setSignedIn(true); saveSignIn({ role, name });
-            if (role === "supervisor" || role === "admin") { setShowSupervisor(true); return; }
+            if (role === "supervisor") { setShowSupervisor(true); return; }
             // An operator's station goes full screen by itself: no tabs, no address bar. (The kiosk launcher locks the browser down for good.)
             else if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
           }} />

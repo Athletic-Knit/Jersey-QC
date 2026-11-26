@@ -2,9 +2,37 @@
    own scrolling (the roster list, the log, the dialogs). Nothing here may add
    a margin, a border or a page scrollbar around it — in full screen a default
    body margin showed as a white frame and a second scrollbar. */
-html, body, #root { height: 100%; margin: 0; padding: 0; background: #0d1117; color: #e2e8f0; }
+html, body, #root { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--text); }
 body { overflow: hidden; overscroll-behavior: none; }
 html { color-scheme: dark; }
+
+/* Colour tokens, named by job (the admin panel plan, 26 Nov 2026). The dark set is the
+   app's colours as they are; the light set is for the floor's bright lights: dark text
+   on white, strong borders, and signal colours deep enough to read from 4–5 ft. A page
+   picks one with data-theme on <html> (main.jsx). Phase 1: only the admin panel uses
+   them; the station still draws its own dark colours inline until it is converted. */
+:root, :root[data-theme="dark"] {
+  --bg: #0d1117; --surface: #161b22; --surface-2: #1e293b; --line: #30363d; --line-strong: #3f4b5c;
+  --text: #e2e8f0; --text-dim: #94a3b8; --text-faint: #64748b;
+  --accent: #3b82f6; --on-accent: #0d1117; --focus: #60a5fa;
+  --pass: #22c55e; --pass-bg: rgba(34,197,94,0.12); --pass-text: #86efac;
+  --warn: #f59e0b; --warn-bg: rgba(245,158,11,0.12); --warn-text: #fcd34d;
+  --fail: #ef4444; --fail-bg: rgba(239,68,68,0.12); --fail-text: #fca5a5;
+  --info: #38bdf8; --info-bg: rgba(56,189,248,0.12); --info-text: #7dd3fc;
+  --shadow: 0 8px 24px rgba(0,0,0,0.45);
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #eef1f5; --surface: #ffffff; --surface-2: #f6f8fb; --line: #b8c1cc; --line-strong: #7b8794;
+  --text: #0b1220; --text-dim: #334155; --text-faint: #52606d;
+  --accent: #1d4ed8; --on-accent: #ffffff; --focus: #1d4ed8;
+  --pass: #15803d; --pass-bg: #dcfce7; --pass-text: #14532d;
+  --warn: #b45309; --warn-bg: #fef3c7; --warn-text: #78350f;
+  --fail: #b91c1c; --fail-bg: #fee2e2; --fail-text: #7f1d1d;
+  --info: #0369a1; --info-bg: #e0f2fe; --info-text: #0c4a6e;
+  --shadow: 0 6px 18px rgba(15,23,42,0.15);
+  color-scheme: light;
+}
 
 /* Type. Atkinson Hyperlegible for everything the operator reads as text: its
    letterforms were drawn so 0/O, 1/l/I and 6/9 cannot be confused, which is
@@ -31,12 +59,12 @@ button, input, select, textarea, kbd { font-family: inherit; }
 
 /* A visible focus ring for keyboard and pedal users — the app is driven by
    keys, so where the focus sits must be obvious from a distance. */
-:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 button:focus:not(:focus-visible) { outline: none; }
 
 /* Scrollbars wide enough to grab from a standing position. */
 ::-webkit-scrollbar { width: 14px; height: 14px; }
-::-webkit-scrollbar-thumb { background: #3f4b5c; border-radius: 8px; border: 3px solid #0d1117; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 8px; border: 3px solid var(--bg); }
 ::-webkit-scrollbar-track { background: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
