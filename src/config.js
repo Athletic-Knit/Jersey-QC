@@ -119,20 +119,19 @@ export function reasonsFor(jerseyType) {
   return t ? REASONS_BY_CONSTRUCTION[t.construction] : ALL_REASONS_MENU;
 }
 
-// Role gate. This is a convenience gate so a passer-by cannot use a station,
-// NOT security: anything in the browser bundle can be read by anyone on the
-// network. Real sign-in arrives with the roster server. Set PINs in .env.local:
-//   VITE_PIN_INSPECTOR=…  VITE_PIN_PACKER=…  VITE_PIN_SUPERVISOR=…
-// and VITE_PIN_REQUIRED=false to switch the gate off.
+// Role gate, so a passer-by cannot use a station. The PINs are checked by the server
+// (admin panel phase 7, src/lib/pins.js, POST /api/admin/pin): the page holds none. Set them
+// in .env.local as JQC_PIN_INSPECTOR=… (no VITE_ prefix, so they never reach a browser; the
+// old VITE_PIN_… names still work), and VITE_PIN_REQUIRED=false to switch the gate off.
 const env = import.meta.env;
 export const ROLES = [
-  { id: "inspector",  label: "Inspector",  pin: env.VITE_PIN_INSPECTOR  || "1111" },
+  { id: "inspector",  label: "Inspector" },
   // A sorter only sorts (the owner, 19 Nov 2026): no cleaning, no inspection. Signs in at a
   // station with the station's PIN, like an inspector; no quick look, no full inspection, no
   // double-check, no damage photo, and the only flags are No size tag, Duplicate and Not on the roster.
-  { id: "sorter",     label: "Sorter",     pin: env.VITE_PIN_SORTER     || "4444" },
-  { id: "packer",     label: "Packer",     pin: env.VITE_PIN_PACKER     || "2222" },
-  { id: "supervisor", label: "Supervisor", pin: env.VITE_PIN_SUPERVISOR || "3333" },
+  { id: "sorter",     label: "Sorter" },
+  { id: "packer",     label: "Packer" },
+  { id: "supervisor", label: "Supervisor" },
 ];
 // There is no Admin role (removed 26 Nov 2026, the co-op): developers use the admin panel
 // (?view=admin), signed in with a password the server checks (admin-plugin.js).
@@ -141,11 +140,11 @@ export const PIN_REQUIRED = (env.VITE_PIN_REQUIRED ?? "true") !== "false";
 // The scanning stations. An operator picks their station at sign-in and
 // enters that station's PIN; the page then runs as ?station=station1 so the
 // supervisor's board, the saved order and the hub all know it as "Station 1".
-// Set PINs in .env.local: VITE_PIN_STATION1=…  VITE_PIN_STATION2=…  VITE_PIN_STATION3=…
+// Their PINs: JQC_PIN_STATION1=… in .env.local (src/lib/pins.js).
 export const STATIONS = [
-  { id: "station1", label: "Station 1", pin: env.VITE_PIN_STATION1 || "1001" },
-  { id: "station2", label: "Station 2", pin: env.VITE_PIN_STATION2 || "1002" },
-  { id: "station3", label: "Station 3", pin: env.VITE_PIN_STATION3 || "1003" },
+  { id: "station1", label: "Station 1" },
+  { id: "station2", label: "Station 2" },
+  { id: "station3", label: "Station 3" },
 ];
 export const stationOf = id => STATIONS.find(s => s.id === id) || null;
 

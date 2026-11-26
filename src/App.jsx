@@ -37,7 +37,7 @@ import { playTone } from "./lib/audio.js";
 import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel, checksFor } from "./lib/vigilance.js";
-import { hub, stationId, snapshotOf, stationUse, holdPrints, setPrintRolls, rollFor, cachedFloorConfig, loadFloorConfig, operatorsFrom } from "./lib/hub.js";
+import { hub, stationId, snapshotOf, stationUse, holdPrints, setPrintRolls, rollFor, cachedFloorConfig, loadFloorConfig, operatorsFrom, checkPin } from "./lib/hub.js";
 import { baseSettings, effectiveSettings, recordOwn, loadOwn, saveOwn, loadFloorInUse, saveFloorInUse } from "./lib/floorsettings.js";
 import { applyTheme, clearTheme, THEMES } from "./lib/theme.js";
 import { ofRun, pickRun, orderDone, doneAt, eventsAsLog } from "./lib/ledgerview.js";
@@ -441,8 +441,16 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const pickRole    = r  => { setRole(r.id); const t = pageFor(r.id, station); if (!atStation(r.id) && t !== here && !onCancel) goToStation(t); };
   const pickStation = id => { setStation(id); if (id !== here && !onCancel) goToStation(id); };
 
-  const submit = () => {
-    if (PIN_REQUIRED && pin !== pinOwner.pin) { setError("Wrong PIN for " + pinOwner.label + "."); return; }
+  // The PIN is checked by the server (phase 7, checkPin in hub.js): the page holds none.
+  const [checking, setChecking] = useState(false);
+  const checkingRef = useRef(false);
+  const submit = async () => {
+    if (checkingRef.current) return;
+    if (PIN_REQUIRED) {
+      checkingRef.current = true; setChecking(true);
+      const r = await checkPin(pinOwner.id, pin).finally(() => { checkingRef.current = false; setChecking(false); });
+      if (!r.ok) { setError(r.error === "Wrong PIN." ? "Wrong PIN for " + pinOwner.label + "." : r.error); return; }
+    }
     if (!name.trim()) { setError("Please enter your name."); return; }
     if (atStation(role) && !onCancel && busyBy(station)) { setError(`${stDef.label} is in use by ${busyBy(station)} on another PC. Pick a free station, or sign out on that PC first.`); return; }
     // The page is not on the chosen station yet (opened from the bare address):
@@ -510,7 +518,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
           )}
         </div>
         {error && <div style={errSt}>{error}</div>}
-        <button onClick={submit} style={bigBtn}>{onCancel ? "Take over →" : "Sign in →"}</button>
+        <button onClick={submit} disabled={checking} style={checking ? { ...bigBtn, opacity: 0.6 } : bigBtn}>{checking ? "Checking the PIN…" : onCancel ? "Take over →" : "Sign in →"}</button>
         {onCancel && <button onClick={onCancel} style={{ ...btnGhost, width: "100%", marginTop: 8 }}>← Back, keep the current operator</button>}
         </div>
         {PIN_REQUIRED && (
@@ -4210,7 +4218,16 @@ export default function App() {
     rosterVersion.current++;
     setRoster(parsed.map(r => ({ ...r, scanned: false })));
     setRosterFile(fileName);
-    if (!keepLog) { setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); inspectRef.current.reset(); syncInspect(); }
+    if (!keepLog) {
+      setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]);
+      // A new order takes the floor's inspection counts as they are now (the admin panel,
+      // phase 7; blank = the app's own 5 / 10 / 5); the order keeps them to its end, a resume too.
+      const counts = cachedFloorConfig()?.inspection || {};
+      inspectRef.current = createInspection({ full: counts.full, every: counts.every, log: m => console.log(m) }); syncInspect();
+      const was = vigilRef.current.state();   // a self-check under way carries on into the new order, as before
+      vigilRef.current = createVigilance({ checks: counts.selfCheck, log: m => console.log(m) });
+      vigilRef.current.load({ ...was, remaining: Math.min(was.remaining, vigilRef.current.checks), checks: vigilRef.current.checks }); setChecksLeft(vigilRef.current.remaining);
+    }
     setThumb(null); setOverlay(null); setShowRosterComplete(false); waitPedalRef.current = false; setWaitPedal(false);
     // Every order has a box: one team or size, or an order that is not
     // sorted, starts in Box 1.1. The box screen shows on every order, as the
@@ -5642,7 +5659,7 @@ export default function App() {
           <Pill color="#ef4444" active={rosterFilter === "flag"} onClick={() => filterRoster("flag")} title="Show the flagged garments">{flagCount} Flag</Pill>
           {sorting && <span title="Signed in as a sorter: sorting only, no inspection"><Pill color="#a78bfa">Sorting</Pill></span>}
           {!sorting && checksLeft > 0 && <span title="After a mistake the next garments are read twice and must agree before a green"><Pill color="#60a5fa">Checking · {checksLeft}</Pill></span>}
-          {!sorting && sessionStarted && <span title="After a defect, inspect the next 5 fully; after 10 clean, one spot check"><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect, CHECKS)}</Pill></span>}
+          {!sorting && sessionStarted && <span title={`After a defect, inspect the next ${inspect.full} fully; after ${inspect.every} clean, one spot check`}><Pill color={inspect.phase === "quick" ? "#94a3b8" : "#f59e0b"}>{inspectLabel(inspect, CHECKS)}</Pill></span>}
           {manualCount > 0 && <Pill color="#f59e0b" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the garments entered by hand">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="#f87171" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
           {saveOk === false && <Pill color="#f87171" title="This PC's storage is full or blocked: the order is not being saved, so a reload or a crash would lose the work since. Tell the supervisor; do not close or reload this page.">⚠ NOT SAVING — tell the supervisor</Pill>}

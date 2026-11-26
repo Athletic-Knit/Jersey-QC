@@ -2,6 +2,7 @@
 // The hub is optional: every call fails quietly if it is not there, and the
 // station keeps working from files.
 import { cleanSpots } from "./labels.js";
+import { pinFor } from "./pins.js";
 
 const STATION_KEY = "jerseyqc.station.v1";
 const BROWSER_KEY = "jerseyqc.browser.v1";
@@ -78,7 +79,7 @@ export async function loadFloorConfig() {
   // Only a real answer replaces what is kept: a server without the admin panel answers the
   // page itself, which would wipe the names and defaults (Fable's review, L4).
   if (!c || !Number.isFinite(c.configVersion)) throw new Error("no admin settings on this server");
-  const kept = { configVersion: c.configVersion || 0, operators: Array.isArray(c.operators) ? c.operators : [], defaults: c.defaults && typeof c.defaults === "object" ? c.defaults : {}, ai: c.ai && typeof c.ai === "object" ? c.ai : {} };
+  const kept = { configVersion: c.configVersion || 0, operators: Array.isArray(c.operators) ? c.operators : [], defaults: c.defaults && typeof c.defaults === "object" ? c.defaults : {}, ai: c.ai && typeof c.ai === "object" ? c.ai : {}, inspection: c.inspection && typeof c.inspection === "object" ? c.inspection : {} };
   try { localStorage.setItem(FLOOR_KEY, JSON.stringify(kept)); } catch { /* private window: this page only */ }
   try { window.dispatchEvent(new CustomEvent("jqc-floorconfig", { detail: kept })); } catch { /* not a browser (tests) */ }   // the station takes the defaults when no order is open (App)
   return c;
@@ -88,6 +89,22 @@ export function noteConfigVersion(v) {
   if (!Number.isFinite(v) || v === cachedFloorConfig()?.configVersion || fetchingConfig) return;
   fetchingConfig = loadFloorConfig().catch(() => null).finally(() => { fetchingConfig = null; });
 }
+// The sign-in PIN, checked by the server (phase 7, POST /api/admin/pin): { ok, error }. The
+// page holds no PIN. A server without the admin panel (vite.config.diag.js, a test server)
+// has no such route: then, and only then, the PIN is checked here against .env.local's old
+// VITE_PIN_… names or the defaults (src/lib/pins.js). A server that cannot be reached is a
+// no: the station never opens on a check it could not make.
+export async function checkPin(id, pin, { fetchImpl = globalThis.fetch, env = import.meta.env } = {}) {
+  let r, body = {};
+  try {
+    r = await fetchImpl("/api/admin/pin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, pin }) });
+    body = await r.json().catch(() => ({}));
+  } catch { return { ok: false, error: "Cannot reach the server to check the PIN. Check the network and try again." }; }
+  if (typeof body.ok === "boolean") return { ok: body.ok, error: body.ok ? "" : (body.error || "Wrong PIN.") };
+  if (r.status === 404 || (r.ok && body.ok === undefined)) return { ok: String(pin) === pinFor(env || {}, id).pin, error: "Wrong PIN.", local: true };
+  return { ok: false, error: body.error || `The server could not check the PIN (${r.status}).` };
+}
+
 // The names to offer: the panel's list when it has one, else the .env.local list (config.js).
 export const operatorsFrom = (config, fallback) => (Array.isArray(config?.operators) && config.operators.length ? config.operators : fallback);
 

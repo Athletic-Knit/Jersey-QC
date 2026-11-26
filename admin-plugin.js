@@ -22,10 +22,12 @@ import path from "node:path";
 import process from "node:process";
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
-import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators, cleanPrinters, cleanDefaults, printerNameOk, cleanAi, cleanPrices, AI_MODELS } from "./src/lib/adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators, cleanPrinters, cleanDefaults, printerNameOk, cleanAi, cleanPrices, AI_MODELS, cleanInspection, INSPECTION_RULES } from "./src/lib/adminstore.js";
+import { pinFor, PIN_IDS } from "./src/lib/pins.js";
 
 export const SESSION_MS = 8 * 60 * 60 * 1000;
 export const TRIES = 5, LOCK_MS = 10 * 60 * 1000;
+export const PIN_TRIES = 10, PIN_LOCK_MS = 60 * 1000;   // wrong sign-in PINs from one PC in a row, and the wait after
 export const LIVE_MS = 20000, GONE_MS = 2 * 60 * 60 * 1000;   // as hub.js and the board count a station live / gone
 const COOKIE_BASE = "jqc_admin";   // + the port: signing in on 5175 must not sign you out of 5173 on the same PC (Fable's review, L3)
 const LOG_LINES = 300;
@@ -89,6 +91,7 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
   const startedAt = now() - Math.round(process.uptime() * 1000);
   const sessions = (globalThis.__jqcAdminSessions ||= new Map());   // token → { name, ip, expires }; survives a reload of this file
   const fails = new Map();                                            // ip → { n, until }
+  const pinFails = new Map();                                         // ip → { n, until }: wrong sign-in PINs (phase 7)
 
   const COOKIE = `${COOKIE_BASE}_${port || "x"}`;
   const pwHash = sha(password).toString("hex");   // a session is good only while the password it signed in with is the password (L3)
@@ -102,7 +105,7 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
   const fallbackOperators = String(env.VITE_OPERATORS || "Person 1,Person 2,Person 3").split(",").map(x => x.trim()).filter(Boolean);
   // The model settings reach stations on development and testing only (phase 6): a production station never takes them.
   const aiFor = () => (stage === "production" ? {} : store.data.settings.ai || {});
-  const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [], defaults: store.data.settings.defaults || {}, ai: aiFor() });
+  const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [], defaults: store.data.settings.defaults || {}, ai: aiFor(), inspection: store.data.settings.inspection || {} });
   (globalThis.__jqcAdminConfig ||= new Map()).set(path.resolve(dataFile), { version: () => store.data.configVersion || 0, printers: () => store.data.settings.printers || {}, ai: aiFor });
   const hubPrinting = () => hubs?.()?.get?.(path.resolve(dataFile))?.printing || null;
   const STATION_IDS = ["st-station1", "st-station2", "st-station3"];
@@ -198,6 +201,7 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
         silent: stations.filter(s => t - (s.updatedAt || 0) >= GONE_MS).length,
       },
       ai: { keyPresent: !!key, keyName: key, keyOnPage: !!env.VITE_CLAUDE_API_KEY },
+      pins: PIN_IDS.map(id => ({ id, from: pinFor(env, id).from })),   // where each PIN comes from, never the PIN
       printing: { stagePrint: stage === "production" ? "always" : (String(env.JQC_STAGE_PRINT || "").trim() === "1" ? "on" : "off") },
       setup: { passwordSet: !!password, productionWrites: stage === "production" ? writable : null },
     };
@@ -210,6 +214,21 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
       if (route === "/config" && req.method === "GET") return send(res, 200, floorConfig());   // public: what every station reads
       if (route === "/session" && req.method === "GET")
         return send(res, 200, { setup: !!password, signedIn: !!me, name: me?.name || "", stage, port, host: hostname, writable });
+      // The sign-in PIN (phase 7): public, before the admin password (a server with no admin
+      // password still signs operators in). Yes or no, never the PIN; 10 wrong from one PC in a
+      // row lock it for a minute (four digits are quick to try).
+      if (route === "/pin" && req.method === "POST") {
+        const ip = ipOf(req), f = pinFails.get(ip);
+        if (f && f.until > now()) return send(res, 429, { ok: false, error: `Too many wrong PINs from this PC. Try again in ${Math.ceil((f.until - now()) / 1000)} s.` });
+        const body = await readJson(req);
+        const id = String(body.id || "");
+        if (!PIN_IDS.includes(id)) return send(res, 400, { ok: false, error: "No such role or station." });
+        if (same(String(body.pin ?? ""), pinFor(env, id).pin)) { pinFails.delete(ip); return send(res, 200, { ok: true }); }
+        const n = (f?.n || 0) + 1;
+        pinFails.set(ip, n >= PIN_TRIES ? { n: 0, until: now() + PIN_LOCK_MS } : { n, until: 0 });
+        console.log(`[admin] wrong PIN for ${id} from ${ip || "?"}`);   // never the PIN typed
+        return send(res, 401, { ok: false, error: n >= PIN_TRIES ? "Wrong PIN. This PC must wait a minute." : "Wrong PIN." });
+      }
       if (!password) return send(res, 503, { error: "The admin panel is not set up on this server: add JQC_ADMIN_PASSWORD to .env.local (no VITE_ prefix)." });
       if (route === "/login" && req.method === "POST") {
         const ip = ipOf(req), f = fails.get(ip);
@@ -323,6 +342,20 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
         const bad = change(req, me, "model settings", settings, show(before), show(map));
         if (bad) return send(res, bad.code, { error: bad.error });
         return send(res, 200, { ai: map, configVersion: store.data.configVersion });
+      }
+      if (route === "/settings/inspection" && req.method === "PUT") {
+        const body = await readJson(req);
+        if (Number.isFinite(body.configVersion) && body.configVersion !== (store.data.configVersion || 0)) return send(res, 409, { error: "Someone saved the admin settings since this page loaded them. Reload the page and make your change again." });
+        const { map, error } = cleanInspection(body.inspection);
+        if (error) return send(res, 400, { error });
+        const before = store.data.settings.inspection || {};
+        if (JSON.stringify(before) === JSON.stringify(map)) return send(res, 200, { inspection: map, unchanged: true });
+        const settings = { ...store.data.settings };
+        if (Object.keys(map).length) settings.inspection = map; else delete settings.inspection;
+        const show = m => Object.keys(m).length ? Object.entries(m).map(([k, v]) => `${k} ${v}`) : "(the app's own: 5, 10, 5)";
+        const bad = change(req, me, "inspection counts", settings, show(before), show(map));
+        if (bad) return send(res, bad.code, { error: bad.error });
+        return send(res, 200, { inspection: map, configVersion: store.data.configVersion });
       }
       if (route === "/settings/prices" && req.method === "PUT") {
         const body = await readJson(req);

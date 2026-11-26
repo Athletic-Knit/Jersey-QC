@@ -10,9 +10,11 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { Buffer } from "node:buffer";
-import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX, cleanOperators, cleanPrinters, cleanDefaults, cleanAi, cleanPrices } from "../adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX, cleanOperators, cleanPrinters, cleanDefaults, cleanAi, cleanPrices, cleanInspection } from "../adminstore.js";
+import { pinFor } from "../pins.js";
+import { createInspection, createVigilance } from "../vigilance.js";
 import { baseSettings, ownOf, effectiveSettings, loadOwn, saveOwn, recordOwn } from "../floorsettings.js";
-import { operatorsFrom } from "../hub.js";
+import { operatorsFrom, checkPin } from "../hub.js";
 import { createAdmin, TRIES } from "../../../admin-plugin.js";
 import { resolveTheme } from "../theme.js";
 
@@ -169,7 +171,7 @@ describe("phase 2: operator names", () => {
   it("/config is public and holds no secret; with nothing set it has no names (the stations keep .env.local's)", async () => {
     const r = await call(handle, "GET", "/config");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ configVersion: 0, operators: [], defaults: {}, ai: {} });
+    expect(r.body).toEqual({ configVersion: 0, operators: [], defaults: {}, ai: {}, inspection: {} });
     expect(r.text).not.toContain(PASSWORD);
   });
   it("saving needs a sign-in; a save goes in the change log with before and after, raises the version and reaches /config", async () => {
@@ -179,7 +181,7 @@ describe("phase 2: operator names", () => {
     expect(s0).toMatchObject({ operators: [], fallbackOperators: ["Shiv", "Priya"], configVersion: 0, writable: true });
     const r = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv", "Priya", "Arshil"] } });
     expect(r.status).toBe(200);
-    expect((await call(handle, "GET", "/config")).body).toEqual({ configVersion: 1, operators: ["Shiv", "Priya", "Arshil"], defaults: {}, ai: {} });
+    expect((await call(handle, "GET", "/config")).body).toEqual({ configVersion: 1, operators: ["Shiv", "Priya", "Arshil"], defaults: {}, ai: {}, inspection: {} });
     const same = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv", "Priya", "Arshil"] } });
     expect(same.body.unchanged).toBe(true);   // no new version, no log line
     const back = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: [] } });
@@ -597,5 +599,82 @@ describe("phase 6: the AI proxy, read counts and model settings", () => {
       expect(src, f).toMatch(/aiProxyPlugin\(\{ env/);
       expect(src, f).not.toMatch(/'\/api\/anthropic': anthropicProxy/);
     }
+  });
+});
+
+describe("phase 7: inspection counts in the panel, PINs checked by the server", () => {
+  it("the inspection counts: checked, saved with the change log, handed to stations; read only on production", async () => {
+    expect(cleanInspection({ full: 3, every: 12, selfCheck: 8 })).toEqual({ map: { full: 3, every: 12, selfCheck: 8 }, error: "" });
+    expect(cleanInspection({ full: 0 }).error).toBeTruthy();
+    expect(cleanInspection({ every: 2.5 }).error).toBeTruthy();
+    expect(cleanInspection({ spot: 3 }).error).toBeTruthy();
+    expect(cleanAdmin({ settings: { inspection: { full: 99 } } }).settings.inspection).toBeUndefined();   // a bad value in the file drops itself
+    const dataFile = path.join(tmp(), "hub-test.json");
+    const a = createAdmin({ dataFile, stage: "development", env: ENV, git: async () => ({}) });
+    const c = cookieFrom(await call(a.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(a.handle, "PUT", "/settings/inspection", { cookie: c, body: { inspection: { full: 99 } } })).status).toBe(400);
+    expect((await call(a.handle, "PUT", "/settings/inspection", { cookie: c, body: { inspection: { full: 3, every: 12 } } })).status).toBe(200);
+    expect((await call(a.handle, "GET", "/config")).body.inspection).toEqual({ full: 3, every: 12 });
+    expect((await call(a.handle, "GET", "/audit", { cookie: c })).body.entries[0]).toMatchObject({ what: "inspection counts", after: ["full 3", "every 12"] });
+    const prod = createAdmin({ dataFile: path.join(tmp(), "hub.json"), stage: "production", env: ENV, git: async () => ({}) });
+    const pc = cookieFrom(await call(prod.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(prod.handle, "PUT", "/settings/inspection", { cookie: pc, body: { inspection: { full: 3 } } })).status).toBe(403);
+  });
+  it("a station's order keeps the counts it started with: createInspection and the self-check take them and save them", () => {
+    const i = createInspection({ full: 2, every: 3 });
+    expect(i.current()).toMatchObject({ phase: "full", remaining: 2, full: 2, every: 3 });
+    i.jerseyDone(); i.jerseyDone();
+    expect(i.current().phase).toBe("quick");
+    for (let n = 0; n < 3; n++) i.jerseyDone();
+    expect(i.current().phase).toBe("sample");
+    const back = createInspection(); back.load(i.state());   // a resume on a station whose panel counts changed since
+    expect(back.current()).toMatchObject({ phase: "sample", full: 2, every: 3 });
+    expect(createInspection({ full: 0, every: "x" }).current()).toMatchObject({ full: 5, every: 10 });   // nonsense: the app's own
+    const v = createVigilance({ checks: 2 }); v.noteMistake("unchecked");
+    expect(v.remaining).toBe(2);
+    const w = createVigilance(); w.load(v.state());
+    expect(w.checks).toBe(2);
+  });
+  it("POST /pin: yes or no from the server, never the PIN; works with no admin password; 10 wrong in a row wait a minute", async () => {
+    const env = { CLAUDE_API_KEY: KEY, VITE_PIN_STATION1: "4321", JQC_PIN_SUPERVISOR: "9876" };   // no JQC_ADMIN_PASSWORD
+    const a = createAdmin({ dataFile: path.join(tmp(), "hub-test.json"), stage: "production", env, git: async () => ({}) });
+    const ok = await call(a.handle, "POST", "/pin", { body: { id: "station1", pin: "4321" } });
+    expect(ok).toMatchObject({ status: 200, body: { ok: true } });
+    expect((await call(a.handle, "POST", "/pin", { body: { id: "supervisor", pin: "9876" } })).body.ok).toBe(true);   // JQC_PIN_ first
+    expect((await call(a.handle, "POST", "/pin", { body: { id: "supervisor", pin: "3333" } })).status).toBe(401);
+    expect((await call(a.handle, "POST", "/pin", { body: { id: "inspector", pin: "1111" } })).body.ok).toBe(true);    // the default, as before
+    expect((await call(a.handle, "POST", "/pin", { body: { id: "admin", pin: "0000" } })).status).toBe(400);
+    const { PIN_TRIES } = await import("../../../admin-plugin.js");
+    let last;
+    for (let n = 0; n < PIN_TRIES; n++) last = await call(a.handle, "POST", "/pin", { body: { id: "station1", pin: "0000" }, ip: "10.0.0.7" });
+    expect(last.text).not.toMatch(/4321/);
+    expect((await call(a.handle, "POST", "/pin", { body: { id: "station1", pin: "4321" }, ip: "10.0.0.7" })).status).toBe(429);
+    expect((await call(a.handle, "POST", "/pin", { body: { id: "station1", pin: "4321" }, ip: "10.0.0.8" })).status).toBe(200);
+  });
+  it("health says where each PIN comes from, never the PIN", async () => {
+    const a = createAdmin({ dataFile: path.join(tmp(), "hub-test.json"), stage: "development", env: { ...ENV, JQC_PIN_SUPERVISOR: "9876" }, git: async () => ({}) });
+    const c = cookieFrom(await call(a.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    const h = await call(a.handle, "GET", "/health", { cookie: c });
+    expect(h.body.pins).toContainEqual({ id: "station1", from: "VITE_PIN_STATION1" });
+    expect(h.body.pins).toContainEqual({ id: "supervisor", from: "JQC_PIN_SUPERVISOR" });
+    expect(h.body.pins).toContainEqual({ id: "inspector", from: "default" });
+    expect(h.text).not.toMatch(/4321|9876/);
+    expect(pinFor({ VITE_PIN_STATION2: "77" }, "station2")).toEqual({ pin: "77", from: "VITE_PIN_STATION2" });
+    expect(pinFor({}, "constructor").pin).toBe("");
+  });
+  it("checkPin (the station): the server's yes or no; no admin route (a test server) checks here; no server is a no", async () => {
+    const answer = (status, body) => async () => ({ status, ok: status < 300, json: async () => body });
+    expect(await checkPin("station1", "1", { fetchImpl: answer(200, { ok: true }) })).toMatchObject({ ok: true });
+    expect(await checkPin("station1", "1", { fetchImpl: answer(401, { ok: false, error: "Wrong PIN." }) })).toMatchObject({ ok: false, error: "Wrong PIN." });
+    expect(await checkPin("station1", "1", { fetchImpl: answer(429, { ok: false, error: "Too many" }) })).toMatchObject({ ok: false, error: "Too many" });
+    expect(await checkPin("station1", "1001", { fetchImpl: answer(404, {}), env: {} })).toMatchObject({ ok: true, local: true });
+    expect(await checkPin("station1", "9", { fetchImpl: answer(404, {}), env: {} })).toMatchObject({ ok: false });
+    expect((await checkPin("station1", "1001", { fetchImpl: async () => { throw new Error("down"); } })).ok).toBe(false);
+  });
+  it("the sign-in screen asks the server, and the order start takes the panel's counts", () => {
+    const src = fs.readFileSync(new URL("../../App.jsx", import.meta.url), "utf8");
+    expect(src).toMatch(/await checkPin\(pinOwner\.id, pin\)/);
+    expect(src).not.toMatch(/pinOwner\.pin/);
+    expect(src).toMatch(/createInspection\(\{ full: counts\.full, every: counts\.every/);
   });
 });

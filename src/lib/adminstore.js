@@ -33,8 +33,9 @@ export function cleanAdmin(raw, dropped = []) {
   const audit = Array.isArray(o.audit) ? o.audit.filter(e => e && typeof e === "object" && Number.isFinite(e.at) && typeof e.what === "string") : [];
   const given = o.settings && typeof o.settings === "object" && !Array.isArray(o.settings) ? o.settings : {};
   const settings = {};
-  for (const [k, v] of Object.entries(given)) if (!["operators", "printers", "defaults", "ai", "prices"].includes(k)) settings[k] = v;   // a later version's section: kept
+  for (const [k, v] of Object.entries(given)) if (!["operators", "printers", "defaults", "ai", "prices", "inspection"].includes(k)) settings[k] = v;   // a later version's section: kept
   if (given.ai && typeof given.ai === "object") { const r = cleanAi(given.ai); if (r.error) dropped.push(`ai: ${r.error}`); else if (Object.keys(r.map).length) settings.ai = r.map; }
+  if (given.inspection && typeof given.inspection === "object") { const r = cleanInspection(given.inspection); if (r.error) dropped.push(`inspection: ${r.error}`); else if (Object.keys(r.map).length) settings.inspection = r.map; }
   if (given.prices && typeof given.prices === "object") { const r = cleanPrices(given.prices); if (r.error) dropped.push(`prices: ${r.error}`); else if (Object.keys(r.map).length) settings.prices = r.map; }
   if (Array.isArray(given.operators)) {
     const ok = given.operators.filter(n => { const r = cleanOperators([n]); if (r.error) dropped.push(`operator ${JSON.stringify(n)}: ${r.error}`); return !r.error; });
@@ -217,6 +218,25 @@ export function cleanPrices(obj) {
     const row = {};
     for (const k of PRICE_KEYS) { if (p[k] === undefined || p[k] === null || p[k] === "") continue; const v = Number(p[k]); if (!(v >= 0 && v <= 1000)) return { map: {}, error: `${m} ${k}: ${p[k]} is not a price.` }; row[k] = v; }
     if (Object.keys(row).length) out[m] = row;
+  }
+  return { map: out, error: "" };
+}
+
+// The inspection counts (phase 7, 26 Nov 2026; the co-op's decision 6): inspect fully the first
+// `full` garments of an order and the next `full` after a defect (a flag's related check is
+// asked on that many too); a spot check after `every` clean; the camera's self-check reads the
+// next `selfCheck` garments twice after the app is corrected. Blank = the app's own (5, 10, 5,
+// vigilance.js). A station takes them at its next order start, never mid-order.
+export const INSPECTION_RULES = { full: [1, 20], every: [1, 50], selfCheck: [1, 20] };
+export function cleanInspection(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return { map: {}, error: "The inspection counts must be a map." };
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null || v === undefined || v === "") continue;
+    if (!own(INSPECTION_RULES, k)) return { map: {}, error: `"${k}" is not an inspection count.` };
+    const [lo, hi] = INSPECTION_RULES[k];
+    if (!(Number.isInteger(v) && v >= lo && v <= hi)) return { map: {}, error: `${k} must be a whole number from ${lo} to ${hi}.` };
+    out[k] = v;
   }
   return { map: out, error: "" };
 }

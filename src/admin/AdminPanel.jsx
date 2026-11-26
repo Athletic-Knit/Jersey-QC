@@ -564,6 +564,67 @@ const costOf = (day, prices) => {
   }
   return priced ? total : null;
 };
+// Floor rules (phase 7): the inspection counts (the co-op's decision 6), and where each sign-in
+// PIN comes from (checked by the server; the PIN itself is never shown or changed here).
+const COUNT_ROWS = [
+  ["full", "Inspect fully", "The first garments of an order, and the next ones after a defect, are inspected fully. A flag's related check (Decoration, Size tag …) is asked on that many too.", 5, 1, 20],
+  ["every", "Spot check after", "Clean garments on a quick look before one is inspected fully.", 10, 1, 50],
+  ["selfCheck", "Camera self-check", "After the operator corrects the app, the next garments are read twice and must agree before a green.", 5, 1, 20],
+];
+const PIN_LABEL = { inspector: "Inspector", sorter: "Sorter", packer: "Packer", supervisor: "Supervisor", station1: "Station 1", station2: "Station 2", station3: "Station 3" };
+function FloorRules() {
+  const [cfg, setCfg] = useState(null);
+  const [pins, setPins] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [msg, setMsg] = useState({ tone: "", text: "" });
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => Promise.all([api("/settings"), api("/health")]).then(([c, h]) => { setCfg(c); setCounts(c.inspection || {}); setPins(h.pins || []); }).catch(e => setMsg({ tone: "fail", text: e.message })), []);
+  useEffect(() => { load(); }, [load]);
+  if (!cfg) return <section style={st.card}>{msg.text ? <span style={{ color: "var(--fail-text)" }}>{msg.text}</span> : "Loading…"}</section>;
+  const changed = JSON.stringify(counts) !== JSON.stringify(cfg.inspection || {});
+  const bad = COUNT_ROWS.find(([k, , , , lo, hi]) => counts[k] !== undefined && !(Number.isInteger(counts[k]) && counts[k] >= lo && counts[k] <= hi));
+  const save = async () => {
+    setBusy(true); setMsg({ tone: "", text: "" });
+    try { const r = await api("/settings/inspection", { method: "PUT", body: JSON.stringify({ inspection: counts, configVersion: cfg.configVersion }) }); setMsg({ tone: "pass", text: r.unchanged ? "Nothing to save." : "Saved. Each station uses the new counts from its next order; an order already open keeps its own." }); await load(); }
+    catch (e) { setMsg({ tone: "fail", text: e.message }); }
+    finally { setBusy(false); }
+  };
+  const cell = { padding: "8px", borderBottom: "1px solid var(--line)", verticalAlign: "top" };
+  const onPage = pins.filter(p => p.from.startsWith("VITE_")), byDefault = pins.filter(p => p.from === "default");
+  return (
+    <>
+      {msg.text && <div role="status" style={{ ...st.card, borderColor: `var(--${msg.tone || "info"})`, background: `var(--${msg.tone || "info"}-bg)`, color: `var(--${msg.tone || "info"}-text)` }}>{msg.text}</div>}
+      <section style={st.card}>
+        <h2 style={st.h2}>Inspection counts</h2>
+        <p style={{ margin: "0 0 10px", color: "var(--text-dim)" }}>Blank means the app's own number. {cfg.writable ? "A station takes a change at its next order, never in the middle of one." : "Read only on this server."}</p>
+        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}><tbody>
+          {COUNT_ROWS.map(([k, label, help, app, lo, hi]) => (
+            <tr key={k} style={counts[k] !== undefined ? { background: "var(--info-bg)" } : undefined}>
+              <td style={{ ...cell, fontWeight: 700, whiteSpace: "nowrap" }}>{label}</td>
+              <td style={cell}><input aria-label={label} type="number" min={lo} max={hi} step="1" inputMode="numeric" style={{ ...st.input, width: 90, padding: "6px 8px" }} disabled={!cfg.writable} placeholder={String(app)} value={counts[k] ?? ""} onChange={e => setCounts(c => { const n = { ...c }; if (e.target.value === "") delete n[k]; else n[k] = Number(e.target.value); return n; })} /></td>
+              <td style={{ ...cell, color: "var(--text-dim)" }}>{help} <span style={{ color: "var(--text-faint)" }}>App's own: {app}. {lo} to {hi}.</span></td>
+            </tr>
+          ))}
+        </tbody></table></div>
+        {bad && <p style={{ margin: "8px 0 0", color: "var(--fail-text)" }}>{bad[1]}: a whole number from {bad[4]} to {bad[5]}.</p>}
+        {cfg.writable && <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <button style={changed && !bad ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!changed || !!bad || busy} onClick={save}>Save</button>
+          {changed && <button style={st.btn} onClick={() => setCounts(cfg.inspection || {})}>Undo changes</button>}
+        </div>}
+      </section>
+      <section style={st.card}>
+        <h2 style={st.h2}>Sign-in PINs</h2>
+        <p style={{ margin: "0 0 10px", color: "var(--text-dim)" }}>Checked by the server: the stations' pages hold no PIN. Each comes from <code>.env.local</code> (JQC_PIN_… first, then the old VITE_PIN_…), else the app's default. The PINs themselves are never shown here and are changed only in <code>.env.local</code>.</p>
+        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}><tbody>
+          {pins.map(p => <tr key={p.id}><td style={{ ...cell, fontWeight: 700 }}>{PIN_LABEL[p.id] || p.id}</td><td style={cell}>{p.from === "default" ? <Pill tone="warn">the app's default</Pill> : p.from.startsWith("VITE_") ? <Pill tone="warn">{p.from}</Pill> : <Pill tone="pass">{p.from}</Pill>}</td></tr>)}
+        </tbody></table></div>
+        {onPage.length > 0 && <p style={{ margin: "10px 0 0", color: "var(--warn-text)" }}>A VITE_ name still reaches every browser (Vite hands VITE_ variables to the page). Rename {onPage.map(p => p.from).join(", ")} to JQC_PIN_… with the same value.</p>}
+        {byDefault.length > 0 && <p style={{ margin: "6px 0 0", color: "var(--warn-text)" }}>{byDefault.map(p => PIN_LABEL[p.id]).join(", ")}: the app's default PIN, which anyone who has read the code knows.</p>}
+      </section>
+    </>
+  );
+}
+
 function AiReads() {
   const [d, setD] = useState(null);
   const [ai, setAi] = useState({});
@@ -636,7 +697,7 @@ function AiReads() {
       <section style={st.card}>
         <h2 style={st.h2}>Token prices <span style={{ fontWeight: 400, color: "var(--text-dim)", fontSize: 14 }}>· dollars per million tokens, from Anthropic's price page, for the cost column</span></h2>
         <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>{head(["Model", "Input", "Output", "Cache read", "Cache write"])}<tbody>
-          {d.models.map(m => <tr key={m}><td style={{ ...cell, fontWeight: 700 }}>{m}</td>{["input", "output", "cacheRead", "cacheWrite"].map(k => <td key={k} style={cell}><input aria-label={`${m} ${k}`} type="number" min="0" step="0.01" style={{ ...st.input, width: 100, padding: "6px 8px" }} disabled={!d.writable} value={prices[m]?.[k] ?? ""} onChange={e => setPrice(m, k, e.target.value)} placeholder="—" /></td>)}</tr>)}
+          {d.models.map(m => <tr key={m}><td style={{ ...cell, fontWeight: 700 }}>{m}</td>{["input", "output", "cacheRead", "cacheWrite"].map(k => <td key={k} style={cell}><input aria-label={`${m} ${k}`} type="number" min="0" step="any" style={{ ...st.input, width: 100, padding: "6px 8px" }} disabled={!d.writable} value={prices[m]?.[k] ?? ""} onChange={e => setPrice(m, k, e.target.value)} placeholder="—" /></td>)}</tr>)}
         </tbody></table></div>
         {d.writable && <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
           <button style={pricesChanged ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!pricesChanged || busy} onClick={() => save("/settings/prices", { prices }, "Prices saved.")}>Save prices</button>
@@ -663,7 +724,7 @@ function Appearance() {
   );
 }
 
-const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "printers", label: "Printers" }, { id: "defaults", label: "Station defaults" }, { id: "data", label: "Data" }, { id: "ai", label: "AI reads" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
+const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "printers", label: "Printers" }, { id: "defaults", label: "Station defaults" }, { id: "data", label: "Data" }, { id: "rules", label: "Floor rules" }, { id: "ai", label: "AI reads" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
 
 export default function AdminPanel() {
   const [s, setS] = useState(null);         // the session answer: stage, setup, signedIn …
@@ -705,6 +766,7 @@ export default function AdminPanel() {
               {tab === "printers" && <Printers />}
               {tab === "defaults" && <StationDefaults />}
               {tab === "data" && <DataTools />}
+              {tab === "rules" && <FloorRules />}
               {tab === "ai" && <AiReads />}
               {tab === "log" && <ServerLog />}
               {tab === "changes" && <ChangeLog />}

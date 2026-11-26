@@ -29,13 +29,18 @@ export const MISTAKES = {
 
 // The self-check's state for one station: noteMistake() starts (or restarts)
 // the count, and each scan shown counts it down (scanDone). `log` hears what happens.
-export function createVigilance({ checks = CHECKS_AFTER_MISTAKE, log } = {}) {
+// `checks` can be set by the admin panel (phase 7); it is saved with the order, so a resumed
+// order keeps the count it started with.
+const count = (v, lo, hi) => (Number.isInteger(v) && v >= lo && v <= hi ? v : null);
+export function createVigilance({ checks: given = CHECKS_AFTER_MISTAKE, log } = {}) {
+  let checks = count(given, 1, 20) ?? CHECKS_AFTER_MISTAKE;
   let remaining = 0, mistakes = 0, last = null;
   return {
     get remaining() { return remaining; },
     get active()    { return remaining > 0; },
     get mistakes()  { return mistakes; },
     get last()      { return last; },
+    get checks()    { return checks; },
     noteMistake(kind) {
       mistakes++; last = { kind, at: Date.now() }; remaining = checks;
       log?.(`[self-check] ${MISTAKES[kind] || kind} — double-checking the next ${checks} garments`);
@@ -45,8 +50,8 @@ export function createVigilance({ checks = CHECKS_AFTER_MISTAKE, log } = {}) {
     scanDone() { if (remaining <= 0) return false; remaining--; if (remaining === 0) log?.("[self-check] done — back to single reads"); return true; },
     reset() { remaining = 0; },
     // For the saved session.
-    state() { return { remaining, mistakes, last }; },
-    load(s) { if (s && typeof s === "object") { remaining = Number(s.remaining) || 0; mistakes = Number(s.mistakes) || 0; last = s.last || null; } },
+    state() { return { remaining, mistakes, last, checks }; },
+    load(s) { if (s && typeof s === "object") { remaining = Number(s.remaining) || 0; mistakes = Number(s.mistakes) || 0; last = s.last || null; checks = count(s.checks, 1, 20) ?? checks; } },
   };
 }
 
@@ -159,7 +164,10 @@ export const INSPECT_FULL  = 5;    // jerseys inspected fully after a defect
 export const INSPECT_EVERY = 10;   // clean jerseys between spot checks
 
 // The inspection regime's state for one order (saved in the session as `inspect`).
-export function createInspection({ full = INSPECT_FULL, every = INSPECT_EVERY, log } = {}) {
+// `full` and `every` can be set by the admin panel (phase 7, 1–20 and 1–50); they are saved
+// with the order (state / load), so a resumed order keeps the counts it started with.
+export function createInspection({ full: givenFull = INSPECT_FULL, every: givenEvery = INSPECT_EVERY, log } = {}) {
+  let full = count(givenFull, 1, 20) ?? INSPECT_FULL, every = count(givenEvery, 1, 50) ?? INSPECT_EVERY;
   let phase = "full", remaining = full, clean = 0, defects = 0;
   // Checks added to a quick look by a flag: { checkId: jerseys left }. A flag
   // whose reason has a related check (Dirt → fabric damage, Holes → holes,
@@ -190,14 +198,15 @@ export function createInspection({ full = INSPECT_FULL, every = INSPECT_EVERY, l
       const f = {};
       for (const [k, n] of Object.entries(focus)) if (n > 1) f[k] = n - 1;
       focus = f;
-      if (phase === "full")        { remaining--; if (remaining <= 0) { phase = "quick"; remaining = 0; clean = 0; log?.("[inspect] 5 clean — quick look from here"); } }
+      if (phase === "full")        { remaining--; if (remaining <= 0) { phase = "quick"; remaining = 0; clean = 0; log?.(`[inspect] ${full} clean — quick look from here`); } }
       else if (phase === "quick")  { clean++; if (clean >= every) { phase = "sample"; log?.(`[inspect] ${every} clean — inspect the next one fully`); } }
       else                         { phase = "quick"; clean = 0; }   // the spot check was clean
     },
     reset() { phase = "full"; remaining = full; clean = 0; focus = {}; },
-    state() { return { phase, remaining, clean, defects, focus: { ...focus } }; },
+    state() { return { phase, remaining, clean, defects, focus: { ...focus }, full, every }; },
     load(s) {
       if (!s || typeof s !== "object") return;
+      full = count(s.full, 1, 20) ?? full; every = count(s.every, 1, 50) ?? every;
       phase = ["full", "quick", "sample"].includes(s.phase) ? s.phase : "full";
       remaining = Number(s.remaining) || 0; clean = Number(s.clean) || 0; defects = Number(s.defects) || 0;
       focus = {};
