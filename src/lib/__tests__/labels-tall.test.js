@@ -40,6 +40,7 @@ function boxes(zpl) {
     let m;
     if ((m = l.match(/\^GB(\d+),(\d+),(\d+)/))) return { x, y, w: +m[1], h: +m[2], kind: "GB", line: l };
     if ((m = l.match(/\^GD(\d+),(\d+),(\d+)/))) return { x, y, w: +m[1], h: +m[2], kind: "GD", line: l };
+    if ((m = l.match(/\^GFA,(\d+),\d+,(\d+),/))) return { x, y, w: +m[2] * 8, h: +m[1] / +m[2], kind: "GF", line: l };
     if ((m = l.match(/\^GC(\d+),(\d+)/))) return { x, y, w: +m[1], h: +m[1], t: +m[2], kind: "GC", line: l };
     const f = l.match(/\^A0N,(\d+),(\d+)/), fb = l.match(/\^FB(\d+),(\d+)/), text = l.match(/\^FD(.*)\^FS$/)[1];
     const w = fb ? +fb[1] : Math.ceil(textUnits(text) * +f[2]);
@@ -76,7 +77,8 @@ describe("the tall flag ticket", () => {
             expect(b.y + b.h, b.line).toBeLessThanOrEqual(size.h);
           }
           const below = rest.filter(b => b.y > black.y + black.h);   // the garment part
-          expect(below.some(b => b.kind === "GD" || b.kind === "GB")).toBe(true);
+          expect(below.filter(b => b.kind === "GF")).toHaveLength(2);   // the garment: one picture a side
+          expect(below.some(b => b.kind === "GD")).toBe(false);         // no stair-stepped lines (26 Nov 2026)
           const front = sideLabel(kind, "front").toUpperCase(), back = sideLabel(kind, "back").toUpperCase();
           expect(below.find(b => b.kind === "text" && b.text.startsWith(`${front} · `)).text).toBe(`${front} · ${garment(kind).label}`);
           expect(below.some(b => b.text === back)).toBe(true);
@@ -321,5 +323,52 @@ describe("listChunks: a long print is cut between lists, never inside one", () =
     expect(listChunks(one, 20).map(c => c.length)).toEqual([20, 10]);
     expect(listChunks(one.slice(0, 5), 100)).toEqual([one.slice(0, 5)]);
     expect(listChunks([], 100)).toEqual([]);
+  });
+});
+
+// The garment picture (^GFA with Zebra's ASCII compression): unpacked again
+// dot for dot, as the printer reads it.
+function unpackGFA(line) {
+  const [, total, , bpr, data] = line.match(/\^GFA,(\d+),(\d+),(\d+),([^^]*)\^FS/);
+  const rowLen = +bpr * 2, rows = [];
+  let row = "", prev = "", count = 0;
+  const endRow = () => { rows.push(row); prev = row; row = ""; };
+  for (const c of data) {
+    if (c >= "G" && c <= "Y") count += c.charCodeAt(0) - 0x46;
+    else if (c >= "g" && c <= "z") count += (c.charCodeAt(0) - 0x66) * 20;
+    else if (c === ",") { row = row.padEnd(rowLen, "0"); endRow(); }
+    else if (c === ":") { row = prev; endRow(); }
+    else { row += c.repeat(count || 1); count = 0; if (row.length >= rowLen) endRow(); }
+  }
+  expect(rows.length * +bpr).toBe(+total);
+  return rows;
+}
+describe("the garment is one picture a side", () => {
+  it("bitmapZPL packs any bitmap so the printer unpacks it dot for dot", async () => {
+    const { bitmapZPL } = await import("../labels.js");
+    const w = 437, h = 90, bits = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (y % 17 === 0 || (x > 30 && x < 33) || (x - y * 3) % 211 === 0 || (y > 40 && y < 44) || (x * y) % 997 < 3) bits[y * w + x] = 1;
+    }
+    const rows = unpackGFA(bitmapZPL(5, 7, bits, w, h));
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const v = parseInt(rows[y][x >> 2], 16) >> (3 - (x & 3)) & 1;
+      if (v !== bits[y * w + x]) throw new Error(`dot ${x},${y}`);
+    }
+  });
+  it("on 2 x 3 every garment's pictures sit in their panels and carry the outline", () => {
+    const size = labelSize("2x3");
+    for (const kind of GARMENT_IDS) {
+      const { panels } = flagPanels(kind, size);
+      const pics = flagLabelZPL(ticket(kind), size).split("\n").filter(l => l.includes("^GFA"));
+      expect(pics, kind).toHaveLength(2);
+      pics.forEach((l, i) => {
+        const p = panels[i ? "back" : "front"], [, x, y] = l.match(/^\^FO(\d+),(\d+)/).map(Number);
+        expect(x).toBe(p.x);
+        expect(y).toBe(p.y + p.cap + p.capGap);
+        const black = unpackGFA(l).join("").replace(/0/g, "").length;
+        expect(black, kind).toBeGreaterThan(50);
+      });
+    }
   });
 });
