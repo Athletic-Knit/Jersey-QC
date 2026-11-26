@@ -13,7 +13,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const AUDIT_MAX = 2000;   // the newest entries kept
-export const EMPTY = Object.freeze({ version: 1, audit: [], settings: {} });
+export const EMPTY = Object.freeze({ version: 1, configVersion: 0, audit: [], settings: {} });
+export const MAX_OPERATORS = 60, MAX_NAME = 40;
 
 export const adminFileFor = dataFile => {
   const { dir, name } = path.parse(path.resolve(dataFile));
@@ -25,8 +26,11 @@ export const adminFileFor = dataFile => {
 export function cleanAdmin(raw) {
   const o = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const audit = Array.isArray(o.audit) ? o.audit.filter(e => e && typeof e === "object" && Number.isFinite(e.at) && typeof e.what === "string") : [];
-  const settings = o.settings && typeof o.settings === "object" && !Array.isArray(o.settings) ? o.settings : {};
-  return { version: 1, audit: audit.slice(-AUDIT_MAX), settings };
+  const given = o.settings && typeof o.settings === "object" && !Array.isArray(o.settings) ? o.settings : {};
+  const settings = {};
+  if (Array.isArray(given.operators)) { const ops = cleanOperators(given.operators); if (!ops.error && ops.list.length) settings.operators = ops.list; }
+  const configVersion = Number.isFinite(o.configVersion) && o.configVersion >= 0 ? Math.floor(o.configVersion) : 0;
+  return { version: 1, configVersion, audit: audit.slice(-AUDIT_MAX), settings };
 }
 
 // → { data, error }. `error` set: the file is there but could not be read (nothing may be
@@ -62,3 +66,23 @@ export function auditEntry({ at = Date.now(), who = "", ip = "", stage = "", wha
   return e;
 }
 export const withAudit = (data, entry) => ({ ...data, audit: [...(data.audit || []), entry].slice(-AUDIT_MAX) });
+
+// The names offered at sign-in (phase 2, 26 Nov 2026). Each trimmed, inner spaces made
+// single; empty lines dropped; the same name twice (any case) once. `error` when a name
+// is too long, or "Other" (the sign-in screen's own choice for anyone not on the list).
+export function cleanOperators(list) {
+  if (!Array.isArray(list)) return { list: [], error: "The names must be a list." };
+  const out = [], seen = new Set();
+  for (const raw of list) {
+    const n = String(raw ?? "").replace(/\s+/g, " ").trim();
+    if (!n) continue;
+    if (n.length > MAX_NAME) return { list: [], error: `"${n.slice(0, 20)}…" is longer than ${MAX_NAME} letters.` };
+    if (/^other$/i.test(n)) return { list: [], error: `"Other" is already on the sign-in screen for anyone not on the list.` };
+    if (/[<>{}]/.test(n)) return { list: [], error: `"${n}" has a character a name does not need.` };
+    const k = n.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(n);
+  }
+  if (out.length > MAX_OPERATORS) return { list: [], error: `At most ${MAX_OPERATORS} names.` };
+  return { list: out, error: "" };
+}

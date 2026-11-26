@@ -176,7 +176,7 @@ function ChangeLog() {
       {(err || r?.error) && <div role="alert" style={{ color: "var(--fail-text)" }}>{err || r.error}</div>}
       <div style={{ overflowX: "auto" }}>
         <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>
-          <thead><tr>{["When", "Who", "From", "What"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", borderBottom: "2px solid var(--line-strong)", color: "var(--text-dim)" }}>{h}</th>)}</tr></thead>
+          <thead><tr>{["When", "Who", "From", "What", "Before → after"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", borderBottom: "2px solid var(--line-strong)", color: "var(--text-dim)" }}>{h}</th>)}</tr></thead>
           <tbody>
             {(r?.entries || []).map((e, i) => (
               <tr key={i}>
@@ -184,11 +184,70 @@ function ChangeLog() {
                 <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--line)" }}>{e.who}</td>
                 <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--line)", color: "var(--text-dim)" }}>{e.ip}</td>
                 <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--line)", color: e.what.startsWith("wrong") ? "var(--fail-text)" : "var(--text)" }}>{e.what}</td>
+                <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--line)", color: "var(--text-dim)", fontSize: 14, minWidth: 200 }}>{e.before !== undefined || e.after !== undefined ? <>{[e.before].flat().join(", ")} <strong style={{ color: "var(--text)" }}>→</strong> {[e.after].flat().join(", ")}</> : ""}</td>
               </tr>
             ))}
-            {r && !r.entries.length && <tr><td colSpan={4} style={{ padding: 8, color: "var(--text-dim)" }}>Nothing yet.</td></tr>}
+            {r && !r.entries.length && <tr><td colSpan={5} style={{ padding: 8, color: "var(--text-dim)" }}>Nothing yet.</td></tr>}
           </tbody>
         </table>
+      </div>
+    </section>
+  );
+}
+
+// The names offered at sign-in (phase 2). An empty list means the .env.local list
+// (VITE_OPERATORS) as before. Saved names reach a station the next time its sign-in
+// screen opens; a station that cannot reach the server keeps the last names it got.
+function Operators() {
+  const [cfg, setCfg] = useState(null);
+  const [list, setList] = useState([]);
+  const [add, setAdd] = useState("");
+  const [msg, setMsg] = useState({ tone: "", text: "" });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api("/settings").then(c => { setCfg(c); setList(c.operators.length ? c.operators : c.fallbackOperators); }).catch(e => setMsg({ tone: "fail", text: e.message })); }, []);
+  if (!cfg) return <section style={st.card}>{msg.text ? <span style={{ color: "var(--fail-text)" }}>{msg.text}</span> : "Loading…"}</section>;
+  const saved = cfg.operators.length ? cfg.operators : cfg.fallbackOperators;
+  const changed = JSON.stringify(list) !== JSON.stringify(saved);
+  const move = (i, d) => setList(l => { const n = [...l]; const j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
+  const addName = e => { e.preventDefault(); const n = add.replace(/\s+/g, " ").trim(); if (!n) return; if (list.some(x => x.toLowerCase() === n.toLowerCase())) { setMsg({ tone: "warn", text: `${n} is on the list already.` }); return; } setList(l => [...l, n]); setAdd(""); setMsg({ tone: "", text: "" }); };
+  const save = async (names, label) => {
+    setBusy(true); setMsg({ tone: "", text: "" });
+    try { const c = await api("/settings/operators", { method: "PUT", body: JSON.stringify({ operators: names }) }); setCfg(c); setList(c.operators.length ? c.operators : c.fallbackOperators); setMsg({ tone: "pass", text: c.unchanged ? "Nothing to save." : label }); }
+    catch (e) { setMsg({ tone: "fail", text: e.message }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <section style={st.card}>
+      <h2 style={st.h2}>Operators</h2>
+      <p style={{ margin: "0 0 12px", color: "var(--text-dim)" }}>
+        The names offered on the stations' sign-in screen, in this order; "Other" is always there too. {cfg.operators.length ? "Set here." : <>Now from <code>.env.local</code> (VITE_OPERATORS). Saving here takes over from it.</>} A station shows the new names the next time its sign-in screen opens.
+      </p>
+      <ol style={{ listStyle: "none", padding: 0, margin: "0 0 12px", display: "flex", flexDirection: "column", gap: 6, maxWidth: 520 }}>
+        {list.map((n, i) => (
+          <li key={n} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 8, padding: "6px 8px" }}>
+            <span style={{ color: "var(--text-faint)", minWidth: 22, fontVariantNumeric: "tabular-nums" }}>{i + 1}</span>
+            <span style={{ flex: 1, fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" }}>{n}</span>
+            <button style={{ ...st.btn, padding: "4px 10px" }} aria-label={`Move ${n} up`} disabled={!cfg.writable || i === 0} onClick={() => move(i, -1)}>↑</button>
+            <button style={{ ...st.btn, padding: "4px 10px" }} aria-label={`Move ${n} down`} disabled={!cfg.writable || i === list.length - 1} onClick={() => move(i, 1)}>↓</button>
+            <button style={{ ...st.btn, padding: "4px 10px", color: "var(--fail-text)" }} aria-label={`Remove ${n}`} disabled={!cfg.writable} onClick={() => setList(l => l.filter(x => x !== n))}>Remove</button>
+          </li>
+        ))}
+        {!list.length && <li style={{ color: "var(--text-dim)" }}>No names: the stations would offer the .env.local list.</li>}
+      </ol>
+      {cfg.writable && (
+        <form onSubmit={addName} style={{ display: "flex", gap: 8, flexWrap: "wrap", maxWidth: 520, marginBottom: 12 }}>
+          <label htmlFor="adm-add" style={{ position: "absolute", left: -9999 }}>New name</label>
+          <input id="adm-add" style={{ ...st.input, flex: 1, minWidth: 180 }} value={add} onChange={e => setAdd(e.target.value)} placeholder="New name" maxLength={40} />
+          <button type="submit" style={st.btn}>Add</button>
+        </form>
+      )}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        {cfg.writable ? <>
+          <button style={changed ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!changed || busy} onClick={() => save(list, "Saved. The stations show these names the next time their sign-in screen opens.")}>{busy ? "Saving…" : "Save"}</button>
+          {changed && <button style={st.btn} onClick={() => { setList(saved); setMsg({ tone: "", text: "" }); }}>Undo changes</button>}
+          {cfg.operators.length > 0 && <button style={st.btn} disabled={busy} onClick={() => save([], "Back to the .env.local list.")}>Use the .env.local list ({cfg.fallbackOperators.length})</button>}
+        </> : <Pill>Read only on this server</Pill>}
+        {msg.text && <span role="status" style={{ color: msg.tone ? `var(--${msg.tone}-text)` : "var(--text)" }}>{msg.text}</span>}
       </div>
     </section>
   );
@@ -210,7 +269,7 @@ function Appearance() {
   );
 }
 
-const TABS = [{ id: "health", label: "Health" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
+const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
 
 export default function AdminPanel() {
   const [s, setS] = useState(null);         // the session answer: stage, setup, signedIn …
@@ -248,6 +307,7 @@ export default function AdminPanel() {
                 {TABS.map(t => <button key={t.id} onClick={() => setTab(t.id)} aria-current={tab === t.id ? "page" : undefined} style={tab === t.id ? st.pri : st.btn}>{t.label}</button>)}
               </nav>
               {tab === "health" && <Health h={h} onRefresh={loadHealth} />}
+              {tab === "operators" && <Operators />}
               {tab === "log" && <ServerLog />}
               {tab === "changes" && <ChangeLog />}
               {tab === "look" && <Appearance />}

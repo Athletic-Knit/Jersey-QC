@@ -10,7 +10,8 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { Buffer } from "node:buffer";
-import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX } from "../adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX, cleanOperators } from "../adminstore.js";
+import { operatorsFrom } from "../hub.js";
 import { createAdmin, TRIES } from "../../../admin-plugin.js";
 import { resolveTheme } from "../theme.js";
 
@@ -146,5 +147,74 @@ describe("theme", () => {
     expect(css).toMatch(/:root\[data-theme="light"\] \{/);
     const main = fs.readFileSync(new URL("../../main.jsx", import.meta.url), "utf8");
     expect(main).toMatch(/if \(admin\) applyTheme\(\)/);   // only the admin page sets a theme in phase 1
+  });
+});
+
+describe("phase 2: operator names", () => {
+  let dir, handle, dataFile;
+  const signIn = async (h = handle) => cookieFrom(await call(h, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+  beforeEach(() => {
+    dir = tmp(); dataFile = path.join(dir, "hub-test.json");
+    ({ handle } = createAdmin({ dataFile, stage: "development", env: { ...ENV, VITE_OPERATORS: "Shiv, Priya" }, git: () => ({}) }));
+  });
+
+  it("cleans a list: trims, one space inside, drops blanks and the same name twice; refuses Other, long names and odd characters", () => {
+    expect(cleanOperators(["  Shiv ", "", "Priya  Kaur", "shiv", "Arshil"])).toEqual({ list: ["Shiv", "Priya Kaur", "Arshil"], error: "" });
+    expect(cleanOperators(["Other"]).error).toMatch(/Other/);
+    expect(cleanOperators(["x".repeat(41)]).error).toMatch(/longer/);
+    expect(cleanOperators(["<b>"]).error).toBeTruthy();
+    expect(cleanOperators("Shiv").error).toBeTruthy();
+  });
+  it("/config is public and holds no secret; with nothing set it has no names (the stations keep .env.local's)", async () => {
+    const r = await call(handle, "GET", "/config");
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ configVersion: 0, operators: [] });
+    expect(r.text).not.toContain(PASSWORD);
+  });
+  it("saving needs a sign-in; a save goes in the change log with before and after, raises the version and reaches /config", async () => {
+    expect((await call(handle, "PUT", "/settings/operators", { body: { operators: ["A"] } })).status).toBe(401);
+    const c = await signIn();
+    const s0 = (await call(handle, "GET", "/settings", { cookie: c })).body;
+    expect(s0).toMatchObject({ operators: [], fallbackOperators: ["Shiv", "Priya"], configVersion: 0, writable: true });
+    const r = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv", "Priya", "Arshil"] } });
+    expect(r.status).toBe(200);
+    expect((await call(handle, "GET", "/config")).body).toEqual({ configVersion: 1, operators: ["Shiv", "Priya", "Arshil"] });
+    const same = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv", "Priya", "Arshil"] } });
+    expect(same.body.unchanged).toBe(true);   // no new version, no log line
+    const back = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: [] } });
+    expect(back.body).toMatchObject({ operators: [], configVersion: 2 });
+    const log = (await call(handle, "GET", "/audit", { cookie: c })).body.entries;
+    expect(log[0]).toMatchObject({ what: "operator names: back to the .env.local list", before: ["Shiv", "Priya", "Arshil"] });
+    expect(log[1]).toMatchObject({ what: "operator names", after: ["Shiv", "Priya", "Arshil"] });
+    // kept in the file: a new plugin on the same file serves the same version
+    const again = createAdmin({ dataFile, stage: "development", env: ENV, git: () => ({}) });
+    expect((await call(again.handle, "GET", "/config")).body.configVersion).toBe(2);
+  });
+  it("a bad list is refused with the reason, and nothing changes", async () => {
+    const c = await signIn();
+    const r = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Other"] } });
+    expect(r.status).toBe(400);
+    expect((await call(handle, "GET", "/config")).body.configVersion).toBe(0);
+  });
+  it("production refuses changes unless JQC_ADMIN_WRITE=1", async () => {
+    const ro = createAdmin({ dataFile: path.join(dir, "hub.json"), stage: "production", env: ENV, git: () => ({}) });
+    const c = await signIn(ro.handle);
+    expect((await call(ro.handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["A"] } })).status).toBe(403);
+  });
+  it("the stations' side: the panel's names when it has some, else .env.local's", () => {
+    expect(operatorsFrom({ operators: ["A", "B"] }, ["X"])).toEqual(["A", "B"]);
+    expect(operatorsFrom({ operators: [] }, ["X"])).toEqual(["X"]);
+    expect(operatorsFrom(null, ["X"])).toEqual(["X"]);
+  });
+  it("the hub's answer to a station report carries the version, so the station fetches the names again", async () => {
+    const { createHub } = await import("../../../hub-plugin.js");
+    const hubFile = path.join(tmp(), "hub-x.json");
+    const h = createHub({ file: hubFile, print: async () => ({}), listPrinters: async () => [] });
+    const a = createAdmin({ dataFile: hubFile, stage: "development", env: ENV, git: () => ({}) });
+    const c = cookieFrom(await call(a.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    await call(a.handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv"] } });
+    const r = await call(h.handle, "POST", "/stations/st-station1", { body: { operatorName: "Shiv", roster: [], log: [] } });
+    expect(r.body).toMatchObject({ ok: true, configVersion: 1 });
+    h.close();
   });
 });

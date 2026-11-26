@@ -65,8 +65,29 @@ export function rollFor(kind) {
   return kind === "flag" ? printRolls.flagRoll : kind === "binlist" || kind === "binticket" ? printRolls.boxRoll : printRolls.stickerRoll;
 }
 
+// The floor's settings from the admin panel (phase 2, 26 Nov 2026): the operator names for
+// now. Kept in this browser, so a station whose hub is away still shows the last names it
+// was given. Every station report's answer carries the settings' version; when it is not
+// the one kept here, they are fetched again (GET /api/admin/config, public, no secrets).
+const FLOOR_KEY = "jerseyqc.floorconfig";
+export function cachedFloorConfig() {
+  try { const c = JSON.parse(localStorage.getItem(FLOOR_KEY) || "null"); return c && typeof c === "object" ? c : null; } catch { return null; }
+}
+export async function loadFloorConfig() {
+  const c = await call("/api/admin/config");
+  try { localStorage.setItem(FLOOR_KEY, JSON.stringify({ configVersion: c.configVersion || 0, operators: Array.isArray(c.operators) ? c.operators : [] })); } catch { /* private window: this page only */ }
+  return c;
+}
+let fetchingConfig = null;
+export function noteConfigVersion(v) {
+  if (!v || v === cachedFloorConfig()?.configVersion || fetchingConfig) return;
+  fetchingConfig = loadFloorConfig().catch(() => null).finally(() => { fetchingConfig = null; });
+}
+// The names to offer: the panel's list when it has one, else the .env.local list (config.js).
+export const operatorsFrom = (config, fallback) => (Array.isArray(config?.operators) && config.operators.length ? config.operators : fallback);
+
 export const hub = {
-  report:        (id, snapshot) => call(`/api/hub/stations/${id}`, { method: "POST", body: JSON.stringify(snapshot) }),
+  report:        (id, snapshot) => call(`/api/hub/stations/${id}`, { method: "POST", body: JSON.stringify(snapshot) }).then(r => { noteConfigVersion(r?.configVersion); return r; }),
   stations:      ()             => call("/api/hub/stations"),
   removeStation: id             => call(`/api/hub/stations/${id}`, { method: "DELETE" }),          // the supervisor's Remove
   signOutStation: id            => call(`/api/hub/stations/${id}/signout`, { method: "POST" }),    // the operator signed out: kept on the board, marked (M8)

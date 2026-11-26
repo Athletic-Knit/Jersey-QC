@@ -37,7 +37,7 @@ import { playTone } from "./lib/audio.js";
 import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel, checksFor } from "./lib/vigilance.js";
-import { hub, stationId, snapshotOf, stationUse, holdPrints, setPrintRolls, rollFor } from "./lib/hub.js";
+import { hub, stationId, snapshotOf, stationUse, holdPrints, setPrintRolls, rollFor, cachedFloorConfig, loadFloorConfig, operatorsFrom } from "./lib/hub.js";
 import { ofRun, pickRun, orderDone, doneAt, eventsAsLog } from "./lib/ledgerview.js";
 import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
@@ -400,10 +400,27 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const [role,    setRole]    = useState(roleOfStation(here) || initial?.role || "inspector");
   const [station, setStation] = useState(stationOf(here) ? here : STATIONS[0].id);
   const [pin,   setPin]   = useState("");
-  const [name, setName] = useState(() => (initial?.name || "") || OPERATORS[0] || "");
-  const [nameChoice, setNameChoice] = useState(() => (initial?.name && !OPERATORS.includes(initial.name) ? "other" : (initial?.name || OPERATORS[0] || "other")));   // "Other": someone sent to this station for the day   // a name from the list, or "other" with the field below
+  // The names: the admin panel's list when it set one (kept from the last fetch, fetched again
+  // as this screen opens), else VITE_OPERATORS (phase 2, 26 Nov 2026).
+  const [operators, setOperators] = useState(() => operatorsFrom(cachedFloorConfig(), OPERATORS));
+  const [name, setName] = useState(() => (initial?.name || "") || operators[0] || "");
+  const [nameChoice, setNameChoice] = useState(() => (initial?.name && !operators.includes(initial.name) ? "other" : (initial?.name || operators[0] || "other")));   // "Other": someone sent to this station for the day   // a name from the list, or "other" with the field below
+  const choiceRef = useRef(nameChoice);
+  useEffect(() => { choiceRef.current = nameChoice; }, [nameChoice]);
   const [pinFocus, setPinFocus] = useState(false);   // only the field's highlight follows focus; the keypad is always there
   const [error, setError] = useState(null);
+  useEffect(() => {
+    let on = true;
+    loadFloorConfig().then(c => {
+      if (!on) return;
+      const next = operatorsFrom(c, OPERATORS);
+      setOperators(next);
+      // The name picked is no longer on the list (and was not typed under Other): the first one.
+      const ch = choiceRef.current;
+      if (ch !== "other" && !next.includes(ch)) { setNameChoice(next[0] || "other"); setName(next[0] || ""); }
+    }).catch(() => {});   // the hub is away: the names kept from last time, or .env.local's
+    return () => { on = false; };
+  }, []);
   // Which stations are live right now, and from where: refreshed every 5 s.
   const [use, setUse] = useState({});
   useEffect(() => {
@@ -478,7 +495,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         <div style={{ marginBottom: 14 }}>
           <label style={labelSt}>Your name</label>
           <select value={nameChoice} onChange={e => { const v = e.target.value; setNameChoice(v); setName(v === "other" ? "" : v); }} style={{ ...inputSt, cursor: "pointer" }}>
-            {OPERATORS.map(n => <option key={n} value={n}>{n}</option>)}
+            {operators.map(n => <option key={n} value={n}>{n}</option>)}
             <option value="other">Other</option>
           </select>
           {/* "Other": the operator's own name, typed on the screen's keys (the stations have no keyboard).

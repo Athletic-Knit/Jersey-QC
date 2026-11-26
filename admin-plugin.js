@@ -22,7 +22,7 @@ import path from "node:path";
 import process from "node:process";
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
-import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit } from "./src/lib/adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators } from "./src/lib/adminstore.js";
 
 export const SESSION_MS = 8 * 60 * 60 * 1000;
 export const TRIES = 5, LOCK_MS = 10 * 60 * 1000;
@@ -92,6 +92,23 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
   let store = readAdmin(adminFile);
   if (store.setAside) console.error(`[admin] ${adminFile} could not be read (${store.parseError}); kept as ${store.setAside}, starting a new one`);
   if (store.error) console.error(`[admin] ${store.error}: the change log is not saved until it can be read`);
+  // The floor's settings the stations read (phase 2): public, never a secret. The hub adds
+  // configVersion to every station report's answer (hub-plugin.js reads it here), so a
+  // station knows when to fetch them again.
+  const fallbackOperators = String(env.VITE_OPERATORS || "Person 1,Person 2,Person 3").split(",").map(x => x.trim()).filter(Boolean);
+  const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [] });
+  (globalThis.__jqcAdminConfig ||= new Map()).set(path.resolve(dataFile), { version: () => store.data.configVersion || 0 });
+  // A change to the settings: saved with the change log line in one write, version up.
+  const change = (req, me, what, settings, before, after) => {
+    if (!writable) return { code: 403, error: "This server's admin panel is read only (production: JQC_ADMIN_WRITE=1 in .env.local allows changes)." };
+    if (store.error) return { code: 503, error: `The admin file cannot be read, so nothing can be saved: ${store.error}` };
+    const entry = auditEntry({ at: now(), who: me.name, ip: ipOf(req), stage, what, before, after });
+    const next = withAudit({ ...store.data, configVersion: (store.data.configVersion || 0) + 1, settings }, entry);
+    try { writeAdmin(adminFile, next); } catch (e) { return { code: 500, error: `Could not save: ${e.message}` }; }
+    store = { ...store, data: next };
+    console.log(`[admin] ${me.name} (${entry.ip}): ${what}`);
+    return null;
+  };
   const log = (req, who, what, extra = {}) => {
     const entry = auditEntry({ at: now(), who, ip: ipOf(req), stage, what, ...extra });
     console.log(`[admin] ${who || "?"} (${entry.ip}): ${what}`);
@@ -146,6 +163,7 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
     const route = new URL(req.url, "http://admin").pathname.replace(/\/+$/, "") || "/";
     const me = session(req);
     try {
+      if (route === "/config" && req.method === "GET") return send(res, 200, floorConfig());   // public: what every station reads
       if (route === "/session" && req.method === "GET")
         return send(res, 200, { setup: !!password, signedIn: !!me, name: me?.name || "", stage, port, host: hostname, writable });
       if (!password) return send(res, 503, { error: "The admin panel is not set up on this server: add JQC_ADMIN_PASSWORD to .env.local (no VITE_ prefix)." });
@@ -174,6 +192,20 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
       if (!me) return send(res, 401, { error: "Sign in first." });
       if (route === "/health" && req.method === "GET") return send(res, 200, health());
       if (route === "/log" && req.method === "GET") return send(res, 200, { lines: tap.lines.slice(-200) });
+      if (route === "/settings" && req.method === "GET")
+        return send(res, 200, { ...floorConfig(), fallbackOperators, writable, error: store.error || "" });
+      if (route === "/settings/operators" && req.method === "PUT") {
+        const body = await readJson(req);
+        const { list, error } = cleanOperators(body.operators);
+        if (error) return send(res, 400, { error });
+        const before = store.data.settings.operators || [];
+        if (JSON.stringify(before) === JSON.stringify(list)) return send(res, 200, { ...floorConfig(), fallbackOperators, writable, unchanged: true });
+        const settings = { ...store.data.settings };
+        if (list.length) settings.operators = list; else delete settings.operators;
+        const bad = change(req, me, list.length ? "operator names" : "operator names: back to the .env.local list", settings, before.length ? before : `(.env.local) ${fallbackOperators.join(", ")}`, list.length ? list : `(.env.local) ${fallbackOperators.join(", ")}`);
+        if (bad) return send(res, bad.code, { error: bad.error });
+        return send(res, 200, { ...floorConfig(), fallbackOperators, writable });
+      }
       if (route === "/audit" && req.method === "GET") return send(res, 200, { entries: store.data.audit.slice(-300).reverse(), error: store.error || "" });
       return send(res, 404, { error: `no such admin route: ${req.method} ${route}` });
     } catch (e) {

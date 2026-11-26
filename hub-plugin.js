@@ -480,7 +480,8 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           pruneLedger(led);   // 90 days; photos on the newest 14
           const setOrder = renamed ? undefined : prev?.setOrder;          // pending until the station reports it
           state.stations[id] = { ...rest, id, carried, day, history, rate, etaMin, updatedAt: now, ...(setOrder ? { setOrder } : {}) }; save();
-          return json(res, 200, { ok: true, ...(setOrder ? { setOrder } : {}) });
+          const configVersion = globalThis.__jqcAdminConfig?.get(key)?.version?.() || 0;   // the admin panel's settings changed: the station fetches them again (admin-plugin.js)
+          return json(res, 200, { ok: true, ...(setOrder ? { setOrder } : {}), ...(configVersion ? { configVersion } : {}) });
         }
         // The supervisor gives a station's running order its number from the board.
         if (req.method === "POST" && id && parts[2] === "order") {
