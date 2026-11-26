@@ -10,7 +10,8 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { Buffer } from "node:buffer";
-import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX, cleanOperators, cleanPrinters } from "../adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX, cleanOperators, cleanPrinters, cleanDefaults } from "../adminstore.js";
+import { baseSettings, ownOf, effectiveSettings, loadOwn, saveOwn } from "../floorsettings.js";
 import { operatorsFrom } from "../hub.js";
 import { createAdmin, TRIES } from "../../../admin-plugin.js";
 import { resolveTheme } from "../theme.js";
@@ -168,7 +169,7 @@ describe("phase 2: operator names", () => {
   it("/config is public and holds no secret; with nothing set it has no names (the stations keep .env.local's)", async () => {
     const r = await call(handle, "GET", "/config");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ configVersion: 0, operators: [] });
+    expect(r.body).toEqual({ configVersion: 0, operators: [], defaults: {} });
     expect(r.text).not.toContain(PASSWORD);
   });
   it("saving needs a sign-in; a save goes in the change log with before and after, raises the version and reaches /config", async () => {
@@ -178,7 +179,7 @@ describe("phase 2: operator names", () => {
     expect(s0).toMatchObject({ operators: [], fallbackOperators: ["Shiv", "Priya"], configVersion: 0, writable: true });
     const r = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv", "Priya", "Arshil"] } });
     expect(r.status).toBe(200);
-    expect((await call(handle, "GET", "/config")).body).toEqual({ configVersion: 1, operators: ["Shiv", "Priya", "Arshil"] });
+    expect((await call(handle, "GET", "/config")).body).toEqual({ configVersion: 1, operators: ["Shiv", "Priya", "Arshil"], defaults: {} });
     const same = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv", "Priya", "Arshil"] } });
     expect(same.body.unchanged).toBe(true);   // no new version, no log line
     const back = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: [] } });
@@ -277,5 +278,55 @@ describe("phase 3: printers", () => {
     expect((await call(ro.handle, "POST", "/printers/test", { cookie: rc, body: { queue: "X", roll: "2x4" } })).status).toBe(403);
     expect((await call(ro.handle, "GET", "/printers", { cookie: rc })).status).toBe(200);   // looking is fine
     h.close();
+  });
+});
+
+describe("phase 4: station defaults", () => {
+  const APP = { scanKey: "Enter", confirmKey: "Enter", cancelKey: "KeyA", upKey: "ArrowUp", retryKey: "KeyR", byHandKey: "KeyW", rotation: 180, cameraId: "", autoScan: true, stickers: false, flagRoll: "2x4", listSort: "size", theme: "dark" };
+  it("cleans the defaults: known settings with good values only, blanks dropped, two on-screen keys the same refused", () => {
+    expect(cleanDefaults({ stickers: true, flagRoll: "2x3", theme: "light", listSort: "", autoScanDelay: 5 })).toEqual({ map: { stickers: true, flagRoll: "2x3", theme: "light", autoScanDelay: 5 }, error: "" });
+    expect(cleanDefaults({ rotation: 90 }).error).toMatch(/not a setting/);          // the camera belongs to the PC
+    expect(cleanDefaults({ stickers: "yes" }).error).toMatch(/not a value/);
+    expect(cleanDefaults({ autoScanDelay: 99 }).error).toBeTruthy();
+    expect(cleanDefaults({ retryKey: "KeyW", byHandKey: "KeyW" }).error).toMatch(/same key/);
+  });
+  it("a station: the app's default, then the floor's, then what its operator changed, which always wins", () => {
+    const base = baseSettings(APP, { stickers: true, flagRoll: "2x3", rotation: 0, nonsense: 1 });
+    expect(base).toMatchObject({ stickers: true, flagRoll: "2x3", rotation: 180 });   // never the PC's rotation, nothing unknown
+    expect(base.nonsense).toBeUndefined();
+    const mine = { ...base, stickers: false };                                         // the operator turned stickers off here
+    const own = ownOf(mine, base);
+    expect(own).toEqual({ stickers: false });
+    const later = baseSettings(APP, { stickers: true, flagRoll: "2x1", listSort: "team" });   // the floor's defaults change
+    expect(effectiveSettings(later, own)).toMatchObject({ stickers: false, flagRoll: "2x1", listSort: "team" });
+  });
+  it("a station from before phase 4 keeps everything it had set (its whole saved object, against the app's defaults)", () => {
+    const store = new Map(), storage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+    expect(loadOwn(APP, { ...APP, rotation: 90, stickers: true }, storage)).toEqual({ rotation: 90, stickers: true });
+    saveOwn({ listSort: "team" }, storage);
+    expect(loadOwn(APP, { ...APP, rotation: 90 }, storage)).toEqual({ listSort: "team" });
+  });
+  it("saving defaults needs a sign-in, goes in the change log, raises the version and reaches /config; production refuses", async () => {
+    const dir = tmp(), dataFile = path.join(dir, "hub-test.json");
+    const { handle } = createAdmin({ dataFile, stage: "development", env: ENV, git: () => ({}) });
+    expect((await call(handle, "PUT", "/settings/defaults", { body: { defaults: { stickers: true } } })).status).toBe(401);
+    const c = cookieFrom(await call(handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(handle, "PUT", "/settings/defaults", { cookie: c, body: { defaults: { rotation: 0 } } })).status).toBe(400);
+    const r = await call(handle, "PUT", "/settings/defaults", { cookie: c, body: { defaults: { stickers: true, theme: "light" } } });
+    expect(r.status).toBe(200);
+    expect((await call(handle, "GET", "/config")).body).toMatchObject({ configVersion: 1, defaults: { stickers: true, theme: "light" } });
+    const e = (await call(handle, "GET", "/audit", { cookie: c })).body.entries[0];
+    expect(e).toMatchObject({ what: "station defaults", before: "(the app's own defaults)", after: ["stickers true", "theme light"] });
+    const ro = createAdmin({ dataFile: path.join(dir, "hub.json"), stage: "production", env: ENV, git: () => ({}) });
+    const rc = cookieFrom(await call(ro.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(ro.handle, "PUT", "/settings/defaults", { cookie: rc, body: { defaults: { stickers: true } } })).status).toBe(403);
+  });
+  it("the app: defaults are taken only with no order open, and light or dark only on the sign-in screen and the board", () => {
+    const src = fs.readFileSync(new URL("../../App.jsx", import.meta.url), "utf8");
+    expect(src).toMatch(/if \(!floorPending \|\| sessionStarted\) return;/);
+    expect(src).toMatch(/const themedScreen = !signedIn \|\| showSupervisor;/);
+    expect(src).toMatch(/else document\.documentElement\.removeAttribute\("data-theme"\);/);
+    const css = fs.readFileSync(new URL("../../index.css", import.meta.url), "utf8");
+    expect(css).toMatch(/:root, :root\[data-theme="dark"\] \{\n {2}--k-page: #0d1117;/);   // dark: the colours as they were
   });
 });

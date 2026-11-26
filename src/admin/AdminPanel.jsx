@@ -6,6 +6,7 @@
 // screen that works in both themes.
 import { useCallback, useEffect, useState } from "react";
 import { THEMES, loadTheme, saveTheme } from "../lib/theme.js";
+import { DEFAULT_SETTINGS } from "../config.js";
 
 const api = async (path, opts = {}) => {
   const r = await fetch(`/api/admin${path}`, { credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...opts });
@@ -355,13 +356,115 @@ function Printers() {
   );
 }
 
+// Station defaults (phase 4): what a station uses for each setting its operator has not
+// changed there (the co-op: no locks, admins set the defaults). Blank = the app's own default.
+// A station takes them at its next sign-in, or as soon as no order is open; never mid-order.
+const ROLL_OPTS = [["2x4", "2 × 4 in"], ["2x3", "2 × 3 in"], ["2x1", "2 × 1 in"], ["1x0.5", "1 × ½ in"]];
+const DEFAULT_ROWS = [
+  { group: "Keys and the pedal" },
+  { k: "scanKey", label: "Scan", type: "key" },
+  { k: "confirmKey", label: "Select", type: "key" },
+  { k: "cancelKey", label: "Highlight down", type: "key" },
+  { k: "upKey", label: "Highlight up", type: "key" },
+  { k: "retryKey", label: "Retry", type: "key" },
+  { k: "byHandKey", label: "By hand", type: "key" },
+  { group: "Hands-free" },
+  { k: "autoScan", label: "Hands-free on", type: "bool" },
+  { k: "autoScanDelay", label: "Wait after a confirm (seconds)", type: "num", min: 0, max: 30 },
+  { group: "Label printer" },
+  { k: "stickers", label: "Sticker on every passed garment", type: "bool" },
+  { k: "stickerRoll", label: "Sticker roll", type: "pick", opts: ROLL_OPTS },
+  { k: "flagTickets", label: "Flag ticket on every flag", type: "bool" },
+  { k: "flagRoll", label: "Flag ticket roll", type: "pick", opts: ROLL_OPTS },
+  { k: "binLists", label: "Box lists at Box full and Finish", type: "bool" },
+  { k: "boxRoll", label: "Box labels and lists roll", type: "pick", opts: ROLL_OPTS },
+  { k: "boxAutoPrint", label: "Box labels print by themselves when an order starts", type: "bool" },
+  { group: "Packing" },
+  { k: "boxWeights", label: "Weight estimate", type: "bool" },
+  { k: "boxWeightCap", label: "Weight cap (lb)", type: "num", min: 10, max: 100 },
+  { group: "Screens" },
+  { k: "listSort", label: "Pick list order", type: "pick", opts: [["size", "Size"], ["team", "Team"], ["number", "Number"]] },
+  { k: "theme", label: "Light or dark", type: "pick", opts: [["dark", "Dark"], ["light", "Light"], ["system", "Follow the PC"]] },
+];
+const showVal = (row, v) => row.type === "bool" ? (v ? "On" : "Off") : row.type === "key" ? keyName(v) : row.type === "pick" ? (row.opts.find(o => o[0] === v)?.[1] || String(v)) : String(v);
+function keyName(code) {
+  const s = String(code || "");
+  return s.startsWith("Key") ? s.slice(3) : s.startsWith("Digit") ? s.slice(5) : s === "ArrowUp" ? "↑" : s === "ArrowDown" ? "↓" : s === "ArrowLeft" ? "←" : s === "ArrowRight" ? "→" : s;
+}
+function StationDefaults() {
+  const [cfg, setCfg] = useState(null);
+  const [draft, setDraft] = useState({});
+  const [listen, setListen] = useState(null);
+  const [msg, setMsg] = useState({ tone: "", text: "" });
+  const [busy, setBusy] = useState(false);
+  const [writable, setWritable] = useState(false);
+  useEffect(() => { api("/settings").then(c => { setCfg(c); setDraft(c.defaults || {}); setWritable(!!c.writable); }).catch(e => setMsg({ tone: "fail", text: e.message })); }, []);
+  useEffect(() => {
+    if (!listen) return;
+    const h = e => { e.preventDefault(); e.stopPropagation(); setDraft(d => ({ ...d, [listen]: e.code })); setListen(null); };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [listen]);
+  if (!cfg) return <section style={st.card}>{msg.text ? <span style={{ color: "var(--fail-text)" }}>{msg.text}</span> : "Loading…"}</section>;
+  const set = (k, v) => setDraft(d => { const n = { ...d }; if (v === "" || v === undefined) delete n[k]; else n[k] = v; return n; });
+  const saved = cfg.defaults || {};
+  const changed = JSON.stringify(draft) !== JSON.stringify(saved);
+  const save = async () => {
+    setBusy(true); setMsg({ tone: "", text: "" });
+    try { const c = await api("/settings/defaults", { method: "PUT", body: JSON.stringify({ defaults: draft }) }); setCfg(x => ({ ...x, ...c })); setDraft(c.defaults || {}); setMsg({ tone: "pass", text: c.unchanged ? "Nothing to save." : "Saved. Each station takes them at its next sign-in, or as soon as it has no order open." }); }
+    catch (e) { setMsg({ tone: "fail", text: e.message }); }
+    finally { setBusy(false); }
+  };
+  const cell = { padding: "7px 8px", borderBottom: "1px solid var(--line)", verticalAlign: "middle" };
+  const control = row => {
+    const v = draft[row.k], dis = !writable;
+    if (row.type === "bool") return <select aria-label={row.label} style={{ ...st.input, width: "auto", padding: "6px 10px" }} disabled={dis} value={v === undefined ? "" : v ? "on" : "off"} onChange={e => set(row.k, e.target.value === "" ? "" : e.target.value === "on")}><option value="">App default</option><option value="on">On</option><option value="off">Off</option></select>;
+    if (row.type === "pick") return <select aria-label={row.label} style={{ ...st.input, width: "auto", padding: "6px 10px" }} disabled={dis} value={v ?? ""} onChange={e => set(row.k, e.target.value)}><option value="">App default</option>{row.opts.map(([id, l]) => <option key={id} value={id}>{l}</option>)}</select>;
+    if (row.type === "num") return <input aria-label={row.label} type="number" min={row.min} max={row.max} style={{ ...st.input, width: 110, padding: "6px 10px" }} disabled={dis} value={v ?? ""} placeholder="App default" onChange={e => set(row.k, e.target.value === "" ? "" : Number(e.target.value))} />;
+    return (
+      <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+        <button style={{ ...st.btn, padding: "5px 12px", minWidth: 120, ...(listen === row.k ? { borderColor: "var(--warn)", color: "var(--warn-text)" } : {}) }} disabled={dis} onClick={() => setListen(listen === row.k ? null : row.k)}>{listen === row.k ? "Press a key…" : v ? keyName(v) : "App default"}</button>
+        {v && <button style={{ ...st.btn, padding: "5px 10px" }} disabled={dis} onClick={() => set(row.k, "")} aria-label={`${row.label}: back to the app default`}>✕</button>}
+      </span>
+    );
+  };
+  return (
+    <section style={st.card}>
+      <h2 style={st.h2}>Station defaults</h2>
+      <p style={{ margin: "0 0 12px", color: "var(--text-dim)" }}>What every station uses for a setting its operator has not changed on that station. An operator can still change any of them in the station's Settings; their choice stays. Leave "App default" to keep the app's own. A station takes new defaults at its next sign-in, or as soon as it has no order open, never in the middle of an order. The camera and its rotation stay with each PC.</p>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>
+          <thead><tr>{["Setting", "App default", "Floor default"].map(h => <th key={h} style={{ ...cell, textAlign: "left", color: "var(--text-dim)", borderBottom: "2px solid var(--line-strong)" }}>{h}</th>)}</tr></thead>
+          <tbody>
+            {DEFAULT_ROWS.map(row => row.group
+              ? <tr key={row.group}><td colSpan={3} style={{ ...cell, fontWeight: 700, paddingTop: 14, color: "var(--text)" }}>{row.group}</td></tr>
+              : <tr key={row.k} style={draft[row.k] !== undefined ? { background: "var(--info-bg)" } : undefined}>
+                  <td style={cell}>{row.label}</td>
+                  <td style={{ ...cell, color: "var(--text-dim)" }}>{showVal(row, DEFAULT_SETTINGS[row.k])}</td>
+                  <td style={cell}>{control(row)}</td>
+                </tr>)}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
+        {writable ? <>
+          <button style={changed ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!changed || busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>
+          {changed && <button style={st.btn} onClick={() => setDraft(saved)}>Undo changes</button>}
+          {!changed && Object.keys(saved).length > 0 && <button style={st.btn} onClick={() => setDraft({})}>Clear all (the app's own defaults)</button>}
+        </> : <Pill>Read only on this server</Pill>}
+        {msg.text && <span role="status" style={{ color: msg.tone ? `var(--${msg.tone}-text)` : "var(--text)" }}>{msg.text}</span>}
+      </div>
+    </section>
+  );
+}
+
 function Appearance() {
   const [choice, setChoice] = useState(loadTheme);
   const pick = id => { setChoice(id); saveTheme(id); };
   return (
     <section style={st.card}>
       <h2 style={st.h2}>Light or dark</h2>
-      <p style={{ margin: "0 0 12px", color: "var(--text-dim)" }}>For this browser. The stations get the same switch in a later phase (sign-in and the board first, then the station screens).</p>
+      <p style={{ margin: "0 0 12px", color: "var(--text-dim)" }}>For this browser. Each station has the same choice in its Settings (Screen), and its default is under Station defaults; on the stations the sign-in screen and the supervisor board follow it, the scanning screens later.</p>
       <div role="radiogroup" aria-label="Light or dark" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         {THEMES.map(t => (
           <button key={t.id} role="radio" aria-checked={choice === t.id} onClick={() => pick(t.id)} style={choice === t.id ? st.pri : st.btn}>{t.label}</button>
@@ -371,7 +474,7 @@ function Appearance() {
   );
 }
 
-const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "printers", label: "Printers" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
+const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "printers", label: "Printers" }, { id: "defaults", label: "Station defaults" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
 
 export default function AdminPanel() {
   const [s, setS] = useState(null);         // the session answer: stage, setup, signedIn …
@@ -411,6 +514,7 @@ export default function AdminPanel() {
               {tab === "health" && <Health h={h} onRefresh={loadHealth} />}
               {tab === "operators" && <Operators />}
               {tab === "printers" && <Printers />}
+              {tab === "defaults" && <StationDefaults />}
               {tab === "log" && <ServerLog />}
               {tab === "changes" && <ChangeLog />}
               {tab === "look" && <Appearance />}

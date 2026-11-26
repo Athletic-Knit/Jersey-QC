@@ -75,7 +75,9 @@ export function cachedFloorConfig() {
 }
 export async function loadFloorConfig() {
   const c = await call("/api/admin/config");
-  try { localStorage.setItem(FLOOR_KEY, JSON.stringify({ configVersion: c.configVersion || 0, operators: Array.isArray(c.operators) ? c.operators : [] })); } catch { /* private window: this page only */ }
+  const kept = { configVersion: c.configVersion || 0, operators: Array.isArray(c.operators) ? c.operators : [], defaults: c.defaults && typeof c.defaults === "object" ? c.defaults : {} };
+  try { localStorage.setItem(FLOOR_KEY, JSON.stringify(kept)); } catch { /* private window: this page only */ }
+  try { window.dispatchEvent(new CustomEvent("jqc-floorconfig", { detail: kept })); } catch { /* not a browser (tests) */ }   // the station takes the defaults when no order is open (App)
   return c;
 }
 let fetchingConfig = null;

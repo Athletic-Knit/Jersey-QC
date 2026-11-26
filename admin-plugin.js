@@ -22,7 +22,7 @@ import path from "node:path";
 import process from "node:process";
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
-import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators, cleanPrinters } from "./src/lib/adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators, cleanPrinters, cleanDefaults } from "./src/lib/adminstore.js";
 
 export const SESSION_MS = 8 * 60 * 60 * 1000;
 export const TRIES = 5, LOCK_MS = 10 * 60 * 1000;
@@ -96,7 +96,7 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
   // configVersion to every station report's answer (hub-plugin.js reads it here), so a
   // station knows when to fetch them again.
   const fallbackOperators = String(env.VITE_OPERATORS || "Person 1,Person 2,Person 3").split(",").map(x => x.trim()).filter(Boolean);
-  const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [] });
+  const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [], defaults: store.data.settings.defaults || {} });
   (globalThis.__jqcAdminConfig ||= new Map()).set(path.resolve(dataFile), { version: () => store.data.configVersion || 0, printers: () => store.data.settings.printers || {} });
   const hubPrinting = () => hubs?.()?.get?.(path.resolve(dataFile))?.printing || null;
   const STATION_IDS = ["st-station1", "st-station2", "st-station3"];   // the floor's stations (config.js STATIONS); the page cannot be imported here
@@ -207,6 +207,19 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
         const bad = change(req, me, list.length ? "operator names" : "operator names: back to the .env.local list", settings, before.length ? before : `(.env.local) ${fallbackOperators.join(", ")}`, list.length ? list : `(.env.local) ${fallbackOperators.join(", ")}`);
         if (bad) return send(res, bad.code, { error: bad.error });
         return send(res, 200, { ...floorConfig(), fallbackOperators, writable });
+      }
+      if (route === "/settings/defaults" && req.method === "PUT") {
+        const body = await readJson(req);
+        const { map, error } = cleanDefaults(body.defaults);
+        if (error) return send(res, 400, { error });
+        const before = store.data.settings.defaults || {};
+        if (JSON.stringify(before) === JSON.stringify(map)) return send(res, 200, { ...floorConfig(), unchanged: true });
+        const settings = { ...store.data.settings };
+        if (Object.keys(map).length) settings.defaults = map; else delete settings.defaults;
+        const show = m => Object.keys(m).length ? Object.entries(m).map(([k, v]) => `${k} ${v}`) : "(the app's own defaults)";
+        const bad = change(req, me, "station defaults", settings, show(before), show(map));
+        if (bad) return send(res, bad.code, { error: bad.error });
+        return send(res, 200, floorConfig());
       }
       if (route === "/printers" && req.method === "GET") {
         const pr = hubPrinting();

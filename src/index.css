@@ -34,6 +34,78 @@ html { color-scheme: dark; }
   color-scheme: light;
 }
 
+/* The app's own colours as tokens (phase 4, 26 Nov 2026): the sign-in screen, the supervisor
+   board and the pieces they share (buttons, fields, pills, the order view, the garment map,
+   the order summary) use them instead of literal colours. Dark is each colour as it was, so
+   nothing changes in dark; light is a high-contrast partner for each. The wall view and the
+   photo viewer stay dark on purpose; the scanning screens are converted later. */
+:root, :root[data-theme="dark"] {
+  --k-page: #0d1117;
+  --k-card: #161b22;
+  --k-field: #1e293b;
+  --k-rule: #21262d;
+  --k-rule-2: #334155;
+  --k-rule-3: #3f4b5c;
+  --k-ink-5: #475569;
+  --k-ink-4: #64748b;
+  --k-ink-3b: #7c8ba1;
+  --k-ink-3: #94a3b8;
+  --k-ink-2: #cbd5e1;
+  --k-ink-1: #e2e8f0;
+  --k-ink-0: #f1f5f9;
+  --k-blue: #3b82f6;
+  --k-blue-ink: #60a5fa;
+  --k-blue-ink-2: #93c5fd;
+  --k-green: #22c55e;
+  --k-green-ink: #4ade80;
+  --k-green-ink-2: #86efac;
+  --k-green-deep: #166534;
+  --k-amber: #f59e0b;
+  --k-amber-ink: #fbbf24;
+  --k-amber-ink-2: #fcd34d;
+  --k-amber-ink-3: #fde68a;
+  --k-red: #ef4444;
+  --k-red-ink: #f87171;
+  --k-red-ink-2: #fca5a5;
+  --k-red-ink-3: #fecaca;
+  --k-pink-ink: #f9a8d4;
+  --k-violet-ink: #ddd6fe;
+  --k-strong: #ffffff;
+}
+:root[data-theme="light"] {
+  --k-page: #eef1f5;
+  --k-card: #ffffff;
+  --k-field: #f1f4f8;
+  --k-rule: #d3d9e1;
+  --k-rule-2: #aab4c0;
+  --k-rule-3: #7b8794;
+  --k-ink-5: #5b6878;
+  --k-ink-4: #4b5866;
+  --k-ink-3b: #3f4b59;
+  --k-ink-3: #334155;
+  --k-ink-2: #1e293b;
+  --k-ink-1: #0b1220;
+  --k-ink-0: #020617;
+  --k-blue: #1d4ed8;
+  --k-blue-ink: #1d4ed8;
+  --k-blue-ink-2: #1e40af;
+  --k-green: #15803d;
+  --k-green-ink: #166534;
+  --k-green-ink-2: #14532d;
+  --k-green-deep: #15803d;
+  --k-amber: #b45309;
+  --k-amber-ink: #92400e;
+  --k-amber-ink-2: #78350f;
+  --k-amber-ink-3: #713f12;
+  --k-red: #b91c1c;
+  --k-red-ink: #991b1b;
+  --k-red-ink-2: #991b1b;
+  --k-red-ink-3: #7f1d1d;
+  --k-pink-ink: #9d174d;
+  --k-violet-ink: #5b21b6;
+  --k-strong: #0b1220;
+}
+
 /* Type. Atkinson Hyperlegible for everything the operator reads as text: its
    letterforms were drawn so 0/O, 1/l/I and 6/9 cannot be confused, which is
    what matters when a name and a number are read from several feet away.

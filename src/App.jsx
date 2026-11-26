@@ -38,6 +38,8 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel, checksFor } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse, holdPrints, setPrintRolls, rollFor, cachedFloorConfig, loadFloorConfig, operatorsFrom } from "./lib/hub.js";
+import { baseSettings, effectiveSettings, ownOf, loadOwn, saveOwn } from "./lib/floorsettings.js";
+import { applyTheme, THEMES } from "./lib/theme.js";
 import { ofRun, pickRun, orderDone, doneAt, eventsAsLog } from "./lib/ledgerview.js";
 import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
@@ -82,35 +84,35 @@ function formatKey(code) {
 }
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
-const card     = { background: "#161b22", borderRadius: 10, border: "1px solid #21262d", marginBottom: 10, overflow: "hidden" };
+const card     = { background: "var(--k-card)", borderRadius: 10, border: "1px solid var(--k-rule)", marginBottom: 10, overflow: "hidden" };
 const FONT_UI      = '"Atkinson Hyperlegible", system-ui, sans-serif';          // text the operator reads
 const FONT_DISPLAY = '"Barlow Condensed", "Arial Narrow", system-ui, sans-serif'; // the big numerals: number, size, bin, counters
-const btnPri   = { padding: "10px 20px", borderRadius: 8, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer" };
-const btnGhost = { padding: "8px 14px", borderRadius: 8, border: "1px solid #3f4b5c", background: "transparent", color: "#cbd5e1", fontWeight: 700, fontSize: 14, cursor: "pointer" };
+const btnPri   = { padding: "10px 20px", borderRadius: 8, border: "none", background: "var(--k-blue)", color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer" };
+const btnGhost = { padding: "8px 14px", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: "transparent", color: "var(--k-ink-2)", fontWeight: 700, fontSize: 14, cursor: "pointer" };
 const btnSm    = { padding: "7px 14px", borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: "pointer" };
-const codeSt   = { background: "#1e293b", padding: "2px 8px", borderRadius: 4, fontSize: 14 };
-const thSt     = { padding: "10px 12px", textAlign: "left", fontSize: 14, fontWeight: 700, color: "#94a3b8" };
-const tdSt     = { padding: "10px 12px", color: "#e2e8f0", fontSize: 18 };
-const inputSt  = { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, border: "1px solid #3f4b5c", background: "#1e293b", color: "#e2e8f0", fontSize: 17 };
-const labelSt  = { fontSize: 14, color: "#94a3b8", fontWeight: 700, display: "block", marginBottom: 6 };
-const modalBg   = { position: "fixed", inset: 0, background: "#0d1117", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto" };
-const modalCard = { background: "#161b22", borderRadius: 16, border: "1px solid #21262d", padding: 40, width: 560, maxWidth: "90vw" };
-const errSt     = { fontSize: 15, color: "#f87171", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 };
-const bigBtn    = { width: "100%", padding: "15px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 19, cursor: "pointer" };
+const codeSt   = { background: "var(--k-field)", padding: "2px 8px", borderRadius: 4, fontSize: 14 };
+const thSt     = { padding: "10px 12px", textAlign: "left", fontSize: 14, fontWeight: 700, color: "var(--k-ink-3)" };
+const tdSt     = { padding: "10px 12px", color: "var(--k-ink-1)", fontSize: 18 };
+const inputSt  = { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: "var(--k-field)", color: "var(--k-ink-1)", fontSize: 17 };
+const labelSt  = { fontSize: 14, color: "var(--k-ink-3)", fontWeight: 700, display: "block", marginBottom: 6 };
+const modalBg   = { position: "fixed", inset: 0, background: "var(--k-page)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto" };
+const modalCard = { background: "var(--k-card)", borderRadius: 16, border: "1px solid var(--k-rule)", padding: 40, width: 560, maxWidth: "90vw" };
+const errSt     = { fontSize: 15, color: "var(--k-red-ink)", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 };
+const bigBtn    = { width: "100%", padding: "15px", borderRadius: 10, border: "none", background: "var(--k-blue)", color: "#fff", fontWeight: 700, fontSize: 19, cursor: "pointer" };
 
 // A log entry's colour by its status: green passed, red flagged, amber undone or missing.
 function statusColor(s) {
-  if (s === S_PASS)    return "#22c55e";
-  if (s === S_FLAGGED) return "#ef4444";
-  if (s === S_MANUAL)  return "#94a3b8";
-  if (s === "undo" || s === "missing" || s === "short") return "#f59e0b";
-  return "#64748b";
+  if (s === S_PASS)    return "var(--k-green)";
+  if (s === S_FLAGGED) return "var(--k-red)";
+  if (s === S_MANUAL)  return "var(--k-ink-3)";
+  if (s === "undo" || s === "missing" || s === "short") return "var(--k-amber)";
+  return "var(--k-ink-4)";
 }
 
 // A small rounded count in the header ("3 By hand"); `active` fills it, when it is the filter shown.
 function Pill({ color, children, onClick, active = false, title }) {
   return (
-    <span onClick={onClick} title={title} style={{ background: active ? color : `${color}22`, color: active ? "#0d1117" : color, fontSize: 14, fontWeight: 700, padding: "4px 11px", borderRadius: 20, border: `1px solid ${color}55`, whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", userSelect: "none" }}>
+    <span onClick={onClick} title={title} style={{ background: active ? color : `color-mix(in srgb, ${color} 13%, transparent)`, color: active ? "var(--k-page)" : color, fontSize: 14, fontWeight: 700, padding: "4px 11px", borderRadius: 20, border: `1px solid color-mix(in srgb, ${color} 33%, transparent)`, whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", userSelect: "none" }}>
       {children}
     </span>
   );
@@ -140,7 +142,7 @@ function ScreenKeys({ layout = "digits", onKey, onEnter, enterLabel = "OK" }) {
         <div key={i} style={{ display: "flex", gap: 6, justifyContent: "center" }}>
           {r.map(k => (
             <button key={k} type="button" onMouseDown={e => e.preventDefault()} onClick={() => (k === "⏎" ? onEnter?.() : onKey(k))}
-              style={{ flex: wide ? 1 : "0 0 auto", minWidth: wide ? 0 : k === "␣" ? 230 : k === "⌧" || (k === "⏎" && layout === "search") ? 96 : 44, padding: wide ? "12px 0" : "10px 0", borderRadius: 8, border: "1px solid #3f4b5c", background: k === "⏎" ? "#3b82f6" : k === "⌫" || k === "⌧" ? "#334155" : "#1e293b", color: "#f1f5f9", fontSize: k === "⏎" || KEY_NAMES[k] ? 15 : 20, fontWeight: 700, cursor: "pointer" }}>
+              style={{ flex: wide ? 1 : "0 0 auto", minWidth: wide ? 0 : k === "␣" ? 230 : k === "⌧" || (k === "⏎" && layout === "search") ? 96 : 44, padding: wide ? "12px 0" : "10px 0", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: k === "⏎" ? "var(--k-blue)" : k === "⌫" || k === "⌧" ? "var(--k-rule-2)" : "var(--k-field)", color: "var(--k-ink-0)", fontSize: k === "⏎" || KEY_NAMES[k] ? 15 : 20, fontWeight: 700, cursor: "pointer" }}>
               {k === "⏎" ? enterLabel : KEY_NAMES[k] || k}
             </button>
           ))}
@@ -175,7 +177,7 @@ function ShipWithField({ value, onChange, placeholder }) {
             else if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); e.currentTarget.blur(); }   // leave the box, like the search box; the keypad goes with it
           }}
           onFocus={() => setKeys(true)} onBlur={() => setKeys(false)}
-          style={{ flex: 1, minWidth: 130, border: "none", outline: "none", background: "transparent", color: "#e2e8f0", fontSize: 17, padding: "5px 2px" }} />
+          style={{ flex: 1, minWidth: 130, border: "none", outline: "none", background: "transparent", color: "var(--k-ink-1)", fontSize: 17, padding: "5px 2px" }} />
       </div>
       {keys && <ScreenKeys layout="shipdigits" onKey={k => onChange(shipPress(value, k))} onEnter={() => ref.current?.blur()} enterLabel="Done" />}
     </div>
@@ -305,15 +307,15 @@ function CompareDays({ days = [], stationLabel, onProblem }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <button onClick={() => setOpen(o => !o)} title="One Excel file over several days: each day, each operator, each station, morning against afternoon, and the defect categories day by day"
-        style={{ ...bigBtn, fontSize: 13, marginBottom: open ? 8 : 0, background: "transparent", border: "1px solid #3b82f6", color: "#93c5fd" }}>⬇ Compare days (Excel) {open ? "▲" : "▼"}</button>
+        style={{ ...bigBtn, fontSize: 13, marginBottom: open ? 8 : 0, background: "transparent", border: "1px solid var(--k-blue)", color: "var(--k-blue-ink-2)" }}>⬇ Compare days (Excel) {open ? "▲" : "▼"}</button>
       {open && (
-        <div style={{ padding: 10, borderRadius: 8, border: "1px solid #21262d", background: "#0d1117" }}>
+        <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--k-rule)", background: "var(--k-page)" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
             <label style={{ ...labelSt, marginBottom: 0 }}>From<input type="date" value={first} min={known[0]} max={known[known.length - 1]} onChange={e => setFrom(e.target.value)} style={dateSt} /></label>
             <label style={{ ...labelSt, marginBottom: 0 }}>To<input type="date" value={last} min={known[0]} max={known[known.length - 1]} onChange={e => setTo(e.target.value)} style={dateSt} /></label>
           </div>
-          <button onClick={run} disabled={busy || !first || !last} style={{ ...bigBtn, fontSize: 13, background: "#3b82f6", color: "#fff", opacity: busy ? 0.6 : 1 }}>{busy ? "Fetching…" : "Download the comparison"}</button>
-          <div style={{ fontSize: 12, color: "#7c8ba1", marginTop: 6 }}>The hub keeps {known.length} {known.length === 1 ? "day" : "days"}: {known[0]} to {known[known.length - 1]}.</div>
+          <button onClick={run} disabled={busy || !first || !last} style={{ ...bigBtn, fontSize: 13, background: "var(--k-blue)", color: "#fff", opacity: busy ? 0.6 : 1 }}>{busy ? "Fetching…" : "Download the comparison"}</button>
+          <div style={{ fontSize: 12, color: "var(--k-ink-3b)", marginTop: 6 }}>The hub keeps {known.length} {known.length === 1 ? "day" : "days"}: {known[0]} to {known[known.length - 1]}.</div>
         </div>
       )}
     </div>
@@ -460,7 +462,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
       <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED ? 940 : 560, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
           <div style={{ fontWeight: 900, fontSize: 26 }}>🏭 Jersey QC Scanner</div>
-          <div style={{ fontSize: 16, color: "#94a3b8" }}>{title || "Sign in once per shift"}</div>
+          <div style={{ fontSize: 16, color: "var(--k-ink-3)" }}>{title || "Sign in once per shift"}</div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 32px", alignItems: "flex-start" }}>
         <div style={{ flex: "1 1 340px", minWidth: 0 }}>
@@ -471,7 +473,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
               const blocked = BLOCKED_ROLES.includes(r.id);   // under development: nobody signs in as it
               return (
               <button key={r.id} onClick={blocked ? undefined : () => pickRole(r)} disabled={!!onCancel && r.id !== role} aria-disabled={blocked || undefined} title={blocked ? "Under development" : undefined}
-                style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: role === r.id ? "#3b82f6" : "#334155", color: role === r.id ? "#fff" : "#94a3b8", background: role === r.id ? "rgba(59,130,246,0.18)" : "transparent", opacity: blocked || (onCancel && r.id !== role) ? 0.4 : 1, cursor: blocked ? "not-allowed" : "pointer" }}>
+                style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: role === r.id ? "var(--k-blue)" : "var(--k-rule-2)", color: role === r.id ? "var(--k-strong)" : "var(--k-ink-3)", background: role === r.id ? "rgba(59,130,246,0.18)" : "transparent", opacity: blocked || (onCancel && r.id !== role) ? 0.4 : 1, cursor: blocked ? "not-allowed" : "pointer" }}>
                 {r.label}{blocked && <div style={{ fontSize: 12, fontWeight: 400, marginTop: 2 }}>under development</div>}
               </button>
               );
@@ -484,12 +486,12 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${STATIONS.length},1fr)`, gap: 6 }}>
               {STATIONS.map(s => { const by = busyBy(s.id); return (
                 <button key={s.id} onClick={() => pickStation(s.id)} disabled={!!onCancel && s.id !== station} title={by ? `In use by ${by} on another PC` : ""}
-                  style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: station === s.id ? (by ? "#ef4444" : "#60a5fa") : by ? "#7f1d1d" : "#334155", color: station === s.id ? "#fff" : by ? "#f87171" : "#94a3b8", background: station === s.id ? (by ? "rgba(239,68,68,0.14)" : "rgba(96,165,250,0.16)") : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
-                  {s.label}{by && <div style={{ fontSize: 13, fontWeight: 400, color: "#f87171", marginTop: 2 }}>in use · {by}</div>}
+                  style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: station === s.id ? (by ? "var(--k-red)" : "var(--k-blue-ink)") : by ? "#7f1d1d" : "var(--k-rule-2)", color: station === s.id ? "var(--k-strong)" : by ? "var(--k-red-ink)" : "var(--k-ink-3)", background: station === s.id ? (by ? "rgba(239,68,68,0.14)" : "rgba(96,165,250,0.16)") : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
+                  {s.label}{by && <div style={{ fontSize: 13, fontWeight: 400, color: "var(--k-red-ink)", marginTop: 2 }}>in use · {by}</div>}
                 </button>
               ); })}
             </div>
-            <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>{busyBy(station) ? <span style={{ color: "#f87171" }}>{stDef?.label} is in use by {busyBy(station)} on another PC right now.</span> : <>Each station has its own PIN. The supervisor's board shows this page as {stDef?.label}.</>}</div>
+            <div style={{ fontSize: 14, color: "var(--k-ink-3b)", marginTop: 6 }}>{busyBy(station) ? <span style={{ color: "var(--k-red-ink)" }}>{stDef?.label} is in use by {busyBy(station)} on another PC right now.</span> : <>Each station has its own PIN. The supervisor's board shows this page as {stDef?.label}.</>}</div>
           </div>
         )}
         <div style={{ marginBottom: 14 }}>
@@ -514,7 +516,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         {PIN_REQUIRED && (
           <div style={{ flex: "1 1 300px", minWidth: 0 }}>
             <label style={labelSt}>PIN</label>
-            <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} placeholder="••••" autoFocus onKeyDown={onEnter} onFocus={() => setPinFocus(true)} onBlur={() => setPinFocus(false)} style={{ ...inputSt, borderColor: pinFocus ? "#60a5fa" : inputSt.borderColor }} />
+            <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} placeholder="••••" autoFocus onKeyDown={onEnter} onFocus={() => setPinFocus(true)} onBlur={() => setPinFocus(false)} style={{ ...inputSt, borderColor: pinFocus ? "var(--k-blue-ink)" : inputSt.borderColor }} />
             <ScreenKeys layout="digits" onKey={k => setPin(v => (k === "⌫" ? v.slice(0, -1) : (v + k).slice(0, 8)))} onEnter={submit} enterLabel="Sign in" />
           </div>
         )}
@@ -531,8 +533,8 @@ function BinByPicker({ value, onChange }) {
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {BIN_BY.map(t => (
         <button key={t.id} type="button" onClick={() => onChange(t.id)} title={t.hint}
-          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "#60a5fa" : "#3f4b5c", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "#93c5fd" : "#cbd5e1", fontWeight: value === t.id ? 700 : 400 }}>
-          {t.label} <span style={{ fontSize: 14, color: "#94a3b8", fontWeight: 400 }}>· {t.hint}</span>
+          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: value === t.id ? 700 : 400 }}>
+          {t.label} <span style={{ fontSize: 14, color: "var(--k-ink-3)", fontWeight: 400 }}>· {t.hint}</span>
         </button>
       ))}
     </div>
@@ -546,8 +548,8 @@ function JerseyTypePicker({ value, onChange }) {
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {JERSEY_TYPES.map(t => (
         <button key={t.id} type="button" onClick={() => onChange(value === t.id ? "" : t.id)} title={t.hint}
-          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "#60a5fa" : "#3f4b5c", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "#93c5fd" : "#cbd5e1", fontWeight: value === t.id ? 700 : 400 }}>
-          {t.label} <span style={{ fontSize: 14, color: "#94a3b8", fontWeight: 400 }}>· {t.construction}</span>
+          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: value === t.id ? 700 : 400 }}>
+          {t.label} <span style={{ fontSize: 14, color: "var(--k-ink-3)", fontWeight: 400 }}>· {t.construction}</span>
         </button>
       ))}
     </div>
@@ -563,7 +565,7 @@ function GarmentPicker({ value, onChange }) {
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {GARMENT_MENU.map(g => (
         <button key={g.id} type="button" onClick={() => onChange(g.id)} aria-pressed={v === g.id}
-          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: v === g.id ? "#60a5fa" : "#3f4b5c", background: v === g.id ? "rgba(96,165,250,0.15)" : "transparent", color: v === g.id ? "#93c5fd" : "#cbd5e1", fontWeight: v === g.id ? 700 : 400 }}>
+          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: v === g.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: v === g.id ? "rgba(96,165,250,0.15)" : "transparent", color: v === g.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: v === g.id ? 700 : 400 }}>
           {g.label}
         </button>
       ))}
@@ -1015,7 +1017,7 @@ function PhotoThumbs({ photo, damagePhotos = [], w = 80, h = 60, onOpen, caption
   if (!set.pics.length) return null;
   return (
     <div style={{ display: "flex", gap: 4, flexShrink: 0, flexWrap: "wrap" }}>
-      {set.pics.map((p, i) => <img key={i} src={p.src} alt="" onClick={() => onOpen({ ...set, index: i, caption })} title={p.damage ? "Damage photo — click to enlarge" : "Click to enlarge"} style={{ width: w, height: h, objectFit: "cover", borderRadius: 4, cursor: "zoom-in", border: p.damage ? "2px solid #ef4444" : "1px solid rgba(255,255,255,0.25)" }} />)}
+      {set.pics.map((p, i) => <img key={i} src={p.src} alt="" onClick={() => onOpen({ ...set, index: i, caption })} title={p.damage ? "Damage photo — click to enlarge" : "Click to enlarge"} style={{ width: w, height: h, objectFit: "cover", borderRadius: 4, cursor: "zoom-in", border: p.damage ? "2px solid var(--k-red)" : "1px solid rgba(255,255,255,0.25)" }} />)}
     </div>
   );
 }
@@ -1133,40 +1135,40 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
   const c = rec?.counts || {}; const total = c.total ?? rows.length; const done = total - (c.remaining ?? 0);
   const latestByRow = new Map(); [...events].reverse().forEach(e => { if (e.rowId !== undefined && e.rowId !== null) latestByRow.set(e.rowId, e); });
   const label = s => ({ pass: "PASS", flag: "FLAGGED", manual: "BY HAND", missing: "MISSING", short: "SHORT-SHIPPED" }[s] || "unscanned");
-  const colour = s => s === "pass" ? "#22c55e" : s === "flag" ? "#ef4444" : s === "manual" ? "#f59e0b" : s === "missing" || s === "short" ? "#f59e0b" : "#475569";
-  const evColour = s => s === "pass" ? "#22c55e" : s === "flagged" ? "#ef4444" : s === "manual" ? "#f59e0b" : s === "undo" ? "#f59e0b" : "#94a3b8";
+  const colour = s => s === "pass" ? "var(--k-green)" : s === "flag" ? "var(--k-red)" : s === "manual" ? "var(--k-amber)" : s === "missing" || s === "short" ? "var(--k-amber)" : "var(--k-ink-5)";
+  const evColour = s => s === "pass" ? "var(--k-green)" : s === "flagged" ? "var(--k-red)" : s === "manual" ? "var(--k-amber)" : s === "undo" ? "var(--k-amber)" : "var(--k-ink-3)";
   const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
   const flaggedRows = rows.filter(r => r.scanned === "flag"), byHandRows = rows.filter(r => r.scanned === "manual");
   const offRoster = events.filter(e => e.status === "flagged" && e.offRoster);
-  const th = { textAlign: "left", fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, padding: "6px 8px", borderBottom: "1px solid #21262d", position: "sticky", top: 0, background: "#0d1117" };
-  const td = { padding: "6px 8px", borderBottom: "1px solid #161b22", fontSize: 13, verticalAlign: "top" };
+  const th = { textAlign: "left", fontSize: 10, color: "var(--k-ink-4)", textTransform: "uppercase", letterSpacing: 0.5, padding: "6px 8px", borderBottom: "1px solid var(--k-rule)", position: "sticky", top: 0, background: "var(--k-page)" };
+  const td = { padding: "6px 8px", borderBottom: "1px solid var(--k-card)", fontSize: 13, verticalAlign: "top" };
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1900, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px, 100%)", height: "min(820px, 100%)", background: "#0d1117", border: "1px solid #334155", borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", color: "#e2e8f0" }}>
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid #21262d", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px, 100%)", height: "min(820px, 100%)", background: "var(--k-page)", border: "1px solid var(--k-rule-2)", borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", color: "var(--k-ink-1)" }}>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--k-rule)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>Order {order} <span style={{ fontWeight: 400, color: "#64748b", fontSize: 14 }}>· {stationLabel(station)} · {rec?.operator || "—"}{rec?.jerseyType ? <span style={{ color: "#93c5fd" }}> · {jerseyTypeLabel(rec.jerseyType)}</span> : null}</span></div>
-            <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
-              {rec ? <>{done} / {total} done · {c.pass ?? 0} pass · <span style={{ color: c.flag ? "#f87171" : undefined }}>{c.flag ?? 0} with supervisor</span> · <span style={{ color: c.manual ? "#fcd34d" : undefined }}>{c.manual ?? 0} by hand</span>{offRoster.length ? <> · <span style={{ color: "#f87171" }}>{offRoster.length} not on roster</span></> : null} · started {hm(rec.firstSeen)}{orderDone(rec) ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(doneAt(rec))}</span>{c.remaining > 0 ? <span style={{ color: "#fcd34d" }}> with {c.remaining} unscanned</span> : null}</> : <> · in progress</>}{rec.notes ? <> · notes: <span style={{ color: "#fcd34d" }}>{rec.notes}</span></> : null}</> : err || "Loading…"}
+            <div style={{ fontWeight: 900, fontSize: 18 }}>Order {order} <span style={{ fontWeight: 400, color: "var(--k-ink-4)", fontSize: 14 }}>· {stationLabel(station)} · {rec?.operator || "—"}{rec?.jerseyType ? <span style={{ color: "var(--k-blue-ink-2)" }}> · {jerseyTypeLabel(rec.jerseyType)}</span> : null}</span></div>
+            <div style={{ fontSize: 12, color: "var(--k-ink-3)", marginTop: 2 }}>
+              {rec ? <>{done} / {total} done · {c.pass ?? 0} pass · <span style={{ color: c.flag ? "var(--k-red-ink)" : undefined }}>{c.flag ?? 0} with supervisor</span> · <span style={{ color: c.manual ? "var(--k-amber-ink-2)" : undefined }}>{c.manual ?? 0} by hand</span>{offRoster.length ? <> · <span style={{ color: "var(--k-red-ink)" }}>{offRoster.length} not on roster</span></> : null} · started {hm(rec.firstSeen)}{orderDone(rec) ? <> · <span style={{ color: "var(--k-green)", fontWeight: 700 }}>finished {hm(doneAt(rec))}</span>{c.remaining > 0 ? <span style={{ color: "var(--k-amber-ink-2)" }}> with {c.remaining} unscanned</span> : null}</> : <> · in progress</>}{rec.notes ? <> · notes: <span style={{ color: "var(--k-amber-ink-2)" }}>{rec.notes}</span></> : null}</> : err || "Loading…"}
             </div>
           </div>
-          <button onClick={() => onDownload({ station, order, run: rec?.run || run, operator: rec?.operator, date })} style={{ ...btnGhost, padding: "6px 12px", borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet (Excel)</button>
-          {events.some(e => e.status === "flagged") && <button onClick={() => exportDamageReportXLSX(buildDamageRows(events, { stationLabel, typeLabel: jerseyTypeLabel }), { name: order, title: `Damage report — order ${order}` }).catch(e => setErr(e.message))} title="Every flagged garment of this order with its photo" style={{ ...btnGhost, padding: "6px 12px", borderColor: "#ef4444", color: "#f87171" }}>⬇ Damage report</button>}
+          <button onClick={() => onDownload({ station, order, run: rec?.run || run, operator: rec?.operator, date })} style={{ ...btnGhost, padding: "6px 12px", borderColor: "var(--k-green)", color: "var(--k-green-ink)" }}>⬇ Order sheet (Excel)</button>
+          {events.some(e => e.status === "flagged") && <button onClick={() => exportDamageReportXLSX(buildDamageRows(events, { stationLabel, typeLabel: jerseyTypeLabel }), { name: order, title: `Damage report — order ${order}` }).catch(e => setErr(e.message))} title="Every flagged garment of this order with its photo" style={{ ...btnGhost, padding: "6px 12px", borderColor: "var(--k-red)", color: "var(--k-red-ink)" }}>⬇ Damage report</button>}
           <button onClick={onClose} style={{ ...btnGhost, padding: "6px 12px" }}>✕ Close <Kbd light>Esc</Kbd></button>
         </div>
-        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #21262d", flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--k-rule)", flexShrink: 0 }}>
           {[["summary", "Summary"], ["roster", `Roster (${rows.length})`], ["problems", `Problems (${flaggedRows.length + byHandRows.length + offRoster.length})`], ["log", `Log (${events.length})`]].map(([id, t]) => (
-            <button key={id} onClick={() => setTab(id)} style={{ background: "transparent", border: 0, borderBottom: `2px solid ${tab === id ? "#3b82f6" : "transparent"}`, color: tab === id ? "#60a5fa" : "#94a3b8", padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t}</button>
+            <button key={id} onClick={() => setTab(id)} style={{ background: "transparent", border: 0, borderBottom: `2px solid ${tab === id ? "var(--k-blue)" : "transparent"}`, color: tab === id ? "var(--k-blue-ink)" : "var(--k-ink-3)", padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t}</button>
           ))}
         </div>
         <div style={{ flex: 1, overflow: "auto" }}>
-          {rec && !rows.length && <div style={{ padding: 24, color: "#fcd34d" }}>The hub has no garment list for this order — the station reported it before today's update. The station's Export has the sheet; reload the station page so future orders come through.</div>}
-          {!rec && !err && <div style={{ padding: 24, color: "#64748b" }}>Loading…</div>}
-          {!rec && err && <div style={{ padding: 24, color: "#f87171" }}>{err}</div>}
+          {rec && !rows.length && <div style={{ padding: 24, color: "var(--k-amber-ink-2)" }}>The hub has no garment list for this order — the station reported it before today's update. The station's Export has the sheet; reload the station page so future orders come through.</div>}
+          {!rec && !err && <div style={{ padding: 24, color: "var(--k-ink-4)" }}>Loading…</div>}
+          {!rec && err && <div style={{ padding: 24, color: "var(--k-red-ink)" }}>{err}</div>}
           {sumView && tab === "summary" && (
             <div style={{ padding: "14px 18px" }}>
               <div style={{ display: "flex" }}><SummaryCounts summary={sumView.summary} stats={sumView.stats} /></div>
-              {c.flag > 0 && <div style={{ fontSize: 14, color: "#f87171", marginTop: 4 }}>{c.flag} with the supervisor</div>}
+              {c.flag > 0 && <div style={{ fontSize: 14, color: "var(--k-red-ink)", marginTop: 4 }}>{c.flag} with the supervisor</div>}
               <OrderSummaryBody summary={sumView.summary} bins={rec.binSummary || []} />
             </div>
           )}
@@ -1179,24 +1181,24 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                   return (
                     <tr key={r._id ?? i} style={{ background: r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned === "manual" ? "rgba(245,158,11,0.07)" : "transparent" }}>
                       <td style={{ ...td, color: colour(r.scanned), fontWeight: 700, whiteSpace: "nowrap" }}>{label(r.scanned)}</td>
-                      <td style={td}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{shortSize(r.size) || ""}</td>
-                      <td style={{ ...td, color: "#60a5fa" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Box ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
-                      <td style={{ ...td, color: "#cbd5e1" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
-                      <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
+                      <td style={td}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "var(--k-amber-ink-2)" }}>{shortSize(r.size) || ""}</td>
+                      <td style={{ ...td, color: "var(--k-blue-ink)" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Box ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
+                      <td style={{ ...td, color: "var(--k-ink-2)" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "var(--k-ink-3)", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
+                      <td style={{ ...td, color: "var(--k-ink-4)", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
                       {tab === "problems" && <td style={td}><div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}><PhotoThumbs photo={e?.photo} damagePhotos={e?.damagePhotos} onOpen={onPhoto} caption={photoCaption(r.number, r.name, e?.reason)} />{e?.status === "flagged" && <FlagMarks item={e} />}</div></td>}
                     </tr>
                   );
                 })}
                 {tab === "problems" && offRoster.map((e, i) => (
                   <tr key={"off" + i} style={{ background: "rgba(239,68,68,0.07)" }}>
-                    <td style={{ ...td, color: "#ef4444", fontWeight: 700, whiteSpace: "nowrap" }}>NOT ON ROSTER</td>
-                    <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "#fcd34d" }}>{shortSize(e.size) || ""}</td><td style={td}></td>
-                    <td style={{ ...td, color: "#cbd5e1" }}><RouteTag item={e} /> {e.reason}{e.resolution ? <div style={{ color: "#94a3b8", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
-                    <td style={{ ...td, color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
+                    <td style={{ ...td, color: "var(--k-red)", fontWeight: 700, whiteSpace: "nowrap" }}>NOT ON ROSTER</td>
+                    <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "var(--k-amber-ink-2)" }}>{shortSize(e.size) || ""}</td><td style={td}></td>
+                    <td style={{ ...td, color: "var(--k-ink-2)" }}><RouteTag item={e} /> {e.reason}{e.resolution ? <div style={{ color: "var(--k-ink-3)", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
+                    <td style={{ ...td, color: "var(--k-ink-4)", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
                     <td style={td}><div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} caption={photoCaption(e.number, e.name, e.reason)} /><FlagMarks item={e} /></div></td>
                   </tr>
                 ))}
-                {tab === "problems" && flaggedRows.length + byHandRows.length + offRoster.length === 0 && <tr><td colSpan={9} style={{ ...td, color: "#22c55e", padding: 18 }}>No problems on this order — nothing went to the supervisor and nothing was entered by hand.</td></tr>}
+                {tab === "problems" && flaggedRows.length + byHandRows.length + offRoster.length === 0 && <tr><td colSpan={9} style={{ ...td, color: "var(--k-green)", padding: 18 }}>No problems on this order — nothing went to the supervisor and nothing was entered by hand.</td></tr>}
               </tbody>
             </table>
           )}
@@ -1206,13 +1208,13 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
               <tbody>
                 {events.map((e, i) => (
                   <tr key={e.id ?? i}>
-                    <td style={{ ...td, color: "#64748b", whiteSpace: "nowrap" }}>{String(e.t).slice(11)}</td>
+                    <td style={{ ...td, color: "var(--k-ink-4)", whiteSpace: "nowrap" }}>{String(e.t).slice(11)}</td>
                     <td style={{ ...td, color: evColour(e.status), fontWeight: 700, textTransform: "uppercase", fontSize: 11 }}>{e.status === "flagged" && e.offRoster ? "not on roster" : e.status === "undo" ? "un-checked" : e.status}</td>
                     <td style={td}>#{e.number}{e.name ? ` · ${e.name}` : ""}{e.size ? ` · ${shortSize(e.size)}` : ""}</td>
-                    <td style={{ ...td, color: "#cbd5e1" }}>{e.reason}</td><td style={{ ...td, color: "#94a3b8" }}>{e.resolution}</td><td style={{ ...td, color: "#94a3b8" }}>{e.operator}</td>
+                    <td style={{ ...td, color: "var(--k-ink-2)" }}>{e.reason}</td><td style={{ ...td, color: "var(--k-ink-3)" }}>{e.resolution}</td><td style={{ ...td, color: "var(--k-ink-3)" }}>{e.operator}</td>
                   </tr>
                 ))}
-                {events.length === 0 && <tr><td colSpan={6} style={{ ...td, color: "#64748b", padding: 18 }}>No scans recorded for this order on the hub.</td></tr>}
+                {events.length === 0 && <tr><td colSpan={6} style={{ ...td, color: "var(--k-ink-4)", padding: 18 }}>No scans recorded for this order on the hub.</td></tr>}
               </tbody>
             </table>
           )}
@@ -1229,11 +1231,11 @@ const stationLabel = id => { const n = String(id || "").replace(/^st-/, ""); con
 // How an attention item looks on the board: by-hand and missing/short are
 // amber questions, a flag is a red stop.
 const attnIcon   = s => s === "manual" ? "✍" : s === "missing" ? "❓" : s === "short" ? "📦" : "🛑";
-const attnColour = s => (s === "manual" || s === "missing" || s === "short") ? "#f59e0b" : "#ef4444";
+const attnColour = s => (s === "manual" || s === "missing" || s === "short") ? "var(--k-amber)" : "var(--k-red)";
 // How much an item weighs: a flag by where it goes (REMAKE over DECORATION and
 // STITCHER over CLEANING over DECIDE); by-hand, missing and short are light.
 // Open items come before resolved ones, then the heavier, then the newer.
-const attnSeverity = a => a.status === "flagged" ? severityOf(a.reason) : { tag: a.status === "manual" ? "SIGN OFF" : a.status === "missing" ? "MISSING" : "SHORT", weight: 1, colour: "#f59e0b" };
+const attnSeverity = a => a.status === "flagged" ? severityOf(a.reason) : { tag: a.status === "manual" ? "SIGN OFF" : a.status === "missing" ? "MISSING" : "SHORT", weight: 1, colour: "var(--k-amber)" };
 const bySeverity = (a, b) => ((a.resolution ? 1 : 0) - (b.resolution ? 1 : 0)) || (attnSeverity(b).weight - attnSeverity(a).weight) || String(b.time || b.t || "").localeCompare(String(a.time || a.t || ""));
 // The board's tag on an open item (REMAKE, STITCHER, SIGN OFF…), filled when it weighs most.
 function RouteTag({ item, size = 10 }) {
@@ -1272,57 +1274,57 @@ function UnfinishedPile({ by, onClose }) {
   const waited = e => (e.parkedAt && seenAt ? Math.max(0, Math.floor((seenAt - e.parkedAt) / 86400000)) : 0);   // days since it was put aside, as of the last load
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#161b22", borderRadius: 16, border: "2px solid #f59e0b", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
+      <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-amber)", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: "#fcd34d" }}>⏸ Unfinished orders{list ? ` · ${list.length}` : ""}</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "var(--k-amber-ink-2)" }}>⏸ Unfinished orders{list ? ` · ${list.length}` : ""}</div>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search order number" style={{ ...inputSt, flex: 1, minWidth: 160, fontSize: 16 }} />
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         {err && <div style={{ ...errSt, marginTop: 10 }}>{err}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
-          {list === null && <div style={{ color: "#94a3b8" }}>Loading…</div>}
-          {list && !list.length && <div style={{ color: "#7c8ba1", fontSize: 16, padding: 8 }}>{q.trim() ? "No unfinished order with that number." : "No unfinished orders."}</div>}
+          {list === null && <div style={{ color: "var(--k-ink-3)" }}>Loading…</div>}
+          {list && !list.length && <div style={{ color: "var(--k-ink-3b)", fontSize: 16, padding: 8 }}>{q.trim() ? "No unfinished order with that number." : "No unfinished orders."}</div>}
           {(list || []).map(e => (
-            <div key={e.id} style={{ borderRadius: 12, border: `2px solid ${open === e.id ? "#f59e0b" : "#334155"}`, background: "#1e293b", padding: "12px 16px" }}>
+            <div key={e.id} style={{ borderRadius: 12, border: `2px solid ${open === e.id ? "var(--k-amber)" : "var(--k-rule-2)"}`, background: "var(--k-field)", padding: "12px 16px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 22, fontWeight: 900 }}>Order {e.order}</div>
-                <div style={{ fontSize: 15, color: "#cbd5e1", flex: 1, minWidth: 220 }}>
-                  {e.done}/{e.total} done{e.flagged ? <> · <span style={{ color: "#f87171" }}>{e.flagged} flagged</span></> : null}{e.missing ? <> · <span style={{ color: "#fbbf24" }}>{e.missing} missing</span></> : null}{e.toScan ? <> · {e.toScan} unscanned</> : null}
-                  <div style={{ fontSize: 13, color: "#94a3b8" }}><span style={{ fontWeight: 800, color: waited(e) >= 5 ? "#f87171" : waited(e) >= 2 ? "#fbbf24" : "#94a3b8" }}>{waited(e) ? `waiting ${waited(e)} day${waited(e) === 1 ? "" : "s"}` : "put aside today"}</span> · put aside on {stationLabel(e.station)} by {e.operator || "—"} · {new Date(e.parkedAt).toLocaleDateString()}{e.assignedTo ? <span style={{ color: "#60a5fa", fontWeight: 700 }}> · assigned to {stationLabel(e.assignedTo)}</span> : null}{e.openOn ? <span style={{ color: "#4ade80", fontWeight: 700 }}> · open on {stationLabel(e.openOn.station)} now <button onClick={() => act(hub.releaseUnfinished(e.id))} title="Free it, so another station can open it" style={{ ...btnGhost, fontSize: 12, padding: "1px 8px", marginLeft: 4 }}>Free it</button></span> : null}{e.checkedOff?.length ? ` · ${e.checkedOff.length} checked off` : ""}</div>
+                <div style={{ fontSize: 15, color: "var(--k-ink-2)", flex: 1, minWidth: 220 }}>
+                  {e.done}/{e.total} done{e.flagged ? <> · <span style={{ color: "var(--k-red-ink)" }}>{e.flagged} flagged</span></> : null}{e.missing ? <> · <span style={{ color: "var(--k-amber-ink)" }}>{e.missing} missing</span></> : null}{e.toScan ? <> · {e.toScan} unscanned</> : null}
+                  <div style={{ fontSize: 13, color: "var(--k-ink-3)" }}><span style={{ fontWeight: 800, color: waited(e) >= 5 ? "var(--k-red-ink)" : waited(e) >= 2 ? "var(--k-amber-ink)" : "var(--k-ink-3)" }}>{waited(e) ? `waiting ${waited(e)} day${waited(e) === 1 ? "" : "s"}` : "put aside today"}</span> · put aside on {stationLabel(e.station)} by {e.operator || "—"} · {new Date(e.parkedAt).toLocaleDateString()}{e.assignedTo ? <span style={{ color: "var(--k-blue-ink)", fontWeight: 700 }}> · assigned to {stationLabel(e.assignedTo)}</span> : null}{e.openOn ? <span style={{ color: "var(--k-green-ink)", fontWeight: 700 }}> · open on {stationLabel(e.openOn.station)} now <button onClick={() => act(hub.releaseUnfinished(e.id))} title="Free it, so another station can open it" style={{ ...btnGhost, fontSize: 12, padding: "1px 8px", marginLeft: 4 }}>Free it</button></span> : null}{e.checkedOff?.length ? ` · ${e.checkedOff.length} checked off` : ""}</div>
                 </div>
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {STATIONS.map(s => (
                     <button key={s.id} onClick={() => act(e.assignedTo === "st-" + s.id ? hub.releaseUnfinished(e.id) : hub.assignUnfinished(e.id, "st-" + s.id, by))} title={e.assignedTo === "st-" + s.id ? "Take it back from this station" : `Send it to ${s.label}: it shows on that station's order screen`}
-                      style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: e.assignedTo === "st-" + s.id ? "#60a5fa" : "#334155", color: e.assignedTo === "st-" + s.id ? "#fff" : "#94a3b8", background: e.assignedTo === "st-" + s.id ? "rgba(59,130,246,0.2)" : "transparent" }}>
+                      style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: e.assignedTo === "st-" + s.id ? "var(--k-blue-ink)" : "var(--k-rule-2)", color: e.assignedTo === "st-" + s.id ? "var(--k-strong)" : "var(--k-ink-3)", background: e.assignedTo === "st-" + s.id ? "rgba(59,130,246,0.2)" : "transparent" }}>
                       → {s.label}
                     </button>
                   ))}
-                  <button disabled={!!e.openOn && open !== e.id} onClick={() => { setOpen(o => (o === e.id ? null : e.id)); setTicked(new Set()); setConfirm(false); }} title={e.openOn ? `Open on ${stationLabel(e.openOn.station)} now: Free it first (the station may be passing these garments)` : "Settle the garments still out: back and good, or ship short"} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px", borderColor: "#22c55e", color: "#86efac", opacity: e.openOn && open !== e.id ? 0.4 : 1 }}>{open === e.id ? "▲ Close" : "✓ Settle…"}</button>
+                  <button disabled={!!e.openOn && open !== e.id} onClick={() => { setOpen(o => (o === e.id ? null : e.id)); setTicked(new Set()); setConfirm(false); }} title={e.openOn ? `Open on ${stationLabel(e.openOn.station)} now: Free it first (the station may be passing these garments)` : "Settle the garments still out: back and good, or ship short"} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px", borderColor: "var(--k-green)", color: "var(--k-green-ink-2)", opacity: e.openOn && open !== e.id ? 0.4 : 1 }}>{open === e.id ? "▲ Close" : "✓ Settle…"}</button>
                 </span>
               </div>
               {open === e.id && entry && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 15, color: "#cbd5e1", marginBottom: 8 }}>Tick garments, then: <strong>Back and good</strong> — they count as passed ("checked off by supervisor"). <strong>Ship short</strong> — the order goes without them. An extra garment (not on the order) is closed either way. When none is left the order is closed.</div>
+                  <div style={{ fontSize: 15, color: "var(--k-ink-2)", marginBottom: 8 }}>Tick garments, then: <strong>Back and good</strong> — they count as passed ("checked off by supervisor"). <strong>Ship short</strong> — the order goes without them. An extra garment (not on the order) is closed either way. When none is left the order is closed.</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 6 }}>
                     {entry.out.map(j => (
-                      <label key={jkey(j)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: ticked.has(jkey(j)) ? "rgba(34,197,94,0.15)" : "#0d1117", border: `1px solid ${ticked.has(jkey(j)) ? "#22c55e" : "#21262d"}`, cursor: "pointer" }}>
+                      <label key={jkey(j)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: ticked.has(jkey(j)) ? "rgba(34,197,94,0.15)" : "var(--k-page)", border: `1px solid ${ticked.has(jkey(j)) ? "var(--k-green)" : "var(--k-rule)"}`, cursor: "pointer" }}>
                         <input type="checkbox" checked={ticked.has(jkey(j))} onChange={() => setTicked(t => { const n = new Set(t); if (n.has(jkey(j))) n.delete(jkey(j)); else n.add(jkey(j)); return n; })} style={{ width: 20, height: 20 }} />
                         <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{j.number || "—"}</strong>
                         {j.name && <span>{j.name}</span>}
-                        {j.size && <span style={{ color: "#4ade80", fontWeight: 700 }}>{shortSize(j.size)}</span>}
-                        {j.team && <span style={{ color: "#94a3b8" }}>{j.team}</span>}
-                        <span style={{ marginLeft: "auto", fontSize: 12, color: j.status === "flag" ? "#f87171" : j.status === "todo" ? "#94a3b8" : j.status === "extra" ? "#f9a8d4" : "#fbbf24" }}>{statusWord[j.status] || j.status}{j.reason ? `: ${j.reason}` : ""}</span>
+                        {j.size && <span style={{ color: "var(--k-green-ink)", fontWeight: 700 }}>{shortSize(j.size)}</span>}
+                        {j.team && <span style={{ color: "var(--k-ink-3)" }}>{j.team}</span>}
+                        <span style={{ marginLeft: "auto", fontSize: 12, color: j.status === "flag" ? "var(--k-red-ink)" : j.status === "todo" ? "var(--k-ink-3)" : j.status === "extra" ? "var(--k-pink-ink)" : "var(--k-amber-ink)" }}>{statusWord[j.status] || j.status}{j.reason ? `: ${j.reason}` : ""}</span>
                       </label>
                     ))}
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
                     <button onClick={() => setTicked(t => (t.size === entry.out.length ? new Set() : new Set(entry.out.map(jkey))))} style={{ ...btnGhost, fontSize: 15 }}>{ticked.size === entry.out.length ? "Untick all" : "Tick all"}</button>
-                    {!confirm && <button disabled={!ticked.size} onClick={() => setConfirm("pass")} style={{ ...btnPri, fontSize: 16, padding: "10px 18px", background: "#22c55e", color: "#0d1117", opacity: ticked.size ? 1 : 0.4 }}>✓ Back and good · {ticked.size}</button>}
-                    {!confirm && <button disabled={!ticked.size} onClick={() => setConfirm("short")} style={{ ...btnGhost, fontSize: 16, padding: "10px 18px", borderColor: "#f59e0b", color: "#fcd34d", opacity: ticked.size ? 1 : 0.4 }}>📦 Ship short · {ticked.size}</button>}
+                    {!confirm && <button disabled={!ticked.size} onClick={() => setConfirm("pass")} style={{ ...btnPri, fontSize: 16, padding: "10px 18px", background: "var(--k-green)", color: "var(--k-page)", opacity: ticked.size ? 1 : 0.4 }}>✓ Back and good · {ticked.size}</button>}
+                    {!confirm && <button disabled={!ticked.size} onClick={() => setConfirm("short")} style={{ ...btnGhost, fontSize: 16, padding: "10px 18px", borderColor: "var(--k-amber)", color: "var(--k-amber-ink-2)", opacity: ticked.size ? 1 : 0.4 }}>📦 Ship short · {ticked.size}</button>}
                     {confirm && (
                       <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         <span style={{ fontSize: 16, fontWeight: 800 }}>{confirm === "short" ? "Ship the order without" : "Check off"} {ticked.size} of {entry.out.length}{ticked.size === entry.out.length ? " and close the order" : ""}?</span>
-                        <button onClick={checkOff} style={{ ...btnPri, fontSize: 16, padding: "10px 18px", background: "#22c55e", color: "#0d1117" }}>✓ Yes</button>
+                        <button onClick={checkOff} style={{ ...btnPri, fontSize: 16, padding: "10px 18px", background: "var(--k-green)", color: "var(--k-page)" }}>✓ Yes</button>
                         <button onClick={() => setConfirm(false)} style={{ ...btnGhost, fontSize: 15 }}>Cancel</button>
                       </span>
                     )}
@@ -1501,11 +1503,11 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#0d1117", zIndex: 1800, display: "flex", flexDirection: "column", color: "#e2e8f0", fontFamily: FONT_UI }}>
-      <div style={{ background: "#161b22", borderBottom: "1px solid #21262d", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="#ef4444">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "#94a3b8" }}><strong style={{ color: "#e2e8f0", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-page)", zIndex: 1800, display: "flex", flexDirection: "column", color: "var(--k-ink-1)", fontFamily: FONT_UI }}>
+      <div style={{ background: "var(--k-card)", borderBottom: "1px solid var(--k-rule)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="var(--k-red)">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "var(--k-ink-3)" }}><strong style={{ color: "var(--k-ink-1)", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={() => setShowPile(true)} title="Orders parked with Finish later: search, assign to a station, check off" style={{ ...btnGhost, padding: "6px 12px", borderColor: pileCount ? "#f59e0b" : "#334155", color: pileCount ? "#fcd34d" : undefined }}>⏸ Unfinished · {pileCount}</button>
+          <button onClick={() => setShowPile(true)} title="Orders parked with Finish later: search, assign to a station, check off" style={{ ...btnGhost, padding: "6px 12px", borderColor: pileCount ? "var(--k-amber)" : "var(--k-rule-2)", color: pileCount ? "var(--k-amber-ink-2)" : undefined }}>⏸ Unfinished · {pileCount}</button>
           <button onClick={toggleFull} title={fullScreen ? "Leave full screen (Esc also works)" : "Full screen: hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px" }}>{fullScreen ? "⛶ Exit" : "⛶ Full screen"}</button>
           <button onClick={() => setWall(true)} title="One row per station in big letters, for a TV on the floor. Click or Esc comes back; ?view=wall in the address opens straight into it." style={{ ...btnGhost, padding: "6px 12px" }}>📺 Wall</button>
           <button onClick={onSignOut} title="End your shift on this PC" style={{ ...btnGhost, padding: "6px 14px" }}>Sign out</button>
@@ -1522,7 +1524,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       {bigPhoto && <PhotoLightbox photo={bigPhoto} onClose={() => setBigPhoto(null)} />}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gridAutoRows: "max-content", gap: 12, alignContent: "start" }}>{/* max-content rows: the station cards were squeezed to a strip to fit the orders list (27 in board, 19 Nov 2026) */}
-          {data.stations.length === 0 && <div style={{ color: "#64748b", padding: 24 }}>No station has reported yet. A station appears here within a few seconds of starting an order.</div>}
+          {data.stations.length === 0 && <div style={{ color: "var(--k-ink-4)", padding: 24 }}>No station has reported yet. A station appears here within a few seconds of starting an order.</div>}
           {(orders.length > 0 || days.length > 1 || day || range) && (
             <div style={{ gridColumn: "1 / -1", order: 99, marginTop: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
@@ -1544,14 +1546,14 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                 {pickMode === "range" && (
                   <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                     <input type="date" value={pickFrom} max={todayStr} onChange={e => setPickFrom(e.target.value)} style={{ ...inputSt, width: "auto", fontSize: 12, padding: "3px 8px" }} />
-                    <span style={{ fontSize: 12, color: "#94a3b8" }}>to</span>
+                    <span style={{ fontSize: 12, color: "var(--k-ink-3)" }}>to</span>
                     <input type="date" value={pickTo} max={todayStr} onChange={e => setPickTo(e.target.value)} style={{ ...inputSt, width: "auto", fontSize: 12, padding: "3px 8px" }} />
                     <button onClick={() => { if (pickFrom && pickTo) { const [a, b] = pickFrom <= pickTo ? [pickFrom, pickTo] : [pickTo, pickFrom]; setRange({ from: a, to: b }); setPickMode(""); } }} style={{ ...btnPri, padding: "3px 12px", fontSize: 12 }}>Show</button>
                   </span>
                 )}
                 {(day || range) && <button onClick={() => { setDay(""); setRange(null); setPickMode(""); }} style={{ ...btnGhost, padding: "3px 10px", fontSize: 12 }}>Back to today</button>}
               </div>
-              {orders.length === 0 && <div style={{ color: "#64748b", fontSize: 13, padding: "6px 0 10px" }}>No orders on this day.</div>}
+              {orders.length === 0 && <div style={{ color: "var(--k-ink-4)", fontSize: 13, padding: "6px 0 10px" }}>No orders on this day.</div>}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {orders.slice().sort((a, b) => ((orderDone(a) ? 1 : 0) - (orderDone(b) ? 1 : 0)) || ((b.lastSeen || 0) - (a.lastSeen || 0))).map(o => {   /* in progress first, then the newest */
                   const c = o.counts || {}; const total = c.total ?? 0; const done = total - (c.remaining ?? 0); const finished = orderDone(o);
@@ -1559,16 +1561,16 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                   return (
                     <div key={`${o.station}|${o.order}|${o.run || 0}`} style={{ ...card, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>Order {o.order} <span style={{ fontWeight: 400, color: "#64748b" }}>· {stationLabel(o.station)} · {o.operator || "—"}</span></div>
-                        <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                          <strong style={{ color: "#e2e8f0" }}>{done} / {total}</strong> done
-                          {c.flag > 0 && <span style={{ color: "#f87171" }}> · {c.flag} with supervisor</span>}
-                          {c.manual > 0 && <span style={{ color: "#fcd34d" }}> · {c.manual} by hand</span>}
-                          {" · "}{finished ? <span style={{ color: "#22c55e", fontWeight: 700 }}>finished {hm(doneAt(o))}{c.remaining > 0 ? ` · ${c.remaining} unscanned` : ""}</span> : `in progress · started ${hm(o.firstSeen)}`}
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>Order {o.order} <span style={{ fontWeight: 400, color: "var(--k-ink-4)" }}>· {stationLabel(o.station)} · {o.operator || "—"}</span></div>
+                        <div style={{ fontSize: 11, color: "var(--k-ink-3)" }}>
+                          <strong style={{ color: "var(--k-ink-1)" }}>{done} / {total}</strong> done
+                          {c.flag > 0 && <span style={{ color: "var(--k-red-ink)" }}> · {c.flag} with supervisor</span>}
+                          {c.manual > 0 && <span style={{ color: "var(--k-amber-ink-2)" }}> · {c.manual} by hand</span>}
+                          {" · "}{finished ? <span style={{ color: "var(--k-green)", fontWeight: 700 }}>finished {hm(doneAt(o))}{c.remaining > 0 ? ` · ${c.remaining} unscanned` : ""}</span> : `in progress · started ${hm(o.firstSeen)}`}
                         </div>
                       </div>
-                      <button onClick={() => setOpenOrder({ station: o.station, order: o.order, run: o.run || 0, date: o.date })} title="Open this order: roster with statuses, problems, and the log" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
-                      <button onClick={() => downloadOrderSheet(o)} title="The QC Results workbook for this order: every garment with its status, reason, resolution, inspector and time" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "#22c55e", color: "#4ade80" }}>⬇ Order sheet</button>
+                      <button onClick={() => setOpenOrder({ station: o.station, order: o.order, run: o.run || 0, date: o.date })} title="Open this order: roster with statuses, problems, and the log" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "var(--k-blue-ink)", color: "var(--k-blue-ink-2)" }}>Open order</button>
+                      <button onClick={() => downloadOrderSheet(o)} title="The QC Results workbook for this order: every garment with its status, reason, resolution, inspector and time" style={{ ...btnGhost, padding: "4px 10px", fontSize: 12, borderColor: "var(--k-green)", color: "var(--k-green-ink)" }}>⬇ Order sheet</button>
                     </div>
                   );
                 })}
@@ -1577,11 +1579,11 @@ function SupervisorPanel({ operatorName, onSignOut }) {
           )}
           {parked.length > 0 && (
             <div style={{ gridColumn: "1 / -1", order: 98, marginTop: 8, ...card, padding: "8px 12px", opacity: 0.75 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8" }}>Not reporting for over {Math.round(GONE_MS / 3600000)} hours ({parked.length}) — stepped back so the live stations stand out{parkedOpen > 0 ? `; ${parkedOpen} old open ${parkedOpen === 1 ? "item" : "items"} on them` : ""}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--k-ink-3)" }}>Not reporting for over {Math.round(GONE_MS / 3600000)} hours ({parked.length}) — stepped back so the live stations stand out{parkedOpen > 0 ? `; ${parkedOpen} old open ${parkedOpen === 1 ? "item" : "items"} on them` : ""}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                 {parked.slice().sort(byName).map(s => (
-                  <span key={s.id} style={{ fontSize: 12, color: "#cbd5e1", display: "inline-flex", gap: 8, alignItems: "center", padding: "3px 4px 3px 10px", border: "1px solid #334155", borderRadius: 6 }}>
-                    {stationLabel(s.id)} · {s.operatorName || "—"} · order {s.orderNumber || "—"} · last seen {fmtMin(Math.round(age(s) / 60))} ago{openOn(s) > 0 && <span style={{ color: "#f87171" }}>· {openOn(s)} open</span>}
+                  <span key={s.id} style={{ fontSize: 12, color: "var(--k-ink-2)", display: "inline-flex", gap: 8, alignItems: "center", padding: "3px 4px 3px 10px", border: "1px solid var(--k-rule-2)", borderRadius: 6 }}>
+                    {stationLabel(s.id)} · {s.operatorName || "—"} · order {s.orderNumber || "—"} · last seen {fmtMin(Math.round(age(s) / 60))} ago{openOn(s) > 0 && <span style={{ color: "var(--k-red-ink)" }}>· {openOn(s)} open</span>}
                     <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber, run: s.orderRun || 0 })} disabled={!s.orderNumber} title="Open its last order" style={{ ...btnGhost, padding: "2px 8px", fontSize: 11, opacity: s.orderNumber ? 1 : 0.4 }}>Open</button>
                     <button onClick={() => removeStation(s)} title="Take it off the board" style={{ ...btnGhost, padding: "2px 8px", fontSize: 11 }}>Remove</button>
                   </span>
@@ -1592,71 +1594,71 @@ function SupervisorPanel({ operatorName, onSignOut }) {
           {active.slice().sort(byName).map(s => {   /* a fixed order: cards must not jump as reports arrive */
             const stale = age(s) > 30;
             return (
-              <div key={s.id} id={"card-" + s.id} style={{ ...card, padding: 14, border: `1px solid ${stale ? "#334155" : s.counts?.flag ? "#ef4444" : "#21262d"}`, opacity: stale ? 0.6 : 1 }}>
+              <div key={s.id} id={"card-" + s.id} style={{ ...card, padding: 14, border: `1px solid ${stale ? "var(--k-rule-2)" : s.counts?.flag ? "var(--k-red)" : "var(--k-rule)"}`, opacity: stale ? 0.6 : 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <div style={{ fontWeight: 800, fontSize: 17 }}><span style={{ color: "#60a5fa" }}>{stationLabel(s.id)}</span> · {s.operatorName || "—"}</div>
+                  <div style={{ fontWeight: 800, fontSize: 17 }}><span style={{ color: "var(--k-blue-ink)" }}>{stationLabel(s.id)}</span> · {s.operatorName || "—"}</div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <div style={{ fontSize: 11, color: s.signedOut ? "#94a3b8" : stale ? "#f87171" : "#22c55e" }}>{s.signedOut ? `signed out ${new Date(s.signedOut.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : stale ? `last seen ${fmtMin(Math.round(age(s) / 60))} ago` : "● live"}</div>
+                    <div style={{ fontSize: 11, color: s.signedOut ? "var(--k-ink-3)" : stale ? "var(--k-red-ink)" : "var(--k-green)" }}>{s.signedOut ? `signed out ${new Date(s.signedOut.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : stale ? `last seen ${fmtMin(Math.round(age(s) / 60))} ago` : "● live"}</div>
                     {(stale || orderDone(s)) && (
                       <button onClick={() => removeStation(s)}
                         title="Take this card off the board" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>Remove</button>
                     )}
                   </div>
                 </div>
-                <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2, display: "flex", alignItems: "center", gap: 10 }}>
-                  <span>Order <strong style={{ color: "#e2e8f0" }}>{s.orderNumber || "—"}</strong></span>
+                <div style={{ fontSize: 13, color: "var(--k-ink-3)", marginTop: 2, display: "flex", alignItems: "center", gap: 10 }}>
+                  <span>Order <strong style={{ color: "var(--k-ink-1)" }}>{s.orderNumber || "—"}</strong></span>
                   {s.counts?.total > 0 && !stale && (
                     <button onClick={() => { const n = window.prompt(`Order number for ${stationLabel(s.id)} · ${s.operatorName || "—"}:`, /^\d+$/.test(s.orderNumber || "") ? s.orderNumber : ""); if (n && n.trim()) hub.setOrder(s.id, { orderNumber: n.trim(), by: operatorName }).then(() => { setMsg(`${stationLabel(s.id)} takes order number ${n.trim()} on its next report.`); refresh(); }).catch(() => setMsg("Could not update the hub.")); }}
                       title="Give the order running on this station its number (only the supervisor can)" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>{s.orderNumber && s.setOrder ? `→ ${s.setOrder.orderNumber}…` : "Set number"}</button>
                   )}
                   {s.orderNumber && s.counts?.total > 0 && (
-                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber, run: s.orderRun || 0 })} title="Open this order: every garment with its status, what was flagged and why, and the log" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "#60a5fa", color: "#93c5fd" }}>Open order</button>
+                    <button onClick={() => setOpenOrder({ station: s.id, order: s.orderNumber, run: s.orderRun || 0 })} title="Open this order: every garment with its status, what was flagged and why, and the log" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, borderColor: "var(--k-blue-ink)", color: "var(--k-blue-ink-2)" }}>Open order</button>
                   )}
                 </div>
-                <div style={{ height: 8, background: "#1e293b", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: orderDone(s) ? "#22c55e" : "#3b82f6" }} /></div>
+                <div style={{ height: 8, background: "var(--k-field)", borderRadius: 4, marginTop: 10, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct(s)}%`, background: orderDone(s) ? "var(--k-green)" : "var(--k-blue)" }} /></div>
                 <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
                   {s.counts?.total > 0
-                    ? <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, marginRight: 6 }}>{(s.counts?.total ?? 0) - (s.counts?.remaining ?? 0)}<span style={{ fontSize: 14, color: "#64748b", fontWeight: 600 }}> / {s.counts?.total ?? 0}</span></div>
-                    : <div style={{ fontSize: 15, fontWeight: 700, color: "#60a5fa", marginRight: 6 }}>Waiting for an order</div>}
-                  <Pill color="#22c55e">{s.counts?.pass ?? 0} pass</Pill>
-                  {s.counts?.flag > 0 && <Pill color="#ef4444">{s.counts.flag} with supervisor</Pill>}
-                  {s.counts?.manual > 0 && <Pill color="#f59e0b">{s.counts.manual} by hand</Pill>}
-                  {(s.counts?.missing > 0 || s.counts?.short > 0) && <Pill color="#f59e0b">{(s.counts.missing || 0) + (s.counts.short || 0)} missing/short</Pill>}
+                    ? <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, marginRight: 6 }}>{(s.counts?.total ?? 0) - (s.counts?.remaining ?? 0)}<span style={{ fontSize: 14, color: "var(--k-ink-4)", fontWeight: 600 }}> / {s.counts?.total ?? 0}</span></div>
+                    : <div style={{ fontSize: 15, fontWeight: 700, color: "var(--k-blue-ink)", marginRight: 6 }}>Waiting for an order</div>}
+                  <Pill color="var(--k-green)">{s.counts?.pass ?? 0} pass</Pill>
+                  {s.counts?.flag > 0 && <Pill color="var(--k-red)">{s.counts.flag} with supervisor</Pill>}
+                  {s.counts?.manual > 0 && <Pill color="var(--k-amber)">{s.counts.manual} by hand</Pill>}
+                  {(s.counts?.missing > 0 || s.counts?.short > 0) && <Pill color="var(--k-amber)">{(s.counts.missing || 0) + (s.counts.short || 0)} missing/short</Pill>}
                 </div>
-                <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>
-                  <strong style={{ color: "#e2e8f0" }}>{s.day?.date === todayStr ? s.day.done : 0}</strong> today
+                <div style={{ fontSize: 12, color: "var(--k-ink-3)", marginTop: 8 }}>
+                  <strong style={{ color: "var(--k-ink-1)" }}>{s.day?.date === todayStr ? s.day.done : 0}</strong> today
                   {!(s.counts?.total > 0)
                     ? " · signed in, no order yet — send one with the form"
                     : orderDone(s)
-                    ? <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>order done</span></>
+                    ? <> · <span style={{ color: "var(--k-green)", fontWeight: 700 }}>order done</span></>
                     : stale ? " · pace unknown — not reporting"
-                      : s.rate ? <> · <strong style={{ color: "#e2e8f0" }}>{Math.round(s.rate)}</strong>/h · about {fmtMin(s.etaMin)} left</>
+                      : s.rate ? <> · <strong style={{ color: "var(--k-ink-1)" }}>{Math.round(s.rate)}</strong>/h · about {fmtMin(s.etaMin)} left</>
                         : " · pace shows after a few minutes"}
                 </div>
-                {s.lastScan && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Now at: {s.lastScan.text} · {s.lastScan.time.slice(11)}</div>}
+                {s.lastScan && <div style={{ fontSize: 11, color: "var(--k-ink-4)", marginTop: 4 }}>Now at: {s.lastScan.text} · {s.lastScan.time.slice(11)}</div>}
                 {s.attention?.length > 0 && (
-                  <div style={{ marginTop: 10, borderTop: "1px solid #21262d", paddingTop: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#f87171", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Needs you ({s.attention.filter(a => !a.resolution).length || s.attention.length})</div>{/* open items; with none open (all accepted or fixed at the station) the number of items shown (review, 25 Nov 2026) */}
-                    {s.attention.length > 3 && <div style={{ fontSize: 11, color: "#64748b", marginBottom: 3 }}>the three that weigh most — the rest are in the order</div>}
+                  <div style={{ marginTop: 10, borderTop: "1px solid var(--k-rule)", paddingTop: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--k-red-ink)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Needs you ({s.attention.filter(a => !a.resolution).length || s.attention.length})</div>{/* open items; with none open (all accepted or fixed at the station) the number of items shown (review, 25 Nov 2026) */}
+                    {s.attention.length > 3 && <div style={{ fontSize: 11, color: "var(--k-ink-4)", marginBottom: 3 }}>the three that weigh most — the rest are in the order</div>}
                     {s.attention.slice().sort(bySeverity).slice(0, 3).map((a, i) => (
                       <div key={i} style={{ fontSize: 12, marginBottom: 3, display: "flex", gap: 8, alignItems: "flex-start" }}>
                         <PhotoThumbs photo={a.photo} damagePhotos={a.damagePhotos} w={56} h={42} onOpen={setBigPhoto} caption={[a.jersey, a.reason].filter(Boolean).join(" · ")} />
                         {a.status === "flagged" && <FlagMarks item={a} height={36} />}
                         <div>
                           <RouteTag item={a} /> <span style={{ color: attnColour(a.status), fontWeight: 700 }}>{attnIcon(a.status)} {a.jersey}</span>
-                          <span style={{ color: "#94a3b8" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
+                          <span style={{ color: "var(--k-ink-3)" }}> — {a.reason}{a.resolution ? ` → ${a.resolution}` : ""}</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
                 {s.carried?.length > 0 && (
-                  <div style={{ marginTop: 10, borderTop: "1px solid #21262d", paddingTop: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Still open from earlier orders ({s.carried.length})</div>
+                  <div style={{ marginTop: 10, borderTop: "1px solid var(--k-rule)", paddingTop: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--k-amber)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Still open from earlier orders ({s.carried.length})</div>
                     <div style={{ maxHeight: 220, overflowY: "auto" }}>{/* up to 50: they scroll in the card, so one station does not stretch the whole row */}
                     {s.carried.map(c => (
                       <div key={c.key} style={{ fontSize: 12, marginBottom: 4, display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-                        <span><span style={{ color: attnColour(c.status), fontWeight: 700 }}>{attnIcon(c.status)} {c.jersey}</span><span style={{ color: "#94a3b8" }}> — order {c.order} · {c.reason}</span></span>
+                        <span><span style={{ color: attnColour(c.status), fontWeight: 700 }}>{attnIcon(c.status)} {c.jersey}</span><span style={{ color: "var(--k-ink-3)" }}> — order {c.order} · {c.reason}</span></span>
                         <button onClick={() => markCarriedDone(s.id, c.key)} title="Dealt with — remove from this list" style={{ ...btnGhost, padding: "5px 12px", fontSize: 14, flexShrink: 0 }}>Done</button>
                       </div>
                     ))}
@@ -1667,11 +1669,11 @@ function SupervisorPanel({ operatorName, onSignOut }) {
             );
           })}
         </div>
-        <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid #21262d", padding: 14, overflowY: "auto" }}>
+        <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid var(--k-rule)", padding: 14, overflowY: "auto" }}>
           <button onClick={() => hub.ledger(day).then(l => exportDaySheetXLSX(l, stationLabel, undefined, { categoryOf: reasonCategory })).catch(() => setMsg("Could not fetch the day's scans from the hub."))}
-            title="One Excel file for the whole day, every station: garments per hour, time per garment, flag rate, each operator, defects by category, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 8, background: "#22c55e", color: "#0d1117" }}>⬇ Day sheet (Excel) — {day ? day : `${todayTotal} ${todayTotal === 1 ? "garment" : "garments"} so far`}</button>
+            title="One Excel file for the whole day, every station: garments per hour, time per garment, flag rate, each operator, defects by category, every scan" style={{ ...bigBtn, fontSize: 14, marginBottom: 8, background: "var(--k-green)", color: "var(--k-page)" }}>⬇ Day sheet (Excel) — {day ? day : `${todayTotal} ${todayTotal === 1 ? "garment" : "garments"} so far`}</button>
           <button onClick={() => hub.ledger(day).then(l => exportDamageReportXLSX(buildDamageRows(l.events || [], { stationLabel, typeLabel: jerseyTypeLabel }), { name: "day_" + (l.date || ""), title: `Damage report — ${l.date || "today"}, every station` })).catch(e => setMsg(e.message || "Could not fetch the day's flags from the hub."))}
-            title="Every flagged garment of the day, every station, with its photo (photos are kept 14 days)" style={{ ...bigBtn, fontSize: 13, marginBottom: 16, background: "transparent", border: "1px solid #ef4444", color: "#f87171" }}>⬇ Damage report (Excel, with photos){day ? ` — ${day}` : ""}</button>
+            title="Every flagged garment of the day, every station, with its photo (photos are kept 14 days)" style={{ ...bigBtn, fontSize: 13, marginBottom: 16, background: "transparent", border: "1px solid var(--k-red)", color: "var(--k-red-ink)" }}>⬇ Damage report (Excel, with photos){day ? ` — ${day}` : ""}</button>
           <CompareDays days={days} stationLabel={stationLabel} onProblem={setMsg} />
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Send a roster</div>
           <div style={{ marginBottom: 10 }}>
@@ -1682,18 +1684,18 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                 <option key={s.id} value={s.id}>{stationLabel(s.id)} · {s.operatorName || "—"}{age(s) > 30 ? " (not reporting)" : !(s.counts?.total > 0) ? " (waiting for an order)" : ` (on order ${s.orderNumber || "—"})`}</option>
               ))}
             </select>
-            {data.stations.length === 0 && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Stations appear here once they have signed in and started once today.</div>}
+            {data.stations.length === 0 && <div style={{ fontSize: 11, color: "var(--k-ink-4)", marginTop: 4 }}>Stations appear here once they have signed in and started once today.</div>}
           </div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order number</label><input value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g. 25" style={inputSt} /></div>
-          <div style={{ marginBottom: 10 }}><label style={labelSt}>Ships with <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— other order numbers on the order form; their boxes are filled together</span></label><ShipWithField value={shipText} onChange={setShipText} placeholder="e.g. 264248 (read from the file when it says)" /></div>
-          <div style={{ marginBottom: 10 }}><label style={labelSt}>Customer <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— on the box's outside label and the sign-off ticket; empty prints the team name</span></label><input value={customer} onChange={e => setCustomer(e.target.value)} placeholder="e.g. Source for Sports" style={inputSt} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Ships with <span style={{ color: "var(--k-ink-3b)", fontWeight: 400 }}>— other order numbers on the order form; their boxes are filled together</span></label><ShipWithField value={shipText} onChange={setShipText} placeholder="e.g. 264248 (read from the file when it says)" /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Customer <span style={{ color: "var(--k-ink-3b)", fontWeight: 400 }}>— on the box's outside label and the sign-off ticket; empty prints the team name</span></label><input value={customer} onChange={e => setCustomer(e.target.value)} placeholder="e.g. Source for Sports" style={inputSt} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Order notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="remarks from the order paper" style={{ ...inputSt, resize: "vertical", fontSize: 13 }} /></div>
-          <div style={{ marginBottom: 10 }}><label style={labelSt}>Garment type <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— sets the station's flag reasons; unset offers every reason</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
-          <div style={{ marginBottom: 10 }}><label style={labelSt}>Garment <span style={{ color: "#7c8ba1", fontWeight: 400 }}>— the outline the station marks the damage on</span></label><GarmentPicker value={garment} onChange={g => { garmentByHand.current = true; setGarment(g); }} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Garment type <span style={{ color: "var(--k-ink-3b)", fontWeight: 400 }}>— sets the station's flag reasons; unset offers every reason</span></label><JerseyTypePicker value={jerseyType} onChange={setJerseyType} /></div>
+          <div style={{ marginBottom: 10 }}><label style={labelSt}>Garment <span style={{ color: "var(--k-ink-3b)", fontWeight: 400 }}>— the outline the station marks the damage on</span></label><GarmentPicker value={garment} onChange={g => { garmentByHand.current = true; setGarment(g); }} /></div>
           <div style={{ marginBottom: 10 }}><label style={labelSt}>Boxes — how the station sorts it</label><BinByPicker value={binBy} onChange={setBinBy} /></div>
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Roster file</label>
-            <div onClick={() => fileRef.current.click()} style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${file ? "#22c55e" : "#334155"}`, background: "#1e293b", color: file ? "#22c55e" : "#64748b", fontSize: 13, cursor: "pointer" }}>{file ? "✓ " + file.name : "📂 Choose CSV or Excel…"}</div>
+            <div onClick={() => fileRef.current.click()} style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${file ? "var(--k-green)" : "var(--k-rule-2)"}`, background: "var(--k-field)", color: file ? "var(--k-green)" : "var(--k-ink-4)", fontSize: 13, cursor: "pointer" }}>{file ? "✓ " + file.name : "📂 Choose CSV or Excel…"}</div>
             <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.tsv,.txt" style={{ display: "none" }} onChange={e => {
               const f = e.target.files[0];
               if (f) {
@@ -1704,16 +1706,16 @@ function SupervisorPanel({ operatorName, onSignOut }) {
             }} />
           </div>
           <button onClick={send} style={{ ...bigBtn, fontSize: 14 }}>Send to stations</button>
-          {msg && <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 10 }}>{msg}</div>}
-          <div style={{ fontWeight: 800, fontSize: 13, margin: "22px 0 8px" }}>Rosters sent ({rosters.length}) <span style={{ fontWeight: 400, color: "#64748b" }}>· one station per order; a finished order leaves this list</span></div>
+          {msg && <div style={{ fontSize: 12, color: "var(--k-ink-3)", marginTop: 10 }}>{msg}</div>}
+          <div style={{ fontWeight: 800, fontSize: 13, margin: "22px 0 8px" }}>Rosters sent ({rosters.length}) <span style={{ fontWeight: 400, color: "var(--k-ink-4)" }}>· one station per order; a finished order leaves this list</span></div>
           {rosters.map(r => (
             <div key={r.id} style={{ ...card, padding: "8px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "#94a3b8" }}>· {r.rowCount}</span>{r.takenBy ? <span style={{ fontWeight: 600, color: "#4ade80", marginLeft: 6 }}>· on {stationLabel(r.takenBy.station)} · {r.takenBy.operator || "—"}</span> : r.forStation ? <span style={{ fontWeight: 600, color: "#60a5fa", marginLeft: 6 }}>→ {stationLabel(r.forStation)}</span> : <span style={{ fontWeight: 400, color: "#64748b", marginLeft: 6 }}>· waiting · any station</span>}</div>
-                <div style={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.fileName} · sent {new Date(r.createdAt).toLocaleTimeString()}{r.takenBy ? ` · started ${new Date(r.takenBy.at).toLocaleTimeString()}` : ""}</div>
+                <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "var(--k-ink-3)" }}>· {r.rowCount}</span>{r.takenBy ? <span style={{ fontWeight: 600, color: "var(--k-green-ink)", marginLeft: 6 }}>· on {stationLabel(r.takenBy.station)} · {r.takenBy.operator || "—"}</span> : r.forStation ? <span style={{ fontWeight: 600, color: "var(--k-blue-ink)", marginLeft: 6 }}>→ {stationLabel(r.forStation)}</span> : <span style={{ fontWeight: 400, color: "var(--k-ink-4)", marginLeft: 6 }}>· waiting · any station</span>}</div>
+                <div style={{ fontSize: 11, color: "var(--k-ink-4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.fileName} · sent {new Date(r.createdAt).toLocaleTimeString()}{r.takenBy ? ` · started ${new Date(r.takenBy.at).toLocaleTimeString()}` : ""}</div>
               </div>
               <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                {r.takenBy && <button onClick={() => hub.releaseRoster(r.id).then(refresh).catch(() => {})} title="Let another station take this order (the station that has it keeps working until it finishes)" style={{ ...btnGhost, padding: "2px 8px", fontSize: 11, borderColor: "#f59e0b", color: "#fcd34d" }}>Release</button>}
+                {r.takenBy && <button onClick={() => hub.releaseRoster(r.id).then(refresh).catch(() => {})} title="Let another station take this order (the station that has it keeps working until it finishes)" style={{ ...btnGhost, padding: "2px 8px", fontSize: 11, borderColor: "var(--k-amber)", color: "var(--k-amber-ink-2)" }}>Release</button>}
                 <button onClick={() => hub.removeRoster(r.id).then(refresh).catch(() => {})} style={{ ...btnGhost, padding: "2px 8px", fontSize: 11 }}>Remove</button>
               </span>
             </div>
@@ -1850,18 +1852,18 @@ function GarmentMap({ kind, spots = [], onTap, onRemove, fit = null, height = 12
     <div title={title} style={{ display: "flex", gap, justifyContent: "center", alignItems: "flex-start" }}>
       {SIDES.map(side => (
         <div key={side} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: big ? 6 : 2 }}>
-          {captions && <div style={{ fontSize: big ? "clamp(20px, 3.2cqh, 34px)" : 11, fontWeight: 900, letterSpacing: big ? 3 : 1, color: big ? "#ddd6fe" : "#94a3b8", lineHeight: 1 }}>{SIDE_LABELS[side].toUpperCase()}</div>}
+          {captions && <div style={{ fontSize: big ? "clamp(20px, 3.2cqh, 34px)" : 11, fontWeight: 900, letterSpacing: big ? 3 : 1, color: big ? "var(--k-violet-ink)" : "var(--k-ink-3)", lineHeight: 1 }}>{SIDE_LABELS[side].toUpperCase()}</div>}
           <svg viewBox={`0 0 ${view.vbW} ${view.vbH}`} data-side={side} onClick={onTap ? e => tap(side, e) : undefined}
             style={{ ...dims, display: "block", cursor: onTap ? "crosshair" : "default", touchAction: "manipulation", background: big ? "rgba(255,255,255,0.03)" : "transparent", borderRadius: big ? 14 : 4 }}>
-            <polygon points={pts(g.outline)} fill={big ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.06)"} stroke="#e2e8f0" strokeWidth={big ? 1.2 : 2} strokeLinejoin="round" />
-            {(g.detail[side] || []).map((d, i) => <polyline key={i} points={pts(d)} fill="none" stroke="#94a3b8" strokeWidth={big ? 0.8 : 1.4} strokeLinejoin="round" strokeLinecap="round" />)}
+            <polygon points={pts(g.outline)} fill={big ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.06)"} stroke="var(--k-ink-1)" strokeWidth={big ? 1.2 : 2} strokeLinejoin="round" />
+            {(g.detail[side] || []).map((d, i) => <polyline key={i} points={pts(d)} fill="none" stroke="var(--k-ink-3)" strokeWidth={big ? 0.8 : 1.4} strokeLinejoin="round" strokeLinecap="round" />)}
             {list.map((s, i) => {
               if (s?.side !== side) return null;
               const [cx, cy] = toView(view, [s.x, s.y]);
               return (
                 <g key={i} data-spot={i + 1} onClick={onRemove ? e => { e.stopPropagation(); remove(i, e); } : undefined} style={{ cursor: onRemove ? "pointer" : "default" }}>
                   <circle cx={cx} cy={cy} r={SPOT_R + 1.5} fill="none" stroke="#fff" strokeWidth={1.2} />
-                  <circle cx={cx} cy={cy} r={SPOT_R} fill="#ef4444" />
+                  <circle cx={cx} cy={cy} r={SPOT_R} fill="var(--k-red)" />
                   <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={SPOT_R * 1.5} fontWeight={900} fill="#fff" style={{ pointerEvents: "none", fontFamily: FONT_DISPLAY }}>{i + 1}</text>
                 </g>
               );
@@ -2686,6 +2688,17 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
         </div>
 
         <div style={{ marginBottom: 18 }}>
+          <div style={labelSt}>Screen</div>
+          <div role="radiogroup" aria-label="Light or dark" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {THEMES.map(t => (
+              <button key={t.id} role="radio" aria-checked={(temp.theme || "dark") === t.id} onClick={() => setTemp(x => ({ ...x, theme: t.id }))}
+                style={{ ...btnGhost, padding: "8px 14px", ...((temp.theme || "dark") === t.id ? { background: "#3b82f6", borderColor: "#3b82f6", color: "#fff" } : {}) }}>{t.label}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 14, color: "#7c8ba1", marginTop: 6 }}>Light is easier to read under bright lights. For now the sign-in screen and the supervisor board change; the scanning screens follow in a later update.</div>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
           <div style={labelSt}>Label printer</div>
           {[
             { on: "stickers", roll: "stickerRoll", text: "Print a sticker for every passed garment (its box, and the team or size)" },
@@ -3176,25 +3189,25 @@ function IssuesModal({ missing, dups, flagged, binOf, onClose }) {
 function OrderSummaryBody({ summary, bins = [] }) {
   const c = summary.counts;
   const line = (key, j, extra, colour, box = null) => (
-    <div key={key} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "5px 10px", borderRadius: 8, background: "#0d1117", flexWrap: "wrap" }}>
+    <div key={key} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "5px 10px", borderRadius: 8, background: "var(--k-page)", flexWrap: "wrap" }}>
       <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 24, lineHeight: 1 }}>#{j.number || "?"}</strong>
       {j.name && <span style={{ fontWeight: 700 }}>{j.name}</span>}
-      {j.team && <span style={{ color: "#94a3b8" }}>{j.team}</span>}
-      {j.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "#4ade80", fontWeight: 800 }}>{shortSize(j.size)}</span>}
-      {box && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 18, color: "#60a5fa", fontWeight: 800, marginLeft: "auto" }}>Box {box}</span>}
+      {j.team && <span style={{ color: "var(--k-ink-3)" }}>{j.team}</span>}
+      {j.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "var(--k-green-ink)", fontWeight: 800 }}>{shortSize(j.size)}</span>}
+      {box && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 18, color: "var(--k-blue-ink)", fontWeight: 800, marginLeft: "auto" }}>Box {box}</span>}
       {extra && <span style={{ color: colour, fontSize: 15, marginLeft: box ? 0 : "auto" }}>{extra}</span>}
     </div>
   );
   const col = (title, colour, items, empty, children) => (
-    <div style={{ flex: "1 1 300px", minWidth: 0, background: "#1e293b", borderRadius: 12, border: "1px solid #3f4b5c", padding: "10px 12px" }}>
+    <div style={{ flex: "1 1 300px", minWidth: 0, background: "var(--k-field)", borderRadius: 12, border: "1px solid var(--k-rule-3)", padding: "10px 12px" }}>
       <div style={{ fontSize: 22, fontWeight: 900, color: colour, marginBottom: 8 }}>{title}</div>
-      {children || <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{items.length ? items : <div style={{ color: "#7c8ba1", fontSize: 16, padding: "6px 2px" }}>{empty}</div>}</div>}
+      {children || <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{items.length ? items : <div style={{ color: "var(--k-ink-3b)", fontSize: 16, padding: "6px 2px" }}>{empty}</div>}</div>}
     </div>
   );
   const sub = (title, items, empty) => (
     <div style={{ flex: "1 1 140px", minWidth: 0 }}>
-      <div style={{ fontSize: 15, fontWeight: 800, color: "#94a3b8", margin: "2px 0 6px" }}>{title}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{items.length ? items : <div style={{ color: "#7c8ba1", fontSize: 15, padding: "4px 2px" }}>{empty}</div>}</div>
+      <div style={{ fontSize: 15, fontWeight: 800, color: "var(--k-ink-3)", margin: "2px 0 6px" }}>{title}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{items.length ? items : <div style={{ color: "var(--k-ink-3b)", fontSize: 15, padding: "4px 2px" }}>{empty}</div>}</div>
     </div>
   );
   return (
@@ -3202,23 +3215,23 @@ function OrderSummaryBody({ summary, bins = [] }) {
       {bins.length > 0 && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
           {bins.map(b => (
-            <div key={b.bin} style={{ background: "#1e293b", border: `1px solid ${b.open ? "#3f4b5c" : "#166534"}`, borderRadius: 10, padding: "6px 12px", fontSize: 15, color: "#cbd5e1" }}>
-              <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "#60a5fa" }}>Box {b.bin}</strong> {b.label} · <strong style={{ color: "#4ade80" }}>{b.count}</strong>{b.box ? <span style={{ color: "#fcd34d" }}> · {b.box}</span> : null} · <span style={{ color: b.open ? "#fbbf24" : "#4ade80" }}>{b.open ? "open" : `closed${b.closedAt ? " " + String(b.closedAt).slice(11, 16) : ""}`}</span>
+            <div key={b.bin} style={{ background: "var(--k-field)", border: `1px solid ${b.open ? "var(--k-rule-3)" : "var(--k-green-deep)"}`, borderRadius: 10, padding: "6px 12px", fontSize: 15, color: "var(--k-ink-2)" }}>
+              <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "var(--k-blue-ink)" }}>Box {b.bin}</strong> {b.label} · <strong style={{ color: "var(--k-green-ink)" }}>{b.count}</strong>{b.box ? <span style={{ color: "var(--k-amber-ink-2)" }}> · {b.box}</span> : null} · <span style={{ color: b.open ? "var(--k-amber-ink)" : "var(--k-green-ink)" }}>{b.open ? "open" : `closed${b.closedAt ? " " + String(b.closedAt).slice(11, 16) : ""}`}</span>
             </div>
           ))}
         </div>
       )}
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start", marginTop: 14 }}>
-        {col(`Passed · ${c.passed}`, "#4ade80", summary.passed.map(p => line("p" + p.row._id, p.row, "", "", p.bin)), "Nothing has passed yet.")}
-        {col(`Failed · ${c.failed}`, "#f87171", summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca")), "Nothing is flagged.", c.extra > 0 ? (
+        {col(`Passed · ${c.passed}`, "var(--k-green-ink)", summary.passed.map(p => line("p" + p.row._id, p.row, "", "", p.bin)), "Nothing has passed yet.")}
+        {col(`Failed · ${c.failed}`, "var(--k-red-ink)", summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "var(--k-red-ink-3)")), "Nothing is flagged.", c.extra > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "#fecaca"))}
-            <div style={{ fontSize: 15, fontWeight: 800, color: "#94a3b8", margin: "6px 0 2px" }}>No roster row · {c.extra}</div>{/* not on the roster, a duplicate, no size tag: in the DAMAGED box, not among the order's jerseys */}
-            {summary.extra.map((f, i) => line("x" + i, f, f.reason || "flagged", "#fecaca"))}
+            {summary.failed.map(f => line("f" + f._id, f, f.reason || "flagged", "var(--k-red-ink-3)"))}
+            <div style={{ fontSize: 15, fontWeight: 800, color: "var(--k-ink-3)", margin: "6px 0 2px" }}>No roster row · {c.extra}</div>{/* not on the roster, a duplicate, no size tag: in the DAMAGED box, not among the order's jerseys */}
+            {summary.extra.map((f, i) => line("x" + i, f, f.reason || "flagged", "var(--k-red-ink-3)"))}
           </div>
         ) : null)}
         {/* Unscanned (not scanned yet) and Missing (the operator's mark) are counted apart (the owner, 25 Nov 2026). */}
-        {col(`Unscanned ${c.notScanned} · Missing ${c.marked}`, "#fbbf24", [], "", (
+        {col(`Unscanned ${c.notScanned} · Missing ${c.marked}`, "var(--k-amber-ink)", [], "", (
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             {sub(`Unscanned · ${c.notScanned}`, summary.missing.notScanned.map(r => line("n" + r._id, r, "", "")), "None.")}
             {sub(`Marked missing · ${c.marked}`, summary.missing.marked.map(r => line("m" + r._id, r, "", "")), "None.")}
@@ -3236,13 +3249,13 @@ function OrderSummaryBody({ summary, bins = [] }) {
 function SummaryCounts({ summary, stats = null }) {
   const c = summary.counts, num = v => v !== "" && v !== null && v !== undefined;
   return (
-    <div style={{ fontSize: 17, color: "#cbd5e1", flex: 1 }}>
-      {c.total} {c.total === 1 ? "garment" : "garments"} · <span style={{ color: "#4ade80", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "#f87171", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "#fbbf24", fontWeight: 800 }}>{c.notScanned} unscanned</span>{c.marked > 0 && <span style={{ color: "#fbbf24", fontWeight: 800 }}> · {c.marked} marked missing</span>}{c.extra > 0 && <span style={{ color: "#fca5a5" }}> · +{c.extra} with no roster row</span>}
+    <div style={{ fontSize: 17, color: "var(--k-ink-2)", flex: 1 }}>
+      {c.total} {c.total === 1 ? "garment" : "garments"} · <span style={{ color: "var(--k-green-ink)", fontWeight: 800 }}>{c.passed} passed</span> · <span style={{ color: "var(--k-red-ink)", fontWeight: 800 }}>{c.failed} failed</span> · <span style={{ color: "var(--k-amber-ink)", fontWeight: 800 }}>{c.notScanned} unscanned</span>{c.marked > 0 && <span style={{ color: "var(--k-amber-ink)", fontWeight: 800 }}> · {c.marked} marked missing</span>}{c.extra > 0 && <span style={{ color: "var(--k-red-ink-2)" }}> · +{c.extra} with no roster row</span>}
       {stats && (num(stats.passRate) || num(stats.flagRate) || num(stats.perHour)) && (
-        <div style={{ fontSize: 14, color: "#94a3b8", marginTop: 2 }}>
-          {num(stats.passRate) ? <>pass rate <strong style={{ color: "#e2e8f0" }}>{stats.passRate}%</strong></> : null}
-          {num(stats.flagRate) ? <> · flag rate <strong style={{ color: "#e2e8f0" }}>{stats.flagRate}%</strong></> : null}
-          {num(stats.perHour) ? <> · <strong style={{ color: "#e2e8f0" }}>{stats.perHour}</strong> garments / hour</> : null}
+        <div style={{ fontSize: 14, color: "var(--k-ink-3)", marginTop: 2 }}>
+          {num(stats.passRate) ? <>pass rate <strong style={{ color: "var(--k-ink-1)" }}>{stats.passRate}%</strong></> : null}
+          {num(stats.flagRate) ? <> · flag rate <strong style={{ color: "var(--k-ink-1)" }}>{stats.flagRate}%</strong></> : null}
+          {num(stats.perHour) ? <> · <strong style={{ color: "var(--k-ink-1)" }}>{stats.perHour}</strong> garments / hour</> : null}
           {num(stats.medianSec) ? <> · {stats.medianSec} s a garment</> : null}
         </div>
       )}
@@ -3743,7 +3756,14 @@ export default function App() {
   const lastScanFrameRef = useRef(null); // what the camera saw at the last scan, for the hands-free gate
   const gateRef         = useRef(createMotionGate({ log: m => console.log("[hands-free] " + m) }));
 
-  const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...(loadSettings() || {}) }));
+  // Three layers (src/lib/floorsettings.js; the admin panel, phase 4): the app's defaults, the
+  // floor's defaults from the admin panel (kept from the last fetch), what this station's
+  // operator changed. Only the last is saved here, so an untouched setting follows the floor.
+  const baseRef = useRef(null);
+  const [settings, setSettings] = useState(() => {
+    baseRef.current = baseSettings(DEFAULT_SETTINGS, cachedFloorConfig()?.defaults);
+    return effectiveSettings(baseRef.current, loadOwn(DEFAULT_SETTINGS, loadSettings()));
+  });
   setPrintRolls(settings);   // every print sends the roll chosen for its kind (Settings → Label printer); set during render so the first print already has it
   useEffect(() => { gateRef.current.setGrace(Math.round((Number(settings.autoScanDelay) || 0) * 5)); }, [settings.autoScanDelay]);   // 200 ms ticks
   const { scanKey, confirmKey, cancelKey, upKey, retryKey, byHandKey } = settings;
@@ -4086,7 +4106,33 @@ export default function App() {
   const keyLabel       = formatKey(scanKey);
   const showResume     = !!savedSession && !resumeDecided && !sessionStarted && !canSupervise;
 
-  useEffect(() => { saveSettings(settings); }, [settings]);
+  useEffect(() => { saveSettings(settings); saveOwn(ownOf(settings, baseRef.current)); }, [settings]);
+  // The floor's defaults changed (the admin panel; hub.js fetches them when a report's answer
+  // carries a new version): taken at once when no order is open, else when it closes, never in
+  // the middle of one. What the operator changed here stays.
+  const [floorPending, setFloorPending] = useState(null);
+  useEffect(() => {
+    const on = e => setFloorPending(e.detail?.defaults || {});
+    window.addEventListener("jqc-floorconfig", on);
+    return () => window.removeEventListener("jqc-floorconfig", on);
+  }, []);
+  useEffect(() => {
+    if (!floorPending || sessionStarted) return;
+    const next = baseSettings(DEFAULT_SETTINGS, floorPending);
+    if (JSON.stringify(next) !== JSON.stringify(baseRef.current)) {
+      const prev = baseRef.current;
+      setSettings(s => { const own = ownOf(s, prev); baseRef.current = next; return effectiveSettings(next, own); });
+    }
+    setFloorPending(null);
+  }, [floorPending, sessionStarted]);
+  // Light or dark (settings.theme): the screens built on the colour tokens follow it, the
+  // sign-in screen and the supervisor board (phase 4); everything else stays dark until it
+  // is converted, so data-theme is set only while one of those is up.
+  const themedScreen = !signedIn || showSupervisor;
+  useEffect(() => {
+    if (themedScreen) applyTheme(settings.theme || "dark");
+    else document.documentElement.removeAttribute("data-theme");
+  }, [themedScreen, settings.theme]);
 
   // SheetJS from the CDN, once, for reading Excel rosters and writing the exports.
   useEffect(() => {
@@ -5402,7 +5448,7 @@ export default function App() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ fontFamily: FONT_UI, background: "#0d1117", height: "100%", color: "#e2e8f0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ fontFamily: FONT_UI, background: "var(--k-page)", height: "100%", color: "var(--k-ink-1)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
       {!signedIn && (
         <SignInModal initial={savedSignIn}

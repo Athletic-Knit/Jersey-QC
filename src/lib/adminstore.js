@@ -30,6 +30,7 @@ export function cleanAdmin(raw) {
   const settings = {};
   if (Array.isArray(given.operators)) { const ops = cleanOperators(given.operators); if (!ops.error && ops.list.length) settings.operators = ops.list; }
   if (given.printers && typeof given.printers === "object") { const pr = cleanPrinters(given.printers); if (!pr.error && Object.keys(pr.map).length) settings.printers = pr.map; }
+  if (given.defaults && typeof given.defaults === "object") { const df = cleanDefaults(given.defaults); if (!df.error && Object.keys(df.map).length) settings.defaults = df.map; }
   const configVersion = Number.isFinite(o.configVersion) && o.configVersion >= 0 ? Math.floor(o.configVersion) : 0;
   return { version: 1, configVersion, audit: audit.slice(-AUDIT_MAX), settings };
 }
@@ -109,5 +110,42 @@ export function cleanPrinters(map) {
     }
     if (Object.keys(slot).length) out[st] = slot;
   }
+  return { map: out, error: "" };
+}
+
+// The floor's defaults for the stations' Settings (phase 4, 26 Nov 2026; the co-op: no locks,
+// "admins can make what is default for operators"). A station uses them for every setting
+// its operator has not changed on that station; they reach it at the next sign-in or once no
+// order is open, never in the middle of one. The camera and its rotation belong to the PC
+// and are not here. Each value is checked; anything else is refused with the reason.
+export const DEFAULT_KEYS = ["scanKey", "confirmKey", "cancelKey", "upKey", "retryKey", "byHandKey"];
+const ON_SCREEN_KEYS = ["confirmKey", "cancelKey", "upKey", "retryKey", "byHandKey"];   // act on the same screen, so must differ (SettingsPanel's rule)
+export const DEFAULT_RULES = {
+  ...Object.fromEntries(DEFAULT_KEYS.map(k => [k, v => typeof v === "string" && /^[A-Za-z0-9]{1,24}$/.test(v)])),
+  autoScan: v => typeof v === "boolean",
+  autoScanDelay: v => typeof v === "number" && v >= 0 && v <= 30,
+  stickers: v => typeof v === "boolean",
+  flagTickets: v => typeof v === "boolean",
+  binLists: v => typeof v === "boolean",
+  boxAutoPrint: v => typeof v === "boolean",
+  boxWeights: v => typeof v === "boolean",
+  boxWeightCap: v => typeof v === "number" && v >= 10 && v <= 100,
+  stickerRoll: v => ["2x4", "2x3", "2x1", "1x0.5"].includes(v),
+  flagRoll: v => ["2x4", "2x3", "2x1", "1x0.5"].includes(v),
+  boxRoll: v => ["2x4", "2x3", "2x1", "1x0.5"].includes(v),
+  listSort: v => ["size", "team", "number"].includes(v),
+  theme: v => ["dark", "light", "system"].includes(v),
+};
+export function cleanDefaults(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return { map: {}, error: "The defaults must be a map of settings." };
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null || v === undefined || v === "") continue;   // blank: the app's own default
+    if (!DEFAULT_RULES[k]) return { map: {}, error: `"${k}" is not a setting the floor's defaults can hold.` };
+    if (!DEFAULT_RULES[k](v)) return { map: {}, error: `${k}: ${JSON.stringify(v)} is not a value it can take.` };
+    out[k] = v;
+  }
+  const keys = ON_SCREEN_KEYS.filter(k => out[k]).map(k => out[k]);
+  if (new Set(keys).size !== keys.length) return { map: {}, error: "Two of the on-screen keys (select, down, up, retry, by hand) are the same key." };
   return { map: out, error: "" };
 }
