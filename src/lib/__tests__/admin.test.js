@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { Buffer } from "node:buffer";
-import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX, cleanOperators, cleanPrinters, cleanDefaults } from "../adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX, cleanOperators, cleanPrinters, cleanDefaults, cleanAi, cleanPrices } from "../adminstore.js";
 import { baseSettings, ownOf, effectiveSettings, loadOwn, saveOwn, recordOwn } from "../floorsettings.js";
 import { operatorsFrom } from "../hub.js";
 import { createAdmin, TRIES } from "../../../admin-plugin.js";
@@ -169,7 +169,7 @@ describe("phase 2: operator names", () => {
   it("/config is public and holds no secret; with nothing set it has no names (the stations keep .env.local's)", async () => {
     const r = await call(handle, "GET", "/config");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ configVersion: 0, operators: [], defaults: {} });
+    expect(r.body).toEqual({ configVersion: 0, operators: [], defaults: {}, ai: {} });
     expect(r.text).not.toContain(PASSWORD);
   });
   it("saving needs a sign-in; a save goes in the change log with before and after, raises the version and reaches /config", async () => {
@@ -179,7 +179,7 @@ describe("phase 2: operator names", () => {
     expect(s0).toMatchObject({ operators: [], fallbackOperators: ["Shiv", "Priya"], configVersion: 0, writable: true });
     const r = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv", "Priya", "Arshil"] } });
     expect(r.status).toBe(200);
-    expect((await call(handle, "GET", "/config")).body).toEqual({ configVersion: 1, operators: ["Shiv", "Priya", "Arshil"], defaults: {} });
+    expect((await call(handle, "GET", "/config")).body).toEqual({ configVersion: 1, operators: ["Shiv", "Priya", "Arshil"], defaults: {}, ai: {} });
     const same = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv", "Priya", "Arshil"] } });
     expect(same.body.unchanged).toBe(true);   // no new version, no log line
     const back = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: [] } });
@@ -502,5 +502,100 @@ describe("phase 5: data tools", () => {
     expect((await call(ro.handle, "GET", "/data", { cookie: rc })).status).toBe(200);
     for (const r of ["/data/backup", "/data/release-roster", "/data/drop-openbox", "/data/clear"]) expect((await call(ro.handle, "POST", r, { cookie: rc, body: { id: "x" } })).status, r).toBe(403);
     h.close();
+  });
+});
+
+describe("phase 6: the AI proxy, read counts and model settings", () => {
+  const read = (over = {}) => ({ model: "claude-haiku-5-5", max_tokens: 300, messages: [{ role: "user", content: "x" }], ...over });
+  const fakeAnthropic = (calls, status = 200) => async (url, opts) => { calls.push({ url, key: opts.headers["x-api-key"], body: JSON.parse(String(opts.body)) }); return { status, text: async () => JSON.stringify(status === 200 ? { content: [{ type: "text", text: "{}" }], usage: { input_tokens: 1000, output_tokens: 50, cache_read_input_tokens: 2000 } } : { type: "error", error: { type: "overloaded_error", message: "busy" } }) }; };
+  const ai = async (opts = {}) => (await import("../../../ai-proxy.js")).createAiProxy({ env: { CLAUDE_API_KEY: KEY }, dataFile: path.join(tmp(), "hub-test.json"), log: false, ...opts });
+  const post = (p, body, { ip = "10.0.0.5", headers = {} } = {}) => new Promise(resolve => {
+    const req = Readable.from([Buffer.from(JSON.stringify(body))]);
+    Object.assign(req, { method: "POST", url: "/v1/messages", headers, socket: { remoteAddress: ip } });
+    const res = { statusCode: 200, headers: {}, setHeader(k, v) { this.headers[k] = v; }, end(t) { resolve({ status: this.statusCode, body: JSON.parse(t || "{}") }); } };
+    p.handle(req, res);
+  });
+  it("passes the app's own read with the server's key, and counts it per day, station and model", async () => {
+    const calls = [], p = await ai({ fetchImpl: fakeAnthropic(calls) });
+    const r = await post(p, read(), { headers: { "x-jqc-station": "st-station2" } });
+    expect(r.status).toBe(200);
+    expect(calls[0]).toMatchObject({ url: "https://api.anthropic.com/v1/messages", key: KEY });
+    const day = Object.values(p.stats().days)[0];
+    expect(day).toMatchObject({ calls: 1, failed: 0, input: 1000, output: 50, cacheRead: 2000 });
+    expect(day.stations["st-station2"]).toEqual({ calls: 1, failed: 0 });
+    expect(day.models["claude-haiku-5-5"]).toMatchObject({ calls: 1, input: 1000 });
+  });
+  it("refuses what is not the app's own read: another model, a huge answer, many messages, another path or method", async () => {
+    const calls = [], p = await ai({ fetchImpl: fakeAnthropic(calls) });
+    expect((await post(p, read({ model: "claude-opus-5-5" }))).status).toBe(403);
+    expect((await post(p, read({ max_tokens: 64000 }))).status).toBe(400);
+    expect((await post(p, read({ messages: [1, 2, 3, 4, 5] }))).status).toBe(400);
+    const other = await new Promise(resolve => { const req = Readable.from([]); Object.assign(req, { method: "GET", url: "/v1/models", headers: {}, socket: {} }); p.handle(req, { setHeader() {}, end(t) { resolve({ status: this.statusCode, t }); } }); });
+    expect(other.status).toBe(404);
+    expect(calls.length).toBe(0);
+    expect(Object.values(p.stats().days)[0].refused).toBe(3);
+  });
+  it(`allows at most so many reads a minute from one PC, not another`, async () => {
+    const calls = [], p = await ai({ fetchImpl: fakeAnthropic(calls) });
+    const { PER_PC_MIN } = await import("../../../ai-proxy.js");
+    for (let i = 0; i < PER_PC_MIN; i++) await post(p, read());
+    expect((await post(p, read())).status).toBe(429);
+    expect((await post(p, read(), { ip: "10.0.0.9" })).status).toBe(200);
+  });
+  it("a request with its own key (the test tools) spends its own key, is not checked or counted", async () => {
+    const calls = [], p = await ai({ fetchImpl: fakeAnthropic(calls) });
+    expect((await post(p, read({ model: "claude-opus-5-5" }), { headers: { "x-api-key": "sk-own" } })).status).toBe(200);
+    expect(calls[0].key).toBe("sk-own");
+    expect(Object.keys(p.stats().days)).toEqual([]);
+  });
+  it("a failed read is counted as failed; the counts are written to data/<hub>-ai.json; the median comes from the buckets", async () => {
+    const dir = tmp(), dataFile = path.join(dir, "hub-test.json"), calls = [];
+    const { createAiProxy, aiStatsFileFor, medianMs } = await import("../../../ai-proxy.js");
+    const p = createAiProxy({ env: { CLAUDE_API_KEY: KEY }, dataFile, log: false, fetchImpl: fakeAnthropic(calls, 529) });
+    expect((await post(p, read())).status).toBe(529);
+    p.flush();
+    const saved = JSON.parse(fs.readFileSync(aiStatsFileFor(dataFile), "utf8"));
+    expect(Object.values(saved.days)[0]).toMatchObject({ calls: 1, failed: 1 });
+    expect(path.basename(aiStatsFileFor(dataFile))).toBe("hub-test-ai.json");   // in data\, which the guard never serves
+    expect(medianMs([0, 3, 1])).toBe(375);
+  });
+  it("the model settings: checked, development and testing only, served to stations only there, and the panel's model is let through", async () => {
+    expect(cleanAi({ model: "claude-sonnet-5-5", maxPx: 1024 }).error).toBe("");
+    expect(cleanAi({ model: "gpt-4" }).error).toBeTruthy();
+    expect(cleanAi({ maxPx: 99 }).error).toBeTruthy();
+    const dir = tmp(), dataFile = path.join(dir, "hub-test.json");
+    const a = createAdmin({ dataFile, stage: "development", env: ENV, git: async () => ({}) });
+    const c = cookieFrom(await call(a.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(a.handle, "PUT", "/settings/ai", { cookie: c, body: { ai: { model: "claude-sonnet-5-5" } } })).status).toBe(200);
+    expect((await call(a.handle, "GET", "/config")).body.ai).toEqual({ model: "claude-sonnet-5-5" });
+    const calls = [];
+    const { default: plugin } = await import("../../../ai-proxy.js");
+    let mw; plugin({ env: { CLAUDE_API_KEY: KEY }, dataFile, log: false, fetchImpl: fakeAnthropic(calls) }).configureServer({ middlewares: { use: (_, f) => { mw = f; } } });
+    const viaPlugin = await new Promise(resolve => { const req = Readable.from([Buffer.from(JSON.stringify(read({ model: "claude-sonnet-5-5" })))]); Object.assign(req, { method: "POST", url: "/v1/messages", headers: {}, socket: { remoteAddress: "10.1.1.1" } }); mw(req, { statusCode: 200, setHeader() {}, end() { resolve(this.statusCode); } }); });
+    expect(viaPlugin).toBe(200);
+    const prod = createAdmin({ dataFile: path.join(dir, "hub.json"), stage: "production", env: { ...ENV, JQC_ADMIN_WRITE: "1" }, git: async () => ({}) });
+    const pc = cookieFrom(await call(prod.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(prod.handle, "PUT", "/settings/ai", { cookie: pc, body: { ai: { model: "claude-sonnet-5-5" } } })).status).toBe(403);
+    expect((await call(prod.handle, "GET", "/config")).body.ai).toEqual({});
+  });
+  it("token prices: checked, saved with the change log", async () => {
+    expect(cleanPrices({ "claude-haiku-5-5": { input: 1, output: 5 } }).error).toBe("");
+    expect(cleanPrices({ "claude-haiku-5-5": { input: -1 } }).error).toBeTruthy();
+    expect(cleanPrices({ "rm -rf": { input: 1 } }).error).toBeTruthy();
+    const a = createAdmin({ dataFile: path.join(tmp(), "hub-test.json"), stage: "development", env: ENV, git: async () => ({}) });
+    const c = cookieFrom(await call(a.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(a.handle, "PUT", "/settings/prices", { cookie: c, body: { prices: { "claude-haiku-5-5": { input: 1, output: 5 } } } })).status).toBe(200);
+    expect((await call(a.handle, "GET", "/audit", { cookie: c })).body.entries[0].what).toBe("token prices");
+  });
+  it("the station sends its id with each read, and every stage uses the new proxy, not Vite's open one", async () => {
+    const { readJersey } = await import("../vision.js");
+    let headers = null;
+    await readJersey({ base64: "x", station: "st-station3", retries: 0, fetchImpl: async (u, o) => { headers = o.headers; return { ok: true, status: 200, text: async () => JSON.stringify({ content: [{ type: "text", text: '{"jersey_present":true,"name":"","number":"7"}' }] }) }; } }).catch(() => {});
+    expect(headers["x-jqc-station"]).toBe("st-station3");
+    for (const f of ["vite.config.js", "vite.config.stage.js"]) {
+      const src = fs.readFileSync(new URL(`../../../${f}`, import.meta.url), "utf8");
+      expect(src, f).toMatch(/aiProxyPlugin\(\{ env/);
+      expect(src, f).not.toMatch(/'\/api\/anthropic': anthropicProxy/);
+    }
   });
 });

@@ -138,7 +138,7 @@ export function orderNumbersHint(numbers) {
 
 // One read through the Anthropic proxy (/api/anthropic): the frame and the
 // prompt in, the parsed JSON out. A failed call is retried `retries` times.
-export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort = DEFAULT_EFFORT, thinking = DEFAULT_THINKING, orderNumbers = null, timeoutMs = 25000, retries = 1, fetchImpl = globalThis.fetch }) {
+export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort = DEFAULT_EFFORT, thinking = DEFAULT_THINKING, orderNumbers = null, timeoutMs = 25000, retries = 1, fetchImpl = globalThis.fetch, station = "" }) {
   const hint = orderNumbersHint(orderNumbers).trim();
   // Current-generation models think before answering (adaptive thinking is on
   // by default) and need room for it; older ones take a plain token cap.
@@ -163,6 +163,7 @@ export async function readJersey({ base64, apiKey, model = DEFAULT_MODEL, effort
           ...(apiKey ? { "x-api-key": apiKey } : {}),   // the station sends none: the server's proxy adds the key (vite.config.js)
           "anthropic-version": "2023-06-01",
           "anthropic-dangerous-direct-browser-access": "true",
+          ...(station ? { "x-jqc-station": station } : {}),   // the server counts reads per station (ai-proxy.js)
         },
         body: JSON.stringify({
           ...request,

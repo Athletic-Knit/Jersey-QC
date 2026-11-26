@@ -4628,9 +4628,12 @@ export default function App() {
     const readOne = async (b64, url) => {
       if (REPLAY_ON && replayReadRef.current) return replayReadRef.current;   // replay: yesterday's read stands in for the camera (src/lib/replay.js)
       // Send a smaller frame than the camera gives: same read, faster answer.
-      const sendB64 = await frameForUpload(url, SEND_MAX_PX).catch(() => b64);
+      // The model settings: .env.local's (config.js), with the admin panel's on top on development
+      // and testing (phase 6; /config never hands them to a production station). Read at each scan.
+      const ai = { model: MODEL, effort: EFFORT, thinking: THINKING, maxPx: SEND_MAX_PX, ...(cachedFloorConfig()?.ai || {}) };
+      const sendB64 = await frameForUpload(url, ai.maxPx).catch(() => b64);
       const t0 = Date.now();
-      const r = await readJersey({ base64: sendB64, model: MODEL, effort: EFFORT, thinking: THINKING, orderNumbers: scanRoster.filter(x => !isDone(x)).map(x => x.number) });
+      const r = await readJersey({ base64: sendB64, model: ai.model, effort: ai.effort, thinking: ai.thinking, station: stationId(), orderNumbers: scanRoster.filter(x => !isDone(x)).map(x => x.number) });
       console.log(`Read in ${Date.now() - t0} ms: #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"}${r.laid_flat ? "" : " [not flat]"} (${r.jersey_colour || "?"}${r.trim_colour ? "/" + r.trim_colour : ""}; sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
       return r;
     };

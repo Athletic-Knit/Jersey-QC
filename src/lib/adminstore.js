@@ -33,7 +33,9 @@ export function cleanAdmin(raw, dropped = []) {
   const audit = Array.isArray(o.audit) ? o.audit.filter(e => e && typeof e === "object" && Number.isFinite(e.at) && typeof e.what === "string") : [];
   const given = o.settings && typeof o.settings === "object" && !Array.isArray(o.settings) ? o.settings : {};
   const settings = {};
-  for (const [k, v] of Object.entries(given)) if (!["operators", "printers", "defaults"].includes(k)) settings[k] = v;   // a later version's section: kept
+  for (const [k, v] of Object.entries(given)) if (!["operators", "printers", "defaults", "ai", "prices"].includes(k)) settings[k] = v;   // a later version's section: kept
+  if (given.ai && typeof given.ai === "object") { const r = cleanAi(given.ai); if (r.error) dropped.push(`ai: ${r.error}`); else if (Object.keys(r.map).length) settings.ai = r.map; }
+  if (given.prices && typeof given.prices === "object") { const r = cleanPrices(given.prices); if (r.error) dropped.push(`prices: ${r.error}`); else if (Object.keys(r.map).length) settings.prices = r.map; }
   if (Array.isArray(given.operators)) {
     const ok = given.operators.filter(n => { const r = cleanOperators([n]); if (r.error) dropped.push(`operator ${JSON.stringify(n)}: ${r.error}`); return !r.error; });
     const list = cleanOperators(ok).list; if (list.length) settings.operators = list;
@@ -178,6 +180,43 @@ export function cleanDefaults(obj) {
   if (new Set(keys).size !== keys.length) {
     const twice = ON_SCREEN_KEYS.filter((k, i) => keys.indexOf(merged[k]) !== i).map(k => KEY_LABEL[k]);
     return { map: {}, error: `Two of the on-screen keys would be the same key (${twice.join(", ")} and another), counting the app's own keys for the ones left blank.` };
+  }
+  return { map: out, error: "" };
+}
+
+// The model the stations read with (phase 6, 26 Nov 2026): development and testing only (the
+// panel refuses it on production, and /config never hands it to a production station). Blank
+// = .env.local's (VITE_CLAUDE_MODEL …), else the app's own (vision.js).
+export const AI_MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5"];
+export const AI_RULES = {
+  model: v => AI_MODELS.includes(v),
+  effort: v => ["low", "medium", "high"].includes(v),
+  thinking: v => ["off", "adaptive"].includes(v),
+  maxPx: v => Number.isInteger(v) && v >= 480 && v <= 1600,
+};
+export function cleanAi(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return { map: {}, error: "The model settings must be a map." };
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null || v === undefined || v === "") continue;
+    if (!own(AI_RULES, k)) return { map: {}, error: `"${k}" is not a model setting.` };
+    if (!AI_RULES[k](v)) return { map: {}, error: `${k}: ${JSON.stringify(v)} is not a value it can take.` };
+    out[k] = v;
+  }
+  return { map: out, error: "" };
+}
+// What a million tokens cost, per model, for the read counts' cost column (typed in by a
+// developer from Anthropic's price page; none is guessed here). Dollars, 0 to 1000.
+const PRICE_KEYS = ["input", "output", "cacheRead", "cacheWrite"];
+export function cleanPrices(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return { map: {}, error: "The prices must be a map of models." };
+  const out = {};
+  for (const [m, p] of Object.entries(obj)) {
+    if (!/^claude-[a-z0-9.-]{1,60}$/.test(m)) return { map: {}, error: `"${m}" is not a model name.` };
+    if (!p || typeof p !== "object") continue;
+    const row = {};
+    for (const k of PRICE_KEYS) { if (p[k] === undefined || p[k] === null || p[k] === "") continue; const v = Number(p[k]); if (!(v >= 0 && v <= 1000)) return { map: {}, error: `${m} ${k}: ${p[k]} is not a price.` }; row[k] = v; }
+    if (Object.keys(row).length) out[m] = row;
   }
   return { map: out, error: "" };
 }

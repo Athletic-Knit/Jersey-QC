@@ -22,7 +22,7 @@ import path from "node:path";
 import process from "node:process";
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
-import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators, cleanPrinters, cleanDefaults, printerNameOk } from "./src/lib/adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators, cleanPrinters, cleanDefaults, printerNameOk, cleanAi, cleanPrices, AI_MODELS } from "./src/lib/adminstore.js";
 
 export const SESSION_MS = 8 * 60 * 60 * 1000;
 export const TRIES = 5, LOCK_MS = 10 * 60 * 1000;
@@ -100,8 +100,10 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
   // configVersion to every station report's answer (hub-plugin.js reads it here), so a
   // station knows when to fetch them again.
   const fallbackOperators = String(env.VITE_OPERATORS || "Person 1,Person 2,Person 3").split(",").map(x => x.trim()).filter(Boolean);
-  const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [], defaults: store.data.settings.defaults || {} });
-  (globalThis.__jqcAdminConfig ||= new Map()).set(path.resolve(dataFile), { version: () => store.data.configVersion || 0, printers: () => store.data.settings.printers || {} });
+  // The model settings reach stations on development and testing only (phase 6): a production station never takes them.
+  const aiFor = () => (stage === "production" ? {} : store.data.settings.ai || {});
+  const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [], defaults: store.data.settings.defaults || {}, ai: aiFor() });
+  (globalThis.__jqcAdminConfig ||= new Map()).set(path.resolve(dataFile), { version: () => store.data.configVersion || 0, printers: () => store.data.settings.printers || {}, ai: aiFor });
   const hubPrinting = () => hubs?.()?.get?.(path.resolve(dataFile))?.printing || null;
   const STATION_IDS = ["st-station1", "st-station2", "st-station3"];
   const hubEntry = () => hubs?.()?.get?.(path.resolve(dataFile)) || null;
@@ -300,6 +302,41 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
           catch (e) { return send(res, 500, { error: `Not cleared: ${e.message}. The backup ${b.name} was made.` }); }
         }
         return send(res, 404, { error: `no such admin route: POST ${route}` });
+      }
+      if (route === "/ai" && req.method === "GET") {
+        const p = globalThis.__jqcAi?.get(path.resolve(dataFile));
+        return send(res, 200, { configVersion: store.data.configVersion || 0, stage, writable, modelEditable: writable && stage !== "production", models: AI_MODELS, ai: store.data.settings.ai || {}, prices: store.data.settings.prices || {},
+          envModel: { model: String(env.VITE_CLAUDE_MODEL || ""), effort: String(env.VITE_CLAUDE_EFFORT || ""), thinking: String(env.VITE_CLAUDE_THINKING || ""), maxPx: Number(env.VITE_SEND_MAX_PX) || 0 },
+          proxy: p ? { allowed: p.allowed(), limits: p.limits } : null, days: p ? p.stats().days : {} });
+      }
+      if (route === "/settings/ai" && req.method === "PUT") {
+        const body = await readJson(req);
+        if (Number.isFinite(body.configVersion) && body.configVersion !== (store.data.configVersion || 0)) return send(res, 409, { error: "Someone saved the admin settings since this page loaded them. Reload the page and make your change again." });
+        if (stage === "production") return send(res, 403, { error: "The model is not changed from the panel on production: it stays what .env.local says." });
+        const { map, error } = cleanAi(body.ai);
+        if (error) return send(res, 400, { error });
+        const before = store.data.settings.ai || {};
+        if (JSON.stringify(before) === JSON.stringify(map)) return send(res, 200, { ai: map, unchanged: true });
+        const settings = { ...store.data.settings };
+        if (Object.keys(map).length) settings.ai = map; else delete settings.ai;
+        const show = m => Object.keys(m).length ? Object.entries(m).map(([k, v]) => `${k} ${v}`) : "(.env.local / the app's own)";
+        const bad = change(req, me, "model settings", settings, show(before), show(map));
+        if (bad) return send(res, bad.code, { error: bad.error });
+        return send(res, 200, { ai: map, configVersion: store.data.configVersion });
+      }
+      if (route === "/settings/prices" && req.method === "PUT") {
+        const body = await readJson(req);
+        if (Number.isFinite(body.configVersion) && body.configVersion !== (store.data.configVersion || 0)) return send(res, 409, { error: "Someone saved the admin settings since this page loaded them. Reload the page and make your change again." });
+        const { map, error } = cleanPrices(body.prices);
+        if (error) return send(res, 400, { error });
+        const before = store.data.settings.prices || {};
+        if (JSON.stringify(before) === JSON.stringify(map)) return send(res, 200, { prices: map, unchanged: true });
+        const settings = { ...store.data.settings };
+        if (Object.keys(map).length) settings.prices = map; else delete settings.prices;
+        const show = m => Object.keys(m).length ? Object.entries(m).map(([k, v]) => `${k} ${Object.entries(v).map(([a, b]) => `${a} $${b}`).join(" ")}`) : "(none)";
+        const bad = change(req, me, "token prices", settings, show(before), show(map));
+        if (bad) return send(res, bad.code, { error: bad.error });
+        return send(res, 200, { prices: map, configVersion: store.data.configVersion });
       }
       if (route === "/printers" && req.method === "GET") {
         const pr = hubPrinting();

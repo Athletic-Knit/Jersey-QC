@@ -6,7 +6,7 @@
 // screen that works in both themes.
 import { useCallback, useEffect, useState } from "react";
 import { THEMES, loadTheme, saveTheme } from "../lib/theme.js";
-import { DEFAULT_SETTINGS } from "../config.js";
+import { DEFAULT_SETTINGS, MODEL, EFFORT, THINKING, SEND_MAX_PX } from "../config.js";
 
 const api = async (path, opts = {}) => {
   const r = await fetch(`/api/admin${path}`, { credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...opts });
@@ -548,6 +548,105 @@ function DataTools() {
   );
 }
 
+// AI reads (phase 6): the model the stations read with (changed here on development and
+// testing only), what the server lets through (ai-proxy.js), and the reads it counted: calls,
+// failures, refusals, time, tokens and, once prices are typed in, what they cost.
+const AI_LABEL = { model: "Model", effort: "Effort", thinking: "Thinking", maxPx: "Frame size (longest side, px)" };
+const AI_OPTS = { effort: [["low", "Low"], ["medium", "Medium"], ["high", "High"]], thinking: [["off", "Off"], ["adaptive", "Adaptive"]], maxPx: [[640, "640"], [800, "800"], [1024, "1024"], [1280, "1280"]] };
+const tok = n => (n >= 1e6 ? `${(n / 1e6).toFixed(2)} M` : n >= 1e3 ? `${Math.round(n / 1e3)} k` : String(n || 0));
+const medianOf = (b = []) => { const n = b.reduce((a, x) => a + (x || 0), 0); if (!n) return 0; let s = 0; for (let i = 0; i < b.length; i++) { s += b[i] || 0; if (s >= n / 2) return (i + 0.5) * 250; } return 0; };
+const costOf = (day, prices) => {
+  let total = 0, priced = false;
+  for (const [m, u] of Object.entries(day.models || {})) {
+    const p = prices[m]; if (!p || typeof u !== "object") continue;
+    priced = true;
+    total += ((u.input || 0) * (p.input || 0) + (u.output || 0) * (p.output || 0) + (u.cacheRead || 0) * (p.cacheRead || 0) + (u.cacheWrite || 0) * (p.cacheWrite || 0)) / 1e6;
+  }
+  return priced ? total : null;
+};
+function AiReads() {
+  const [d, setD] = useState(null);
+  const [ai, setAi] = useState({});
+  const [prices, setPrices] = useState({});
+  const [msg, setMsg] = useState({ tone: "", text: "" });
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => api("/ai").then(r => { setD(r); setAi(r.ai || {}); setPrices(r.prices || {}); }).catch(e => setMsg({ tone: "fail", text: e.message })), []);
+  useEffect(() => { load(); const t = setInterval(() => api("/ai").then(r => setD(x => ({ ...r, ai: x?.ai ?? r.ai, prices: x?.prices ?? r.prices }))).catch(() => {}), 15000); return () => clearInterval(t); }, [load]);
+  if (!d) return <section style={st.card}>{msg.text ? <span style={{ color: "var(--fail-text)" }}>{msg.text}</span> : "Loading…"}</section>;
+  const envOf = k => (k === "maxPx" ? (d.envModel.maxPx || SEND_MAX_PX) : (d.envModel[k] || { model: MODEL, effort: EFFORT, thinking: THINKING }[k]));
+  const save = async (route, body, label) => {
+    setBusy(true); setMsg({ tone: "", text: "" });
+    try { const r = await api(route, { method: "PUT", body: JSON.stringify({ ...body, configVersion: d.configVersion }) }); setMsg({ tone: "pass", text: r.unchanged ? "Nothing to save." : label }); await load(); }
+    catch (e) { setMsg({ tone: "fail", text: e.message }); }
+    finally { setBusy(false); }
+  };
+  const days = Object.entries(d.days || {}).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 14);
+  const today = days[0]?.[1];
+  const cell = { padding: "6px 8px", borderBottom: "1px solid var(--line)", verticalAlign: "middle", fontVariantNumeric: "tabular-nums" };
+  const head = cols => <thead><tr>{cols.map(h => <th key={h} style={{ ...cell, textAlign: "left", color: "var(--text-dim)", borderBottom: "2px solid var(--line-strong)" }}>{h}</th>)}</tr></thead>;
+  const aiChanged = JSON.stringify(ai) !== JSON.stringify(d.ai || {});
+  const pricesChanged = JSON.stringify(prices) !== JSON.stringify(d.prices || {});
+  const setPrice = (m, k, v) => setPrices(p => { const n = { ...p, [m]: { ...(p[m] || {}) } }; if (v === "") delete n[m][k]; else n[m][k] = Number(v); if (!Object.keys(n[m]).length) delete n[m]; return n; });
+  return (
+    <>
+      {msg.text && <div role="status" style={{ ...st.card, borderColor: `var(--${msg.tone || "info"})`, background: `var(--${msg.tone || "info"}-bg)`, color: `var(--${msg.tone || "info"}-text)` }}>{msg.text}</div>}
+      <section style={st.card}>
+        <h2 style={st.h2}>The model the stations read with</h2>
+        <p style={{ margin: "0 0 10px", color: "var(--text-dim)" }}>{d.modelEditable ? "Changed here, it is used from each station's next scan on this server. A different model changes what goes green: try it on testing with the recognition stress test before the floor gets it." : d.stage === "production" ? "On production the model stays what .env.local says: it is not changed from the panel." : "Read only on this server."}</p>
+        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>{head(["Setting", ".env.local / app", "Here"])}<tbody>
+          {Object.keys(AI_LABEL).map(k => (
+            <tr key={k} style={ai[k] !== undefined ? { background: "var(--info-bg)" } : undefined}>
+              <td style={cell}>{AI_LABEL[k]}</td>
+              <td style={{ ...cell, color: "var(--text-dim)" }}>{String(envOf(k))}</td>
+              <td style={cell}>
+                <select aria-label={AI_LABEL[k]} style={{ ...st.input, width: "auto", padding: "6px 10px" }} disabled={!d.modelEditable} value={ai[k] ?? ""} onChange={e => setAi(a => { const n = { ...a }; const v = e.target.value; if (v === "") delete n[k]; else n[k] = k === "maxPx" ? Number(v) : v; return n; })}>
+                  <option value="">.env.local / app</option>
+                  {(k === "model" ? d.models.map(m => [m, m]) : AI_OPTS[k]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </td>
+            </tr>
+          ))}
+        </tbody></table></div>
+        {d.modelEditable && <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <button style={aiChanged ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!aiChanged || busy} onClick={() => save("/settings/ai", { ai }, "Saved. Each station reads with it from its next scan.")}>Save</button>
+          {aiChanged && <button style={st.btn} onClick={() => setAi(d.ai || {})}>Undo changes</button>}
+        </div>}
+      </section>
+
+      <section style={st.card}>
+        <h2 style={st.h2}>Reads <span style={{ fontWeight: 400, color: "var(--text-dim)", fontSize: 14 }}>· with this server's key, per day</span></h2>
+        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>{head(["Day", "Reads", "Failed", "Refused", "Median time", "Input", "Output", "Cache read", "Cache write", "Cost"])}<tbody>
+          {days.map(([day, x]) => { const c = costOf(x, d.prices || {}); return (
+            <tr key={day}><td style={{ ...cell, fontWeight: 700 }}>{day}</td><td style={cell}>{x.calls}</td><td style={{ ...cell, color: x.failed ? "var(--fail-text)" : undefined }}>{x.failed}</td><td style={{ ...cell, color: x.refused ? "var(--warn-text)" : undefined }}>{x.refused}</td><td style={cell}>{(medianOf(x.ms) / 1000).toFixed(1)} s</td><td style={cell}>{tok(x.input)}</td><td style={cell}>{tok(x.output)}</td><td style={cell}>{tok(x.cacheRead)}</td><td style={cell}>{tok(x.cacheWrite)}</td><td style={cell}>{c === null ? "—" : `$${c.toFixed(2)}`}</td></tr>); })}
+          {!days.length && <tr><td colSpan={10} style={{ ...cell, color: "var(--text-dim)" }}>No reads counted yet on this server (counting started with phase 6).</td></tr>}
+        </tbody></table></div>
+        {today && <p style={{ margin: "10px 0 0" }}>Today by station: {Object.entries(today.stations || {}).map(([s, v]) => `${s.replace(/^st-station/i, "Station ")} ${v.calls}${v.failed ? ` (${v.failed} failed)` : ""}`).join(" · ") || "none"}. Refused means the server stopped a read that was not the app's own, or one too many from one PC in a minute.</p>}
+      </section>
+
+      <section style={st.card}>
+        <h2 style={st.h2}>What the server lets through</h2>
+        {d.proxy ? <ul style={{ margin: 0, paddingLeft: 20 }}>
+          <li>Models: {d.proxy.allowed.join(", ")}</li>
+          <li>At most {d.proxy.limits.maxBody / 1048576} MB a read and {d.proxy.limits.maxTokens} tokens of answer</li>
+          <li>At most {d.proxy.limits.perPcMin} reads a minute from one PC and {d.proxy.limits.allMin} from all</li>
+          <li>A request that brings its own API key (the test tools) spends its own key and is not counted</li>
+        </ul> : <p style={{ margin: 0, color: "var(--text-dim)" }}>The AI proxy is not running on this server.</p>}
+      </section>
+
+      <section style={st.card}>
+        <h2 style={st.h2}>Token prices <span style={{ fontWeight: 400, color: "var(--text-dim)", fontSize: 14 }}>· dollars per million tokens, from Anthropic's price page, for the cost column</span></h2>
+        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>{head(["Model", "Input", "Output", "Cache read", "Cache write"])}<tbody>
+          {d.models.map(m => <tr key={m}><td style={{ ...cell, fontWeight: 700 }}>{m}</td>{["input", "output", "cacheRead", "cacheWrite"].map(k => <td key={k} style={cell}><input aria-label={`${m} ${k}`} type="number" min="0" step="0.01" style={{ ...st.input, width: 100, padding: "6px 8px" }} disabled={!d.writable} value={prices[m]?.[k] ?? ""} onChange={e => setPrice(m, k, e.target.value)} placeholder="—" /></td>)}</tr>)}
+        </tbody></table></div>
+        {d.writable && <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <button style={pricesChanged ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!pricesChanged || busy} onClick={() => save("/settings/prices", { prices }, "Prices saved.")}>Save prices</button>
+          {pricesChanged && <button style={st.btn} onClick={() => setPrices(d.prices || {})}>Undo changes</button>}
+        </div>}
+      </section>
+    </>
+  );
+}
+
 function Appearance() {
   const [choice, setChoice] = useState(loadTheme);
   const pick = id => { setChoice(id); saveTheme(id); };
@@ -564,7 +663,7 @@ function Appearance() {
   );
 }
 
-const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "printers", label: "Printers" }, { id: "defaults", label: "Station defaults" }, { id: "data", label: "Data" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
+const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "printers", label: "Printers" }, { id: "defaults", label: "Station defaults" }, { id: "data", label: "Data" }, { id: "ai", label: "AI reads" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
 
 export default function AdminPanel() {
   const [s, setS] = useState(null);         // the session answer: stage, setup, signedIn …
@@ -606,6 +705,7 @@ export default function AdminPanel() {
               {tab === "printers" && <Printers />}
               {tab === "defaults" && <StationDefaults />}
               {tab === "data" && <DataTools />}
+              {tab === "ai" && <AiReads />}
               {tab === "log" && <ServerLog />}
               {tab === "changes" && <ChangeLog />}
               {tab === "look" && <Appearance />}
