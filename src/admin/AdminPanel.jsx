@@ -714,7 +714,7 @@ function Appearance() {
   return (
     <section style={st.card}>
       <h2 style={st.h2}>Light or dark</h2>
-      <p style={{ margin: "0 0 12px", color: "var(--text-dim)" }}>For this browser. Each station has the same choice in its Settings (Screen), and its default is under Station defaults; on the stations the sign-in screen and the supervisor board follow it, the scanning screens later.</p>
+      <p style={{ margin: "0 0 12px", color: "var(--text-dim)" }}>For this browser. Each station has the same choice in its Settings (Screen), and its default is under Station defaults; on the stations every screen follows it (the camera picture, the photo viewer and the wall view stay dark).</p>
       <div role="radiogroup" aria-label="Light or dark" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         {THEMES.map(t => (
           <button key={t.id} role="radio" aria-checked={choice === t.id} onClick={() => pick(t.id)} style={choice === t.id ? st.pri : st.btn}>{t.label}</button>

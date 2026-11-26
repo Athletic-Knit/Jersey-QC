@@ -326,13 +326,12 @@ describe("phase 4: station defaults", () => {
     const rc = cookieFrom(await call(ro.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
     expect((await call(ro.handle, "PUT", "/settings/defaults", { cookie: rc, body: { defaults: { stickers: true } } })).status).toBe(403);
   });
-  it("the app: defaults are taken only with no order open, and light or dark only on the sign-in screen and the board", () => {
+  it("the app: defaults are taken only with no order open, and light or dark on every screen (phase 8)", () => {
     const src = fs.readFileSync(new URL("../../App.jsx", import.meta.url), "utf8");
     expect(src).toMatch(/const orderOpen = sessionStarted \|\| \(!!savedSession && !resumeDecided\);/);   // Resume not answered yet counts as an order (Fable's review, H2)
     expect(src).toMatch(/if \(!floorPending \|\| orderOpen\) return;/);
     expect(src).toMatch(/baseSettings\(DEFAULT_SETTINGS, inUse \?\? \(loadSession\(\) \? \{\} : cachedFloorConfig\(\)\?\.defaults\)\)/);   // a reload starts from the defaults in use
-    expect(src).toMatch(/const themedScreen = !signedIn \|\| showSupervisor;/);
-    expect(src).toMatch(/else clearTheme\(\);/);
+    expect(src).toMatch(/useEffect\(\(\) => \{ applyTheme\(settings\.theme \|\| "dark"\); \}, \[settings\.theme\]\);/);   // every screen since phase 8
     const css = fs.readFileSync(new URL("../../index.css", import.meta.url), "utf8");
     expect(css).toMatch(/:root, :root\[data-theme="dark"\] \{\n {2}--k-page: #0d1117;/);   // dark: the colours as they were
   });
@@ -389,7 +388,7 @@ describe("Fable's review of phases 1-4 (26 Nov 2026)", () => {
     const block = css.match(/:root, :root\[data-theme="dark"\] \{([^}]*--k-page[^}]*)\}/)[1];
     const dark = Object.fromEntries([...block.matchAll(/--(k-[a-z0-9-]+): (#[0-9a-f]{6})/g)].map(m => [m[1], m[2]]));
     // Each token's dark value is the literal it replaced (the colours as they were before phase 4).
-    const WAS = { "k-page": "#0d1117", "k-card": "#161b22", "k-field": "#1e293b", "k-rule": "#21262d", "k-rule-2": "#334155", "k-rule-3": "#3f4b5c", "k-ink-5": "#475569", "k-ink-4": "#64748b", "k-ink-3b": "#7c8ba1", "k-ink-3": "#94a3b8", "k-ink-2": "#cbd5e1", "k-ink-1": "#e2e8f0", "k-ink-0": "#f1f5f9", "k-blue": "#3b82f6", "k-blue-ink": "#60a5fa", "k-blue-ink-2": "#93c5fd", "k-green": "#22c55e", "k-green-ink": "#4ade80", "k-green-ink-2": "#86efac", "k-green-deep": "#166534", "k-amber": "#f59e0b", "k-amber-ink": "#fbbf24", "k-amber-ink-2": "#fcd34d", "k-amber-ink-3": "#fde68a", "k-red": "#ef4444", "k-red-ink": "#f87171", "k-red-ink-2": "#fca5a5", "k-red-ink-3": "#fecaca", "k-pink-ink": "#f9a8d4", "k-violet-ink": "#ddd6fe", "k-strong": "#ffffff" };
+    const WAS = { "k-page": "#0d1117", "k-card": "#161b22", "k-field": "#1e293b", "k-rule": "#21262d", "k-rule-2": "#334155", "k-rule-3": "#3f4b5c", "k-ink-5": "#475569", "k-ink-4": "#64748b", "k-ink-3b": "#7c8ba1", "k-ink-3": "#94a3b8", "k-ink-2": "#cbd5e1", "k-ink-1": "#e2e8f0", "k-ink-0": "#f1f5f9", "k-blue": "#3b82f6", "k-blue-ink": "#60a5fa", "k-blue-ink-2": "#93c5fd", "k-green": "#22c55e", "k-green-ink": "#4ade80", "k-green-ink-2": "#86efac", "k-green-deep": "#166534", "k-amber": "#f59e0b", "k-amber-ink": "#fbbf24", "k-amber-ink-2": "#fcd34d", "k-amber-ink-3": "#fde68a", "k-red": "#ef4444", "k-red-ink": "#f87171", "k-red-ink-2": "#fca5a5", "k-red-ink-3": "#fecaca", "k-pink-ink": "#f9a8d4", "k-violet-ink": "#ddd6fe", "k-strong": "#ffffff", "k-bg-green": "#052e16", "k-bg-amber": "#1c1a06", "k-bg-violet": "#1a1033", "k-bg-sky": "#082f49", "k-bg-red": "#450a0a", "k-green-locked": "#14532d", "k-rule-0": "#30363d", "k-sky": "#38bdf8", "k-sky-ink": "#7dd3fc", "k-sky-ink-2": "#bae6fd", "k-sky-ink-3": "#e0f2fe", "k-violet": "#a78bfa", "k-violet-ink-2": "#c4b5fd", "k-purple-ink": "#d8b4fe", "k-purple": "#c084fc", "k-purple-2": "#a855f7", "k-purple-deep": "#6b21a8", "k-indigo": "#818cf8", "k-blue-ink-3": "#bfdbfe", "k-green-ink-3": "#bbf7d0", "k-teal-ink": "#a7f3d0", "k-orange-ink": "#fed7aa", "k-stone-ink": "#a8a29e", "k-stone-ink-2": "#d6d3d1" };   // phase 8: the scanning screens' colours
     expect(dark).toEqual(WAS);
   });
   it("M6: clearTheme stops following the PC and takes the theme off", async () => {

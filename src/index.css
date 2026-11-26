@@ -71,6 +71,30 @@ html { color-scheme: dark; }
   --k-pink-ink: #f9a8d4;
   --k-violet-ink: #ddd6fe;
   --k-strong: #ffffff;
+  --k-bg-green: #052e16;
+  --k-bg-amber: #1c1a06;
+  --k-bg-violet: #1a1033;
+  --k-bg-sky: #082f49;
+  --k-bg-red: #450a0a;
+  --k-green-locked: #14532d;
+  --k-rule-0: #30363d;
+  --k-sky: #38bdf8;
+  --k-sky-ink: #7dd3fc;
+  --k-sky-ink-2: #bae6fd;
+  --k-sky-ink-3: #e0f2fe;
+  --k-violet: #a78bfa;
+  --k-violet-ink-2: #c4b5fd;
+  --k-purple-ink: #d8b4fe;
+  --k-purple: #c084fc;
+  --k-purple-2: #a855f7;
+  --k-purple-deep: #6b21a8;
+  --k-indigo: #818cf8;
+  --k-blue-ink-3: #bfdbfe;
+  --k-green-ink-3: #bbf7d0;
+  --k-teal-ink: #a7f3d0;
+  --k-orange-ink: #fed7aa;
+  --k-stone-ink: #a8a29e;
+  --k-stone-ink-2: #d6d3d1;
 }
 :root[data-theme="light"] {
   --k-page: #eef1f5;
@@ -104,6 +128,30 @@ html { color-scheme: dark; }
   --k-pink-ink: #9d174d;
   --k-violet-ink: #5b21b6;
   --k-strong: #0b1220;
+  --k-bg-green: #dcfce7;
+  --k-bg-amber: #fef3c7;
+  --k-bg-violet: #ede9fe;
+  --k-bg-sky: #e0f2fe;
+  --k-bg-red: #fee2e2;
+  --k-green-locked: #bbf7d0;
+  --k-rule-0: #d0d7de;
+  --k-sky: #0369a1;
+  --k-sky-ink: #075985;
+  --k-sky-ink-2: #0c4a6e;
+  --k-sky-ink-3: #0c4a6e;
+  --k-violet: #6d28d9;
+  --k-violet-ink-2: #5b21b6;
+  --k-purple-ink: #6b21a8;
+  --k-purple: #7e22ce;
+  --k-purple-2: #7e22ce;
+  --k-purple-deep: #7e22ce;
+  --k-indigo: #4338ca;
+  --k-blue-ink-3: #1e3a8a;
+  --k-green-ink-3: #14532d;
+  --k-teal-ink: #065f46;
+  --k-orange-ink: #9a3412;
+  --k-stone-ink: #57534e;
+  --k-stone-ink-2: #44403c;
 }
 
 /* Type. Atkinson Hyperlegible for everything the operator reads as text: its

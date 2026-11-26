@@ -42,7 +42,7 @@ describe("CandidateRow", () => {
   it("a passed row is grey with its badge, nothing amber; no number shows a dash", () => {
     const el = tile({ _id: 3, number: "100", name: "", team: "Navy", size: "A-M", scanned: "pass" }, ["team"], { disabled: true });
     expect(el.children[1].textContent).toContain("Already passed");
-    expect(screen.getByText("Navy").style.color).toBe("rgb(100, 116, 139)");
+    expect(screen.getByText("Navy").style.color).toBe("var(--k-ink-4)");   // #64748b in dark (phase 8 tokens)
     const blank = tile({ _id: 4, number: "", name: "", team: "", size: "Y-M" });
     expect(blank.children[0].textContent).toBe("—");
   });
