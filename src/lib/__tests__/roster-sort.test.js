@@ -116,6 +116,11 @@ describe("the pick list follows the last confirmed jersey's size (25 Nov 2026)",
     // A list with no twin keeps the family step.
     expect(sortCandidates(rows.filter(r => r.number === "6"), "size", { lastSize: "Y-L" }).map(r => r.size)).toEqual(["Y-L", "Y-S", "A-S", "A-M"]);
   });
+  it("rows still out (back from repair, found) come at the very end, whatever the sort and the last size (the co-op, 26 Nov 2026)", () => {
+    const rows = [{ _id: 1, number: "6", size: "L-M", cameBack: { was: "flag" } }, { _id: 2, number: "6", size: "A-S" }, { _id: 3, number: "6", size: "Y-XL", cameBack: { was: "missing" } }, { _id: 4, number: "6", size: "L-M" }];
+    expect(sortCandidates(rows, "size", { lastSize: "L-M" }).map(r => r._id)).toEqual([4, 2, 1, 3]);   // the still-out ones last, the last size first among them
+    expect(sortCandidates(rows, "team").slice(-2).every(r => r.cameBack)).toBe(true);
+  });
   it("the line under the header knows whether the size or only its family is on the list", () => {
     expect(lastSizeRank("L-S", "L-S")).toBe(0);
     expect(lastSizeRank("L-M", "L-S")).toBe(1);

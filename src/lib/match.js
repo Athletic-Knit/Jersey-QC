@@ -200,7 +200,8 @@ function sameReadRows(rows, read, reason, eligible = rows) {
 // has narrowed them, stay a list; so does a doubtful read (N1) and a roster with names.
 function oneGarment(rows, read, numberOnly, typed, number) {
   if (!numberOnly || (!typed && isDoubtfulRead(number, read))) return null;
-  const open = rows.filter(r => !isDone(r));
+  // Rows still out (back from repair, found) last, so the green goes on a garment not yet scanned.
+  const open = rows.filter(r => !isDone(r)).sort((a, b) => !!a.cameBack - !!b.cameBack);
   if (open.length < 2) return null;
   const { rows: agree, strong } = narrowByColour(open, read);
   const pool = strong && agree.length ? agree : open;

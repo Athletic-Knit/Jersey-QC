@@ -460,7 +460,9 @@ export const lastSizeLetter = lastSize => { const g = SIZE_GROUPS[sizeRank(lastS
 export function sortCandidates(rows, by = "size", { lastSize = "", after = null } = {}) {
   if (after) by = "size";
   const near = r => after ? (lastSize && !sameSize(r.size, lastSize) ? 1 : 0) : lastSizeRank(r.size, lastSize);
-  const rank = r => (after && after(r) ? 3 : 0) + near(r);
+  // Still out (back from repair, or marked missing and found) comes at the very end of the list,
+  // after everything else (the co-op, 26 Nov 2026).
+  const rank = r => (r.cameBack ? 10 : 0) + (after && after(r) ? 3 : 0) + near(r);
   const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
   const team = (a, b) => String(a.team || "").localeCompare(String(b.team || ""), undefined, { sensitivity: "base", numeric: true });
   const size = (a, b) => bySize(a.size || "", b.size || "");

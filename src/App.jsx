@@ -1860,6 +1860,14 @@ function GarmentMap({ kind, spots = [], onTap, onRemove, fit = null, height = 12
 // checklist, the yellow lists, red, ALREADY DONE, the reasons menu, Clean it
 // now, FLAGGED, the by-hand form and the size picker. It draws and takes keys;
 // what each choice does is in `actions` (App).
+// A flagged garment offered back on an order that was not parked (the co-op, 26 Nov 2026): a tap
+// on the list, never the pedal and never a green straight away (code review H3: the garment just
+// flagged is usually still under the camera).
+const tapOnly = r => r?.cameBack?.was === "flag" && !!r.cameBack.live;
+const holdBack = m => (m?.type === "exact" && tapOnly(m.match))
+  ? { type: "pick", candidates: [m.match], reason: "Back from repair? Tap it to pass it", twins: true }
+  : m;
+
 export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", lastSize = "", paused = false }) {
   const reasons = reasonsFor(jerseyType);
   // Runs an option: a click, the Select key or the pedal.
@@ -2007,7 +2015,8 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
       // number was typed has it too (the owner, 20 Nov 2026), and its flags take the typed
       // number, not the camera's read.
       const flag = { id: "listflag", label: "🚩 Flag", run: actions.listFlag };
-      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), run: () => actions.pick(c) })), ...(t ? [back, none, flag] : [retry, flag])];
+      // A flagged garment offered back on an order that was not parked is a tap only (tapOnly): the pedal never passes it (H3).
+      return [...candidates.map(c => ({ id: "c" + c._id, candidate: c, disabled: isDone(c), ...(tapOnly(c) ? { mouseOnly: true } : {}), run: () => actions.pick(c) })), ...(t ? [back, none, flag] : [retry, flag])];
     }
     if (mode === "listFlag")   return [{ id: "nosize", label: "🏷 No size tag", run: actions.noSizeTag }, { id: "dup", label: "🔁 Duplicate", run: () => actions.offRosterStart("dup") }, { id: "offroster", label: "🚩 Not on the roster", run: () => actions.offRosterStart("off") }, { id: "back", label: "← Back", run: actions.back }];
     if (mode === "offSize")    return [
@@ -2054,7 +2063,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
     return [];
   }, [state.spots, allTicked, toTick.length, tickNext, mode, isList, candidates, actions, state.typed, state.sizes, state.goalie, state.sizeBack, reasons, damagePhotos.length, canPhoto, state.photoFirst, takePhoto, frameAgain, canFrame, framing, shooting, sorter, state.match, state.fromList, fixIn]);
 
-  const selectedIdx = picked ?? Math.max(0, options.findIndex(o => !o.disabled));
+  const selectedIdx = picked ?? Math.max(0, options.findIndex(o => !o.disabled && !o.mouseOnly));
   const lastKeyRef = useRef(0);
   const locateQuietRef = useRef(0);   // until when the Select key is ignored on "where is the damage"
 
@@ -3876,14 +3885,16 @@ export default function App() {
   const shortList  = useMemo(() => shortages(roster, binMap, closedBins), [roster, binMap, closedBins]);
   const shortByBox = useMemo(() => Object.fromEntries(shortList.map(x => [x.bin, x])), [shortList]);
   const flaggedRows = useMemo(() => roster.filter(r => r.scanned === "flag"), [roster]);   // what is in the DAMAGED box
-  // What the matcher sees. On an order picked up again a flagged jersey that comes back from
-  // repair is open again, so it can go green (the owner, 19 Nov 2026); otherwise it is with the
-  // supervisor and scanning it shows the flag.
-  // A missing jersey that turns up is always open to the matcher; a flagged one on a picked-up
-  // order (back from repair). Both carry `cameBack`, so the green screen says so.
+  // What the matcher sees. A flagged garment is still out from its first flag (the co-op, 26 Nov
+  // 2026; before, only on an order picked up again), so a garment back from repair is open again.
+  // On an order picked up again it can go green (the owner, 19 Nov 2026); on an order that was
+  // not parked it is `live`: offered on the list only, last and a tap only (tapOnly, holdBack),
+  // because the garment just flagged is usually still under the camera and the pedal must
+  // never pass it (code review H3). A missing garment that turns up is always open to the
+  // matcher. Both carry `cameBack`, so the green and the list say so.
   const scanRoster = useMemo(() => {
     const why = id => String(log.find(l => l.status === S_FLAGGED && l.match?._id === id && !l.resolution)?.reason || "").replace(/ — found after it passed$/, "");
-    return roster.map(r => (r.scanned === "flag" && pickedUp ? { ...r, scanned: false, cameBack: { was: "flag", reason: why(r._id) } }
+    return roster.map(r => (r.scanned === "flag" ? { ...r, scanned: false, cameBack: { was: "flag", reason: why(r._id), ...(pickedUp ? {} : { live: true }) } }
       : r.scanned === "missing" || r.scanned === "short" ? { ...r, cameBack: { was: "missing" } } : r));
   }, [roster, pickedUp, log]);
   // The three lists behind the "Missing · Duplicate · Flagged" button. A duplicate is a flag
@@ -4544,7 +4555,7 @@ export default function App() {
       console.log(`Read in ${Date.now() - t0} ms: #${r.number}${r.number_complete ? "" : "?"} ${r.name}${r.name_complete ? "" : "…"}${r.laid_flat ? "" : " [not flat]"} (${r.jersey_colour || "?"}${r.trim_colour ? "/" + r.trim_colour : ""}; sleeves: ${r.sleeve_numbers.join(",") || "—"}; number ${r.number_position || "?"}${r.obstruction ? "; " + r.obstruction : ""}) — tokens in ${r.usage?.input_tokens}, out ${r.usage?.output_tokens}`);
       return r;
     };
-    const matchOf = d => matchRead(scanRoster, d);   // the read as the matcher's options: src/lib/scanpolicy.js
+    const matchOf = d => holdBack(matchRead(scanRoster, d));   // the read as the matcher's options: src/lib/scanpolicy.js
 
     let detected = { name: "", number: "" };
     let apiError = null;
@@ -5103,6 +5114,7 @@ export default function App() {
         if (m.type === "pick" && same.length === 1 && numberFits(same[0]) && nameFits(same[0])) m = isDone(same[0]) ? { type: "duplicate", match: same[0] } : { type: "exact", match: same[0] };
         else if (same.length >= 1) m = { ...m, candidates: same };
       }
+      m = holdBack(m);   // a flagged garment of an order not parked: on the list, a tap only (H3)
       if (m.type === "duplicate") { setOverlay({ mode: "duplicate", scan: o.scan, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.scanned === "flag" ? " is flagged — with the supervisor." : " already passed this session."}` }); playTone("flag"); return; }
       if (m.type === "exact") { commitTyped(o, typed, m.match); return; }
       if (m.type === "pick" || m.type === "close") {
@@ -5732,7 +5744,7 @@ export default function App() {
               {/* Bottom-left, under the last pass: the order's history, where the hand already is. */}
               {sessionStarted && (
                 <div style={{ padding: "8px 14px", borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>{/* one line, short labels, never under the roster (the owner, 19 Nov 2026) */}
-                  {pickedUp && stillOut.total > 0 && <button onClick={() => setShowStillOut(true)} title="The garments this order is waiting for: back from repair, missing, extra. Scan one when it comes back, or pass it here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", borderColor: "#38bdf8", color: "#7dd3fc" }}>🔧 Still out · {stillOut.total}</button>}
+                  {stillOut.total > 0 && <button onClick={() => setShowStillOut(true)} title="The garments this order is waiting for: back from repair, missing, extra. Scan one when it comes back, or pass it here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", borderColor: "#38bdf8", color: "#7dd3fc" }}>🔧 Still out · {stillOut.total}</button>}
                   <button onClick={() => setShowHistory(true)} title="Every garment scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 16px", fontSize: 15, fontWeight: 700 }}>🕘 History ({new Set(log.filter(l => l.match && l.match._id !== undefined && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).map(l => l.match._id)).size})</button>
                   <button onClick={() => setShowPacking(true)} title="Packing: what to do next, each box with its list (Print list, Box full), and the order summary" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "#ef4444", color: "#fff" } : { borderColor: "#22c55e", color: "#86efac" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Packing"}</button>
                   <button onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: issues.missing.length + issues.dups.length + issues.flagged.length ? "#f59e0b" : "#334155" }}>

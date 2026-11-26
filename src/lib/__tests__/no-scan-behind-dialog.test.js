@@ -73,6 +73,15 @@ describe("no scan behind a dialog", () => {
     expect(body).toMatch(/e\.code === byHandKey[\s\S]*actions\.manual\(\)/);
   });
 
+  it("a flagged garment of an order not parked is offered back as a tap only, never a green (H3; the co-op, 26 Nov 2026)", () => {
+    expect(src).toMatch(/const tapOnly = r => r\?\.cameBack\?\.was === "flag" && !!r\.cameBack\.live;/);
+    expect(src).toMatch(/const matchOf = d => holdBack\(matchRead\(scanRoster, d\)\);/);   // camera reads
+    expect(src).toMatch(/m = holdBack\(m\);/);                                                // typed entries
+    expect(src).toMatch(/tapOnly\(c\) \? \{ mouseOnly: true \}/);                          // the list tile
+    expect(src).toMatch(/options\.findIndex\(o => !o\.disabled && !o\.mouseOnly\)/);       // never the first highlight
+    expect(src).toMatch(/cameBack: \{ was: "flag", reason: why\(r\._id\), \.\.\.\(pickedUp \? \{\} : \{ live: true \}\) \}/);
+  });
+
   it("hands-free, the scan itself, the SCAN button and By hand use it", () => {
     expect(src).toMatch(/if \(anyDialogOpen\) \{ if \(gate\.armed\)/);   // the hands-free gate
     expect(src).toMatch(/if \(anyDialogOpen\) return;[^\n]*last line of defence/);   // doTriggerScan
