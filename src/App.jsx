@@ -573,14 +573,16 @@ function GarmentPicker({ value, onChange }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {GARMENT_GROUPS.map(group => (
-        <div key={group} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ width: 92, fontSize: 13, fontWeight: 700, color: "var(--k-ink-3)", textTransform: "uppercase", letterSpacing: 1 }}>{group}</span>
+        <div key={group} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <span style={{ flex: "0 0 92px", paddingTop: 11, fontSize: 13, fontWeight: 700, color: "var(--k-ink-3)", textTransform: "uppercase", letterSpacing: 1 }}>{group}</span>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {GARMENT_MENU.filter(g => g.group === group).map(g => (
             <button key={g.id} type="button" onClick={() => onChange(g.id)} aria-pressed={v === g.id}
               style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: v === g.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: v === g.id ? "rgba(96,165,250,0.15)" : "transparent", color: v === g.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: v === g.id ? 700 : 400 }}>
               {g.label}
             </button>
           ))}
+          </div>
         </div>
       ))}
     </div>
@@ -1831,15 +1833,36 @@ export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled,
 // last result) it only shows the marks. Spots are numbered 1–3 over both sides
 // in the order they were marked, as on the ticket. Its size: `fit` { cqh, cqw }
 // (each side at most that much of the screen's container) or `height` in px.
+// `stackFit` { cqh, cqw }: the same for front ABOVE back; the map measures its
+// container and stacks when that draws the garment bigger (the wide drawings,
+// a hockey jersey or a hoodie with its arms out, the owner's SVGs of 26 Nov 2026).
 // A component at module level, never inside ScanOverlay (see optionButton).
 const LOCATE_QUIET_MS = 450;   // the Select key is ignored this long after the locate step opens or its highlight is moved
 const DOUBLE_TAP_MS = 400;                         // see GarmentMap's `remove`
 const SPOT_R = 7;                                  // a spot's radius, in viewBox units (the garment is 100 tall)
-function GarmentMap({ kind, spots = [], onTap, onRemove, fit = null, height = 120, captions = true, title }) {
+function GarmentMap({ kind, spots = [], onTap, onRemove, fit = null, stackFit = null, height = 120, captions = true, title }) {
   const g = garmentShape(kind), view = garmentView(g.id);
   const ratio = view.vbW / view.vbH;
-  const dims = fit
-    ? { height: `min(${fit.cqh}cqh, ${(fit.cqw / ratio).toFixed(2)}cqw)`, width: `min(${(fit.cqh * ratio).toFixed(2)}cqh, ${fit.cqw}cqw)` }
+  const boxRef = useRef(null);
+  const [stacked, setStacked] = useState(false);
+  useLayoutEffect(() => {
+    if (!fit || !stackFit) return;
+    let c = boxRef.current?.parentElement;
+    while (c && getComputedStyle(c).containerType === "normal") c = c.parentElement;
+    if (!c) return;
+    const measure = () => {
+      const W = c.clientWidth / 100, H = c.clientHeight / 100;
+      const beside = Math.min(fit.cqh * H, fit.cqw * W / ratio), above = Math.min(stackFit.cqh * H, stackFit.cqw * W / ratio);
+      setStacked(above > beside * 1.05);
+    };
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);                // it reports once at once, then on every resize
+    ro.observe(c);
+    return () => ro.disconnect();
+  }, [fit?.cqh, fit?.cqw, stackFit?.cqh, stackFit?.cqw, ratio]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stack = !!(stacked && fit && stackFit), f = stack ? stackFit : fit;
+  const dims = f
+    ? { height: `min(${f.cqh}cqh, ${(f.cqw / ratio).toFixed(2)}cqw)`, width: `min(${(f.cqh * ratio).toFixed(2)}cqh, ${f.cqw}cqw)` }
     : { height, width: Math.round(height * ratio) };
   const list = Array.isArray(spots) ? spots : [];
   const pts = poly => poly.map(p => toView(view, p).map(v => v.toFixed(1)).join(",")).join(" ");
@@ -1863,7 +1886,7 @@ function GarmentMap({ kind, spots = [], onTap, onRemove, fit = null, height = 12
   // and lines whatever its size.
   const big = !!onTap, gap = fit ? "3cqw" : 8;
   return (
-    <div title={title} style={{ display: "flex", gap, justifyContent: "center", alignItems: "flex-start" }}>
+    <div ref={boxRef} title={title} style={{ display: "flex", flexDirection: stack ? "column" : "row", gap: stack ? "1.2cqh" : gap, justifyContent: "center", alignItems: stack ? "center" : "flex-start" }}>
       {SIDES.map(side => (
         <div key={side} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: big ? 6 : 2 }}>
           {captions && <div style={{ fontSize: big ? "clamp(20px, 3.2cqh, 34px)" : 11, fontWeight: 900, letterSpacing: big ? 3 : 1, color: big ? "var(--k-violet-ink)" : "var(--k-ink-3)", lineHeight: 1 }}>{sideLabel(g.id, side).toUpperCase()}</div>}
@@ -2509,7 +2532,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
             Tap where it is, up to {MAX_SPOTS} spots, front or back. Tap a spot to take it off.
           </div>
           <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", margin: "1.2cqh 0", width: "100%" }}>
-            <GarmentMap kind={state.garment} spots={state.spots || []} fit={{ cqh: 52, cqw: 44 }}
+            <GarmentMap kind={state.garment} spots={state.spots || []} fit={{ cqh: 52, cqw: 44 }} stackFit={{ cqh: 22, cqw: 88 }}
               onTap={spot => actions.locateTap(spot)} onRemove={i => actions.locateRemove(i)} />
           </div>
           <div style={{ flexShrink: 0, minHeight: "1.3em", fontSize: "clamp(18px, 2.8cqh, 28px)", fontWeight: 800, color: (state.spots || []).length ? "var(--k-amber-ink-3)" : "var(--k-ink-3b)", textAlign: "center", padding: "0 24px" }}>
