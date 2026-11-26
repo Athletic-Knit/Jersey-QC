@@ -55,3 +55,13 @@ export function screenFor({ error = null, read = {}, match = null } = {}) {
   if (m.type === "pick" || m.type === "close") return { mode: m.type, candidates: m.candidates, reason: m.reason, ...(m.twinOf ? { twinOf: m.twinOf } : {}), shown: { mode: m.type, ids: m.candidates.map(c => c._id) } };
   return { mode: "flag", title: "NOT FOUND", reason: `"${read.name || "?"}" #${read.number || "?"} is not on this roster.${m.reason ? ` Camera: ${m.reason}.` : ""}`, shown: { mode: "flag" }, tone: "flag" };
 }
+
+// A flagged garment offered back on an order that was not parked (the co-op, 26 Nov 2026): a tap
+// on the list, never the pedal and never a green straight away (code review H3: the garment just
+// flagged is usually still under the camera). `tapOnly` marks such a row (its tile is mouseOnly);
+// `holdBack` turns a green on it into a list of that one row. Here, not in App.jsx, so the
+// operator simulation and the tests run the same rule (Fable's final review, 26 Nov 2026).
+export const tapOnly = r => r?.cameBack?.was === "flag" && !!r.cameBack.live;
+export const holdBack = m => (m?.type === "exact" && tapOnly(m.match))
+  ? { type: "pick", candidates: [m.match], reason: "Back from repair? Tap it to pass it", twins: true }
+  : m;

@@ -4,16 +4,33 @@
     {
       "name": "jersey-qc",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173,
       "url": "https://localhost:5173"
     },
     {
       "name": "jersey-qc-test",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "--config", "vite.config.diag.js"],
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "vite.config.diag.js"
+      ],
       "port": 5174,
-      "url": "http://localhost:5174"
+      "url": "https://localhost:5174"
+    },
+    {
+      "name": "jersey-qc-dev-stage",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set JQC_STAGE=development&& npx vite --config vite.config.stage.js"
+      ],
+      "port": 5174,
+      "url": "https://localhost:5174"
     }
   ]
 }

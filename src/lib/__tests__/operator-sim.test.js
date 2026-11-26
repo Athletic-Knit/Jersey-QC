@@ -256,7 +256,11 @@ function workOrder(r, seed, k, stats, findings) {
       if (sc.mode === "pick" || sc.mode === "close") {
         seconds += T.yellow; stats.yellows++; stats.yellowByKind[kind] = (stats.yellowByKind[kind] || 0) + 1;
         stats.listLen.push(m.candidates.length);
-        const c = m.candidates.find(x => sameJersey(x, truth) && !isDone(x));
+        // On a roster with no names, a row of the same number and size is the same garment (one garment,
+        // the co-op, 25 Nov 2026): the operator may pick it when the garment's own row is not on the list
+        // (Fable's final review: a reconciled self-check list held only the one-garment pick).
+        const sameGarmentRow = x => !item.extra && !roster.some(y => norm(y.name)) && normNum(x.number) === normNum(truth.number) && (x.size || "") === (truth.size || "") && !!(x.size || "");
+        const c = m.candidates.find(x => sameJersey(x, truth) && !isDone(x)) || m.candidates.find(x => sameGarmentRow(x) && !isDone(x));
         if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace]    operator picks ${c ? `#${c.number} ${c.team} ${c.size}` : "nothing → by hand"}`);
         if (c) { seconds += T.green; setRow(c._id, "pass"); add({ detected, match: c, status: "pass", thumb: "t".repeat(6_000) }); done = true; continue; }
         if (item.extra) { seconds += T.flag; stats.offRosterFlag++; add({ detected, match: null, status: "flagged", reason: "Not on the roster", photo: "data:image/jpeg;base64," + "x".repeat(40_000) }); done = true; continue; }

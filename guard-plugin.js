@@ -10,12 +10,23 @@
 //   /@fs/…         any file on the PC outside the project (nothing the app needs)
 //   /.git/…, /.claude/…, /tools/…   the repository, session files, the server-PC scripts
 // The hub's own routes (/api/hub/*, /api/admin/*) are not files and are not touched.
+// The address is read as Vite's file server reads it: the raw path before ? or #, decoded, every
+// backslash a slash and doubled slashes made one. Reading it through new URL() first let
+// "/\data/hub.json" and "//data/hub.json" through: the URL parser took "data" for a host name,
+// while Vite joined the raw path to the project folder and Windows found data\hub.json (Fable's
+// final review, 26 Nov 2026).
 export function blockedPath(url) {
+  let raw = String(url || "/");
+  const cut = raw.search(/[?#]/); if (cut >= 0) raw = raw.slice(0, cut);
   let p;
-  try { p = decodeURIComponent(new URL(url, "http://x").pathname); } catch { return true; }   // a malformed address: refused
-  p = p.replace(/\\/g, "/").replace(/\/{2,}/g, "/").toLowerCase();
+  try { p = decodeURIComponent(raw); } catch { return true; }   // a malformed address: refused
+  p = ("/" + p).replace(/\\/g, "/").replace(/\/{2,}/g, "/").toLowerCase();
   if (p.startsWith("/api/")) return false;
   if (p.includes("/../") || p.endsWith("/..")) return true;
+  // /@id/<anything>: Vite loads the module named there, a file on the PC too
+  // ("/@id/C:/JerseyQC/data/hub.json"). A path on a drive is refused, and the rest is checked
+  // like any address ("/@id/data/hub.json", "/@id/@fs/…").
+  if (p.startsWith("/@id/")) { const rest = p.slice(4); if (/^\/[a-z]:/.test(rest)) return true; return blockedPath(rest); }
   return p.startsWith("/data/") || p === "/data"
     || p.startsWith("/@fs/")
     || p.startsWith("/.git") || p.startsWith("/.claude") || p.startsWith("/tools/")

@@ -45,7 +45,7 @@ import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyChe
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { duplicateOptions } from "./lib/dupoptions.js";
-import { matchRead, screenFor } from "./lib/scanpolicy.js";
+import { matchRead, screenFor, tapOnly, holdBack } from "./lib/scanpolicy.js";
 import { binLabels, jerseyLabel, flagLabel, listChunks, cleanSpots, repageLists, isTallTicket, labelSize as labelDots, DEFAULT_FLAG_LABEL_SIZE } from "./lib/labels.js";
 import { LIST_COPIES } from "./lib/packlabels.js";
 // The status line of a print with a packing list in it: each of its pages comes out four times (the owner, 25 Nov 2026).
@@ -1887,13 +1887,7 @@ function GarmentMap({ kind, spots = [], onTap, onRemove, fit = null, height = 12
 // checklist, the yellow lists, red, ALREADY DONE, the reasons menu, Clean it
 // now, FLAGGED, the by-hand form and the size picker. It draws and takes keys;
 // what each choice does is in `actions` (App).
-// A flagged garment offered back on an order that was not parked (the co-op, 26 Nov 2026): a tap
-// on the list, never the pedal and never a green straight away (code review H3: the garment just
-// flagged is usually still under the camera).
-const tapOnly = r => r?.cameBack?.was === "flag" && !!r.cameBack.live;
-const holdBack = m => (m?.type === "exact" && tapOnly(m.match))
-  ? { type: "pick", candidates: [m.match], reason: "Back from repair? Tap it to pass it", twins: true }
-  : m;
+// tapOnly / holdBack (a flagged garment of an order not parked: a tap, never the pedal) are in src/lib/scanpolicy.js.
 
 export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", lastSize = "", paused = false }) {
   const reasons = reasonsFor(jerseyType);
@@ -5210,6 +5204,7 @@ export default function App() {
         else if (same.length >= 1) m = { ...m, candidates: same };
       }
       m = holdBack(m);   // a flagged garment of an order not parked: on the list, a tap only (H3)
+      // (a flagged row is open in scanRoster, so "duplicate" here is a passed row; the "is flagged" words are a safety net)
       if (m.type === "duplicate") { setOverlay({ mode: "duplicate", scan: o.scan, match: m.match, reason: `#${m.match.number}${m.match.name ? " · " + m.match.name : ""}${m.match.scanned === "flag" ? " is flagged — with the supervisor." : " already passed this session."}` }); playTone("flag"); return; }
       if (m.type === "exact") { commitTyped(o, typed, m.match); return; }
       if (m.type === "pick" || m.type === "close") {

@@ -115,11 +115,11 @@ html { color-scheme: dark; }
   --k-blue: #1d4ed8;
   --k-blue-ink: #1d4ed8;
   --k-blue-ink-2: #1e40af;
-  --k-green: #15803d;
+  --k-green: #147a3a;   /* 4.8:1 likewise */
   --k-green-ink: #166534;
   --k-green-ink-2: #14532d;
-  --k-green-deep: #15803d;
-  --k-amber: #b45309;
+  --k-green-deep: #147a3a;
+  --k-amber: #a8500a;   /* 4.9:1 with --k-page letters on it (Fable's final review) */
   --k-amber-ink: #92400e;
   --k-amber-ink-2: #78350f;
   --k-amber-ink-3: #713f12;

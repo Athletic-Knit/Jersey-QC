@@ -766,3 +766,13 @@ describe("Fable's review of phases 5-8 (26 Nov 2026)", () => {
     expect(css).toMatch(/--k-kbd-bg: rgba\(0,0,0,0\.3\);/);   // dark as before
   });
 });
+
+describe("Fable's final review (26 Nov 2026)", () => {
+  it("the guard reads the path as Vite's file server does: backslashes, doubled slashes and /@id/ paths are refused", async () => {
+    const { blockedPath } = await import("../../../guard-plugin.js");
+    for (const u of [String.raw`/\data/hub.json`, String.raw`/\data\hub.json?raw`, "//data/hub.json", "///data/hub-test-admin.json", "/%5Cdata/hub.json", "/@id/C:/JerseyQC/data/hub.json?import", "/@id/c:/Users/coop/JerseyQC-dev/.env.local", "/@id/data/hub.json", "/@id/@fs/C:/x"])
+      expect(blockedPath(u), u).toBe(true);
+    for (const u of ["/", "/?view=admin", "/src/main.jsx?t=123", "/@vite/client", "/@react-refresh", "/@id/__x00__react/jsx-runtime", "/node_modules/.vite/deps/react.js?v=1", "/api/hub/stations"])
+      expect(blockedPath(u), u).toBe(false);
+  });
+});

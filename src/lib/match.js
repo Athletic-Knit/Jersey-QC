@@ -200,12 +200,17 @@ function sameReadRows(rows, read, reason, eligible = rows) {
 // has narrowed them, stay a list; so does a doubtful read (N1) and a roster with names.
 function oneGarment(rows, read, numberOnly, typed, number) {
   if (!numberOnly || (!typed && isDoubtfulRead(number, read))) return null;
-  // Rows still out (back from repair, found) last, so the green goes on a garment not yet scanned.
-  const open = rows.filter(r => !isDone(r)).sort((a, b) => !!a.cameBack - !!b.cameBack);
+  // Rows still out last, so the green goes on a garment not yet scanned; among them one marked
+  // missing before one flagged on this order (cameBack.live): a garment that turns up is the
+  // missing one, never the one in the DAMAGED box (Fable's final review, 26 Nov 2026).
+  const rank = r => (!r.cameBack ? 0 : r.cameBack.live ? 2 : 1);
+  const open = rows.filter(r => !isDone(r)).sort((a, b) => rank(a) - rank(b));
   if (open.length < 2) return null;
   const { rows: agree, strong } = narrowByColour(open, read);
   const pool = strong && agree.length ? agree : open;
   const colourOf = r => norm(rowColourText(r));
+  // A size must be known: rows with no size are not known to be one garment (Fable's final review).
+  if (!String(pool[0].size ?? "").trim()) return null;
   if (!pool.every(r => sameSize(r.size, pool[0].size) && colourOf(r) === colourOf(pool[0]))) return null;
   return { type: "exact", match: pool[0], sameGarment: pool.length };
 }

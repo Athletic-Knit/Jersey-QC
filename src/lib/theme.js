@@ -2,8 +2,8 @@
 // most of all, under the floor's lights). The choice is per browser, so per station PC:
 // "dark", "light" or "system" (follow the PC's own setting), kept in localStorage. It sets
 // data-theme on <html>, which picks the colour tokens in index.css. The admin panel uses
-// it (its own choice, jerseyqc.theme); a station uses settings.theme, applied only while the
-// sign-in screen or the supervisor board is up (App.jsx, themedScreen) and cleared otherwise.
+// it (its own choice, jerseyqc.theme); a station uses settings.theme, applied on every screen
+// since phase 8 (App.jsx). clearTheme is kept for a screen that must not follow it; none does now.
 export const THEME_KEY = "jerseyqc.theme";
 export const THEMES = [
   { id: "dark", label: "Dark" },
