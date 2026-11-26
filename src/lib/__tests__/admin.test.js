@@ -776,3 +776,22 @@ describe("Fable's final review (26 Nov 2026)", () => {
       expect(blockedPath(u), u).toBe(false);
   });
 });
+
+describe("the guard as an allow-list (Fable's review of the final fixes, 26 Nov 2026)", () => {
+  it("refuses every spelling the reviews found: dot segments, .. in the path or the query, NTFS streams, 8.3 short names, /@id/ with any of these", async () => {
+    const { blockedPath } = await import("../../../guard-plugin.js");
+    const bad = ["/api/../data/hub.json", "/api/%2e%2e/data/hub.json", String.raw`/api/..\data/hub.json`, "/api/..%5cdata/hub.json",
+      "/src/main.js?x=/../../data/hub.json", "/src/main.js?..", "/./data/hub.json", "/%2e/data/hub.json", "/./.claude/x.json", "/./tools/x.mjs",
+      "/data::$INDEX_ALLOCATION/hub.json", "/data/server.log::$DATA", "/ENV~1.LOC", "/ENV~1.LOC?raw", "/ENV~1.LOC?import&raw", "/GIT~1/config", "/CLAUDE~1/x.json",
+      "/@id/./data/hub.json?import", "/@id/%2e/data/hub.json?import", "/@id/file:///C:/JerseyQC/data/hub.json?import", "/@id/ENV~1.LOC?import&raw",
+      "/@id/__x00__C:/JerseyQC/data/hub.json", "/@id/%5c%5c%3f%5cC:/JerseyQC/data/hub.json", "/data%3f/hub.json", "/README.md", "/package.json", "/vite.config.js",
+      "/hub-plugin.js", "/admin-plugin.js", "/docs/DEPLOY.md", "/Servers/x", "/node_modules/.cache/x", "/@fs/C:/x", "/data./hub.json", "/data%20/hub.json"];
+    for (const u of bad) expect(blockedPath(u), u).toBe(true);
+    const good = ["/", "/?view=admin", "/?station=station1", "/index.html", "/src/main.jsx", "/src/main.jsx?t=1732630000000", "/src/index.css?import", "/src/./main.jsx",
+      "/node_modules/vite/dist/client/env.mjs", "/node_modules/@fontsource/atkinson-hyperlegible/files/x.woff2", "/node_modules/.vite/deps/react.js?v=abc",
+      "/.vite-development/deps/react.js?v=1", "/.vite-testing/deps/react.js", "/.vite-dev/deps/react.js", "/@vite/client", "/@react-refresh",
+      "/@id/__x00__vite/modulepreload-polyfill.js", "/api/hub/stations", "/api/admin/session", "/api/anthropic/v1/messages", "/favicon.svg", "/icons.svg", "/sim/replay-1.json"];
+    for (const u of good) expect(blockedPath(u), u).toBe(false);
+    expect(blockedPath("/extra.png", { publicNames: ["extra.png"] })).toBe(false);   // what public/ holds when the server starts
+  });
+});

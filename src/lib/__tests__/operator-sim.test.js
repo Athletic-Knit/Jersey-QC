@@ -38,6 +38,7 @@ import { saveSession, loadSession, clearSession } from "../persist.js";
 import { buildDamageRows } from "../damage.js";
 import { createVigilance, reconcile } from "../vigilance.js";
 import { matchRead, screenFor } from "../scanpolicy.js";
+import { rowColourText } from "../colour.js";
 import { reasonsFor, JERSEY_TYPES } from "../../config.js";
 
 function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
@@ -259,7 +260,7 @@ function workOrder(r, seed, k, stats, findings) {
         // On a roster with no names, a row of the same number and size is the same garment (one garment,
         // the co-op, 25 Nov 2026): the operator may pick it when the garment's own row is not on the list
         // (Fable's final review: a reconciled self-check list held only the one-garment pick).
-        const sameGarmentRow = x => !item.extra && !roster.some(y => norm(y.name)) && normNum(x.number) === normNum(truth.number) && (x.size || "") === (truth.size || "") && !!(x.size || "");
+        const sameGarmentRow = x => !item.extra && !roster.some(y => norm(y.name)) && normNum(x.number) === normNum(truth.number) && (x.size || "") === (truth.size || "") && !!(x.size || "") && norm(rowColourText(x)) === norm(rowColourText(truth));
         const c = m.candidates.find(x => sameJersey(x, truth) && !isDone(x)) || m.candidates.find(x => sameGarmentRow(x) && !isDone(x));
         if (process.env.SIM_TRACE && Number(process.env.SIM_TRACE) === k) console.log(`[trace]    operator picks ${c ? `#${c.number} ${c.team} ${c.size}` : "nothing → by hand"}`);
         if (c) { seconds += T.green; setRow(c._id, "pass"); add({ detected, match: c, status: "pass", thumb: "t".repeat(6_000) }); done = true; continue; }

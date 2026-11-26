@@ -59,8 +59,9 @@ export function screenFor({ error = null, read = {}, match = null } = {}) {
 // A flagged garment offered back on an order that was not parked (the co-op, 26 Nov 2026): a tap
 // on the list, never the pedal and never a green straight away (code review H3: the garment just
 // flagged is usually still under the camera). `tapOnly` marks such a row (its tile is mouseOnly);
-// `holdBack` turns a green on it into a list of that one row. Here, not in App.jsx, so the
-// operator simulation and the tests run the same rule (Fable's final review, 26 Nov 2026).
+// `holdBack` turns a green on it into a list of that one row. Here, not in App.jsx, so a test
+// runs the very rule the station uses (came-back.test.js; the operator simulation does not flag
+// and rescan, so it does not reach it) (Fable's final review, 26 Nov 2026).
 export const tapOnly = r => r?.cameBack?.was === "flag" && !!r.cameBack.live;
 export const holdBack = m => (m?.type === "exact" && tapOnly(m.match))
   ? { type: "pick", candidates: [m.match], reason: "Back from repair? Tap it to pass it", twins: true }
