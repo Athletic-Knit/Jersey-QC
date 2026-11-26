@@ -1,56 +1,47 @@
-// Garments still out coming back (the co-op, 26 Nov 2026), run through the same functions the
-// station uses (scanpolicy.js), not read off App.jsx (Fable's final review, 26 Nov 2026):
-//  - H3: a garment flagged on an order that was not parked (cameBack.live) is never green by
-//    itself, from the camera or typed: it is a one-row list, a tap only;
-//  - one garment (oneGarment in match.js) needs a known size, and prefers a row marked missing
-//    to one flagged on this order: a garment that turns up is the missing one;
-//  - on a list, rows still out come last, a missing one before a flagged one.
+// The loop of an unfinished order (the owner, 20 Nov 2026): what is still out,
+// in groups, and what the supervisor settled coming back to the station.
 import { describe, it, expect } from "vitest";
-import { matchRead, holdBack, tapOnly } from "../scanpolicy.js";
-import { sortCandidates } from "../roster.js";
+import { outList, outGroups, applyCheckOff, jerseyWords } from "../orderstore.js";
 
-const clean = n => ({ jersey_present: true, name: "", number: n, name_complete: true, number_complete: true, flat: true, orientation: "upright" });
-const flagged = r => ({ ...r, scanned: false, cameBack: { was: "flag", reason: "Holes", live: true } });
-const missing = r => ({ ...r, scanned: false, cameBack: { was: "missing" } });
-const row = (id, number, team, size, over = {}) => ({ _id: id, name: "", number, team, size, scanned: false, ...over });
+const roster = [
+  { _id: 0, number: "7", name: "SMITH", size: "A-L", team: "Navy", scanned: "pass" },
+  { _id: 1, number: "9", name: "JONES", size: "A-M", team: "Navy", scanned: "flag" },
+  { _id: 2, number: "11", name: "BROWN", size: "A-S", team: "Red", scanned: "missing" },
+  { _id: 3, number: "12", name: "WHITE", size: "A-XL", team: "Red", scanned: false },
+];
+const log = [
+  { id: 50, status: "flagged", match: { number: "29", size: "A-M", offRoster: true }, reason: "Not on the roster — #29 A-M" },
+  { id: 40, status: "flagged", match: { ...roster[1] }, reason: "Name or number — found after it passed" },
+  { id: 30, status: "flagged", match: { number: "5", noRow: true }, reason: "No size tag", resolution: "Dealt with by the supervisor" },
+];
 
-describe("a flagged garment of an order not parked (H3)", () => {
-  it("is never green by itself: a clean camera read of its number is a one-row list, a tap only", () => {
-    const roster = [flagged(row(1, "10", "Hawks", "A-L"))];
-    const m = holdBack(matchRead(roster, clean("10")));
-    expect(m.type).toBe("pick");
-    expect(m.candidates.map(c => c._id)).toEqual([1]);
-    expect(tapOnly(m.candidates[0])).toBe(true);
+describe("what is still out", () => {
+  const out = outList(roster, log);
+  it("every row not passed, and every extra jersey not dealt with", () => {
+    expect(out.map(j => [j.rowId, j.xid ?? null, j.status])).toEqual([[1, null, "flag"], [2, null, "missing"], [3, null, "todo"], [null, 50, "extra"]]);
+    expect(out[0].reason).toBe("Name or number");
   });
-  it("one picked up from the unfinished pile (no `live`) goes green as before", () => {
-    const roster = [{ ...row(1, "10", "Hawks", "A-L"), cameBack: { was: "flag", reason: "Holes" } }];
-    expect(holdBack(matchRead(roster, clean("10"))).type).toBe("exact");
+  it("grouped for the screens, in plain words", () => {
+    const g = outGroups(out);
+    expect([g.flag.length, g.missing.length, g.extra.length, g.todo.length]).toEqual([1, 1, 1, 1]);
+    expect(jerseyWords(g.flag[0])).toBe("#9 JONES A-M");
   });
 });
 
-describe("one garment and rows still out (Fable's final review)", () => {
-  it("rows with no size are not one garment: a list, not a green in the first team's box", () => {
-    const roster = [row(1, "10", "Hawks", ""), row(2, "10", "Eagles", "")];
-    const m = matchRead(roster, clean("10"));
-    expect(m.type).not.toBe("exact");
-    expect(m.sameGarment).toBeUndefined();
+describe("what the supervisor settled, applied at the station", () => {
+  const rec = { session: { roster, log } };
+  const entry = { checkedOff: [{ rowId: 1, by: "Sam", at: 1, as: "pass" }, { rowId: 2, by: "Sam", at: 1, as: "short" }, { rowId: null, xid: 50, by: "Sam", at: 1, as: "done" }], closed: null };
+  const got = applyCheckOff(rec, entry).session;
+  it("back and good passes, shipped short is short, each with a log line", () => {
+    expect(got.roster.map(r => r.scanned)).toEqual(["pass", "pass", "short", false]);
+    expect(got.log.slice(0, 2).map(l => [l.status, l.reason])).toEqual([["short", "Shipped short — supervisor"], ["pass", "Checked off by supervisor"]]);   // newest first, like every log
   });
-  it("the same size on two teams is still one garment", () => {
-    const roster = [row(1, "10", "Hawks", "A-L"), row(2, "10", "Eagles", "A-L")];
-    expect(matchRead(roster, clean("10"))).toMatchObject({ type: "exact", sameGarment: 2 });
+  it("an extra jersey's flag is closed", () => {
+    expect(got.log.find(l => l.id === 50).resolution).toBe("Dealt with by the supervisor (Sam)");
+    expect(outList(got.roster, got.log).map(j => j.status)).toEqual(["short", "todo"]);
   });
-  it("a garment that turns up goes on the row marked missing, not the one in the DAMAGED box", () => {
-    const roster = [flagged(row(1, "10", "Hawks", "A-L")), missing(row(2, "10", "Hawks", "A-L"))];
-    const m = holdBack(matchRead(roster, clean("10")));
-    expect(m.type).toBe("exact");
-    expect(m.match._id).toBe(2);
-  });
-  it("a row not scanned yet comes before either", () => {
-    const roster = [flagged(row(1, "10", "Hawks", "A-L")), missing(row(2, "10", "Hawks", "A-L")), row(3, "10", "Hawks", "A-L")];
-    expect(matchRead(roster, clean("10")).match._id).toBe(3);
-  });
-  it("on a list: not scanned, then missing, then flagged on this order", () => {
-    const rows = [flagged(row(1, "10", "Hawks", "A-L")), missing(row(2, "10", "Eagles", "A-M")), row(3, "10", "Owls", "A-S")];
-    expect(sortCandidates(rows, "size").map(r => r._id)).toEqual([3, 2, 1]);
+  it("applied twice, nothing changes the second time", () => {
+    const again = applyCheckOff({ session: got }, entry).session;
+    expect(again.log.length).toBe(got.log.length);
   });
 });

@@ -74,7 +74,7 @@ describe("no scan behind a dialog", () => {
   });
 
   it("a flagged garment of an order not parked is offered back as a tap only, never a green (H3; the co-op, 26 Nov 2026)", () => {
-    expect(src).toMatch(/import \{ matchRead, screenFor, tapOnly, holdBack \} from "\.\/lib\/scanpolicy\.js";/);   // the rule itself is tested in still-out.test.js
+    expect(src).toMatch(/import \{ matchRead, screenFor, tapOnly, holdBack \} from "\.\/lib\/scanpolicy\.js";/);   // the rule itself is tested in came-back.test.js
     expect(src).toMatch(/const matchOf = d => holdBack\(matchRead\(scanRoster, d\)\);/);   // camera reads
     expect(src).toMatch(/m = holdBack\(m\);/);                                                // typed entries
     expect(src).toMatch(/tapOnly\(c\) \? \{ mouseOnly: true \}/);                          // the list tile
