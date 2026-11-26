@@ -460,6 +460,94 @@ function StationDefaults() {
   );
 }
 
+// Data (phase 5): what the hub is holding (rosters sent, unfinished orders and their files,
+// boxes left open, backups), "Back up now", and the fixes for something stuck: a roster or an
+// unfinished order still marked as taken by a station, an open box no order will take. Each
+// goes through the hub's own routes and into the change log. On the development and testing
+// servers only: clear the test data (a backup first, and the stage's name typed to confirm).
+function DataTools() {
+  const [d, setD] = useState(null);
+  const [msg, setMsg] = useState({ tone: "", text: "" });
+  const [busy, setBusy] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const load = useCallback(() => api("/data").then(setD).catch(e => setMsg({ tone: "fail", text: e.message })), []);
+  useEffect(() => { load(); }, [load]);
+  if (!d) return <section style={st.card}>{msg.text ? <span style={{ color: "var(--fail-text)" }}>{msg.text}</span> : "Loading…"}</section>;
+  const act = async (what, route, body, done) => {
+    setBusy(what); setMsg({ tone: "", text: "" });
+    try { const r = await api(route, { method: "POST", body: JSON.stringify(body || {}) }); setMsg({ tone: "pass", text: done(r) }); setConfirm(""); await load(); }
+    catch (e) { setMsg({ tone: "fail", text: e.message }); }
+    finally { setBusy(""); }
+  };
+  const cell = { padding: "6px 8px", borderBottom: "1px solid var(--line)", verticalAlign: "middle" };
+  const head = cols => <thead><tr>{cols.map(h => <th key={h} style={{ ...cell, textAlign: "left", color: "var(--text-dim)", borderBottom: "2px solid var(--line-strong)" }}>{h}</th>)}</tr></thead>;
+  const small = { ...st.btn, padding: "4px 10px", fontSize: 14 };
+  const stName = s => String(s || "").replace(/^st-station/i, "Station ");
+  const want = `clear ${d.stage}`;
+  return (
+    <>
+      {msg.text && <div role="status" style={{ ...st.card, borderColor: `var(--${msg.tone || "info"})`, background: `var(--${msg.tone || "info"}-bg)`, color: `var(--${msg.tone || "info"}-text)` }}>{msg.text}</div>}
+      <section style={st.card}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <h2 style={{ ...st.h2, margin: 0 }}>What the hub holds</h2>
+          <button style={st.pri} disabled={!d.writable || !!busy} onClick={() => act("backup", "/data/backup", {}, r => `Backup made: data\\backups\\${r.name} (${r.files} files).`)}>{busy === "backup" ? "Backing up…" : "Back up now"}</button>
+        </div>
+        <p style={{ margin: "8px 0 0", color: "var(--text-dim)" }}>{d.stations} stations known · {d.ledgerDays} days of ledger · {d.boxAnswers} box answers teaching the box model · {d.backups.length} backups{d.backups[0] ? `, newest ${d.backups[0].name}` : ""}. A backup copies the data file, the unfinished orders and the admin file into data\backups (the newest 20 are kept), the same copy a promotion makes.</p>
+      </section>
+
+      <section style={st.card}>
+        <h2 style={st.h2}>Rosters sent to stations <span style={{ fontWeight: 400, color: "var(--text-dim)", fontSize: 14 }}>· {d.rosters.length}</span></h2>
+        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>{head(["Order", "Garments", "Sent", "Taken by", ""])}<tbody>
+          {d.rosters.map(r => <tr key={r.id}><td style={{ ...cell, fontWeight: 700 }}>{r.orderNumber || r.id}</td><td style={cell}>{r.rows}</td><td style={cell}>{when(r.createdAt)}{r.by ? ` · ${r.by}` : ""}</td><td style={cell}>{r.takenBy ? `${stName(r.takenBy.station)}${r.takenBy.operator ? " · " + r.takenBy.operator : ""}` : <span style={{ color: "var(--text-dim)" }}>waiting</span>}</td>
+            <td style={cell}>{r.takenBy && <button style={small} disabled={!d.writable || !!busy} onClick={() => act(r.id, "/data/release-roster", { id: r.id }, () => `Roster ${r.orderNumber || r.id} released: any station can take it.`)}>Release</button>}</td></tr>)}
+          {!d.rosters.length && <tr><td colSpan={5} style={{ ...cell, color: "var(--text-dim)" }}>None.</td></tr>}
+        </tbody></table></div>
+      </section>
+
+      <section style={st.card}>
+        <h2 style={st.h2}>Unfinished orders <span style={{ fontWeight: 400, color: "var(--text-dim)", fontSize: 14 }}>· {d.unfinished.filter(u => !u.closed).length} open, {d.unfinished.filter(u => u.closed).length} closed</span></h2>
+        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>{head(["Order", "Parked by", "Still out", "Open on", "File", "Changed", ""])}<tbody>
+          {d.unfinished.map(u => <tr key={u.id} style={u.closed ? { color: "var(--text-dim)" } : undefined}><td style={{ ...cell, fontWeight: 700 }}>{u.order}{u.kind === "sorter" ? " (sorter)" : ""}{u.closed ? " · closed" : ""}</td><td style={cell}>{stName(u.station)}</td><td style={cell}>{u.out}</td><td style={cell}>{u.openOn ? stName(u.openOn.station) : u.assignedTo ? `given to ${stName(u.assignedTo)}` : "—"}</td>
+            <td style={cell}>{u.file ? "on disk" : u.stored ? <Pill tone="fail">missing</Pill> : "—"}</td><td style={cell}>{when(u.updatedAt)}</td>
+            <td style={cell}>{(u.openOn || u.assignedTo) && <button style={small} disabled={!d.writable || !!busy} onClick={() => act(u.id, "/data/release-unfinished", { id: u.id }, () => `Order ${u.order} taken off its station: any station can pick it up.`)}>Take off station</button>}</td></tr>)}
+          {!d.unfinished.length && <tr><td colSpan={7} style={{ ...cell, color: "var(--text-dim)" }}>None.</td></tr>}
+        </tbody></table></div>
+        {d.orphanFiles.length > 0 && <p style={{ margin: "8px 0 0", color: "var(--warn-text)" }}>Order files with no entry (left in data\{"<"}hub{">"}-orders, not shown to stations): {d.orphanFiles.join(", ")}</p>}
+      </section>
+
+      <section style={st.card}>
+        <h2 style={st.h2}>Boxes left open for ship-with orders <span style={{ fontWeight: 400, color: "var(--text-dim)", fontSize: 14 }}>· {d.openBoxes.length}</span></h2>
+        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>{head(["Box", "From order", "For orders", "Garments", "Left", "Taken by", ""])}<tbody>
+          {d.openBoxes.map(b => <tr key={b.id}><td style={{ ...cell, fontWeight: 700 }}>{b.bin} {b.label}</td><td style={cell}>{b.order} · {stName(b.station)}</td><td style={cell}>{b.orders.join(", ")}</td><td style={cell}>{b.items}</td><td style={cell}>{when(b.at)}</td><td style={cell}>{b.takenBy ? `${b.takenBy.order || ""} ${stName(b.takenBy.station)}` : <span style={{ color: "var(--text-dim)" }}>waiting</span>}</td>
+            <td style={cell}><button style={small} disabled={!d.writable || !!busy} onClick={() => act(b.id, "/data/drop-openbox", { id: b.id }, () => `Box ${b.bin} given up: no order will take it.`)}>Give up</button></td></tr>)}
+          {!d.openBoxes.length && <tr><td colSpan={7} style={{ ...cell, color: "var(--text-dim)" }}>None.</td></tr>}
+        </tbody></table></div>
+      </section>
+
+      <section style={{ ...st.card, borderColor: d.canClear ? "var(--fail)" : "var(--line)" }}>
+        <h2 style={st.h2}>Clear test data</h2>
+        {d.canClear ? <>
+          <p style={{ margin: "0 0 10px", color: "var(--text-dim)" }}>Takes the stations, rosters, ledger, unfinished orders (and their files) and open boxes off this {d.stage} server, after a backup. The box model's answers stay. Only the development and testing servers have this; never production. Type <strong style={{ color: "var(--text)" }}>{want}</strong> to confirm.</p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <label htmlFor="adm-clear" style={{ position: "absolute", left: -9999 }}>Type {want}</label>
+            <input id="adm-clear" style={{ ...st.input, maxWidth: 280 }} value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={want} autoComplete="off" />
+            <button style={{ ...st.pri, background: "var(--fail)", borderColor: "var(--fail)", color: "#fff", ...(confirm.trim().toLowerCase() === want ? {} : { opacity: 0.45, cursor: "not-allowed" }) }} disabled={confirm.trim().toLowerCase() !== want || !d.writable || !!busy} onClick={() => act("clear", "/data/clear", { confirm }, r => `Test data cleared (${r.files} order files). The backup is data\\backups\\${r.backup}.`)}>{busy === "clear" ? "Clearing…" : "Back up, then clear"}</button>
+          </div>
+        </> : <p style={{ margin: 0, color: "var(--text-dim)" }}>Not on this server: clearing test data is only for the development and testing servers.</p>}
+      </section>
+
+      <section style={st.card}>
+        <h2 style={st.h2}>Backups <span style={{ fontWeight: 400, color: "var(--text-dim)", fontSize: 14 }}>· data\backups</span></h2>
+        <p style={{ margin: "0 0 8px", color: "var(--text-dim)" }}>Restoring one needs the server stopped, so it stays a job on the server PC (copy the files back into data\, or tools\merge-hub-data.mjs).</p>
+        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>{head(["Backup", "Size"])}<tbody>
+          {d.backups.map(b => <tr key={b.name}><td style={cell}>{b.name}</td><td style={cell}>{mb(b.size)}</td></tr>)}
+          {!d.backups.length && <tr><td colSpan={2} style={{ ...cell, color: "var(--text-dim)" }}>None yet.</td></tr>}
+        </tbody></table></div>
+      </section>
+    </>
+  );
+}
+
 function Appearance() {
   const [choice, setChoice] = useState(loadTheme);
   const pick = id => { setChoice(id); saveTheme(id); };
@@ -476,7 +564,7 @@ function Appearance() {
   );
 }
 
-const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "printers", label: "Printers" }, { id: "defaults", label: "Station defaults" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
+const TABS = [{ id: "health", label: "Health" }, { id: "operators", label: "Operators" }, { id: "printers", label: "Printers" }, { id: "defaults", label: "Station defaults" }, { id: "data", label: "Data" }, { id: "log", label: "Server log" }, { id: "changes", label: "Change log" }, { id: "look", label: "Light / dark" }];
 
 export default function AdminPanel() {
   const [s, setS] = useState(null);         // the session answer: stage, setup, signedIn …
@@ -517,6 +605,7 @@ export default function AdminPanel() {
               {tab === "operators" && <Operators />}
               {tab === "printers" && <Printers />}
               {tab === "defaults" && <StationDefaults />}
+              {tab === "data" && <DataTools />}
               {tab === "log" && <ServerLog />}
               {tab === "changes" && <ChangeLog />}
               {tab === "look" && <Appearance />}

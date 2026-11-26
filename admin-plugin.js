@@ -103,7 +103,40 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
   const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [], defaults: store.data.settings.defaults || {} });
   (globalThis.__jqcAdminConfig ||= new Map()).set(path.resolve(dataFile), { version: () => store.data.configVersion || 0, printers: () => store.data.settings.printers || {} });
   const hubPrinting = () => hubs?.()?.get?.(path.resolve(dataFile))?.printing || null;
-  const STATION_IDS = ["st-station1", "st-station2", "st-station3"];   // the floor's stations (config.js STATIONS); the page cannot be imported here
+  const STATION_IDS = ["st-station1", "st-station2", "st-station3"];
+  const hubEntry = () => hubs?.()?.get?.(path.resolve(dataFile)) || null;
+  // A request to the hub's own routes, so the hub stays the only one that changes its data
+  // (release a roster, take an unfinished order off a station, give up an open box).
+  const hubCall = (method, url, body) => new Promise(resolve => {
+    const h = hubEntry(); if (!h) return resolve({ status: 503, body: { error: "No hub is running for this data file." } });
+    const req = { method, url, headers: { "content-type": "application/json" }, socket: { remoteAddress: "admin" }, __jqcBody: Buffer.from(JSON.stringify(body || {})) };
+    const res = { statusCode: 200, setHeader() {}, end(t) { let b = {}; try { b = JSON.parse(t || "{}"); } catch { /* not JSON */ } resolve({ status: this.statusCode, body: b }); } };
+    Promise.resolve(h.handle(req, res)).catch(e => resolve({ status: 500, body: { error: e.message } }));
+  });
+  // "Back up now": what is pending in the hub is written first, then the same copy the
+  // promotion makes (tools/stagelib.ps1 Backup-Data): data\hub*.json and data\hub*-orders\
+  // into data\backups\<yyyy-MM-dd_HHmmss>\, the newest 20 kept.
+  const dataDir = path.dirname(path.resolve(dataFile));
+  const backupNow = () => {
+    hubEntry()?.flush?.();
+    const d = new Date(now()), z = n => String(n).padStart(2, "0");
+    const name = `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}`;
+    const to = path.join(dataDir, "backups", name);
+    fs.mkdirSync(to, { recursive: true });
+    let files = 0;
+    for (const f of fs.readdirSync(dataDir)) {
+      const from = path.join(dataDir, f), stat = fs.statSync(from);
+      if (stat.isFile() && /^hub.*\.json$/i.test(f)) { fs.copyFileSync(from, path.join(to, f)); files++; }
+      else if (stat.isDirectory() && /^hub.*-orders$/i.test(f)) { fs.cpSync(from, path.join(to, f), { recursive: true }); files += fs.readdirSync(from).length; }
+    }
+    const all = fs.readdirSync(path.join(dataDir, "backups")).filter(n => /^\d{4}-\d{2}-\d{2}_\d{6}$/.test(n)).sort().reverse();
+    for (const old of all.slice(20)) fs.rmSync(path.join(dataDir, "backups", old), { recursive: true, force: true });
+    return { name, files };
+  };
+  const dirSize = p => { let n = 0; try { for (const f of fs.readdirSync(p)) { const q = path.join(p, f), s = fs.statSync(q); n += s.isDirectory() ? dirSize(q) : s.size; } } catch { /* gone */ } return n; };
+  // Clearing test data is never allowed on production, whatever JQC_ADMIN_WRITE says, nor on a
+  // file named hub.json outside testing (the floor's name).
+  const canClear = stage !== "production" && (stage === "testing" || path.basename(dataFile).toLowerCase() !== "hub.json");   // the floor's stations (config.js STATIONS); the page cannot be imported here
   // A change to the settings: saved with the change log line in one write, version up.
   const change = (req, me, what, settings, before, after) => {
     if (!writable) return { code: 403, error: "This server's admin panel is read only (production: JQC_ADMIN_WRITE=1 in .env.local allows changes)." };
@@ -229,6 +262,44 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
         const bad = change(req, me, "station defaults", settings, show(before), show(map));
         if (bad) return send(res, bad.code, { error: bad.error });
         return send(res, 200, floorConfig());
+      }
+      if (route === "/data" && req.method === "GET") {
+        const h = hubEntry();
+        if (!h) return send(res, 503, { error: "No hub is running for this data file." });
+        const s0 = h.state() || {};
+        const rosters = Object.values(s0.rosters || {}).map(r => ({ id: r.id, orderNumber: r.orderNumber, rows: Array.isArray(r.rows) ? r.rows.length : 0, by: r.by || "", forStation: r.forStation || "", createdAt: r.createdAt || 0, takenBy: r.takenBy || null })).sort((a, b) => b.createdAt - a.createdAt);
+        let files = []; try { files = fs.readdirSync(h.orderDir).filter(f => f.endsWith(".json")).map(f => f.replace(/\.json$/, "")); } catch { /* none */ }
+        const entries = Object.values(s0.unfinished || {});
+        const withFile = new Set(files);
+        const unfinished = entries.map(u => ({ id: u.id, order: u.order, station: u.station || "", kind: u.kind || "", openOn: u.openOn || null, assignedTo: u.assignedTo || "", out: Array.isArray(u.out) ? u.out.length : 0, updatedAt: u.updatedAt || 0, closed: !!u.closed, stored: !!u.stored, file: withFile.has(String(u.id).replace(/[^\w-]/g, "")) })).sort((a, b) => b.updatedAt - a.updatedAt);
+        const known = new Set(entries.map(u => String(u.id).replace(/[^\w-]/g, "")));
+        const openBoxes = Object.entries(s0.openBoxes || {}).map(([id, b]) => ({ id, orders: b.orders || [], label: b.label || b.key || "", bin: b.bin || "", items: Array.isArray(b.items) ? b.items.length : 0, station: b.station || "", order: b.order || "", at: b.at || 0, takenBy: b.takenBy || null })).sort((a, b) => b.at - a.at);
+        let backups = []; try { backups = fs.readdirSync(path.join(dataDir, "backups")).filter(n => /^\d{4}-\d{2}-\d{2}_\d{6}$/.test(n)).sort().reverse().map(n => ({ name: n, size: dirSize(path.join(dataDir, "backups", n)) })); } catch { /* none */ }
+        return send(res, 200, { stage, writable, canClear, rosters, unfinished, orphanFiles: files.filter(f => !known.has(f)), openBoxes, boxAnswers: (s0.boxAnswers || []).length, ledgerDays: Object.keys(s0.ledger || {}).length, stations: Object.keys(s0.stations || {}).length, backups });
+      }
+      if (route.startsWith("/data/") && req.method === "POST") {
+        if (!writable) return send(res, 403, { error: "This server's admin panel is read only (production: JQC_ADMIN_WRITE=1 in .env.local allows changes)." });
+        const body = await readJson(req);
+        const id = String(body.id || "").trim();
+        const safeId = encodeURIComponent(id);
+        if (route === "/data/backup") {
+          try { const r = backupNow(); log(req, me.name, `backup made: data\\backups\\${r.name} (${r.files} files)`); return send(res, 200, r); }
+          catch (e) { return send(res, 500, { error: `Could not make the backup: ${e.message}` }); }
+        }
+        if (!id && route !== "/data/clear") return send(res, 400, { error: "Which one?" });
+        if (route === "/data/release-roster") { const r = await hubCall("POST", `/rosters/${safeId}/release`); if (r.status === 200) log(req, me.name, `roster ${id} released`); return send(res, r.status, r.body); }
+        if (route === "/data/release-unfinished") { const r = await hubCall("POST", `/unfinished/${safeId}/release`); if (r.status === 200) log(req, me.name, `unfinished order ${r.body.entry?.order || id} taken off its station`); return send(res, r.status, r.body); }
+        if (route === "/data/drop-openbox") { const r = await hubCall("DELETE", `/openboxes/${safeId}`); if (r.status === 200) log(req, me.name, `open box ${id} given up`); return send(res, r.status, r.body); }
+        if (route === "/data/clear") {
+          if (!canClear) return send(res, 403, { error: "Clearing test data is only for the development and testing servers." });
+          const want = `clear ${stage}`;
+          if (String(body.confirm || "").trim().toLowerCase() !== want) return send(res, 400, { error: `Type "${want}" to clear this server's test data.` });
+          const h = hubEntry(); if (!h?.clearTestData) return send(res, 503, { error: "No hub is running for this data file." });
+          let b; try { b = backupNow(); } catch (e) { return send(res, 500, { error: `No backup could be made, so nothing was cleared: ${e.message}` }); }
+          try { const r = h.clearTestData(); log(req, me.name, `test data cleared (stations, rosters, ledger, unfinished orders, open boxes; ${r.files} order files) after backup ${b.name}`); return send(res, 200, { ok: true, backup: b.name, files: r.files }); }
+          catch (e) { return send(res, 500, { error: `Not cleared: ${e.message}. The backup ${b.name} was made.` }); }
+        }
+        return send(res, 404, { error: `no such admin route: POST ${route}` });
       }
       if (route === "/printers" && req.method === "GET") {
         const pr = hubPrinting();

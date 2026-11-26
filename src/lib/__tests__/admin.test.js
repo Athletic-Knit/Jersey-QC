@@ -430,3 +430,77 @@ describe("Fable's review of phases 1-4 (26 Nov 2026)", () => {
     expect((await call(handle, "GET", "/audit", { cookie: c })).body.entries.map(e => e.what)).toContain("signed in");
   });
 });
+
+describe("phase 5: data tools", () => {
+  let dir, hubFile, h, a, c;
+  const seed = async () => {
+    await call(h.handle, "POST", "/rosters", { body: { orderNumber: "777001", rows: [{ number: "1" }, { number: "2" }], by: "Sup" } });
+    const rid = (await call(h.handle, "GET", "/rosters")).body.rosters[0].id;
+    await call(h.handle, "POST", `/rosters/${rid}/take`, { body: { station: "st-station2", operator: "Shiv" } });
+    await call(h.handle, "POST", "/openboxes", { body: { boxes: [{ orders: ["777002"], by: "team", key: "Hawks", label: "Hawks", bin: "1.1", items: [{ number: "1" }] }], station: "st-station1", order: "777001", run: 1 } });
+    await call(h.handle, "POST", "/boxes", { body: { counts: { "youth|st": 3 }, box: "small", station: "st-station1", order: "777001", bin: "1.1" } });
+    await call(h.handle, "POST", "/stations/st-station1", { body: { operatorName: "Shiv", roster: [], log: [] } });
+    return rid;
+  };
+  beforeEach(async () => {
+    dir = tmp(); hubFile = path.join(dir, "hub-test.json");
+    h = (await import("../../../hub-plugin.js")).createHub({ file: hubFile, print: async () => {}, listPrinters: async () => [] });
+    a = createAdmin({ dataFile: hubFile, stage: "development", env: ENV, git: async () => ({}) });
+    c = cookieFrom(await call(a.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+  });
+  it("shows what the hub holds; releases a stuck roster and gives up an open box through the hub's own routes, into the change log", async () => {
+    const rid = await seed();
+    const d = (await call(a.handle, "GET", "/data", { cookie: c })).body;
+    expect(d).toMatchObject({ stage: "development", canClear: true, stations: 1, boxAnswers: 1 });
+    expect(d.rosters[0]).toMatchObject({ id: rid, orderNumber: "777001", rows: 2, takenBy: { station: "st-station2" } });
+    expect(d.openBoxes.length).toBe(1);
+    expect((await call(a.handle, "POST", "/data/release-roster", { cookie: c, body: { id: rid } })).status).toBe(200);
+    expect(h.state().rosters[rid].takenBy).toBeUndefined();
+    expect((await call(a.handle, "POST", "/data/drop-openbox", { cookie: c, body: { id: d.openBoxes[0].id } })).status).toBe(200);
+    expect(Object.keys(h.state().openBoxes)).toEqual([]);
+    const what = (await call(a.handle, "GET", "/audit", { cookie: c })).body.entries.map(e => e.what);
+    expect(what[0]).toMatch(/open box .* given up/);
+    expect(what[1]).toMatch(/roster .* released/);
+    h.close();
+  });
+  it("Back up now copies the data file and the admin file into data/backups/<date_time>, the newest 20 kept", async () => {
+    await seed(); h.flush();
+    const b = fs.mkdirSync(path.join(dir, "backups"), { recursive: true });
+    for (let i = 0; i < 21; i++) fs.mkdirSync(path.join(dir, "backups", `2020-01-01_0000${String(i).padStart(2, "0")}`));
+    const r = await call(a.handle, "POST", "/data/backup", { cookie: c, body: {} });
+    expect(r.status).toBe(200);
+    expect(r.body.name).toMatch(/^\d{4}-\d{2}-\d{2}_\d{6}$/);
+    const copied = fs.readdirSync(path.join(dir, "backups", r.body.name));
+    expect(copied).toContain("hub-test.json");
+    expect(copied).toContain("hub-test-admin.json");
+    expect(fs.readdirSync(path.join(dir, "backups")).length).toBe(20);
+    expect(b === undefined || typeof b === "string").toBe(true);
+    h.close();
+  });
+  it("clearing test data needs the stage typed, makes a backup first, keeps the box answers, and is never offered on production or on a hub.json outside testing", async () => {
+    await seed(); h.flush();
+    expect((await call(a.handle, "POST", "/data/clear", { cookie: c, body: { confirm: "yes" } })).status).toBe(400);
+    const r = await call(a.handle, "POST", "/data/clear", { cookie: c, body: { confirm: "clear development" } });
+    expect(r.status).toBe(200);
+    expect(fs.existsSync(path.join(dir, "backups", r.body.backup, "hub-test.json"))).toBe(true);
+    const s1 = h.state();
+    expect(Object.keys(s1.stations)).toEqual([]);
+    expect(Object.keys(s1.rosters)).toEqual([]);
+    expect(s1.boxAnswers.length).toBe(1);
+    expect(JSON.parse(fs.readFileSync(hubFile, "utf8")).rosters).toEqual({});   // written at once
+    const prod = createAdmin({ dataFile: path.join(dir, "hub.json"), stage: "production", env: { ...ENV, JQC_ADMIN_WRITE: "1" }, git: async () => ({}) });
+    const pc = cookieFrom(await call(prod.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(prod.handle, "POST", "/data/clear", { cookie: pc, body: { confirm: "clear production" } })).status).toBe(403);
+    const devOnFloorName = createAdmin({ dataFile: path.join(dir, "hub.json"), stage: "development", env: ENV, git: async () => ({}) });
+    const dc = cookieFrom(await call(devOnFloorName.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(devOnFloorName.handle, "POST", "/data/clear", { cookie: dc, body: { confirm: "clear development" } })).status).toBe(403);   // a file named hub.json outside testing
+    h.close();
+  });
+  it("a read-only production refuses every data action but shows the data", async () => {
+    const ro = createAdmin({ dataFile: hubFile, stage: "production", env: ENV, git: async () => ({}) });
+    const rc = cookieFrom(await call(ro.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(ro.handle, "GET", "/data", { cookie: rc })).status).toBe(200);
+    for (const r of ["/data/backup", "/data/release-roster", "/data/drop-openbox", "/data/clear"]) expect((await call(ro.handle, "POST", r, { cookie: rc, body: { id: "x" } })).status, r).toBe(403);
+    h.close();
+  });
+});

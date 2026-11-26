@@ -874,7 +874,20 @@ Connection: close
     });
   };
 
-  hubs.set(key, { close, handle, flush, blocked: () => blocked, state: () => state,
+  // The admin panel's "clear test data" (phase 5, development and testing only; admin-plugin.js
+  // refuses it on production and makes a backup first): the stations, rosters, ledger,
+  // unfinished orders and open boxes go; the box model's answers stay (they teach every
+  // station). Written at once.
+  const clearTestData = () => {
+    if (blocked) throw new Error(`the hub is blocked: ${blocked}`);
+    state = { stations: {}, rosters: {}, boxAnswers: state.boxAnswers || [] };
+    boxModel = null;
+    let files = 0;
+    try { for (const f of fs.readdirSync(orderDir)) if (f.endsWith(".json")) { fs.unlinkSync(path.join(orderDir, f)); files++; } } catch { /* no orders folder */ }
+    writeNow();
+    return { files };
+  };
+  hubs.set(key, { close, handle, flush, blocked: () => blocked, state: () => state, orderDir, clearTestData,
     // the admin panel's printer page (phase 3): the queues, which one each station uses and why, the last print, a test label
     printing: { queues: () => printerList(), why: whyPrinter, last: () => lastPrint, test: testPrint, env: { printer: printerName, flagPrinter: flagName, stations: { ...perStation }, flagStations: { ...perStationFlag }, labelSize: labelSpec, flagLabelSize: flagSpec } } });   // the admin panel reads these (admin-plugin.js), read only
   return { handle, redirectPlainHttp, state: () => state, flush: writeNow, close, blocked: () => blocked };
