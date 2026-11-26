@@ -71,6 +71,8 @@ html { color-scheme: dark; }
   --k-pink-ink: #f9a8d4;
   --k-violet-ink: #ddd6fe;
   --k-strong: #ffffff;
+  --k-kbd-bg: rgba(0,0,0,0.3);
+  --k-kbd-line: rgba(255,255,255,0.3);
   --k-bg-green: #052e16;
   --k-bg-amber: #1c1a06;
   --k-bg-violet: #1a1033;
@@ -128,6 +130,8 @@ html { color-scheme: dark; }
   --k-pink-ink: #9d174d;
   --k-violet-ink: #5b21b6;
   --k-strong: #0b1220;
+  --k-kbd-bg: rgba(15,23,42,0.07);
+  --k-kbd-line: rgba(15,23,42,0.35);
   --k-bg-green: #dcfce7;
   --k-bg-amber: #fef3c7;
   --k-bg-violet: #ede9fe;

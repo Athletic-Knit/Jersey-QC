@@ -187,7 +187,7 @@ function ShipWithField({ value, onChange, placeholder }) {
 // A key cap drawn beside a button's label, so the operator sees which key does it.
 function Kbd({ light, children }) {
   return (
-    <kbd style={{ background: light ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.3)", padding: "3px 9px", borderRadius: 6, fontSize: 15, fontWeight: 700 }}>
+    <kbd style={{ background: light ? "rgba(255,255,255,0.12)" : "var(--k-kbd-bg)", border: light ? "1px solid rgba(255,255,255,0.3)" : "1px solid var(--k-kbd-line)", padding: "3px 9px", borderRadius: 6, fontSize: 15, fontWeight: 700 }}>
       {children}
     </kbd>
   );

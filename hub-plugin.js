@@ -439,6 +439,10 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
     if (blocked) return json(res, 503, { error: `the hub is not saving anything: ${blocked}. Restart the server once the file can be read.` });
     const parts = new URL(req.url, "http://hub").pathname.split("/").filter(Boolean);
     const [kind, id] = parts;
+    // An id is a key in the hub's maps: "__proto__" or "constructor" would reach every object in
+    // the server (state.stations, the rosters, the unfinished and open-box pools). Refused here
+    // for every route (Fable's review of admin phases 5-8).
+    if (parts.some(p => UNSAFE_KEYS.has(p))) return json(res, 400, { error: "no such id" });
     try {
       if (kind === "stations") {
         if (req.method === "GET" && !id) return json(res, 200, { now: now_(), today: new Date(now_()).toLocaleDateString("en-CA"), stations: Object.values(state.stations).map(s => Object.fromEntries(Object.entries(s).filter(([k]) => k !== "history"))).sort((a, b) => b.updatedAt - a.updatedAt) });   // history stays on the hub
@@ -895,6 +899,8 @@ Connection: close
 
 // The Vite plugin: the hub's routes under /api/hub on the dev server that
 // vite.config.js (or vite.config.stage.js) starts.
+export const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
 export default function hubPlugin(opts = {}) {
   const { handle, redirectPlainHttp, close } = createHub(opts);
   return {

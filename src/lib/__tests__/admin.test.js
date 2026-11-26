@@ -545,7 +545,7 @@ describe("phase 6: the AI proxy, read counts and model settings", () => {
   });
   it("a request with its own key (the test tools) spends its own key, is not checked or counted", async () => {
     const calls = [], p = await ai({ fetchImpl: fakeAnthropic(calls) });
-    expect((await post(p, read({ model: "claude-opus-5-5" }), { headers: { "x-api-key": "sk-own" } })).status).toBe(200);
+    expect((await post(p, read({ model: "claude-opus-5-5" }), { ip: "127.0.0.1", headers: { "x-api-key": "sk-own" } })).status).toBe(200);   // from the server's own PC (Fable's review of 5-8, L2)
     expect(calls[0].key).toBe("sk-own");
     expect(Object.keys(p.stats().days)).toEqual([]);
   });
@@ -675,5 +675,94 @@ describe("phase 7: inspection counts in the panel, PINs checked by the server", 
     expect(src).toMatch(/await checkPin\(pinOwner\.id, pin\)/);
     expect(src).not.toMatch(/pinOwner\.pin/);
     expect(src).toMatch(/createInspection\(\{ full: counts\.full, every: counts\.every/);
+  });
+});
+
+describe("Fable's review of phases 5-8 (26 Nov 2026)", () => {
+  const read = (over = {}) => ({ model: "claude-haiku-5-5", max_tokens: 300, messages: [{ role: "user", content: "x" }], ...over });
+  const answer = (calls) => async (url, opts) => { calls.push({ headers: opts.headers, signal: opts.signal }); return { status: 200, text: async () => JSON.stringify({ content: [], usage: { input_tokens: 10, output_tokens: 1 } }) }; };
+  const proxy = async (opts = {}) => (await import("../../../ai-proxy.js")).createAiProxy({ env: { CLAUDE_API_KEY: KEY }, dataFile: path.join(tmp(), "hub-test.json"), log: false, ...opts });
+  const post = (p, body, { ip = "10.0.0.5", headers = {} } = {}) => new Promise(resolve => {
+    const req = Readable.from([Buffer.from(JSON.stringify(body))]);
+    Object.assign(req, { method: "POST", url: "/v1/messages", headers, socket: { remoteAddress: ip } });
+    const res = { statusCode: 200, setHeader() {}, end(t) { resolve({ status: this.statusCode, body: JSON.parse(t || "{}") }); } };
+    p.handle(req, res);
+  });
+  it("M1: a station name like __proto__ counts under the PC's address and reaches no other object", async () => {
+    const { stationName } = await import("../../../ai-proxy.js");
+    expect(stationName("st-station2", "10.0.0.5")).toBe("st-station2");
+    expect(stationName("__proto__", "10.0.0.5")).toBe("10.0.0.5");
+    expect(stationName("constructor", "")).toBe("?");
+    const p = await proxy({ fetchImpl: answer([]) });
+    expect((await post(p, read(), { headers: { "x-jqc-station": "__proto__" } })).status).toBe(200);
+    expect(({}).calls).toBeUndefined();
+    expect(Object.values(p.stats().days)[0].stations["10.0.0.5"]).toEqual({ calls: 1, failed: 0 });
+  });
+  it("L2: an own key only from the server's PC (any PC on development and testing); tighter limits; no streaming; no beta header on the floor's key", async () => {
+    const calls = [];
+    const p = await proxy({ fetchImpl: answer(calls) });
+    expect((await post(p, read(), { headers: { "x-api-key": "sk-own" } })).status).toBe(403);
+    expect((await post(p, read(), { ip: "127.0.0.1", headers: { "x-api-key": "sk-own" } })).status).toBe(200);
+    const stage = await proxy({ fetchImpl: answer([]), ownKeyFromAnyPc: true });
+    expect((await post(stage, read(), { headers: { "x-api-key": "sk-own" } })).status).toBe(200);
+    expect((await post(p, read({ max_tokens: 4001 }))).status).toBe(400);
+    expect((await post(p, read({ max_tokens: 4000 }))).status).toBe(200);   // what vision.js asks with thinking on
+    expect((await post(p, read({ stream: true }))).status).toBe(400);
+    calls.length = 0;
+    await post(p, read(), { headers: { "anthropic-beta": "something" } });
+    expect(calls[0].headers["anthropic-beta"]).toBeUndefined();
+    const src = fs.readFileSync(new URL("../../../vite.config.stage.js", import.meta.url), "utf8");
+    expect(src).toMatch(/aiProxyPlugin\(\{ env, dataFile, ownKeyFromAnyPc: true \}\)/);
+  });
+  it("L3: Anthropic too slow: the call is stopped and the station hears 504, once", async () => {
+    const slow = async (url, opts) => new Promise((_, reject) => opts.signal.addEventListener("abort", () => reject(new Error("aborted"))));
+    const p = await proxy({ fetchImpl: slow, upstreamMs: 30 });
+    const r = await post(p, read());
+    expect(r.status).toBe(504);
+    expect(r.body.error.message).toMatch(/no answer from Anthropic/);
+  });
+  it("L4: a damaged counts file never fails a read; a reload reads the counts the proxy before it wrote", async () => {
+    const dir = tmp(), dataFile = path.join(dir, "hub-test.json");
+    const { createAiProxy, aiStatsFileFor } = await import("../../../ai-proxy.js");
+    fs.writeFileSync(aiStatsFileFor(dataFile), JSON.stringify({ days: null }));
+    const a = createAiProxy({ env: { CLAUDE_API_KEY: KEY }, dataFile, log: false, fetchImpl: answer([]) });
+    expect((await post(a, read())).status).toBe(200);
+    const b = createAiProxy({ env: { CLAUDE_API_KEY: KEY }, dataFile, log: false, fetchImpl: answer([]) });   // Vite loading the server again: a's counts are flushed first
+    expect(Object.values(b.stats().days)[0].calls).toBe(1);
+    fs.writeFileSync(aiStatsFileFor(dataFile), '{"days":{"2026-11-26":{"calls":2,"stations":{"__proto__":{"calls":9}},"models":[]}}}');
+    const c = createAiProxy({ env: { CLAUDE_API_KEY: KEY }, dataFile, log: false, fetchImpl: answer([]) });
+    expect(Object.getPrototypeOf(c.stats().days["2026-11-26"].stations)).toBe(null);
+  });
+  it("L1: a PIN someone knows does not clear the count for guessing another", async () => {
+    const a = createAdmin({ dataFile: path.join(tmp(), "hub-test.json"), stage: "production", env: { CLAUDE_API_KEY: KEY }, git: async () => ({}) });
+    const { PIN_TRIES } = await import("../../../admin-plugin.js");
+    for (let n = 0; n < PIN_TRIES - 1; n++) await call(a.handle, "POST", "/pin", { body: { id: "supervisor", pin: "0000" } });
+    expect((await call(a.handle, "POST", "/pin", { body: { id: "packer", pin: "2222" } })).status).toBe(200);   // a known PIN
+    await call(a.handle, "POST", "/pin", { body: { id: "supervisor", pin: "0001" } });
+    expect((await call(a.handle, "POST", "/pin", { body: { id: "supervisor", pin: "3333" } })).status).toBe(429);   // locked all the same
+    expect((await call(a.handle, "POST", "/pin", { body: { id: "station1", pin: "1001" } })).status).toBe(200);    // the station's own sign-in still works
+  });
+  it("L5: an order saved before phase 7 runs on the app's own counts, never the last order's", () => {
+    const i = createInspection({ full: 3, every: 4 });
+    i.load({ phase: "quick", remaining: 0, clean: 2 });
+    expect(i.current()).toMatchObject({ full: 5, every: 10 });
+    const v = createVigilance({ checks: 2 });
+    v.load({ remaining: 1 });
+    expect(v.checks).toBe(5);
+  });
+  it("the hub refuses __proto__ and constructor as an id on every route", async () => {
+    const h = (await import("../../../hub-plugin.js")).createHub({ file: path.join(tmp(), "hub-test.json"), print: async () => {}, listPrinters: async () => [] });
+    for (const [m, u] of [["POST", "/unfinished/__proto__/release"], ["POST", "/stations/__proto__"], ["GET", "/rosters/constructor"], ["DELETE", "/openboxes/__proto__"]]) {
+      expect((await call(h.handle, m, u, { body: { station: "st-station1" } })).status, u).toBe(400);
+    }
+    expect(({}).assignedTo).toBeUndefined();
+    expect(({}).station).toBeUndefined();
+  });
+  it("Back up now does not hold up the server (no synchronous copy); key caps are tokens in dark and light", () => {
+    const src = fs.readFileSync(new URL("../../../admin-plugin.js", import.meta.url), "utf8");
+    const b = src.slice(src.indexOf("const backupNow = async"), src.indexOf("return { name, files };"));
+    expect(b).not.toMatch(/Sync\(/);
+    const css = fs.readFileSync(new URL("../../index.css", import.meta.url), "utf8");
+    expect(css).toMatch(/--k-kbd-bg: rgba\(0,0,0,0\.3\);/);   // dark as before
   });
 });

@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: here,
     cacheDir: path.join(here, `.vite-${name}`),
-    plugins: [guardPlugin(), react(), basicSsl(), hubPlugin({ file: dataFile, ...printerEnv(env), ...(printOn ? {} : { print: noPrint }) }), replayPlugin({ files: replayFiles }), adminPlugin({ dataFile, stage: name, port: stage.port, env, root: here }), aiProxyPlugin({ env, dataFile })],
+    plugins: [guardPlugin(), react(), basicSsl(), hubPlugin({ file: dataFile, ...printerEnv(env), ...(printOn ? {} : { print: noPrint }) }), replayPlugin({ files: replayFiles }), adminPlugin({ dataFile, stage: name, port: stage.port, env, root: here }), aiProxyPlugin({ env, dataFile, ownKeyFromAnyPc: true })],
     server: {
       host: true, port: stage.port, strictPort: true,
     },

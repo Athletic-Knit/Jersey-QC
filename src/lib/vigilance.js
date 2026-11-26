@@ -51,7 +51,7 @@ export function createVigilance({ checks: given = CHECKS_AFTER_MISTAKE, log } = 
     reset() { remaining = 0; },
     // For the saved session.
     state() { return { remaining, mistakes, last, checks }; },
-    load(s) { if (s && typeof s === "object") { remaining = Number(s.remaining) || 0; mistakes = Number(s.mistakes) || 0; last = s.last || null; checks = count(s.checks, 1, 20) ?? checks; } },
+    load(s) { if (s && typeof s === "object") { remaining = Number(s.remaining) || 0; mistakes = Number(s.mistakes) || 0; last = s.last || null; checks = count(s.checks, 1, 20) ?? CHECKS_AFTER_MISTAKE; } },
   };
 }
 
@@ -206,7 +206,7 @@ export function createInspection({ full: givenFull = INSPECT_FULL, every: givenE
     state() { return { phase, remaining, clean, defects, focus: { ...focus }, full, every }; },
     load(s) {
       if (!s || typeof s !== "object") return;
-      full = count(s.full, 1, 20) ?? full; every = count(s.every, 1, 50) ?? every;
+      full = count(s.full, 1, 20) ?? INSPECT_FULL; every = count(s.every, 1, 50) ?? INSPECT_EVERY;
       phase = ["full", "quick", "sample"].includes(s.phase) ? s.phase : "full";
       remaining = Number(s.remaining) || 0; clean = Number(s.clean) || 0; defects = Number(s.defects) || 0;
       focus = {};

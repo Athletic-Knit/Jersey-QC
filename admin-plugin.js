@@ -122,20 +122,20 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
   // promotion makes (tools/stagelib.ps1 Backup-Data): data\hub*.json and data\hub*-orders\
   // into data\backups\<yyyy-MM-dd_HHmmss>\, the newest 20 kept.
   const dataDir = path.dirname(path.resolve(dataFile));
-  const backupNow = () => {
+  const backupNow = async () => {
     hubEntry()?.flush?.();
     const d = new Date(now()), z = n => String(n).padStart(2, "0");
     const name = `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}`;
     const to = path.join(dataDir, "backups", name);
-    fs.mkdirSync(to, { recursive: true });
+    await fs.promises.mkdir(to, { recursive: true });
     let files = 0;
-    for (const f of fs.readdirSync(dataDir)) {
-      const from = path.join(dataDir, f), stat = fs.statSync(from);
-      if (stat.isFile() && /^hub.*\.json$/i.test(f)) { fs.copyFileSync(from, path.join(to, f)); files++; }
-      else if (stat.isDirectory() && /^hub.*-orders$/i.test(f)) { fs.cpSync(from, path.join(to, f), { recursive: true }); files += fs.readdirSync(from).length; }
+    for (const f of await fs.promises.readdir(dataDir)) {
+      const from = path.join(dataDir, f), stat = await fs.promises.stat(from);
+      if (stat.isFile() && /^hub.*\.json$/i.test(f)) { await fs.promises.copyFile(from, path.join(to, f)); files++; }
+      else if (stat.isDirectory() && /^hub.*-orders$/i.test(f)) { await fs.promises.cp(from, path.join(to, f), { recursive: true }); files += (await fs.promises.readdir(from)).length; }
     }
-    const all = fs.readdirSync(path.join(dataDir, "backups")).filter(n => /^\d{4}-\d{2}-\d{2}_\d{6}$/.test(n)).sort().reverse();
-    for (const old of all.slice(20)) fs.rmSync(path.join(dataDir, "backups", old), { recursive: true, force: true });
+    const all = (await fs.promises.readdir(path.join(dataDir, "backups"))).filter(n => /^\d{4}-\d{2}-\d{2}_\d{6}$/.test(n)).sort().reverse();
+    for (const old of all.slice(20)) await fs.promises.rm(path.join(dataDir, "backups", old), { recursive: true, force: true });
     return { name, files };
   };
   const dirSize = p => { let n = 0; try { for (const f of fs.readdirSync(p)) { const q = path.join(p, f), s = fs.statSync(q); n += s.isDirectory() ? dirSize(q) : s.size; } } catch { /* gone */ } return n; };
@@ -215,17 +215,20 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
       if (route === "/session" && req.method === "GET")
         return send(res, 200, { setup: !!password, signedIn: !!me, name: me?.name || "", stage, port, host: hostname, writable });
       // The sign-in PIN (phase 7): public, before the admin password (a server with no admin
-      // password still signs operators in). Yes or no, never the PIN; 10 wrong from one PC in a
-      // row lock it for a minute (four digits are quick to try).
+      // password still signs operators in). Yes or no, never the PIN; 10 wrong in a row for one
+      // role or station from one PC lock that one for a minute (four digits are quick to try).
+      // Counted per PC AND per role or station: a PIN someone knows (their own station's) must not
+      // clear the count for guessing another (Fable's review of 5-8, L1).
       if (route === "/pin" && req.method === "POST") {
-        const ip = ipOf(req), f = pinFails.get(ip);
-        if (f && f.until > now()) return send(res, 429, { ok: false, error: `Too many wrong PINs from this PC. Try again in ${Math.ceil((f.until - now()) / 1000)} s.` });
+        const ip = ipOf(req);
         const body = await readJson(req);
         const id = String(body.id || "");
         if (!PIN_IDS.includes(id)) return send(res, 400, { ok: false, error: "No such role or station." });
-        if (same(String(body.pin ?? ""), pinFor(env, id).pin)) { pinFails.delete(ip); return send(res, 200, { ok: true }); }
+        const slot = `${ip}|${id}`, f = pinFails.get(slot);
+        if (f && f.until > now()) return send(res, 429, { ok: false, error: `Too many wrong PINs from this PC. Try again in ${Math.ceil((f.until - now()) / 1000)} s.` });
+        if (same(String(body.pin ?? ""), pinFor(env, id).pin)) { pinFails.delete(slot); return send(res, 200, { ok: true }); }
         const n = (f?.n || 0) + 1;
-        pinFails.set(ip, n >= PIN_TRIES ? { n: 0, until: now() + PIN_LOCK_MS } : { n, until: 0 });
+        pinFails.set(slot, n >= PIN_TRIES ? { n: 0, until: now() + PIN_LOCK_MS } : { n, until: 0 });
         console.log(`[admin] wrong PIN for ${id} from ${ip || "?"}`);   // never the PIN typed
         return send(res, 401, { ok: false, error: n >= PIN_TRIES ? "Wrong PIN. This PC must wait a minute." : "Wrong PIN." });
       }
@@ -304,7 +307,7 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
         const id = String(body.id || "").trim();
         const safeId = encodeURIComponent(id);
         if (route === "/data/backup") {
-          try { const r = backupNow(); log(req, me.name, `backup made: data\\backups\\${r.name} (${r.files} files)`); return send(res, 200, r); }
+          try { const r = await backupNow(); log(req, me.name, `backup made: data\\backups\\${r.name} (${r.files} files)`); return send(res, 200, r); }
           catch (e) { return send(res, 500, { error: `Could not make the backup: ${e.message}` }); }
         }
         if (!id && route !== "/data/clear") return send(res, 400, { error: "Which one?" });
@@ -316,7 +319,7 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
           const want = `clear ${stage}`;
           if (String(body.confirm || "").trim().toLowerCase() !== want) return send(res, 400, { error: `Type "${want}" to clear this server's test data.` });
           const h = hubEntry(); if (!h?.clearTestData) return send(res, 503, { error: "No hub is running for this data file." });
-          let b; try { b = backupNow(); } catch (e) { return send(res, 500, { error: `No backup could be made, so nothing was cleared: ${e.message}` }); }
+          let b; try { b = await backupNow(); } catch (e) { return send(res, 500, { error: `No backup could be made, so nothing was cleared: ${e.message}` }); }
           try { const r = h.clearTestData(); log(req, me.name, `test data cleared (stations, rosters, ledger, unfinished orders, open boxes; ${r.files} order files) after backup ${b.name}`); return send(res, 200, { ok: true, backup: b.name, files: r.files }); }
           catch (e) { return send(res, 500, { error: `Not cleared: ${e.message}. The backup ${b.name} was made.` }); }
         }

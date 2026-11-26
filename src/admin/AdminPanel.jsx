@@ -555,14 +555,17 @@ const AI_LABEL = { model: "Model", effort: "Effort", thinking: "Thinking", maxPx
 const AI_OPTS = { effort: [["low", "Low"], ["medium", "Medium"], ["high", "High"]], thinking: [["off", "Off"], ["adaptive", "Adaptive"]], maxPx: [[640, "640"], [800, "800"], [1024, "1024"], [1280, "1280"]] };
 const tok = n => (n >= 1e6 ? `${(n / 1e6).toFixed(2)} M` : n >= 1e3 ? `${Math.round(n / 1e3)} k` : String(n || 0));
 const medianOf = (b = []) => { const n = b.reduce((a, x) => a + (x || 0), 0); if (!n) return 0; let s = 0; for (let i = 0; i < b.length; i++) { s += b[i] || 0; if (s >= n / 2) return (i + 0.5) * 250; } return 0; };
+// { total, partial }: what the day's reads cost at the prices typed in; `partial` when reads on
+// a model with no price are left out (Fable's review of 5-8, L6). null when nothing is priced.
 const costOf = (day, prices) => {
-  let total = 0, priced = false;
+  let total = 0, priced = false, partial = false;
   for (const [m, u] of Object.entries(day.models || {})) {
-    const p = prices[m]; if (!p || typeof u !== "object") continue;
+    if (!u || typeof u !== "object" || !u.calls) continue;
+    const p = prices[m]; if (!p) { partial = true; continue; }
     priced = true;
     total += ((u.input || 0) * (p.input || 0) + (u.output || 0) * (p.output || 0) + (u.cacheRead || 0) * (p.cacheRead || 0) + (u.cacheWrite || 0) * (p.cacheWrite || 0)) / 1e6;
   }
-  return priced ? total : null;
+  return priced ? { total, partial } : null;
 };
 // Floor rules (phase 7): the inspection counts (the co-op's decision 6), and where each sign-in
 // PIN comes from (checked by the server; the PIN itself is never shown or changed here).
@@ -642,6 +645,7 @@ function AiReads() {
     finally { setBusy(false); }
   };
   const days = Object.entries(d.days || {}).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 14);
+  const priceModels = [...new Set([...d.models, ...Object.values(d.days || {}).flatMap(x => Object.keys(x.models || {})).filter(m => /^claude-[a-z0-9.-]{1,60}$/.test(m))])];
   const today = days[0]?.[1];
   const cell = { padding: "6px 8px", borderBottom: "1px solid var(--line)", verticalAlign: "middle", fontVariantNumeric: "tabular-nums" };
   const head = cols => <thead><tr>{cols.map(h => <th key={h} style={{ ...cell, textAlign: "left", color: "var(--text-dim)", borderBottom: "2px solid var(--line-strong)" }}>{h}</th>)}</tr></thead>;
@@ -678,7 +682,7 @@ function AiReads() {
         <h2 style={st.h2}>Reads <span style={{ fontWeight: 400, color: "var(--text-dim)", fontSize: 14 }}>· with this server's key, per day</span></h2>
         <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>{head(["Day", "Reads", "Failed", "Refused", "Median time", "Input", "Output", "Cache read", "Cache write", "Cost"])}<tbody>
           {days.map(([day, x]) => { const c = costOf(x, d.prices || {}); return (
-            <tr key={day}><td style={{ ...cell, fontWeight: 700 }}>{day}</td><td style={cell}>{x.calls}</td><td style={{ ...cell, color: x.failed ? "var(--fail-text)" : undefined }}>{x.failed}</td><td style={{ ...cell, color: x.refused ? "var(--warn-text)" : undefined }}>{x.refused}</td><td style={cell}>{(medianOf(x.ms) / 1000).toFixed(1)} s</td><td style={cell}>{tok(x.input)}</td><td style={cell}>{tok(x.output)}</td><td style={cell}>{tok(x.cacheRead)}</td><td style={cell}>{tok(x.cacheWrite)}</td><td style={cell}>{c === null ? "—" : `$${c.toFixed(2)}`}</td></tr>); })}
+            <tr key={day}><td style={{ ...cell, fontWeight: 700 }}>{day}</td><td style={cell}>{x.calls}</td><td style={{ ...cell, color: x.failed ? "var(--fail-text)" : undefined }}>{x.failed}</td><td style={{ ...cell, color: x.refused ? "var(--warn-text)" : undefined }}>{x.refused}</td><td style={cell}>{(medianOf(x.ms) / 1000).toFixed(1)} s</td><td style={cell}>{tok(x.input)}</td><td style={cell}>{tok(x.output)}</td><td style={cell}>{tok(x.cacheRead)}</td><td style={cell}>{tok(x.cacheWrite)}</td><td style={cell} title={c?.partial ? "Some reads were on a model with no price: they are not in this sum" : undefined}>{c === null ? "—" : `$${c.total.toFixed(2)}${c.partial ? " + ?" : ""}`}</td></tr>); })}
           {!days.length && <tr><td colSpan={10} style={{ ...cell, color: "var(--text-dim)" }}>No reads counted yet on this server (counting started with phase 6).</td></tr>}
         </tbody></table></div>
         {today && <p style={{ margin: "10px 0 0" }}>Today by station: {Object.entries(today.stations || {}).map(([s, v]) => `${s.replace(/^st-station/i, "Station ")} ${v.calls}${v.failed ? ` (${v.failed} failed)` : ""}`).join(" · ") || "none"}. Refused means the server stopped a read that was not the app's own, or one too many from one PC in a minute.</p>}
@@ -697,7 +701,7 @@ function AiReads() {
       <section style={st.card}>
         <h2 style={st.h2}>Token prices <span style={{ fontWeight: 400, color: "var(--text-dim)", fontSize: 14 }}>· dollars per million tokens, from Anthropic's price page, for the cost column</span></h2>
         <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>{head(["Model", "Input", "Output", "Cache read", "Cache write"])}<tbody>
-          {d.models.map(m => <tr key={m}><td style={{ ...cell, fontWeight: 700 }}>{m}</td>{["input", "output", "cacheRead", "cacheWrite"].map(k => <td key={k} style={cell}><input aria-label={`${m} ${k}`} type="number" min="0" step="any" style={{ ...st.input, width: 100, padding: "6px 8px" }} disabled={!d.writable} value={prices[m]?.[k] ?? ""} onChange={e => setPrice(m, k, e.target.value)} placeholder="—" /></td>)}</tr>)}
+          {priceModels.map(m => <tr key={m}><td style={{ ...cell, fontWeight: 700 }}>{m}</td>{["input", "output", "cacheRead", "cacheWrite"].map(k => <td key={k} style={cell}><input aria-label={`${m} ${k}`} type="number" min="0" step="any" style={{ ...st.input, width: 100, padding: "6px 8px" }} disabled={!d.writable} value={prices[m]?.[k] ?? ""} onChange={e => setPrice(m, k, e.target.value)} placeholder="—" /></td>)}</tr>)}
         </tbody></table></div>
         {d.writable && <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
           <button style={pricesChanged ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!pricesChanged || busy} onClick={() => save("/settings/prices", { prices }, "Prices saved.")}>Save prices</button>

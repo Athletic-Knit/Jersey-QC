@@ -9,7 +9,9 @@
 //   - at most MAX_BODY bytes and max_tokens at most MAX_TOKENS, at most 4 messages,
 //   - at most PER_PC_MIN requests a minute from one address and ALL_MIN from all;
 // anything else gets an Anthropic-shaped error the station shows. A request that brings
-// its own x-api-key (the test tools) spends its own key and is passed as before.
+// its own x-api-key (the test tools) spends its own key: from the server's own PC on every
+// stage, from any PC only where `ownKeyFromAnyPc` is set (development and testing), so a
+// floor PC with no internet cannot use the server as a way out (Fable's review of 5-8, L2).
 // Every read with the server's key is counted (calls, failures, time, tokens, per day and
 // per station) and kept in data/<hub data file>-ai.json, written at most once a minute.
 import fs from "node:fs";
@@ -17,11 +19,32 @@ import path from "node:path";
 import { Buffer } from "node:buffer";
 
 export const ALLOWED_MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5"];
-export const MAX_BODY = 4 * 1024 * 1024, MAX_TOKENS = 8000, PER_PC_MIN = 120, ALL_MIN = 600;
+// A real read is 100-400 KB (an 800 px JPEG; 1600 px at most from the panel) and asks for 300 or
+// 4000 tokens (vision.js), so these leave room and no more (Fable's review of 5-8, L2).
+export const MAX_BODY = 2 * 1024 * 1024, MAX_TOKENS = 4000, PER_PC_MIN = 120, ALL_MIN = 600, UPSTREAM_MS = 30000;
 const KEEP_DAYS = 60, BUCKET_MS = 250, BUCKETS = 121;   // time taken, in 250 ms steps up to 30 s
 
 const dayOf = t => new Date(t).toLocaleDateString("en-CA");
 const error = (res, code, type, message) => { res.statusCode = code; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ type: "error", error: { type, message } })); };
+
+// A station's name as the station sends it (st-station1): anything else counts under the PC's
+// address. Never "__proto__" or "constructor", which would write into every object in the
+// server (Fable's review of 5-8, M1).
+export const stationName = (header, ip) => { const h = String(header || ""); return /^st-[a-z0-9-]{1,30}$/i.test(h) ? h : (ip || "?"); };
+const LOOPBACK = new Set(["127.0.0.1", "::1", "localhost"]);
+const isMap = o => !!o && typeof o === "object" && !Array.isArray(o);
+// The counts as read from disk: only plain maps, with no inherited names, survive.
+function cleanStats(o) {
+  const days = Object.create(null);
+  if (!isMap(o) || !isMap(o.days)) return { days };
+  for (const [d, x] of Object.entries(o.days)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !isMap(x)) continue;
+    const day = { ...x, ms: Array.isArray(x.ms) ? x.ms : [], stations: Object.create(null), models: Object.create(null) };
+    for (const k of ["stations", "models"]) if (isMap(x[k])) for (const [n, v] of Object.entries(x[k])) if (isMap(v)) day[k][n] = v;
+    days[d] = day;
+  }
+  return { days };
+}
 
 export function aiStatsFileFor(dataFile) { const { dir, name } = path.parse(path.resolve(dataFile)); return path.join(dir, `${name}-ai.json`); }
 
@@ -32,7 +55,7 @@ export function medianMs(buckets = []) {
   return 0;
 }
 
-export function createAiProxy({ env = {}, dataFile = path.resolve("data/hub.json"), now = () => Date.now(), fetchImpl = globalThis.fetch, log = true, panelModel = () => "" } = {}) {
+export function createAiProxy({ env = {}, dataFile = path.resolve("data/hub.json"), now = () => Date.now(), fetchImpl = globalThis.fetch, log = true, panelModel = () => "", ownKeyFromAnyPc = false, upstreamMs = UPSTREAM_MS } = {}) {
   const key = env.CLAUDE_API_KEY || env.VITE_CLAUDE_API_KEY || "";
   const statsFile = aiStatsFileFor(dataFile);
   const allowed = () => new Set([...ALLOWED_MODELS, String(env.VITE_CLAUDE_MODEL || ""), String(panelModel() || "")].filter(Boolean));
@@ -40,8 +63,11 @@ export function createAiProxy({ env = {}, dataFile = path.resolve("data/hub.json
   if (!key) console.log(`${stamp()} [anthropic] no API key in .env.local (CLAUDE_API_KEY): the stations cannot read garments`);
 
   // { days: { "2026-11-26": { calls, failed, refused, input, output, cacheRead, cacheWrite, ms: [buckets], stations: { id: { calls, failed } }, models: { m: { calls, input, output, cacheRead, cacheWrite } } } } }
-  let stats = { days: {} };
-  try { const o = JSON.parse(fs.readFileSync(statsFile, "utf8")); if (o && typeof o.days === "object") stats = o; } catch { /* none yet, or unreadable: start counting again */ }
+  // A proxy on the same file before this one (Vite loading the server again) writes its
+  // counts first, so they are read here and not written over (Fable's review of 5-8, L4).
+  globalThis.__jqcAi?.get(path.resolve(dataFile))?.flush?.();
+  let stats = { days: Object.create(null) };
+  try { stats = cleanStats(JSON.parse(fs.readFileSync(statsFile, "utf8"))); } catch { /* none yet, or unreadable: start counting again */ }
   let dirty = false, timer = null;
   const writeNow = () => {
     clearTimeout(timer); timer = null; if (!dirty) return;
@@ -50,8 +76,9 @@ export function createAiProxy({ env = {}, dataFile = path.resolve("data/hub.json
     catch (e) { console.error(`[anthropic] could not save the read counts: ${e.message}`); }
   };
   const touch = () => { dirty = true; if (!timer) timer = setTimeout(writeNow, 60000); };
-  const day = () => { const d = dayOf(now()); return (stats.days[d] ||= { calls: 0, failed: 0, refused: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, ms: [], stations: {}, models: {} }); };
-  const count = (station, model, ok, ms, usage) => {
+  const day = () => { const d = dayOf(now()); return (stats.days[d] ||= { calls: 0, failed: 0, refused: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, ms: [], stations: Object.create(null), models: Object.create(null) }); };
+  const count = (station, model, ok, ms, usage) => { try { countNow(station, model, ok, ms, usage); } catch (e) { console.error(`[anthropic] could not count a read: ${e.message}`); } };   // counting never fails a read
+  const countNow = (station, model, ok, ms, usage) => {
     const d = day(); d.calls++; if (!ok) d.failed++;
     const b = Math.min(BUCKETS - 1, Math.floor(ms / BUCKET_MS)); d.ms[b] = (d.ms[b] || 0) + 1;
     const s = (d.stations[station] ||= { calls: 0, failed: 0 }); s.calls++; if (!ok) s.failed++;
@@ -80,6 +107,7 @@ export function createAiProxy({ env = {}, dataFile = path.resolve("data/hub.json
     catch (e) { return error(res, 400, "invalid_request_error", e.message); }
     const raw = Buffer.concat(chunks);
     const ownKey = String(req.headers["x-api-key"] || "");
+    if (ownKey && !ownKeyFromAnyPc && !LOOPBACK.has(ip)) { refused(); return error(res, 403, "permission_error", "A request with its own API key is taken only from this server's own PC."); }
     let body = null;
     try { body = JSON.parse(raw.toString("utf8")); } catch { /* checked below */ }
     if (!ownKey) {
@@ -88,24 +116,36 @@ export function createAiProxy({ env = {}, dataFile = path.resolve("data/hub.json
       if (!allowed().has(String(body.model))) { refused(); return error(res, 403, "permission_error", `The model ${String(body.model).slice(0, 60)} is not allowed through this server.`); }
       if (!(Number(body.max_tokens) > 0 && Number(body.max_tokens) <= MAX_TOKENS)) { refused(); return error(res, 400, "invalid_request_error", `max_tokens must be 1 to ${MAX_TOKENS}.`); }
       if (!Array.isArray(body.messages) || body.messages.length > 4) { refused(); return error(res, 400, "invalid_request_error", "A read has at most 4 messages."); }
+      if (body.stream) { refused(); return error(res, 400, "invalid_request_error", "Reads through this server are not streamed."); }
       if (overLimit(ip)) { refused(); return error(res, 429, "rate_limit_error", "Too many reads from this PC in the last minute: slow down and scan again."); }
     }
-    const station = String(req.headers["x-jqc-station"] || "").replace(/[^\w-]/g, "").slice(0, 40) || ip || "?";
+    const station = stationName(req.headers["x-jqc-station"], ip);
     const t0 = now();
     let status = 502, text = "";
+    // Stopped after upstreamMs, or as soon as the station gives up (it retries after 25 s), so a
+    // slow answer is never paid for twice (Fable's review of 5-8, L3).
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(new Error(`no answer from Anthropic after ${Math.round(upstreamMs / 1000)} s`)), upstreamMs);
+    const gaveUp = () => ac.abort(new Error("the station stopped waiting"));
+    res.on?.("close", () => { if (!res.writableEnded) gaveUp(); });   // the response closed before an answer: the station hung up (a request's own "close" fires once its body is read)
     try {
       const r = await fetchImpl("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-api-key": ownKey || key, "anthropic-version": String(req.headers["anthropic-version"] || "2023-06-01"), ...(req.headers["anthropic-beta"] ? { "anthropic-beta": String(req.headers["anthropic-beta"]) } : {}) },
+        // anthropic-beta only with the sender's own key: the floor's key reads the plain API.
+        headers: { "content-type": "application/json", "x-api-key": ownKey || key, "anthropic-version": String(req.headers["anthropic-version"] || "2023-06-01"), ...(ownKey && req.headers["anthropic-beta"] ? { "anthropic-beta": String(req.headers["anthropic-beta"]) } : {}) },
         body: raw,
+        signal: ac.signal,
       });
       status = r.status; text = await r.text();
     } catch (e) {
-      text = JSON.stringify({ type: "error", error: { type: "api_error", message: `The server could not reach Anthropic: ${e.message}` } });
-    }
+      const why = ac.signal.aborted ? String(ac.signal.reason?.message || e.message) : e.message;
+      status = ac.signal.aborted ? 504 : 502;
+      text = JSON.stringify({ type: "error", error: { type: "api_error", message: `The server could not reach Anthropic: ${why}` } });
+    } finally { clearTimeout(timer); }
     const ms = now() - t0;
     if (!ownKey) { let usage = null; try { usage = JSON.parse(text).usage || null; } catch { /* error body */ } count(station, String(body?.model || "?"), status >= 200 && status < 300, ms, usage); }
     if (log) console.log(`${stamp()} [anthropic] ${status} in ${ms} ms from ${ip || "?"}${station !== ip ? ` (${station})` : ""}${ownKey ? " (its own key)" : ""}`);
+    if (res.writableEnded || res.destroyed) return;
     res.statusCode = status; res.setHeader("Content-Type", "application/json"); res.end(text);
   }
   const entry = { stats: () => stats, flush: writeNow, allowed: () => [...allowed()], limits: { maxBody: MAX_BODY, maxTokens: MAX_TOKENS, perPcMin: PER_PC_MIN, allMin: ALL_MIN } };
