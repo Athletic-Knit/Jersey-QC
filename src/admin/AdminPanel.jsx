@@ -258,13 +258,13 @@ function Operators() {
 // queues this server PC has; the last print; a test label on any queue and roll. A queue set
 // here is used before .env.local (the station's own, then "every station"); a blank box
 // means .env.local as before. Changes take effect with the next print, no restart.
-const ROLLS = [{ id: "2x4", label: "2 × 4 in" }, { id: "2x3", label: "2 × 3 in" }, { id: "2x1", label: "2 × 1 in" }, { id: "1x0.5", label: "1 × ½ in" }];
+const ROLLS = [{ id: "2x3", label: "2 × 3 in" }, { id: "2x4", label: "2 × 4 in" }, { id: "2x1", label: "2 × 1 in" }, { id: "1x0.5", label: "1 × ½ in" }];
 function Printers() {
   const [p, setP] = useState(null);
   const [draft, setDraft] = useState({});
   const [msg, setMsg] = useState({ tone: "", text: "" });
   const [busy, setBusy] = useState(false);
-  const [test, setTest] = useState({ queue: "", roll: "2x4" });
+  const [test, setTest] = useState({ queue: "", roll: "2x3" });
   const [unknown, setUnknown] = useState([]);   // printer names the server did not find on its list: "Save anyway"
   const load = useCallback(() => api("/printers").then(r => { setP(r); setDraft(r.overrides || {}); setTest(t => ({ ...t, queue: t.queue || r.stations[0]?.ticket?.name || r.queues.find(q => q.zebra)?.name || "" })); }).catch(e => setMsg({ tone: "fail", text: e.message })), []);
   useEffect(() => { load(); }, [load]);
@@ -361,7 +361,7 @@ function Printers() {
 // Station defaults (phase 4): what a station uses for each setting its operator has not
 // changed there (the co-op: no locks, admins set the defaults). Blank = the app's own default.
 // A station takes them at its next sign-in, or as soon as no order is open; never mid-order.
-const ROLL_OPTS = [["2x4", "2 × 4 in"], ["2x3", "2 × 3 in"], ["2x1", "2 × 1 in"], ["1x0.5", "1 × ½ in"]];
+const ROLL_OPTS = [["2x3", "2 × 3 in"], ["2x4", "2 × 4 in"], ["2x1", "2 × 1 in"], ["1x0.5", "1 × ½ in"]];
 const DEFAULT_ROWS = [
   { group: "Keys and the pedal" },
   { k: "scanKey", label: "Scan", type: "key" },

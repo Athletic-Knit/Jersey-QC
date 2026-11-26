@@ -54,7 +54,7 @@ import { nowStep, listUnchanged, listIds } from "./lib/packing.js";
 import { photoSet, photoCaption } from "./lib/photoset.js";
 import { packBoxes, boxLabelJobs, boxListJobs, boxListLabels, boxFaceJobs, signoffJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
 import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, NO_SIZE_TAG, FIXED_AT_STATION, GARMENT_MENU, DEFAULT_ORDER_GARMENT, LABEL_ROLLS } from "./config.js";
-import { garment as garmentShape, garmentOf, garmentView, toView, fromView, spotAt, spotWords, rosterGarment, orderGarmentOf, SIDES, SIDE_LABELS, MAX_SPOTS } from "./lib/garments.js";
+import { garment as garmentShape, garmentOf, garmentView, toView, fromView, spotAt, spotWords, rosterGarment, orderGarmentOf, SIDES, sideLabel, MAX_SPOTS, GARMENT_GROUPS } from "./lib/garments.js";
 
 
 const S_PASS    = "pass";
@@ -569,13 +569,19 @@ function JerseyTypePicker({ value, onChange }) {
 // by default. A roster whose rows mostly carry a known style picks it by itself.
 function GarmentPicker({ value, onChange }) {
   const v = orderGarmentOf(value);
+  // One row a group (Hockey, Basketball, Baseball, Apparel: the owner, 26 Nov 2026).
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      {GARMENT_MENU.map(g => (
-        <button key={g.id} type="button" onClick={() => onChange(g.id)} aria-pressed={v === g.id}
-          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: v === g.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: v === g.id ? "rgba(96,165,250,0.15)" : "transparent", color: v === g.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: v === g.id ? 700 : 400 }}>
-          {g.label}
-        </button>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {GARMENT_GROUPS.map(group => (
+        <div key={group} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ width: 92, fontSize: 13, fontWeight: 700, color: "var(--k-ink-3)", textTransform: "uppercase", letterSpacing: 1 }}>{group}</span>
+          {GARMENT_MENU.filter(g => g.group === group).map(g => (
+            <button key={g.id} type="button" onClick={() => onChange(g.id)} aria-pressed={v === g.id}
+              style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: v === g.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: v === g.id ? "rgba(96,165,250,0.15)" : "transparent", color: v === g.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: v === g.id ? 700 : 400 }}>
+              {g.label}
+            </button>
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -1860,10 +1866,10 @@ function GarmentMap({ kind, spots = [], onTap, onRemove, fit = null, height = 12
     <div title={title} style={{ display: "flex", gap, justifyContent: "center", alignItems: "flex-start" }}>
       {SIDES.map(side => (
         <div key={side} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: big ? 6 : 2 }}>
-          {captions && <div style={{ fontSize: big ? "clamp(20px, 3.2cqh, 34px)" : 11, fontWeight: 900, letterSpacing: big ? 3 : 1, color: big ? "var(--k-violet-ink)" : "var(--k-ink-3)", lineHeight: 1 }}>{SIDE_LABELS[side].toUpperCase()}</div>}
+          {captions && <div style={{ fontSize: big ? "clamp(20px, 3.2cqh, 34px)" : 11, fontWeight: 900, letterSpacing: big ? 3 : 1, color: big ? "var(--k-violet-ink)" : "var(--k-ink-3)", lineHeight: 1 }}>{sideLabel(g.id, side).toUpperCase()}</div>}
           <svg viewBox={`0 0 ${view.vbW} ${view.vbH}`} data-side={side} onClick={onTap ? e => tap(side, e) : undefined}
             style={{ ...dims, display: "block", cursor: onTap ? "crosshair" : "default", touchAction: "manipulation", background: big ? "color-mix(in srgb, var(--k-strong) 3%, transparent)" : "transparent", borderRadius: big ? 14 : 4 }}>
-            <polygon points={pts(g.outline)} fill={big ? "color-mix(in srgb, var(--k-strong) 8%, transparent)" : "color-mix(in srgb, var(--k-strong) 6%, transparent)"} stroke="var(--k-ink-1)" strokeWidth={big ? 1.2 : 2} strokeLinejoin="round" />
+            <polygon points={pts(g.outlines[side])} fill={big ? "color-mix(in srgb, var(--k-strong) 8%, transparent)" : "color-mix(in srgb, var(--k-strong) 6%, transparent)"} stroke="var(--k-ink-1)" strokeWidth={big ? 1.2 : 2} strokeLinejoin="round" />
             {(g.detail[side] || []).map((d, i) => <polyline key={i} points={pts(d)} fill="none" stroke="var(--k-ink-3)" strokeWidth={big ? 0.8 : 1.4} strokeLinejoin="round" strokeLinecap="round" />)}
             {list.map((s, i) => {
               if (s?.side !== side) return null;

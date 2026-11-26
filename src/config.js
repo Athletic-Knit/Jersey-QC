@@ -103,7 +103,7 @@ export const jerseyTypeLabel = id => jerseyTypeOf(id)?.label || "";
 // step and on the flag ticket: the ids and labels straight from
 // src/lib/garments.js, which holds the shapes. Hockey by default: the most common order (the owner,
 // 24 Nov 2026). A row whose `style` the catalogue table knows uses its own kind.
-export const GARMENT_MENU = GARMENT_IDS.map(id => ({ id, label: GARMENTS[id].label }));
+export const GARMENT_MENU = GARMENT_IDS.map(id => ({ id, label: GARMENTS[id].label, group: GARMENTS[id].group }));
 export const DEFAULT_ORDER_GARMENT = DEFAULT_GARMENT;
 
 export const REASONS_BY_CONSTRUCTION = {
@@ -157,12 +157,13 @@ export const DEFAULT_SETTINGS = {
   stickers: false,        // print a sticker (bin + team or size) on the server's label printer for every passed jersey. Off unless a station turns it on (the owner, 17 Nov 2026)
   flagTickets: true,      // print a flag ticket (2 x 1 in: where it goes and why) for every flagged jersey
   binLists: true,         // print what is in a box (2 x 1 in: a count label, then fourteen jerseys a label) when it is closed: full, or the order finished
-  // Which roll each kind of label prints on (Settings → Label printer; the owner, 25 Nov 2026: 2 x 4 for all by default).
+  // Which roll each kind of label prints on (Settings → Label printer; the owner, 26 Nov 2026: 2 x 3 for everything,
+  // replacing 25 Nov's 2 x 4).
   // The station sends it with every print; the hub lays the label out for that roll and sends a 1 x 0.5 one to the
   // station's sticker printer, the others to its ticket printer (JERSEY_FLAG_PRINTER…, else the sticker printer).
-  stickerRoll: "2x4",     // stickers on passed jerseys
-  flagRoll: "2x4",        // flag tickets
-  boxRoll: "2x4",         // box labels, box lists, count labels, the DAMAGED list
+  stickerRoll: "2x3",     // stickers on passed jerseys
+  flagRoll: "2x3",        // flag tickets
+  boxRoll: "2x3",         // box labels, box lists, count labels, the DAMAGED list
   boxAutoPrint: false,    // the set-out screen prints the box labels by itself when an order starts. Off: only its button prints them (the owner, 25 Nov 2026)
   boxWeights: false,      // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station
   boxWeightCap: 45,       // lb: no box heavier than this, when boxWeights is on (src/lib/boxmodel.js)
@@ -237,8 +238,8 @@ export function severityOf(reason) {
 // The label rolls a station can choose in Settings → Label printer (the owner, 25 Nov 2026).
 // The hub accepts the same four (LABEL_ROLLS in hub-plugin.js).
 export const LABEL_ROLLS = [
-  { id: "2x4",   label: "2 × 4 in" },
   { id: "2x3",   label: "2 × 3 in" },
+  { id: "2x4",   label: "2 × 4 in" },
   { id: "2x1",   label: "2 × 1 in" },
   { id: "1x0.5", label: "1 × ½ in" },
 ];

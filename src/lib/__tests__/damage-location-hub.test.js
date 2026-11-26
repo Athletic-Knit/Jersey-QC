@@ -99,7 +99,7 @@ describe("the spots in the station's report (snapshotOf)", () => {
   const roster = [{ _id: 0, number: "7", name: "SMITH", team: "Navy", size: "A-L", scanned: "flag" }, { _id: 1, number: "9", name: "JONES", scanned: "flag" }, { _id: 2, number: "4", name: "LEE", scanned: false }];
   const log = [
     ...Array.from({ length: 8 }, (_, i) => ({ id: 100 + i, timestamp: "2026-11-24 10:00:00", status: "pass", match: roster[2] })),
-    { id: 3, timestamp: "2026-11-24 09:03:00", status: "flagged", match: roster[1], reason: "Holes", garment: "tee" },   // asked, skipped
+    { id: 3, timestamp: "2026-11-24 09:03:00", status: "flagged", match: roster[1], reason: "Holes", garment: "jacket" },   // asked, skipped
     { id: 2, timestamp: "2026-11-24 09:02:00", status: "flagged", match: roster[0], reason: "Holes", garment: "hockey", spots: [...SPOTS, { side: "front", x: 0.4, y: 0.4 }, { side: "back", x: 0.1, y: 0.1 }], photo: "data:image/jpeg;base64,AAA" },
     { id: 1, timestamp: "2026-11-24 09:01:00", status: "flagged", match: roster[0], reason: "Others" },
     { id: 4, timestamp: "2026-11-24 09:04:00", status: "flagged", match: roster[1], reason: "Holes", garment: "hockey", locating: true },   // still being marked
@@ -111,7 +111,7 @@ describe("the spots in the station's report (snapshotOf)", () => {
     expect(ev(2).garment).toBe("hockey");              // … but its marks are always sent
     expect(ev(2).spots).toHaveLength(3);
     expect(ev(2).spots[0]).toEqual(SPOTS[0]);
-    expect(ev(3)).toMatchObject({ garment: "tee" });
+    expect(ev(3)).toMatchObject({ garment: "jacket" });
     expect(ev(3).spots).toBeUndefined();
     expect(ev(1).garment).toBeUndefined();
     expect(ev(4).garment).toBeUndefined();             // not until the operator is done marking
@@ -130,12 +130,12 @@ describe("the ledger keeps the spots", () => {
   it("withMarks: the newest spots that are not empty win, with their garment; junk is left out", () => {
     expect(withMarks(flag({ garment: "hockey", spots: SPOTS }), undefined)).toMatchObject({ garment: "hockey", spots: SPOTS });
     expect(withMarks(flag(), { garment: "hockey", spots: SPOTS })).toMatchObject({ garment: "hockey", spots: SPOTS });
-    expect(withMarks(flag({ garment: "tee", spots: [] }), { garment: "hockey", spots: SPOTS })).toMatchObject({ garment: "hockey", spots: SPOTS });
-    expect(withMarks(flag({ garment: "tee", spots: [SPOTS[1]] }), { garment: "hockey", spots: SPOTS })).toMatchObject({ garment: "tee", spots: [SPOTS[1]] });
+    expect(withMarks(flag({ garment: "jacket", spots: [] }), { garment: "hockey", spots: SPOTS })).toMatchObject({ garment: "hockey", spots: SPOTS });
+    expect(withMarks(flag({ garment: "jacket", spots: [SPOTS[1]] }), { garment: "hockey", spots: SPOTS })).toMatchObject({ garment: "jacket", spots: [SPOTS[1]] });
     const bad = withMarks(flag({ garment: "__proto__", spots: [{ side: "inside", x: 0.5, y: 0.5 }, { side: "front", x: 2, y: 0 }, "x"] }));
     expect(bad.garment).toBeUndefined();
     expect(bad.spots).toBeUndefined();
-    expect(withMarks(flag({ garment: "tee" }), {}).garment).toBe("tee");   // skipped: the garment alone ("Not marked")
+    expect(withMarks(flag({ garment: "jacket" }), {}).garment).toBe("jacket");   // skipped: the garment alone ("Not marked")
   });
   it("fileEvent: a re-send without them never wipes them; a photo is kept as before", () => {
     const led = {};
@@ -160,13 +160,13 @@ describe("the ledger keeps the spots", () => {
     expect(ticket).toMatchObject({ garment: "hockey", spots: SPOTS, copies: 1 });
   });
   it("a reprinted ticket for a flag never asked where draws the order's garment, as the first ticket did", async () => {
-    // By the row's style (BA2690 is pants), and by the order's garment when the row has no style.
+    // By the row's style (BA2690 is baseball pants), and by the order's garment when the row has no style.
     const pack = { orderNumber: "264247", garment: "pants", binMap: null, flags: [
       { id: 1, reason: "Others", match: { number: "7", name: "SMITH", style: "BA2690" } },
       { id: 2, reason: "No size tag", match: { number: "9", name: "JONES" } },
-      { id: 3, reason: "Holes", garment: "tee", spots: [SPOTS[0]], match: { number: "4", style: "BA2690" } },   // its own garment wins
+      { id: 3, reason: "Holes", garment: "jacket", spots: [SPOTS[0]], match: { number: "4", style: "BA2690" } },   // its own garment wins
     ] };
-    expect(flagJobs(pack).map(t => t.garment)).toEqual(["pants", "pants", "tee"]);
+    expect(flagJobs(pack).map(t => t.garment)).toEqual(["baseballpants", "pants", "jacket"]);
     expect(flagJobs({ ...pack, garment: "" })[1].garment).toBe("hockey");   // no order garment: the default
     // From "Another order": /orders gives the order's garment and packFromRecord carries it.
     const { call } = makeHub();
@@ -192,8 +192,8 @@ describe("the ledger keeps the spots", () => {
     const copy = ev => ({ stations: {}, rosters: {}, ledger: { "2026-11-24": { events: { "1000|5": ev }, orders: {} } } });
     const out = mergeHub([copy(flag({ garment: "hockey", spots: SPOTS })), copy(flag({ spots: [], garment: "", resolution: "Accepted" }))]);
     expect(out.ledger["2026-11-24"].events["1000|5"]).toMatchObject({ garment: "hockey", spots: SPOTS, resolution: "Accepted" });
-    const newer = mergeHub([copy(flag({ garment: "hockey", spots: SPOTS })), copy(flag({ garment: "tee", spots: [SPOTS[1]] }))]);
-    expect(newer.ledger["2026-11-24"].events["1000|5"]).toMatchObject({ garment: "tee", spots: [SPOTS[1]] });
+    const newer = mergeHub([copy(flag({ garment: "hockey", spots: SPOTS })), copy(flag({ garment: "jacket", spots: [SPOTS[1]] }))]);
+    expect(newer.ledger["2026-11-24"].events["1000|5"]).toMatchObject({ garment: "jacket", spots: [SPOTS[1]] });
   });
 });
 
@@ -214,6 +214,6 @@ describe("the damage report says where", () => {
     expect(rows[1]).toMatchObject({ where: "Not marked", garment: "Pants" });
     expect(rows[2]).toMatchObject({ where: "", garment: "" });
     expect(rows[3].where).toMatch(/^Back: /);
-    expect(rows[3].garment).toBe("Socks");
+    expect(rows[3].garment).toBe("Hockey socks");
   });
 });

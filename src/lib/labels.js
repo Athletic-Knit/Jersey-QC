@@ -28,7 +28,7 @@
 // on one label (repageLists). On the 2 x 1 in and sticker rolls every label
 // is exactly as before.
 import { binEntries, binFieldOf, binFor, boxParts, bySize, shortSize } from "./roster.js";
-import { GARMENTS, MAX_SPOTS, SIDES, garment as garmentShape } from "./garments.js";
+import { GARMENTS, MAX_SPOTS, SIDES, garment as garmentShape, sideLabel } from "./garments.js";
 import { packListZPL, packListRows, boxFaceZPL, signoffZPL } from "./packlabels.js";
 
 // "1x0.5" (inches, width x height) → dots at the printer's resolution.
@@ -277,7 +277,8 @@ export function flagPanels(kind, size) {
   const g = garmentShape(kind), { aspect } = g;
   // The outline's own box in 0–1: a pair of pants or a sock does not fill its
   // garment box from side to side, and is scaled by what it really covers.
-  const xs = g.outline.map(p => p[0]), ys = g.outline.map(p => p[1]);
+  const all = SIDES.flatMap(side => g.outlines[side]);            // both views, so they draw at one scale
+  const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
   const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
   const shape = aspect * (bx1 - bx0) / Math.max(0.01, by1 - by0);   // the outline's width over its height
   const rule = band + FLAG_LIFT + 8;                              // under the black column, which ends at band + FLAG_LIFT + 4
@@ -327,13 +328,14 @@ function garmentZPL(l, size) {
   SIDES.forEach(side => {
     const p = panels[side];
     const at = ([x, y]) => [Math.round(p.dx + x * p.dw), Math.round(p.dy + y * p.dh)];
-    if (side === "front") out.push(tight(p.x, p.y, p.cap, p.w, `FRONT · ${g.label}`));
+    const cap = sideLabel(kind, side).toUpperCase();
+    if (side === "front") out.push(tight(p.x, p.y, p.cap, p.w, `${cap} · ${g.label}`));
     else {   // with nothing marked, the BACK caption says so: every tall ticket looks the same
       const lw = spots.length ? p.w : Math.round(p.w * 0.4);
-      out.push(tight(p.x, p.y, p.cap, lw, "BACK"));
+      out.push(tight(p.x, p.y, p.cap, lw, cap));
       if (!spots.length) out.push(line(p.x + lw, p.y, p.cap, p.w - lw, "R", "Not marked"));
     }
-    const pts = g.outline.map(at);
+    const pts = g.outlines[side].map(at);
     pts.forEach((pt, i) => out.push(segment(pt, pts[(i + 1) % pts.length], OUTLINE_DOTS)));
     (g.detail[side] || []).forEach(poly => {
       const q = poly.map(at);

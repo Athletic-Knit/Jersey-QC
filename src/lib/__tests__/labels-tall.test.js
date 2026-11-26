@@ -9,7 +9,7 @@ import {
   labelSize, labelsZPL, flagLabelZPL, flagPanels, binLabelZPL, binListZPL, binListLabels, damagedListLabels, listLabels,
   repageLists, rowsPerLabel, pagesPerLabel, isTallTicket, textUnits, FLAG_LIFT, listChunks,
 } from "../labels.js";
-import { GARMENT_IDS, garment } from "../garments.js";
+import { GARMENT_IDS, garment, sideLabel } from "../garments.js";
 
 const fixture = JSON.parse(readFileSync(fileURLToPath(new URL("./fixtures/labels-2x1.json", import.meta.url)), "utf8"));
 
@@ -77,8 +77,9 @@ describe("the tall flag ticket", () => {
           }
           const below = rest.filter(b => b.y > black.y + black.h);   // the garment part
           expect(below.some(b => b.kind === "GD" || b.kind === "GB")).toBe(true);
-          expect(below.find(b => b.kind === "text" && b.text.startsWith("FRONT · ")).text).toBe(`FRONT · ${garment(kind).label}`);
-          expect(below.some(b => b.text === "BACK")).toBe(true);
+          const front = sideLabel(kind, "front").toUpperCase(), back = sideLabel(kind, "back").toUpperCase();
+          expect(below.find(b => b.kind === "text" && b.text.startsWith(`${front} · `)).text).toBe(`${front} · ${garment(kind).label}`);
+          expect(below.some(b => b.text === back)).toBe(true);
           expect(below.some(b => b.text === "Not marked")).toBe(spots.length === 0);
           // the band's texts are all above the column's end
           for (const t of rest.filter(b => b.kind === "text" && !below.includes(b))) expect(t.y + t.h).toBeLessThanOrEqual(black.y + black.h);
@@ -87,7 +88,7 @@ describe("the tall flag ticket", () => {
     }
   }
   it("each spot is a filled ^GC with a ring and its number in white, in its own side's panel", () => {
-    for (const [spec, kind] of [["2x4", "hockey"], ["2x4", "tank"], ["2x4", "pants"], ["2x3", "hockey"], ["2x3", "socks"]]) {
+    for (const [spec, kind] of [["2x4", "hockey"], ["2x4", "basketball"], ["2x4", "pants"], ["2x3", "hockey"], ["2x3", "socks"], ["2x3", "hoodie"], ["2x3", "baseballpants"]]) {
       const size = labelSize(spec), { panels } = flagPanels(kind, size);
       const z = flagLabelZPL(ticket(kind, spots3), size);
       const circles = boxes(z).filter(b => b.kind === "GC");
@@ -264,11 +265,11 @@ describe("the stage-2 review follow-ups", () => {
     expect(isTallTicket({ w: 406, h: 812, dpi: 203 })).toBe(true);   // dots alone, no inches
   });
   it("side by side, the drawing sits right under its caption; the outline (not its box) fills the panel's width or height", () => {
-    const size = labelSize("2x4");
-    for (const kind of ["pants", "socks", "tank"]) {
+    const size = labelSize("2x3");
+    for (const kind of ["pants", "socks", "basketball", "basketballpants", "baseballpants", "garmentbag"]) {
       const { across, panels } = flagPanels(kind, size);
-      expect(across).toBe(true);
-      const g = garment(kind), xs = g.outline.map(p => p[0]), ys = g.outline.map(p => p[1]);
+      expect(across, kind).toBe(true);
+      const g = garment(kind), all = [...g.outlines.front, ...g.outlines.back], xs = all.map(p => p[0]), ys = all.map(p => p[1]);
       for (const side of ["front", "back"]) {
         const p = panels[side];
         const top = p.dy + Math.min(...ys) * p.dh, bottom = p.dy + Math.max(...ys) * p.dh;
