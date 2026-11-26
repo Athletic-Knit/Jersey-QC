@@ -11,7 +11,7 @@ import { DEFAULT_SETTINGS } from "../config.js";
 const api = async (path, opts = {}) => {
   const r = await fetch(`/api/admin${path}`, { credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...opts });
   let body = {}; try { body = await r.json(); } catch { /* empty */ }
-  if (!r.ok) { const e = new Error(body.error || `The server answered ${r.status}`); e.status = r.status; throw e; }
+  if (!r.ok) { const e = new Error(body.error || `The server answered ${r.status}`); e.status = r.status; e.body = body; throw e; }
   return body;
 };
 
@@ -213,7 +213,7 @@ function Operators() {
   const addName = e => { e.preventDefault(); const n = add.replace(/\s+/g, " ").trim(); if (!n) return; if (list.some(x => x.toLowerCase() === n.toLowerCase())) { setMsg({ tone: "warn", text: `${n} is on the list already.` }); return; } setList(l => [...l, n]); setAdd(""); setMsg({ tone: "", text: "" }); };
   const save = async (names, label) => {
     setBusy(true); setMsg({ tone: "", text: "" });
-    try { const c = await api("/settings/operators", { method: "PUT", body: JSON.stringify({ operators: names }) }); setCfg(c); setList(c.operators.length ? c.operators : c.fallbackOperators); setMsg({ tone: "pass", text: c.unchanged ? "Nothing to save." : label }); }
+    try { const c = await api("/settings/operators", { method: "PUT", body: JSON.stringify({ operators: names, configVersion: cfg.configVersion }) }); setCfg(c); setList(c.operators.length ? c.operators : c.fallbackOperators); setMsg({ tone: "pass", text: c.unchanged ? "Nothing to save." : label }); }
     catch (e) { setMsg({ tone: "fail", text: e.message }); }
     finally { setBusy(false); }
   };
@@ -265,6 +265,7 @@ function Printers() {
   const [msg, setMsg] = useState({ tone: "", text: "" });
   const [busy, setBusy] = useState(false);
   const [test, setTest] = useState({ queue: "", roll: "2x4" });
+  const [unknown, setUnknown] = useState([]);   // printer names the server did not find on its list: "Save anyway"
   const load = useCallback(() => api("/printers").then(r => { setP(r); setDraft(r.overrides || {}); setTest(t => ({ ...t, queue: t.queue || r.stations[0]?.ticket?.name || r.queues.find(q => q.zebra)?.name || "" })); }).catch(e => setMsg({ tone: "fail", text: e.message })), []);
   useEffect(() => { load(); }, [load]);
   if (!p) return <section style={st.card}>{msg.text ? <span style={{ color: "var(--fail-text)" }}>{msg.text}</span> : "Loading…"}</section>;
@@ -272,10 +273,10 @@ function Printers() {
   const val = (id, which) => draft[id]?.[which] || "";
   const set = (id, which, v) => setDraft(d => { const n = { ...d, [id]: { ...(d[id] || {}), [which]: v } }; if (!v) delete n[id][which]; if (!Object.keys(n[id]).length) delete n[id]; return n; });
   const changed = JSON.stringify(draft) !== JSON.stringify(p.overrides || {});
-  const save = async () => {
-    setBusy(true); setMsg({ tone: "", text: "" });
-    try { const r = await api("/settings/printers", { method: "PUT", body: JSON.stringify({ printers: draft }) }); setMsg({ tone: "pass", text: r.unchanged ? "Nothing to save." : "Saved. The next print uses it." }); await load(); }
-    catch (e) { setMsg({ tone: "fail", text: e.message }); }
+  const save = async (force = false) => {
+    setBusy(true); setMsg({ tone: "", text: "" }); setUnknown([]);
+    try { const r = await api("/settings/printers", { method: "PUT", body: JSON.stringify({ printers: draft, configVersion: p.configVersion, force }) }); setMsg({ tone: "pass", text: r.unchanged ? "Nothing to save." : "Saved. The next print uses it." }); await load(); }
+    catch (e) { setMsg({ tone: "fail", text: e.message }); setUnknown(e.body?.unknown || []); }
     finally { setBusy(false); }
   };
   const sendTest = async () => {
@@ -318,8 +319,9 @@ function Printers() {
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
           {p.writable ? <>
-            <button style={changed ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!changed || busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>
-            {changed && <button style={st.btn} onClick={() => setDraft(p.overrides || {})}>Undo changes</button>}
+            <button style={changed ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!changed || busy} onClick={() => save(false)}>{busy ? "Saving…" : "Save"}</button>
+            {unknown.length > 0 && changed && <button style={{ ...st.btn, borderColor: "var(--warn)", color: "var(--warn-text)" }} disabled={busy} onClick={() => save(true)}>Save anyway</button>}
+            {changed && <button style={st.btn} onClick={() => { setDraft(p.overrides || {}); setUnknown([]); }}>Undo changes</button>}
             {Object.keys(p.overrides || {}).length > 0 && !changed && <button style={st.btn} onClick={() => setDraft({})}>Clear all (back to .env.local)</button>}
           </> : <Pill>Read only on this server</Pill>}
         </div>
@@ -411,7 +413,7 @@ function StationDefaults() {
   const changed = JSON.stringify(draft) !== JSON.stringify(saved);
   const save = async () => {
     setBusy(true); setMsg({ tone: "", text: "" });
-    try { const c = await api("/settings/defaults", { method: "PUT", body: JSON.stringify({ defaults: draft }) }); setCfg(x => ({ ...x, ...c })); setDraft(c.defaults || {}); setMsg({ tone: "pass", text: c.unchanged ? "Nothing to save." : "Saved. Each station takes them at its next sign-in, or as soon as it has no order open." }); }
+    try { const c = await api("/settings/defaults", { method: "PUT", body: JSON.stringify({ defaults: draft, configVersion: cfg.configVersion }) }); setCfg(x => ({ ...x, ...c })); setDraft(c.defaults || {}); setMsg({ tone: "pass", text: c.unchanged ? "Nothing to save." : "Saved. Each station takes them at its next sign-in, or as soon as it has no order open." }); }
     catch (e) { setMsg({ tone: "fail", text: e.message }); }
     finally { setBusy(false); }
   };

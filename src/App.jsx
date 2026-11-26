@@ -38,8 +38,8 @@ import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel, checksFor } from "./lib/vigilance.js";
 import { hub, stationId, snapshotOf, stationUse, holdPrints, setPrintRolls, rollFor, cachedFloorConfig, loadFloorConfig, operatorsFrom } from "./lib/hub.js";
-import { baseSettings, effectiveSettings, ownOf, loadOwn, saveOwn } from "./lib/floorsettings.js";
-import { applyTheme, THEMES } from "./lib/theme.js";
+import { baseSettings, effectiveSettings, recordOwn, loadOwn, saveOwn, loadFloorInUse, saveFloorInUse } from "./lib/floorsettings.js";
+import { applyTheme, clearTheme, THEMES } from "./lib/theme.js";
 import { ofRun, pickRun, orderDone, doneAt, eventsAsLog } from "./lib/ledgerview.js";
 import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
@@ -112,7 +112,7 @@ function statusColor(s) {
 // A small rounded count in the header ("3 By hand"); `active` fills it, when it is the filter shown.
 function Pill({ color, children, onClick, active = false, title }) {
   return (
-    <span onClick={onClick} title={title} style={{ background: active ? color : `color-mix(in srgb, ${color} 13%, transparent)`, color: active ? "var(--k-page)" : color, fontSize: 14, fontWeight: 700, padding: "4px 11px", borderRadius: 20, border: `1px solid color-mix(in srgb, ${color} 33%, transparent)`, whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", userSelect: "none" }}>
+    <span onClick={onClick} title={title} style={{ background: active ? color : `color-mix(in srgb, ${color} 13.33%, transparent)`, color: active ? "var(--k-page)" : color, fontSize: 14, fontWeight: 700, padding: "4px 11px", borderRadius: 20, border: `1px solid color-mix(in srgb, ${color} 33%, transparent)`, whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", userSelect: "none" }}>
       {children}
     </span>
   );
@@ -1241,7 +1241,7 @@ const bySeverity = (a, b) => ((a.resolution ? 1 : 0) - (b.resolution ? 1 : 0)) |
 function RouteTag({ item, size = 10 }) {
   const s = attnSeverity(item);
   const hot = s.weight >= 4;
-  return <span title={s.route || ""} style={{ fontSize: size, fontWeight: 800, letterSpacing: 0.5, padding: "1px 6px", borderRadius: 4, background: hot ? s.colour : `${s.colour}22`, color: hot ? "#fff" : s.colour, border: `1px solid ${s.colour}66`, whiteSpace: "nowrap", flexShrink: 0, verticalAlign: "middle" }}>{s.tag}</span>;
+  return <span title={s.route || ""} style={{ fontSize: size, fontWeight: 800, letterSpacing: 0.5, padding: "1px 6px", borderRadius: 4, background: hot ? s.colour : `color-mix(in srgb, ${s.colour} 13.33%, transparent)`, color: hot ? "#fff" : s.colour, border: `1px solid color-mix(in srgb, ${s.colour} 40%, transparent)`, whiteSpace: "nowrap", flexShrink: 0, verticalAlign: "middle" }}>{s.tag}</span>;
 }
 // A station that has not reported for this long steps back off the cards.
 const GONE_MS = 2 * 3600 * 1000;
@@ -3759,11 +3759,23 @@ export default function App() {
   // Three layers (src/lib/floorsettings.js; the admin panel, phase 4): the app's defaults, the
   // floor's defaults from the admin panel (kept from the last fetch), what this station's
   // operator changed. Only the last is saved here, so an untouched setting follows the floor.
-  const baseRef = useRef(null);
+  // It starts from the floor's defaults this station was USING (kept), not the newest fetched,
+  // so an order open across a reload keeps its settings; the newest are taken once no order is
+  // open (floorPending below). Fable's review, H2.
+  const baseRef = useRef(null), ownRef = useRef(null);
   const [settings, setSettings] = useState(() => {
-    baseRef.current = baseSettings(DEFAULT_SETTINGS, cachedFloorConfig()?.defaults);
-    return effectiveSettings(baseRef.current, loadOwn(DEFAULT_SETTINGS, loadSettings()));
+    const inUse = loadFloorInUse();
+    baseRef.current = baseSettings(DEFAULT_SETTINGS, inUse ?? (loadSession() ? {} : cachedFloorConfig()?.defaults));
+    ownRef.current = loadOwn(DEFAULT_SETTINGS, loadSettings());
+    return effectiveSettings(baseRef.current, ownRef.current, DEFAULT_SETTINGS);
   });
+  // A change the operator makes (Settings, the hands-free switch): each setting changed is theirs
+  // from now on, until they set it back to what the floor gives (recordOwn).
+  const changeSettings = useCallback(update => setSettings(prev => {
+    const next = typeof update === "function" ? update(prev) : update;
+    ownRef.current = recordOwn(ownRef.current, prev, next, baseRef.current);
+    return next;
+  }), []);
   setPrintRolls(settings);   // every print sends the roll chosen for its kind (Settings → Label printer); set during render so the first print already has it
   useEffect(() => { gateRef.current.setGrace(Math.round((Number(settings.autoScanDelay) || 0) * 5)); }, [settings.autoScanDelay]);   // 200 ms ticks
   const { scanKey, confirmKey, cancelKey, upKey, retryKey, byHandKey } = settings;
@@ -4106,32 +4118,36 @@ export default function App() {
   const keyLabel       = formatKey(scanKey);
   const showResume     = !!savedSession && !resumeDecided && !sessionStarted && !canSupervise;
 
-  useEffect(() => { saveSettings(settings); saveOwn(ownOf(settings, baseRef.current)); }, [settings]);
+  useEffect(() => { saveSettings(settings); saveOwn(ownRef.current); }, [settings]);
   // The floor's defaults changed (the admin panel; hub.js fetches them when a report's answer
   // carries a new version): taken at once when no order is open, else when it closes, never in
   // the middle of one. What the operator changed here stays.
-  const [floorPending, setFloorPending] = useState(null);
+  const [floorPending, setFloorPending] = useState(() => cachedFloorConfig()?.defaults ?? null);   // the newest fetched, taken once no order is open
   useEffect(() => {
     const on = e => setFloorPending(e.detail?.defaults || {});
     window.addEventListener("jqc-floorconfig", on);
     return () => window.removeEventListener("jqc-floorconfig", on);
   }, []);
+  // An order is open while it runs AND while a saved one waits for Resume (Fable's review, H2:
+  // the station reports, and so fetches, while the Resume question is up).
+  const orderOpen = sessionStarted || (!!savedSession && !resumeDecided);
   useEffect(() => {
-    if (!floorPending || sessionStarted) return;
+    if (!floorPending || orderOpen) return;
     const next = baseSettings(DEFAULT_SETTINGS, floorPending);
+    saveFloorInUse(floorPending);
     if (JSON.stringify(next) !== JSON.stringify(baseRef.current)) {
-      const prev = baseRef.current;
-      setSettings(s => { const own = ownOf(s, prev); baseRef.current = next; return effectiveSettings(next, own); });
+      baseRef.current = next;
+      setSettings(effectiveSettings(next, ownRef.current, DEFAULT_SETTINGS));
     }
     setFloorPending(null);
-  }, [floorPending, sessionStarted]);
+  }, [floorPending, orderOpen]);
   // Light or dark (settings.theme): the screens built on the colour tokens follow it, the
   // sign-in screen and the supervisor board (phase 4); everything else stays dark until it
   // is converted, so data-theme is set only while one of those is up.
   const themedScreen = !signedIn || showSupervisor;
   useEffect(() => {
     if (themedScreen) applyTheme(settings.theme || "dark");
-    else document.documentElement.removeAttribute("data-theme");
+    else clearTheme();   // also stops following the PC, so "Follow this PC" never turns a scanning screen light (Fable's review, M6)
   }, [themedScreen, settings.theme]);
 
   // SheetJS from the CDN, once, for reading Excel rosters and writing the exports.
@@ -4832,7 +4848,7 @@ export default function App() {
   // One button, three states: off in Settings → turn it on; running → pause; paused → resume.
   // Resume is the operator's word that the table is ready, so it also ends the wait for the pedal after a flag.
   const toggleHandsFree = () => {
-    if (!settings.autoScan) { setSettings(s => ({ ...s, autoScan: true })); setHandsFreePaused(false); }
+    if (!settings.autoScan) { changeSettings(s => ({ ...s, autoScan: true })); setHandsFreePaused(false); }
     else if (!handsFreePaused) { gateRef.current.disarm(); setArmed(false); setHandsFreePaused(true); return; }
     else setHandsFreePaused(false);
     pedalDone();
@@ -5510,7 +5526,7 @@ export default function App() {
         </div>
       )}
       {showSettings && (
-        <SettingsPanel settings={settings} cameras={cameras} onSave={setSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
+        <SettingsPanel settings={settings} cameras={cameras} onSave={changeSettings} onClose={saved => closeDialog(() => setShowSettings(false), saved ? saved.autoScan : undefined)} />
       )}
       {bigPhoto && <PhotoLightbox photo={bigPhoto} onClose={() => closeDialog(() => setBigPhoto(null))} />}
 

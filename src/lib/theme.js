@@ -1,9 +1,9 @@
 // Light or dark (the co-op, 26 Nov 2026: a switch in the admin panel, and the stations
 // most of all, under the floor's lights). The choice is per browser, so per station PC:
 // "dark", "light" or "system" (follow the PC's own setting), kept in localStorage. It sets
-// data-theme on <html>, which picks the colour tokens in index.css. Phase 1: the admin
-// panel uses it; the station screens still draw their own dark colours inline until they
-// are converted, so nothing changes on a station yet.
+// data-theme on <html>, which picks the colour tokens in index.css. The admin panel uses
+// it (its own choice, jerseyqc.theme); a station uses settings.theme, applied only while the
+// sign-in screen or the supervisor board is up (App.jsx, themedScreen) and cleared otherwise.
 export const THEME_KEY = "jerseyqc.theme";
 export const THEMES = [
   { id: "dark", label: "Dark" },
@@ -31,6 +31,13 @@ export function applyTheme(choice = loadTheme(), root = typeof document !== "und
     if (followSystem) mq.addEventListener("change", followSystem);
   } catch { /* no matchMedia (tests) */ }
   return resolveTheme(choice);
+}
+// Back to the app's own dark, and no longer following the PC: the screens not yet built on the
+// tokens call this, so "Follow this PC" can never turn them light (Fable's review, 26 Nov 2026).
+export function clearTheme(root = typeof document !== "undefined" ? document.documentElement : null) {
+  try { if (followSystem) window.matchMedia("(prefers-color-scheme: light)").removeEventListener("change", followSystem); } catch { /* no matchMedia */ }
+  followSystem = null;
+  root?.removeAttribute("data-theme");
 }
 export function saveTheme(choice) {
   try { localStorage.setItem(THEME_KEY, choice); } catch { /* private window: this page only */ }

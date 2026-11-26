@@ -11,7 +11,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { Buffer } from "node:buffer";
 import { adminFileFor, readAdmin, writeAdmin, cleanAdmin, withAudit, auditEntry, AUDIT_MAX, cleanOperators, cleanPrinters, cleanDefaults } from "../adminstore.js";
-import { baseSettings, ownOf, effectiveSettings, loadOwn, saveOwn } from "../floorsettings.js";
+import { baseSettings, ownOf, effectiveSettings, loadOwn, saveOwn, recordOwn } from "../floorsettings.js";
 import { operatorsFrom } from "../hub.js";
 import { createAdmin, TRIES } from "../../../admin-plugin.js";
 import { resolveTheme } from "../theme.js";
@@ -244,7 +244,10 @@ describe("phase 3: printers", () => {
     expect(s["st-station1"].ticket.why).toMatch(/sticker printer/);
   });
   it("a queue set in the panel comes first, the station's own before every station's, and the next print goes there", async () => {
-    const r = await call(a.handle, "PUT", "/settings/printers", { cookie: c, body: { printers: { "*": { ticket: "Office Laser" }, "st-station2": { sticker: "Panel Zebra" } } } });
+    const unknown = await call(a.handle, "PUT", "/settings/printers", { cookie: c, body: { printers: { "*": { ticket: "Office Laser" }, "st-station2": { sticker: "Panel Zebra" } } } });
+    expect(unknown.status).toBe(400);                       // "Panel Zebra" is not on this PC's list (Fable's review, M5)
+    expect(unknown.body.unknown).toEqual(["Panel Zebra"]);
+    const r = await call(a.handle, "PUT", "/settings/printers", { cookie: c, body: { force: true, printers: { "*": { ticket: "Office Laser" }, "st-station2": { sticker: "Panel Zebra" } } } });
     expect(r.status).toBe(200);
     const s = await stationsNow();
     expect(s["st-station2"].sticker).toMatchObject({ name: "Panel Zebra", why: expect.stringMatching(/this station/) });
@@ -323,10 +326,107 @@ describe("phase 4: station defaults", () => {
   });
   it("the app: defaults are taken only with no order open, and light or dark only on the sign-in screen and the board", () => {
     const src = fs.readFileSync(new URL("../../App.jsx", import.meta.url), "utf8");
-    expect(src).toMatch(/if \(!floorPending \|\| sessionStarted\) return;/);
+    expect(src).toMatch(/const orderOpen = sessionStarted \|\| \(!!savedSession && !resumeDecided\);/);   // Resume not answered yet counts as an order (Fable's review, H2)
+    expect(src).toMatch(/if \(!floorPending \|\| orderOpen\) return;/);
+    expect(src).toMatch(/baseSettings\(DEFAULT_SETTINGS, inUse \?\? \(loadSession\(\) \? \{\} : cachedFloorConfig\(\)\?\.defaults\)\)/);   // a reload starts from the defaults in use
     expect(src).toMatch(/const themedScreen = !signedIn \|\| showSupervisor;/);
-    expect(src).toMatch(/else document\.documentElement\.removeAttribute\("data-theme"\);/);
+    expect(src).toMatch(/else clearTheme\(\);/);
     const css = fs.readFileSync(new URL("../../index.css", import.meta.url), "utf8");
     expect(css).toMatch(/:root, :root\[data-theme="dark"\] \{\n {2}--k-page: #0d1117;/);   // dark: the colours as they were
+  });
+});
+
+describe("Fable's review of phases 1-4 (26 Nov 2026)", () => {
+  it("H1, M3: the server never hands out .env files, the data folder, /@fs/, logs or the repository; the app and the routes still pass", async () => {
+    const { blockedPath } = await import("../../../guard-plugin.js");
+    for (const u of ["/.env.local", "/.env", "/%2e%65nv.local", "/data/hub.json", "/data/hub-test-admin.json", "/data%2Fhub.json", "/DATA/hub.json", "/data/backups/x/hub.json", "/@fs/C:/Users/coop/JerseyQC-dev/.env.local", "/.git/config", "/tools/printer-check.ps1", "/x/server.log", "/a/../data/hub.json", "/x.local"])
+      expect(blockedPath(u), u).toBe(true);
+    for (const u of ["/", "/?view=admin", "/src/main.jsx", "/src/index.css", "/node_modules/.vite/deps/react.js", "/node_modules/@fontsource/barlow-condensed/files/x.woff2", "/api/admin/session", "/api/hub/stations", "/sim/replay-1.json"])
+      expect(blockedPath(u), u).toBe(false);
+    for (const f of ["vite.config.js", "vite.config.stage.js"]) {
+      const src = fs.readFileSync(new URL(`../../../${f}`, import.meta.url), "utf8");
+      expect(src, f).toMatch(/plugins: \[guardPlugin\(\), /);
+      expect(src, f).not.toMatch(/strict: false/);
+    }
+  });
+  it("M2: a floor key is checked with the app's own keys filled in; a station drops a clashing floor key and keeps the operator's", () => {
+    expect(cleanDefaults({ retryKey: "Enter" }).error).toMatch(/same key/);
+    expect(cleanDefaults({ byHandKey: "KeyA" }).error).toMatch(/same key/);
+    expect(cleanDefaults({ retryKey: "KeyQ" }).error).toBe("");
+    const APP = { confirmKey: "Enter", cancelKey: "KeyA", upKey: "ArrowUp", retryKey: "KeyR", byHandKey: "KeyW", stickers: false };
+    expect(effectiveSettings({ ...APP, retryKey: "Enter" }, {}, APP).retryKey).toBe("KeyR");
+    expect(effectiveSettings({ ...APP, byHandKey: "KeyQ" }, { retryKey: "KeyQ" }, APP)).toMatchObject({ retryKey: "KeyQ", byHandKey: "KeyW" });
+  });
+  it("M4: one bad entry drops only itself, says so, and a section this version does not know is kept", () => {
+    const dropped = [];
+    const d = cleanAdmin({ settings: { operators: ["Shiv", "Other", "Priya"], printers: { "*": { sticker: "Zebra", ticket: "bad|name" }, kitchen: { sticker: "X" } }, defaults: { stickers: true, newThing: 1, flagRoll: "9x9" }, models: { reads: 3 } } }, dropped);
+    expect(d.settings.operators).toEqual(["Shiv", "Priya"]);
+    expect(d.settings.printers).toEqual({ "*": { sticker: "Zebra" } });
+    expect(d.settings.defaults).toEqual({ stickers: true });
+    expect(d.settings.models).toEqual({ reads: 3 });
+    expect(dropped.length).toBe(5);
+  });
+  it("M7: an operator's own choice stays when a floor default happens to equal it, and goes back to the floor only when they set it back", () => {
+    const base0 = { stickers: false, listSort: "size" };
+    let own = recordOwn({}, base0, { ...base0, stickers: true }, base0);
+    expect(own).toEqual({ stickers: true });
+    const base1 = { stickers: true, listSort: "size" };
+    const base2 = { stickers: false, listSort: "size" };
+    expect(effectiveSettings(base2, own).stickers).toBe(true);
+    own = recordOwn(own, effectiveSettings(base1, own), { stickers: true, listSort: "team" }, base1);
+    expect(own).toEqual({ stickers: true, listSort: "team" });
+    own = recordOwn(own, { stickers: true, listSort: "team" }, { stickers: true, listSort: "size" }, base1);
+    expect(own).toEqual({ stickers: true });
+  });
+  it("M1, L6: the tags and pills tint with color-mix at the old strength, so a colour token works and dark looks as before", () => {
+    const src = fs.readFileSync(new URL("../../App.jsx", import.meta.url), "utf8");
+    expect(src).not.toMatch(/\$\{s\.colour\}22/);
+    expect(src).toMatch(/color-mix\(in srgb, \$\{s\.colour\} 13\.33%, transparent\)/);
+    expect(src).toMatch(/color-mix\(in srgb, \$\{color\} 13\.33%, transparent\)/);
+    const css = fs.readFileSync(new URL("../../index.css", import.meta.url), "utf8");
+    const block = css.match(/:root, :root\[data-theme="dark"\] \{([^}]*--k-page[^}]*)\}/)[1];
+    const dark = Object.fromEntries([...block.matchAll(/--(k-[a-z0-9-]+): (#[0-9a-f]{6})/g)].map(m => [m[1], m[2]]));
+    // Each token's dark value is the literal it replaced (the colours as they were before phase 4).
+    const WAS = { "k-page": "#0d1117", "k-card": "#161b22", "k-field": "#1e293b", "k-rule": "#21262d", "k-rule-2": "#334155", "k-rule-3": "#3f4b5c", "k-ink-5": "#475569", "k-ink-4": "#64748b", "k-ink-3b": "#7c8ba1", "k-ink-3": "#94a3b8", "k-ink-2": "#cbd5e1", "k-ink-1": "#e2e8f0", "k-ink-0": "#f1f5f9", "k-blue": "#3b82f6", "k-blue-ink": "#60a5fa", "k-blue-ink-2": "#93c5fd", "k-green": "#22c55e", "k-green-ink": "#4ade80", "k-green-ink-2": "#86efac", "k-green-deep": "#166534", "k-amber": "#f59e0b", "k-amber-ink": "#fbbf24", "k-amber-ink-2": "#fcd34d", "k-amber-ink-3": "#fde68a", "k-red": "#ef4444", "k-red-ink": "#f87171", "k-red-ink-2": "#fca5a5", "k-red-ink-3": "#fecaca", "k-pink-ink": "#f9a8d4", "k-violet-ink": "#ddd6fe", "k-strong": "#ffffff" };
+    expect(dark).toEqual(WAS);
+  });
+  it("M6: clearTheme stops following the PC and takes the theme off", async () => {
+    const { applyTheme, clearTheme } = await import("../theme.js");
+    const listeners = new Set();
+    globalThis.window = { matchMedia: () => ({ matches: true, addEventListener: (_, f) => listeners.add(f), removeEventListener: (_, f) => listeners.delete(f) }) };
+    const attrs = {}, root = { setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: k => { delete attrs[k]; } };
+    applyTheme("system", root);
+    expect(attrs["data-theme"]).toBe("light");
+    expect(listeners.size).toBe(1);
+    clearTheme(root);
+    expect(listeners.size).toBe(0);
+    expect(attrs["data-theme"]).toBeUndefined();
+    delete globalThis.window;
+  });
+  it("L5: names an object inherits are refused", () => {
+    expect(cleanDefaults({ constructor: "x" }).error).toBeTruthy();
+    expect(cleanDefaults({ toString: "x" }).error).toBeTruthy();
+    expect(baseSettings({ a: 1 }, { constructor: 5, toString: 6 })).toEqual({ a: 1 });
+  });
+  it("L1, L3: a stale tab gets 409; the cookie carries the port; a new password ends old sessions; a wrong password does not log the name typed", async () => {
+    const dir = tmp(), dataFile = path.join(dir, "hub-test.json");
+    const a = createAdmin({ dataFile, stage: "development", port: 5174, env: ENV, git: async () => ({}) });
+    const r = await call(a.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } });
+    expect(r.headers["set-cookie"]).toMatch(/^jqc_admin_5174=/);
+    const c = cookieFrom(r);
+    expect((await call(a.handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["A"], configVersion: 0 } })).status).toBe(200);
+    expect((await call(a.handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["B"], configVersion: 0 } })).status).toBe(409);
+    await call(a.handle, "POST", "/login", { body: { name: "secret-typed-in-name-box", password: "wrong" } });
+    const log = (await call(a.handle, "GET", "/audit", { cookie: c })).body.entries;
+    expect(JSON.stringify(log)).not.toContain("secret-typed-in-name-box");
+    const changed = createAdmin({ dataFile, stage: "development", port: 5174, env: { ...ENV, JQC_ADMIN_PASSWORD: "a new one" }, git: async () => ({}) });
+    expect((await call(changed.handle, "GET", "/health", { cookie: c })).status).toBe(401);
+  });
+  it("L7: with an admin file that cannot be read, the change log is kept in memory", async () => {
+    const dir = tmp(), data = path.join(dir, "hub.json"), f = adminFileFor(data);
+    fs.mkdirSync(f);
+    const { handle } = createAdmin({ dataFile: data, stage: "development", env: ENV, git: async () => ({}) });
+    const c = cookieFrom(await call(handle, "POST", "/login", { body: { name: "Dev", password: PASSWORD } }));
+    expect((await call(handle, "GET", "/audit", { cookie: c })).body.entries.map(e => e.what)).toContain("signed in");
   });
 });

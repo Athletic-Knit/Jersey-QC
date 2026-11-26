@@ -512,8 +512,8 @@ export function createHub({ file = path.resolve("data/hub.json"), now = () => Da
           pruneLedger(led);   // 90 days; photos on the newest 14
           const setOrder = renamed ? undefined : prev?.setOrder;          // pending until the station reports it
           state.stations[id] = { ...rest, id, carried, day, history, rate, etaMin, updatedAt: now, ...(setOrder ? { setOrder } : {}) }; save();
-          const configVersion = globalThis.__jqcAdminConfig?.get(key)?.version?.() || 0;   // the admin panel's settings changed: the station fetches them again (admin-plugin.js)
-          return json(res, 200, { ok: true, ...(setOrder ? { setOrder } : {}), ...(configVersion ? { configVersion } : {}) });
+          const admin = globalThis.__jqcAdminConfig?.get(key);   // the admin panel's settings: the station fetches them again when this differs from what it has (admin-plugin.js)
+          return json(res, 200, { ok: true, ...(setOrder ? { setOrder } : {}), ...(admin ? { configVersion: admin.version?.() || 0 } : {}) });   // 0 too, so a reset admin file is noticed (Fable's review, L9)
         }
         // The supervisor gives a station's running order its number from the board.
         if (req.method === "POST" && id && parts[2] === "order") {

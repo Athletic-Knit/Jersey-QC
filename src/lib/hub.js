@@ -75,6 +75,9 @@ export function cachedFloorConfig() {
 }
 export async function loadFloorConfig() {
   const c = await call("/api/admin/config");
+  // Only a real answer replaces what is kept: a server without the admin panel answers the
+  // page itself, which would wipe the names and defaults (Fable's review, L4).
+  if (!c || !Number.isFinite(c.configVersion)) throw new Error("no admin settings on this server");
   const kept = { configVersion: c.configVersion || 0, operators: Array.isArray(c.operators) ? c.operators : [], defaults: c.defaults && typeof c.defaults === "object" ? c.defaults : {} };
   try { localStorage.setItem(FLOOR_KEY, JSON.stringify(kept)); } catch { /* private window: this page only */ }
   try { window.dispatchEvent(new CustomEvent("jqc-floorconfig", { detail: kept })); } catch { /* not a browser (tests) */ }   // the station takes the defaults when no order is open (App)
@@ -82,7 +85,7 @@ export async function loadFloorConfig() {
 }
 let fetchingConfig = null;
 export function noteConfigVersion(v) {
-  if (!v || v === cachedFloorConfig()?.configVersion || fetchingConfig) return;
+  if (!Number.isFinite(v) || v === cachedFloorConfig()?.configVersion || fetchingConfig) return;
   fetchingConfig = loadFloorConfig().catch(() => null).finally(() => { fetchingConfig = null; });
 }
 // The names to offer: the panel's list when it has one, else the .env.local list (config.js).

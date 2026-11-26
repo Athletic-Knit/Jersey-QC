@@ -1,4 +1,5 @@
 // ── Floor configuration ───────────────────────────────────────────────────────
+import { KEY_DEFAULTS } from "./lib/keydefaults.js";
 import { DEFAULT_MODEL, DEFAULT_EFFORT, DEFAULT_THINKING } from "./lib/vision.js";
 import { DEFAULT_GARMENT, GARMENTS, GARMENT_IDS } from "./lib/garments.js";
 
@@ -149,12 +150,7 @@ export const STATIONS = [
 export const stationOf = id => STATIONS.find(s => s.id === id) || null;
 
 export const DEFAULT_SETTINGS = {
-  scanKey: "Enter",       // take a picture (only when no screen is open). Enter, the same as Select, so one pedal does both (the owner, 17 Nov 2026; it was B)
-  confirmKey: "Enter",    // select the highlighted option on any screen
-  cancelKey: "KeyA",      // move the highlight down (↓ also works)
-  upKey: "ArrowUp",       // move the highlight up (↑ also works)
-  retryKey: "KeyR",       // retry the scan wherever it is offered; nothing is recorded
-  byHandKey: "KeyW",      // open "Enter by hand" wherever it is offered (a failed read, a pick list)
+  ...KEY_DEFAULTS,        // scan Enter, select Enter, down A, up ↑, retry R, by hand W (src/lib/keydefaults.js, which the server reads too)
   rotation: 180,          // 0 | 90 | 180 | 270 — how the camera is mounted
   cameraId: "",           // "" = browser default
   autoScan: true,         // hands-free: scan when the jersey changes and settles

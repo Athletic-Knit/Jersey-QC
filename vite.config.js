@@ -9,6 +9,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import hubPlugin from './hub-plugin.js'
 import adminPlugin from './admin-plugin.js'
+import guardPlugin from './guard-plugin.js'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import process from 'node:process'
 
@@ -68,7 +69,8 @@ export default defineConfig(({ mode }) => {
   // Required: browsers only allow getUserMedia (the camera) on a secure
   // origin, so scanning stations on the LAN cannot use http://<ip>:5173.
   // adminPlugin: the developers' admin panel (?view=admin), read only on production unless JQC_ADMIN_WRITE=1.
-  plugins: [react(), basicSsl(), hubPlugin(printerEnv(env)), adminPlugin({ stage: 'production', port: 5173, env })],
+  // guardPlugin first: data\, .env.local and the like are never served (guard-plugin.js).
+  plugins: [guardPlugin(), react(), basicSsl(), hubPlugin(printerEnv(env)), adminPlugin({ stage: 'production', port: 5173, env })],
   server: {
     host: true,          // bind all interfaces so other PCs on the network can reach it
     port: 5173,
