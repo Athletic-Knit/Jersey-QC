@@ -143,7 +143,7 @@ function ScreenKeys({ layout = "digits", onKey, onEnter, enterLabel = "OK" }) {
         <div key={i} style={{ display: "flex", gap: 6, justifyContent: "center" }}>
           {r.map(k => (
             <button key={k} type="button" onMouseDown={e => e.preventDefault()} onClick={() => (k === "⏎" ? onEnter?.() : onKey(k))}
-              style={{ flex: wide ? 1 : "0 0 auto", minWidth: wide ? 0 : k === "␣" ? 230 : k === "⌧" || (k === "⏎" && layout === "search") ? 96 : 44, padding: wide ? "12px 0" : "10px 0", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: k === "⏎" ? "var(--k-blue)" : k === "⌫" || k === "⌧" ? "var(--k-rule-2)" : "var(--k-field)", color: k === "⏎" ? "#fff" : "var(--k-ink-0)", fontSize: k === "⏎" || KEY_NAMES[k] ? 15 : 20, fontWeight: 700, cursor: "pointer" }}>
+              style={{ flex: wide ? 1 : "0 0 auto", minWidth: wide ? 0 : k === "␣" ? 230 : k === "⌧" || (k === "⏎" && layout === "search") ? 96 : 44, padding: wide ? "12px 0" : "10px 0", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: k === "⏎" ? "var(--k-blue)" : k === "⌫" || k === "⌧" ? "var(--k-rule-2)" : "var(--k-field)", color: k === "⏎" ? "var(--k-on-blue)" : "var(--k-ink-0)", fontSize: k === "⏎" || KEY_NAMES[k] ? 15 : 20, fontWeight: 700, cursor: "pointer" }}>
               {k === "⏎" ? enterLabel : KEY_NAMES[k] || k}
             </button>
           ))}
@@ -971,7 +971,7 @@ function ReasonTextForm({ match, onSubmit, onBack }) {
     <div style={{ width: "100%", maxWidth: 560, padding: "0 24px", boxSizing: "border-box" }}>
       <div style={{ fontSize: 56, textAlign: "center", lineHeight: 1 }}>✎</div>
       <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "var(--k-violet)", textAlign: "center", marginBottom: 6 }}>What's wrong with it?</div>
-      {match && <div style={{ fontSize: 18, color: "var(--k-violet-ink-2)", textAlign: "center", marginBottom: 10 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${shortSize(match.size)}` : ""}</div>}
+      {match && <div style={{ fontSize: 18, color: "var(--k-violet-ink-2)", textAlign: "center", marginBottom: 10 }}>#{match.number}{match.name ? <> · <span style={{ fontFamily: FONT_READ }}>{match.name}</span></> : ""}{match.size ? ` · ${shortSize(match.size)}` : ""}</div>}
       <input value={text} onChange={e => setText(e.target.value)} onKeyDown={onKey} autoFocus placeholder="e.g. hole under the left arm" maxLength={120} style={{ ...inputSt, fontSize: 22, padding: "12px 14px", marginBottom: 14 }} />
       <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
         <button disabled={!text.trim()} onClick={() => onSubmit(text)} style={{ ...bigBtn, width: "auto", padding: "14px 30px", background: "var(--k-violet)", color: "var(--k-page)", opacity: text.trim() ? 1 : 0.5 }}>✓ Send to supervisor <Kbd>Enter</Kbd></button>
@@ -1239,7 +1239,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                   <tr key={e.id ?? i}>
                     <td style={{ ...td, color: "var(--k-ink-4)", whiteSpace: "nowrap" }}>{String(e.t).slice(11)}</td>
                     <td style={{ ...td, color: evColour(e.status), fontWeight: 700, textTransform: "uppercase", fontSize: 11 }}>{e.status === "flagged" && e.offRoster ? "not on roster" : e.status === "undo" ? "un-checked" : e.status}</td>
-                    <td style={td}>#{e.number}{e.name ? ` · ${e.name}` : ""}{e.size ? ` · ${shortSize(e.size)}` : ""}</td>
+                    <td style={td}>#{e.number}{e.name ? <> · <span style={{ fontFamily: FONT_READ }}>{e.name}</span></> : ""}{e.size ? ` · ${shortSize(e.size)}` : ""}</td>
                     <td style={{ ...td, color: "var(--k-ink-2)" }}>{e.reason}</td><td style={{ ...td, color: "var(--k-ink-3)" }}>{e.resolution}</td><td style={{ ...td, color: "var(--k-ink-3)" }}>{e.operator}</td>
                   </tr>
                 ))}
@@ -1339,7 +1339,7 @@ function UnfinishedPile({ by, onClose }) {
                       <label key={jkey(j)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: ticked.has(jkey(j)) ? "rgba(34,197,94,0.15)" : "var(--k-page)", border: `1px solid ${ticked.has(jkey(j)) ? "var(--k-green)" : "var(--k-rule)"}`, cursor: "pointer" }}>
                         <input type="checkbox" checked={ticked.has(jkey(j))} onChange={() => setTicked(t => { const n = new Set(t); if (n.has(jkey(j))) n.delete(jkey(j)); else n.add(jkey(j)); return n; })} style={{ width: 20, height: 20 }} />
                         <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{j.number || "—"}</strong>
-                        {j.name && <span>{j.name}</span>}
+                        {j.name && <span style={{ fontFamily: FONT_READ }}>{j.name}</span>}
                         {j.size && <span style={{ color: "var(--k-green-ink)", fontWeight: 700 }}>{shortSize(j.size)}</span>}
                         {j.team && <span style={{ color: "var(--k-ink-3)" }}>{j.team}</span>}
                         <span style={{ marginLeft: "auto", fontSize: 12, color: j.status === "flag" ? "var(--k-red-ink)" : j.status === "todo" ? "var(--k-ink-3)" : j.status === "extra" ? "var(--k-pink-ink)" : "var(--k-amber-ink)" }}>{statusWord[j.status] || j.status}{j.reason ? `: ${j.reason}` : ""}</span>
@@ -1683,7 +1683,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
                 )}
                 {s.carried?.length > 0 && (
                   <div style={{ marginTop: 10, borderTop: "1px solid var(--k-rule)", paddingTop: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--k-amber)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Still open from earlier orders ({s.carried.length})</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--k-amber-ink)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Still open from earlier orders ({s.carried.length})</div>
                     <div style={{ maxHeight: 220, overflowY: "auto" }}>{/* up to 50: they scroll in the card, so one station does not stretch the whole row */}
                     {s.carried.map(c => (
                       <div key={c.key} style={{ fontSize: 12, marginBottom: 4, display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
@@ -2227,7 +2227,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
                 #{match.number}
               </div>
               {match.name && (
-                <div style={{ fontFamily: FONT_READ, fontSize: `min(16cqh, ${Math.min(14, 105 / Math.max(6, String(match.name).length))}cqw)`, fontWeight: 700, color: "var(--k-strong)", lineHeight: 1, marginTop: "2cqh", maxWidth: "100%", overflowWrap: "anywhere", letterSpacing: 1 }}>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(20cqh, ${Math.min(22, 170 / Math.max(6, String(match.name).length))}cqw)`, fontWeight: 800, color: "var(--k-strong)", lineHeight: 1, marginTop: "2cqh", maxWidth: "100%", overflowWrap: "anywhere", letterSpacing: 1 }}>
                   {match.name}
                 </div>
               )}
@@ -2562,7 +2562,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
         <>
           <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 4 }}>✎</div>
           <div style={{ fontSize: "clamp(28px, 4.5vw, 44px)", fontWeight: 900, color: accent, marginBottom: 6, textAlign: "center" }}>What's wrong with it?</div>
-          {match && <div style={{ fontSize: 22, color: "var(--k-violet-ink-2)", marginBottom: 16 }}>#{match.number}{match.name ? ` · ${match.name}` : ""}{match.size ? ` · ${shortSize(match.size)}` : ""}</div>}
+          {match && <div style={{ fontSize: 22, color: "var(--k-violet-ink-2)", marginBottom: 16 }}>#{match.number}{match.name ? <> · <span style={{ fontFamily: FONT_READ }}>{match.name}</span></> : ""}{match.size ? ` · ${shortSize(match.size)}` : ""}</div>}
           <div style={{ width: "100%", maxWidth: 1200, padding: "0 24px", boxSizing: "border-box", maxHeight: "68%", overflowY: "auto", ...twoColumns(options.length) }}>
             {options.map((o, i) => {
               const sel = i === selectedIdx;
@@ -3044,7 +3044,7 @@ function PackingRow({ b, sh, cap, asking, unfolded, onAsk, onUnfold, onFull, onL
           <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 4 }}>
             {sh.waiting.map(r => (
               <div key={r._id} style={{ fontSize: 16, color: "var(--k-ink-1)", padding: "4px 8px", borderRadius: 6, background: "var(--k-page)" }}>
-                <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{r.number || "—"}</strong>{r.name ? ` ${r.name}` : ""}{r.size ? <span style={{ color: "var(--k-green-ink)", fontWeight: 700 }}> {shortSize(r.size)}</span> : null}{r.team ? <span style={{ color: "var(--k-ink-3)" }}> · {r.team}</span> : null}
+                <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{r.number || "—"}</strong>{r.name ? <span style={{ fontFamily: FONT_READ }}>{` ${r.name}`}</span> : ""}{r.size ? <span style={{ color: "var(--k-green-ink)", fontWeight: 700 }}> {shortSize(r.size)}</span> : null}{r.team ? <span style={{ color: "var(--k-ink-3)" }}> · {r.team}</span> : null}
               </div>
             ))}
           </div>
@@ -3188,7 +3188,7 @@ function IssuesModal({ missing, dups, flagged, binOf, onClose }) {
     return (
       <div key={key} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "6px 10px", borderRadius: 8, background: "var(--k-page)", flexWrap: "wrap" }}>
         <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 24, lineHeight: 1 }}>#{j.number || "?"}</strong>
-        {j.name && <span style={{ fontWeight: 700 }}>{j.name}</span>}
+        {j.name && <span style={{ fontWeight: 700, fontFamily: FONT_READ }}>{j.name}</span>}
         {j.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "var(--k-green-ink)", fontWeight: 800 }}>{shortSize(j.size)}</span>}
         {j.team && <span style={{ color: "var(--k-ink-3)" }}>{j.team}</span>}
         {box !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 18, color: "var(--k-blue-ink)", fontWeight: 800 }}>Box {box}</span>}
@@ -3235,7 +3235,7 @@ function OrderSummaryBody({ summary, bins = [] }) {
   const line = (key, j, extra, colour, box = null) => (
     <div key={key} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "5px 10px", borderRadius: 8, background: "var(--k-page)", flexWrap: "wrap" }}>
       <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 24, lineHeight: 1 }}>#{j.number || "?"}</strong>
-      {j.name && <span style={{ fontWeight: 700 }}>{j.name}</span>}
+      {j.name && <span style={{ fontWeight: 700, fontFamily: FONT_READ }}>{j.name}</span>}
       {j.team && <span style={{ color: "var(--k-ink-3)" }}>{j.team}</span>}
       {j.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: "var(--k-green-ink)", fontWeight: 800 }}>{shortSize(j.size)}</span>}
       {box && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 18, color: "var(--k-blue-ink)", fontWeight: 800, marginLeft: "auto" }}>Box {box}</span>}
@@ -3589,7 +3589,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
               {picked.map(r => (
                 <div key={r._id} style={rowSt}>
-                  <div style={{ flex: 1, fontSize: 16, color: "var(--k-ink-1)" }}><strong>#{r.number}</strong> {r.name} <span style={{ color: "var(--k-ink-3)" }}>{[r.team, shortSize(r.size)].filter(Boolean).join(" · ")}</span></div>
+                  <div style={{ flex: 1, fontSize: 16, color: "var(--k-ink-1)" }}><strong>#{r.number}</strong> <span style={{ fontFamily: FONT_READ }}>{r.name}</span> <span style={{ color: "var(--k-ink-3)" }}>{[r.team, shortSize(r.size)].filter(Boolean).join(" · ")}</span></div>
                   <button style={smBtn} onClick={() => send([[stickerJobs(pack, [r._id]), "jersey"]], `the sticker of #${r.number}`)}>Print sticker</button>
                 </div>
               ))}
@@ -6057,7 +6057,7 @@ export default function App() {
                     <div key={l.id} style={{ display: "flex", gap: 14, alignItems: "baseline", padding: "8px 4px", borderBottom: "1px solid var(--k-rule)", fontSize: 18 }}>
                       <span style={{ color: "var(--k-red-ink)" }}>🛑</span>
                       <span style={{ fontWeight: 800, color: "var(--k-strong)", minWidth: 60 }}>#{l.match?.number || "?"}</span>
-                      {l.match?.name && <span style={{ color: "var(--k-ink-1)" }}>{l.match.name}</span>}
+                      {l.match?.name && <span style={{ color: "var(--k-ink-1)", fontFamily: FONT_READ }}>{l.match.name}</span>}
                       {l.match?.size && <span style={{ color: "var(--k-amber-ink)", fontWeight: 700 }}>{shortSize(l.match.size)}</span>}
                       <span style={{ color: "var(--k-red-ink-2)" }}>{l.reason}</span>
                       <span style={{ marginLeft: "auto", color: "var(--k-ink-4)", fontSize: 14 }}>{String(l.timestamp || "").slice(-8)}</span>
