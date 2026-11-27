@@ -4218,7 +4218,6 @@ export default function App() {
   const offRosterFlags = offRosterList.length;
   // What a picked-up order is still waiting for, grouped (the Still out button and list).
   const stillOut = useMemo(() => { const g = outGroups(outList(roster, log)); return { ...g, total: g.flag.length + g.missing.length + g.extra.length }; }, [roster, log]);   // jerseys that are not on the roster, or flagged with no row (no size tag), have no row to count
-  const flagCount      = roster.filter(r => r.scanned === "flag").length + offRosterFlags;
   const manualCount    = roster.filter(r => r.scanned === "manual").length;
   const teamNames      = useMemo(() => [...new Set(roster.map(r => r.team).filter(Boolean))], [roster]);
   const canSupervise   = role === "supervisor";
@@ -5778,14 +5777,20 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flex: 1, minWidth: 0, overflow: "hidden", justifyContent: "flex-end" }}>
           <Pill color="var(--k-green)" active={rosterFilter === "pass"} onClick={() => filterRoster("pass")} title="Show the passed garments">{passCount} Pass</Pill>
-          <Pill color="var(--k-red)" active={rosterFilter === "flag"} onClick={() => filterRoster("flag")} title="Show the flagged garments">{flagCount} Flag</Pill>
+          {/* The order's tracker in the header, always in view (the co-op, 27 Nov 2026: in the bottom bar it was cut off on a
+              smaller screen). It replaces the Flag and Missing pills; a tap opens the Missing · Duplicate · Flagged lists. */}
+          {sessionStarted && (() => { const n = issues.missing.length + issues.dups.length + issues.flagged.length; return (
+            <Pill color={n ? "var(--k-amber)" : "var(--k-ink-4)"} active={showIssues} onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged">
+              ⚠ Mis <span style={{ color: "var(--k-amber-ink)" }}>{issues.missing.length}</span> · Dup <span style={{ color: "var(--k-purple)" }}>{issues.dups.length}</span> · Flag <span style={{ color: "var(--k-red-ink)" }}>{issues.flagged.length}</span>
+            </Pill>
+          ); })()}
           {sorting && <span title="Signed in as a sorter: sorting only, no inspection"><Pill color="var(--k-violet)">Sorting</Pill></span>}
           {!sorting && checksLeft > 0 && <span title="After a mistake the next garments are read twice and must agree before a green"><Pill color="var(--k-blue-ink)">Checking · {checksLeft}</Pill></span>}
           {!sorting && sessionStarted && <span title={`After a defect, inspect the next ${inspect.full} fully; after ${inspect.every} clean, one spot check`}><Pill color={inspect.phase === "quick" ? "var(--k-ink-3)" : "var(--k-amber)"}>{inspectLabel(inspect, inspect.checks || CHECKS)}</Pill></span>}
           {manualCount > 0 && <Pill color="var(--k-amber)" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the garments entered by hand">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill alert color="var(--k-red-ink)" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
           {saveOk === false && <Pill alert color="var(--k-red-ink)" title="This PC's storage is full or blocked: the order is not being saved, so a reload or a crash would lose the work since. Tell the supervisor; do not close or reload this page.">⚠ NOT SAVING — tell the supervisor</Pill>}
-          {openCount - flagCount > 0 && <Pill color="var(--k-amber)">{openCount - flagCount} Missing</Pill>}
+
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
           {sessionStarted && <button onClick={() => setShowPrint(true)} title="Print any label of this order again, or of an order done before" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>🖨 Print</button>}
@@ -5968,9 +5973,6 @@ export default function App() {
                   {stillOut.total > 0 && <button onClick={() => setShowStillOut(true)} title="The garments this order is waiting for: back from repair, missing, extra. Scan one when it comes back, or pass it here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", borderColor: "var(--k-sky)", color: "var(--k-sky-ink)" }}>🔧 Still out · {stillOut.total}</button>}
                   <button onClick={() => setShowHistory(true)} title="Every garment scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap" }}>🕘 History · {new Set(log.filter(l => l.match && l.match._id !== undefined && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).map(l => l.match._id)).size}</button>
                   <button onClick={() => setShowPacking(true)} title="Packing: what to do next, each box with its list (Print list, Box full), and the order summary" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "var(--k-red)", borderColor: "var(--k-red)", color: "var(--k-on-red)" } : { borderColor: "var(--k-green)", color: "var(--k-green-ink-2)" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Packing / Summary"}</button>
-                  <button onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: issues.missing.length + issues.dups.length + issues.flagged.length ? "var(--k-amber)" : "var(--k-rule-2)" }}>
-                    ⚠ Mis <span style={{ color: "var(--k-amber-ink)" }}>{issues.missing.length}</span> · Dup <span style={{ color: "var(--k-purple)" }}>{issues.dups.length}</span> · Flag <span style={{ color: "var(--k-red-ink)" }}>{issues.flagged.length}</span>
-                  </button>
                 </div>
               )}
 

@@ -262,7 +262,7 @@ The camera's read (`readJersey` in vision.js) goes to the matcher (`findMatches`
 - **Flag after the fact:** the roster's Mark menu on a passed or by-hand row offers "🚩 Flag / damage" (`flagRow`); History lists every jersey scanned. A jersey flagged after its box was closed leaves that box (`dropFromClosed`).
 - **Board tags** (`routeOfReason` / `severityOf` in config.js): every open item carries a tag from its reason's route (REMAKE over DECORATION / STITCHER over CLEANING / CHECK ORDER over SIGN OFF / DECIDE).
 - **Defect categories** (`cat` on each reason, `reasonCategory`, `DEFECT_CATEGORIES`): Decoration, Artwork, Sewing, Label, Fabric, Cleaning, Order, Other.
-- The header's Flag count includes flags with no roster row (Not on the roster, Duplicate, No size tag); its filter lists them under the table (`offRosterList`).
+- The header's tracker pill "⚠ Mis N · Dup N · Flag N" (the co-op, 27 Nov 2026: it was in the bottom bar and got cut off on a smaller screen) replaces the Flag and Missing pills and opens the Issues lists (`IssuesModal`: Missing, Duplicate, Flagged, flags with no roster row included). The roster table's flag filter (`offRosterList` under the table) is no longer reached from a pill.
 - Flags are resolved on the board or the last-result card (Accept / Reject / Note); a resolved flag stays a flag (`outcome`, `resolution`).
 
 ### Garments: the outline the damage is marked on
@@ -282,7 +282,7 @@ The camera's read (`readJersey` in vision.js) goes to the matcher (`findMatches`
 - **Mark menu:** an unscanned row offers Missing; a missing (or short) row "✓ Found — pass it"; a flagged row "🔧 Back from repair — pass it" (both with a confirm box naming the box; the owner, 20 Nov 2026); a passed or by-hand row "🚩 Flag / damage" and Un-check. A supervisor also gets Un-check on a flagged row. The `short` status is still read for old sessions.
 - **On-screen keys:** the stations have no keyboard, so every text box an operator types in brings up on-screen keys (`ScreenKeys`; layout `"search"`: digits, letters, dash, ⌫, Clear, Space, Done; layout `"digits"`: a keypad for order numbers, 17 Nov 2026). They sit under the bar, before the "N shown" line, so nothing moves under the finger. **Any new text box an operator must type in needs them too.**
 - Big orders: each row is a memoised `RosterRow` with one shared handler (`onMarkRow`) and a stable column list (`rosterColsStable`); keep new props to it stable (rebuilding 500 rows held the screen ~0.75 s).
-- The bottom-left bar under the last pass: "🔧 Still out · N" (a picked-up order), "🕘 History", "📦 Packing", and "⚠ Mis · Dup · Flag" (the Issues lists) (the owner, 19 Nov 2026: one line, never under the roster).
+- The bottom-left bar under the last pass: "🔧 Still out · N" (a picked-up order), "🕘 History", "📦 Packing / Summary" (the owner, 19 Nov 2026: one line, never under the roster; the Mis · Dup · Flag tracker moved to the header, 27 Nov 2026).
 
 ### Boxes
 
