@@ -733,3 +733,8 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Why "not set up":** the 5174 server then running was `vite.config.diag.js`, which does not load `admin-plugin.js`; `.env.local` has the password. The stage servers (`Servers\*.bat`, `jersey-qc-dev-stage`) load it.
 - **What changed:** Admin asks `/api/admin/session`: signed in → "Signed in as …" and "Open the admin panel →"; not → Your name and Admin password on the card, posted to the panel's own `/api/admin/login` (its cookie, its lockout and messages), then the panel opens. No panel or no password on the server → a red line, the button greyed. The supervisor's and admin's description lines and the "Each station has its own PIN…" line are gone (the in-use warning stays). The card is 940 wide in every case.
 - **Tests:** `admin.test.js` follows the new submit. 1080 tests pass. On 5174 (development stage): the Admin layout and a wrong password ("Wrong password (4 tries left).") checked; the signed-in path was not tried (it needs the real password).
+
+## 2026-11-27 · Packing: "flagged", and the summary at the top
+- **Asked for (the co-op):** the Now strip's "X with the supervisor" should say "X flagged"; the summary and its print sat under every box, a long scroll on a big order.
+- **What changed:** the Now strip says "N flagged". The "Summary ▸" fold with ⬇ Excel and 🖨 Print summary is right under the Now strip, above the boxes; opened, the summary shows there in a frame. Finish order and Close stay at the bottom. The board's order view still says "with the supervisor" (not asked).
+- **Tests:** 1080 pass. Not looked at on 5174: station 3 was in use by the co-op's own browser.

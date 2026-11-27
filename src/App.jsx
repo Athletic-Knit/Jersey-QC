@@ -3190,7 +3190,7 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
           <div style={{ flex: 1, minWidth: 260 }}>
             <div style={{ fontSize: 26, fontWeight: 900, color: "var(--k-ink-1)" }}>{now.text}</div>
             <div style={{ fontSize: 18, color: "var(--k-ink-2)", marginTop: 2 }}>
-              <strong style={{ color: "var(--k-green-ink)" }}>{c.passed}</strong> of {c.total} passed · <strong style={{ color: c.failed ? "var(--k-red-ink)" : "var(--k-ink-2)" }}>{c.failed}</strong> with the supervisor · <strong style={{ color: c.notScanned ? "var(--k-amber-ink)" : "var(--k-ink-2)" }}>{c.notScanned}</strong> unscanned{c.marked > 0 && <> · <strong style={{ color: "var(--k-amber-ink)" }}>{c.marked}</strong> marked missing</>}
+              <strong style={{ color: "var(--k-green-ink)" }}>{c.passed}</strong> of {c.total} passed · <strong style={{ color: c.failed ? "var(--k-red-ink)" : "var(--k-ink-2)" }}>{c.failed}</strong> flagged · <strong style={{ color: c.notScanned ? "var(--k-amber-ink)" : "var(--k-ink-2)" }}>{c.notScanned}</strong> unscanned{c.marked > 0 && <> · <strong style={{ color: "var(--k-amber-ink)" }}>{c.marked}</strong> marked missing</>}
             </div>
           </div>
           {now.step === "scan" && <button onClick={onClose} style={bigBtn}>Close</button>}
@@ -3200,6 +3200,20 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
         {status && (
           <div style={{ marginTop: 12, fontSize: 18, fontWeight: 600, color: status.status === "done" ? "var(--k-green-ink)" : status.status === "printing" ? "var(--k-ink-3)" : "var(--k-amber-ink)" }}>
             {status.status === "printing" ? "🖨 Printing… " : "🖨 "}{status.text}
+          </div>
+        )}
+        {/* The summary, folded, under the Now strip (the co-op, 27 Nov 2026: it sat under every box, a long scroll on a
+            30-box order): passed with its box, failed with its reason, missing; with Excel and Print summary beside it. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 14 }}>
+          <button onClick={() => setSummaryOpen(o => !o)} style={{ ...btnGhost, fontSize: 18, padding: "10px 18px", borderColor: "var(--k-blue)", color: "var(--k-blue-ink-2)" }}>Summary {summaryOpen ? "▾" : "▸"}</button>
+          <div style={{ flex: 1 }} />
+          {onExport && <button onClick={onExport} style={{ ...btnGhost, fontSize: 17, padding: "10px 18px" }}>⬇ Excel</button>}
+          <button onClick={() => onPrintSummary(false)} disabled={printing} title="The count label, the FAILED list and the MISSING list, on the 2 x 1 in roll" style={{ ...btnGhost, fontSize: 17, padding: "10px 18px", opacity: printing ? 0.5 : 1 }}>🖨 Print summary · {summaryLabels} {summaryLabels === 1 ? "label" : "labels"}</button>
+        </div>
+        {summaryOpen && (
+          <div style={{ marginTop: 10, padding: "4px 16px 12px", borderRadius: 12, border: "1px solid var(--k-rule-3)" }}>
+            <SummaryCounts summary={summary} stats={stats} />
+            <OrderSummaryBody summary={summary} bins={[]} />{/* the boxes are the rows above */}
           </div>
         )}
         {open.length > 0 && <div style={{ fontSize: 16, color: "var(--k-ink-3)", margin: "14px 0 8px" }}>
@@ -3231,19 +3245,6 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
               ))}
             </div>
           </>
-        )}
-        {/* The summary, folded: passed with its box, failed with its reason, missing. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 22 }}>
-          <button onClick={() => setSummaryOpen(o => !o)} style={{ ...btnGhost, fontSize: 18, padding: "10px 18px", borderColor: "var(--k-blue)", color: "var(--k-blue-ink-2)" }}>Summary {summaryOpen ? "▾" : "▸"}</button>
-          <div style={{ flex: 1 }} />
-          {onExport && <button onClick={onExport} style={{ ...btnGhost, fontSize: 17, padding: "10px 18px" }}>⬇ Excel</button>}
-          <button onClick={() => onPrintSummary(false)} disabled={printing} title="The count label, the FAILED list and the MISSING list, on the 2 x 1 in roll" style={{ ...btnGhost, fontSize: 17, padding: "10px 18px", opacity: printing ? 0.5 : 1 }}>🖨 Print summary · {summaryLabels} {summaryLabels === 1 ? "label" : "labels"}</button>
-        </div>
-        {summaryOpen && (
-          <div style={{ marginTop: 10 }}>
-            <SummaryCounts summary={summary} stats={stats} />
-            <OrderSummaryBody summary={summary} bins={[]} />{/* the boxes are the rows above */}
-          </div>
         )}
         <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 24 }}>
           {onFinish && <button onClick={onFinish} style={{ ...btnGhost, fontSize: 17, padding: "12px 24px", borderColor: "var(--k-green)", color: "var(--k-green-ink-2)" }}>🏁 Finish order</button>}
