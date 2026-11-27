@@ -34,8 +34,9 @@ Read these fields:
 - "number_position": where the number you read sits across the width of the jersey back, judged against the jersey's own centre line (midway between its two sleeves), not the centre of the picture: "left", "centre" or "right". A one-digit number whose centre is clearly off that line is "left" or "right".
 - "name_complete": true when the whole name is visible from its first letter to its last. false when any letters are covered (a hand, a fold, a tag, another garment), cut off by the edge of the picture, or unreadable, so the "name" you return may be only part of the word. If only part of a name is readable, still return the letters you can read. A short name of two or three letters with open fabric on both sides of it is complete.
 - "number_complete": true when every digit of the back number is wholly visible. false when any part of a digit could be covered or cut off (a hand, a fold, a tag, another garment, the edge of the picture). This is about the digits only: the jersey body, sleeves or collar running out of the picture does not matter if the digits themselves are whole. For a single digit, look at the fabric within one digit's width on each side of it: smooth, open fabric on both sides means the number is complete and is that one digit. Return false only when something is actually there — a fold line, a crease, a sleeve, a hand, a tag, a shadow band, or the edge of the picture — or the digit sits clearly to the left or right of the jersey's centre line, which usually means a second digit is hidden.
+- "stop_sign": the STOP patch: a red octagon (eight-sided, like a road stop sign) with a white border and the word STOP stitched in white, sewn on the back of the jersey just below the collar, above the name and number. It is small, about the size of a palm, and the word STOP may run sideways or upside down with the jersey. "yes" when that patch is on the jersey. "no" when the area just below the collar is in plain view and has no such patch. "not_visible" when the collar area is out of the picture, folded under, or covered, so you cannot tell. A red number, a red stripe, a team crest or any other logo is not a stop sign: only the red octagon with STOP on it counts.
 Return ONLY valid JSON, no markdown, no commentary:
-{"jersey_present":true,"orientation":"upright","name":"NAME","number":"##","sleeve_numbers":[],"jersey_colour":"black","trim_colour":"red","obstruction":"","laid_flat":true,"number_position":"centre","name_complete":true,"number_complete":true}
+{"jersey_present":true,"orientation":"upright","name":"NAME","number":"##","sleeve_numbers":[],"jersey_colour":"black","trim_colour":"red","obstruction":"","laid_flat":true,"number_position":"centre","name_complete":true,"number_complete":true,"stop_sign":"no"}
 If more than one jersey or plate is in the picture, read the largest or most central one and ignore the others.
 Never leave a field empty because you are unsure, and never decide that an item is "only a sample" or "not a real name": whatever letters are printed, return them. A person checks every read against the order, so a near-miss is far more useful than nothing. Do not explain; output the JSON only. Use "" only for a field that is truly not in the picture. A name plate with no number is a valid read: return the name and "" for the number.`;
 
@@ -69,6 +70,7 @@ function parseModelText(data) {
     jersey_colour: str(obj.jersey_colour).toLowerCase(),
     trim_colour: str(obj.trim_colour).toLowerCase(),
     obstruction: str(obj.obstruction),
+    stop_sign: normStopSign(obj.stop_sign),
   };
   // The sleeve numbers are reported, not acted on. A one-digit sleeve number
   // beside a two-digit back read looked like a merge, but on the floor it was
@@ -114,6 +116,19 @@ export function normPosition(v) {
   if (/cent|middle|mid/.test(s)) return "centre";
   if (/left/.test(s)) return "left";
   if (/right/.test(s)) return "right";
+  return "";
+}
+
+// The STOP patch below the collar: "yes", "no", or "" when the model could not
+// see the collar area (or an older answer left the field out). "" is never "no":
+// a jersey whose collar was folded under says nothing about its patch.
+export function normStopSign(v) {
+  if (v === true) return "yes";
+  if (v === false) return "no";
+  const s = str(v).toLowerCase().replace(/[\s-]+/g, "_");
+  if (/^(not_visible|unknown|unsure|unclear|n\/a|na|none_visible|cannot_tell)$/.test(s)) return "";
+  if (/^(yes|true|present|y)$/.test(s)) return "yes";
+  if (/^(no|false|absent|missing|n)$/.test(s)) return "no";
   return "";
 }
 
