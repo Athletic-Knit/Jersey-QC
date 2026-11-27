@@ -85,9 +85,10 @@ function formatKey(code) {
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const card     = { background: "var(--k-card)", borderRadius: 10, border: "1px solid var(--k-rule)", marginBottom: 10, overflow: "hidden" };
-const FONT_UI      = '"Atkinson Hyperlegible", system-ui, sans-serif';          // text the operator reads
+const FONT_UI      = '"Barlow", system-ui, sans-serif';                          // the interface text (brand body face)
+const FONT_READ    = '"Atkinson Hyperlegible", system-ui, sans-serif';           // a player's name and the roster cells: keeps 0/O, 1/l/I, 6/9 apart from 4-5 ft
 const FONT_DISPLAY = '"Barlow Condensed", "Arial Narrow", system-ui, sans-serif'; // the big numerals: number, size, bin, counters
-const btnPri   = { padding: "10px 20px", borderRadius: 8, border: "none", background: "var(--k-blue)", color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer" };
+const btnPri   = { padding: "10px 20px", borderRadius: 8, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 700, fontSize: 16, cursor: "pointer" };
 const btnGhost = { padding: "8px 14px", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: "transparent", color: "var(--k-ink-2)", fontWeight: 700, fontSize: 14, cursor: "pointer" };
 const btnSm    = { padding: "7px 14px", borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: "pointer" };
 const codeSt   = { background: "var(--k-field)", padding: "2px 8px", borderRadius: 4, fontSize: 14 };
@@ -98,7 +99,7 @@ const labelSt  = { fontSize: 14, color: "var(--k-ink-3)", fontWeight: 700, displ
 const modalBg   = { position: "fixed", inset: 0, background: "var(--k-page)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto" };
 const modalCard = { background: "var(--k-card)", borderRadius: 16, border: "1px solid var(--k-rule)", padding: 40, width: 560, maxWidth: "90vw" };
 const errSt     = { fontSize: 15, color: "var(--k-red-ink)", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 };
-const bigBtn    = { width: "100%", padding: "15px", borderRadius: 10, border: "none", background: "var(--k-blue)", color: "#fff", fontWeight: 700, fontSize: 19, cursor: "pointer" };
+const bigBtn    = { width: "100%", padding: "15px", borderRadius: 10, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 700, fontSize: 19, cursor: "pointer" };
 
 // A log entry's colour by its status: green passed, red flagged, amber undone or missing.
 function statusColor(s) {
@@ -261,7 +262,7 @@ const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise,
         {r.scanned === "pass" ? "✅" : r.scanned === "flag" ? "🛑" : r.scanned === "manual" ? "✍" : r.scanned === "missing" ? "❓" : r.scanned === "short" ? "📦" : <span style={{ color: "var(--k-ink-5)" }}>—</span>}
       </td>
       {cols.map(c => (
-        <td key={c} style={{ ...tdSt, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "var(--k-amber-ink)" : "var(--k-ink-1)" }}>{c === "size" ? shortSize(r[c]) : r[c]}</td>
+        <td key={c} style={{ ...tdSt, fontFamily: FONT_READ, fontWeight: c === "size" || c === "number" ? 700 : 400, color: c === "size" ? "var(--k-amber-ink)" : "var(--k-ink-1)" }}>{c === "size" ? shortSize(r[c]) : r[c]}</td>
       ))}
       {hasBins && <td style={{ ...tdSt, color: r.scanned === "flag" ? "var(--k-red-ink)" : "var(--k-blue-ink)", fontWeight: 700, whiteSpace: "nowrap" }}>{r.scanned === "flag" ? "Damaged" : bin !== null ? `Box ${bin}` : "—"}</td>}
       <td style={{ ...tdSt, padding: "2px 6px" }}>
@@ -314,7 +315,7 @@ function CompareDays({ days = [], stationLabel, onProblem }) {
             <label style={{ ...labelSt, marginBottom: 0 }}>From<input type="date" value={first} min={known[0]} max={known[known.length - 1]} onChange={e => setFrom(e.target.value)} style={dateSt} /></label>
             <label style={{ ...labelSt, marginBottom: 0 }}>To<input type="date" value={last} min={known[0]} max={known[known.length - 1]} onChange={e => setTo(e.target.value)} style={dateSt} /></label>
           </div>
-          <button onClick={run} disabled={busy || !first || !last} style={{ ...bigBtn, fontSize: 13, background: "var(--k-blue)", color: "#fff", opacity: busy ? 0.6 : 1 }}>{busy ? "Fetching…" : "Download the comparison"}</button>
+          <button onClick={run} disabled={busy || !first || !last} style={{ ...bigBtn, fontSize: 13, background: "var(--k-blue)", color: "var(--k-on-blue)", opacity: busy ? 0.6 : 1 }}>{busy ? "Fetching…" : "Download the comparison"}</button>
           <div style={{ fontSize: 12, color: "var(--k-ink-3b)", marginTop: 6 }}>The hub keeps {known.length} {known.length === 1 ? "day" : "days"}: {known[0]} to {known[known.length - 1]}.</div>
         </div>
       )}
@@ -1006,7 +1007,7 @@ function ManualEntryForm({ detected, initial = null, teams, onSubmit, onBack }) 
       <div style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "var(--k-amber)", textAlign: "center", marginBottom: 18 }}>Enter the garment by hand</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
         <div><label style={labelSt}>Number</label><input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={onKey} onFocus={() => setField("number")} autoFocus inputMode="numeric" placeholder="##" style={{ ...fieldSt, borderColor: field === "number" ? "var(--k-amber)" : fieldSt.borderColor }} /></div>
-        <div><label style={labelSt}>Name</label><input value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} onFocus={() => setField("name")} placeholder="as printed" style={{ ...fieldSt, borderColor: field === "name" ? "var(--k-amber)" : fieldSt.borderColor }} /></div>
+        <div><label style={labelSt}>Name</label><input value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} onFocus={() => setField("name")} placeholder="as printed" style={{ ...fieldSt, fontFamily: FONT_READ, borderColor: field === "name" ? "var(--k-amber)" : fieldSt.borderColor }} /></div>
       </div>
       {teams.length > 0 && (
         <div style={{ marginBottom: 14 }}>
@@ -1820,7 +1821,7 @@ export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled,
         {back && <span style={{ fontSize: px(17), fontWeight: 900, color: "var(--k-sky-ink)", lineHeight: 1.1 }}>{back.was === "flag" ? `🔧 Back from repair${back.reason ? " — was: " + back.reason : ""}` : "✓ Was marked missing — found"}</span>}
         {(name || team || extras.length > 0 || disabled) && (
           <span data-head={big ? "1" : undefined} style={{ fontSize: big ? "clamp(22px, 2vw, 29px)" : "clamp(18px, 1.7vw, 24px)", fontWeight: 700, lineHeight: 1.1, color: disabled ? "var(--k-ink-4)" : "var(--k-ink-1)", ...(big ? { whiteSpace: "nowrap", overflow: "hidden" } : { overflowWrap: "anywhere" }) }}>{/* beside the camera a two-column tile leaves the middle ~150 px: a long name then wraps at the dot, the team under it. big: one line, so the list's measurement can tell when the text no longer fits (ScanOverlay drops `big` then) */}
-            {name && <span style={{ color: hue("name") }}>{name}</span>}
+            {name && <span style={{ fontFamily: FONT_READ, color: hue("name") }}>{name}</span>}
             {name && team && " · "}
             {team && <span style={{ color: hue("team") }}>{team}</span>}
             {extras.map(k => <span key={k} style={{ fontSize: px(16), color: hue(k) || "var(--k-ink-2)", marginLeft: name || team ? 10 : 0 }}>{cap(k)}: {c[k]}</span>)}
@@ -2226,7 +2227,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
                 #{match.number}
               </div>
               {match.name && (
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(20cqh, ${Math.min(22, 170 / Math.max(6, String(match.name).length))}cqw)`, fontWeight: 800, color: "var(--k-strong)", lineHeight: 1, marginTop: "2cqh", maxWidth: "100%", overflowWrap: "anywhere", letterSpacing: 1 }}>
+                <div style={{ fontFamily: FONT_READ, fontSize: `min(16cqh, ${Math.min(14, 105 / Math.max(6, String(match.name).length))}cqw)`, fontWeight: 700, color: "var(--k-strong)", lineHeight: 1, marginTop: "2cqh", maxWidth: "100%", overflowWrap: "anywhere", letterSpacing: 1 }}>
                   {match.name}
                 </div>
               )}
@@ -2734,8 +2735,8 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
           <div style={labelSt}>Screen</div>
           <div role="radiogroup" aria-label="Light or dark" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {THEMES.map(t => (
-              <button key={t.id} role="radio" aria-checked={(temp.theme || "dark") === t.id} onClick={() => setTemp(x => ({ ...x, theme: t.id }))}
-                style={{ ...btnGhost, padding: "8px 14px", ...((temp.theme || "dark") === t.id ? { background: "var(--k-blue)", borderColor: "var(--k-blue)", color: "#fff" } : {}) }}>{t.label}</button>
+              <button key={t.id} role="radio" aria-checked={(temp.theme || "light") === t.id} onClick={() => setTemp(x => ({ ...x, theme: t.id }))}
+                style={{ ...btnGhost, padding: "8px 14px", ...((temp.theme || "light") === t.id ? { background: "var(--k-blue)", borderColor: "var(--k-blue)", color: "var(--k-on-blue)" } : {}) }}>{t.label}</button>
             ))}
           </div>
           <div style={{ fontSize: 14, color: "var(--k-ink-3b)", marginTop: 6 }}>Light is easier to read under bright lights. Every screen follows it; the camera picture and the photo viewer stay dark.</div>
@@ -2845,7 +2846,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
           ))}
         </div>
         <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-          <button onClick={onConfirm} style={{ padding: "16px 40px", borderRadius: 10, border: "none", background: "var(--k-blue)", color: "#fff", fontWeight: 700, fontSize: 21, cursor: "pointer" }}>
+          <button onClick={onConfirm} style={{ padding: "16px 40px", borderRadius: 10, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 700, fontSize: 21, cursor: "pointer" }}>
             Boxes ready — start scanning
           </button>
           {labels.length > 0 && (
@@ -3328,7 +3329,7 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
           {rows.map(l => { const st = stateOf(l); return (
             <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 10, background: st === "flag" ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.06)", border: "1px solid var(--k-rule)" }}>
               {l.thumb && <img src={l.thumb} alt="" style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
-              <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 28, lineHeight: 1 }}>#{l.match.number}{l.match.name ? ` · ${l.match.name}` : ""}</span>
+              <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 28, lineHeight: 1 }}>#{l.match.number}{l.match.name ? <span style={{ fontFamily: FONT_READ, fontWeight: 700 }}>{` · ${l.match.name}`}</span> : ""}</span>
               {l.match.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "var(--k-green-ink)", fontWeight: 800 }}>{shortSize(l.match.size)}</span>}
               {binOf(l.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "var(--k-blue-ink)", fontWeight: 800 }}>Box {binOf(l.match)}</span>}
               {/* A flag's reason and, when it was marked, where the damage is. */}
@@ -4187,7 +4188,7 @@ export default function App() {
   // Light or dark (settings.theme): every screen is built on the colour tokens since phase 8
   // (26 Nov 2026), so the theme is applied everywhere. What stays dark on purpose draws its own
   // colours: the camera picture and what is written on it, the photo viewer and the wall view.
-  useEffect(() => { applyTheme(settings.theme || "dark"); }, [settings.theme]);
+  useEffect(() => { applyTheme(settings.theme || "light"); }, [settings.theme]);
 
   // SheetJS from the CDN, once, for reading Excel rosters and writing the exports.
   useEffect(() => {
@@ -5845,7 +5846,7 @@ export default function App() {
               {lastConfirmed && (
                 <div style={{ padding: "10px 14px", borderTop: "1px solid var(--k-rule)", display: "flex", alignItems: "center", gap: 14, background: "rgba(34,197,94,0.06)", flexShrink: 0, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 14, color: "var(--k-ink-3)", whiteSpace: "nowrap" }}>Last passed</span>
-                  <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 30, lineHeight: 1 }}>#{lastConfirmed.match?.number}{lastConfirmed.match?.name ? ` · ${lastConfirmed.match.name}` : ""}</span>
+                  <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 30, lineHeight: 1 }}>#{lastConfirmed.match?.number}{lastConfirmed.match?.name ? <span style={{ fontFamily: FONT_READ, fontWeight: 700 }}>{` · ${lastConfirmed.match.name}`}</span> : ""}</span>
                   {lastConfirmed.match?.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "var(--k-green-ink)", fontWeight: 800 }}>{shortSize(lastConfirmed.match.size)}</span>}
                   {binOf(lastConfirmed.match) !== null && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "var(--k-blue-ink)", fontWeight: 800 }}>Box {binOf(lastConfirmed.match)}</span>}
                   {lastConfirmed.match?._id !== undefined && roster.some(r => r._id === lastConfirmed.match._id && r.scanned) && (

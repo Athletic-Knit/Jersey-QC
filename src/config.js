@@ -168,7 +168,7 @@ export const DEFAULT_SETTINGS = {
   boxWeights: false,      // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station
   boxWeightCap: 45,       // lb: no box heavier than this, when boxWeights is on (src/lib/boxmodel.js)
   listSort: "size",       // the pick list's order: "size" | "team" | "number" (LIST_SORTS in roster.js; the owner, 19 Nov 2026: by size, the tag is all the operator checks)
-  theme: "dark",          // "dark" | "light" | "system" (follow the PC). Phase 4 of the admin panel (26 Nov 2026): the sign-in screen and the supervisor board follow it; the station screens stay dark until they are converted
+  theme: "light",         // "dark" | "light" | "system" (follow the PC). Light is the default (brand-ui, 27 Nov 2026); a station that chose Dark in Settings keeps it
 };
 
 // ── Where a flagged jersey goes, from the reason the operator picked ────────

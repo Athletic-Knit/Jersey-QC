@@ -3,7 +3,7 @@
 // "dark", "light" or "system" (follow the PC's own setting), kept in localStorage. It sets
 // data-theme on <html>, which picks the colour tokens in index.css. The admin panel uses
 // it (its own choice, jerseyqc.theme); a station uses settings.theme, applied on every screen
-// since phase 8 (App.jsx). clearTheme is kept for a screen that must not follow it; none does now.
+// since phase 8 (App.jsx). Light is the default for both (brand-ui, 27 Nov 2026). clearTheme is kept for a screen that must not follow it; none does now.
 export const THEME_KEY = "jerseyqc.theme";
 export const THEMES = [
   { id: "dark", label: "Dark" },
@@ -12,7 +12,7 @@ export const THEMES = [
 ];
 
 export function loadTheme() {
-  try { const v = localStorage.getItem(THEME_KEY); return THEMES.some(t => t.id === v) ? v : "dark"; } catch { return "dark"; }
+  try { const v = localStorage.getItem(THEME_KEY); return THEMES.some(t => t.id === v) ? v : "light"; } catch { return "light"; }
 }
 // "dark" or "light": what a choice means on this PC right now.
 export function resolveTheme(choice, prefersLight = () => { try { return window.matchMedia("(prefers-color-scheme: light)").matches; } catch { return false; } }) {
@@ -32,7 +32,7 @@ export function applyTheme(choice = loadTheme(), root = typeof document !== "und
   } catch { /* no matchMedia (tests) */ }
   return resolveTheme(choice);
 }
-// Back to the app's own dark, and no longer following the PC: the screens not yet built on the
+// Back to the root colours (light), and no longer following the PC: the screens not yet built on the
 // tokens call this, so "Follow this PC" can never turn them light (Fable's review, 26 Nov 2026).
 export function clearTheme(root = typeof document !== "undefined" ? document.documentElement : null) {
   try { if (followSystem) window.matchMedia("(prefers-color-scheme: light)").removeEventListener("change", followSystem); } catch { /* no matchMedia */ }
