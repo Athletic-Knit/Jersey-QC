@@ -82,6 +82,7 @@ body { overflow: hidden; overscroll-behavior: none; }
   --k-kbd-line: rgba(16,26,46,0.35);
   --k-bg-green: #E3F2E8;
   --k-bg-amber: #FBEFD9;
+  --k-bg-stop: #F2CF6B;   /* the green when the STOP sign was not seen: a darker yellow than the list's */
   --k-bg-violet: #EEE7F7;
   --k-bg-sky: #E1F2F8;
   --k-bg-red: #FBE6E7;
@@ -163,6 +164,7 @@ body { overflow: hidden; overscroll-behavior: none; }
   --k-kbd-line: rgba(238,241,248,0.3);
   --k-bg-green: #0F2F22;
   --k-bg-amber: #33250D;
+  --k-bg-stop: #4D3B06;
   --k-bg-violet: #231A47;
   --k-bg-sky: #0B2E48;
   --k-bg-red: #3B1420;

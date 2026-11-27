@@ -2028,6 +2028,11 @@ function GarmentMap({ kind, spots = [], onTap, onRemove, fit = null, stackFit = 
 // what each choice does is in `actions` (App).
 // tapOnly / holdBack (a flagged garment of an order not parked: a tap, never the pedal) are in src/lib/scanpolicy.js.
 
+// The STOP sign tick on the green (the co-op, 27 Nov 2026): only on an order
+// that has the STOP patch, never in the admin panel's list or the inspection
+// counts.
+const STOP_CHECK = { id: "stopsign", label: "STOP sign", quick: true, reasons: [] };
+
 export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", stopSign = false, inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", lastSize = "", paused = false }) {
   const reasons = reasonsFor(jerseyType);
   // Runs an option: a click, the Select key or the pedal.
@@ -2043,20 +2048,33 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
   const seen = state.scan?.detected;
   const numberDoubt = mode === "confirm" && !!seen && String(state.match?.number ?? "") !== ""
     && seen.number_complete === false;   // only when the camera says the number itself is covered or cut off: not for a jersey that is merely not flat or a number off centre, or the line would show too often to be read
-  // The STOP patch (the co-op, 27 Nov 2026): on an order that has one, the green
-  // says what the camera saw below the collar. Only a camera read says anything:
-  // a typed entry shows nothing. It never changes the match or locks Confirm.
-  const stopSeen = mode === "confirm" && stopSign && seen ? (seen.stop_sign || "") : null;
+  // The STOP patch (the co-op, 27 Nov 2026): on an order that has one, "STOP sign"
+  // is a tick check on the green, on every garment, quick look too. The camera
+  // seeing it ticks it by itself; not seen, unsure, or typed by hand (no camera
+  // read), the operator ticks it like the others and the green turns dark
+  // yellow, so the change of colour says "no STOP sign seen". It never changes
+  // the match.
+  const stopOn = mode === "confirm" && stopSign;
+  const stopSeen = stopOn ? (seen ? (seen.stop_sign || "") : "typed") : null;   // "yes" | "no" | "" (collar not in view) | "typed"
+  const stopMissing = stopOn && stopSeen !== "yes";
   // The checks to tick before Confirm works (the owner, 20 Nov 2026): all of
   // them on Inspect fully; on a quick look only the ones a flag added, while
   // Decoration and Size tag are shown big to look at and the rest small, with
   // nothing to tick (the owner, 23 Nov 2026). Tap a check to tick it; the
   // Select key ticks the next one while any is left, then confirms.
-  const { required: mustCheck, look: lookAt, remind: alsoLook } = useMemo(() => checksFor(mode === "confirm" ? inspect : null, inspect?.checks || CHECKS), [mode, inspect]);
+  const { required: inspectChecks, look: lookAt, remind: alsoLook } = useMemo(() => checksFor(mode === "confirm" ? inspect : null, inspect?.checks || CHECKS), [mode, inspect]);
+  const mustCheck = useMemo(() => (stopOn ? [STOP_CHECK, ...inspectChecks] : inspectChecks), [stopOn, inspectChecks]);
   const [ticked, setTicked] = useState(() => new Set());
-  const toTick = mustCheck.filter(c => !ticked.has(c.id));
+  // Seen by the camera: ticked by itself; a tap unticks it (stopOff) and ticks it again.
+  const stopAuto = stopOn && stopSeen === "yes";
+  const [stopOff, setStopOff] = useState(false);
+  const isTicked = id => (id === STOP_CHECK.id && stopAuto ? !stopOff : ticked.has(id));
+  const toTick = mustCheck.filter(c => !isTicked(c.id));
   const allTicked = toTick.length === 0;
-  const toggleTick = useCallback(id => setTicked(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; }), []);
+  const toggleTick = useCallback(id => {
+    if (id === STOP_CHECK.id && stopAuto) { setStopOff(v => !v); return; }
+    setTicked(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }, [stopAuto]);
   const tickNext = useCallback(() => { if (toTick[0]) toggleTick(toTick[0].id); }, [toTick, toggleTick]);
   const isList  = mode === "pick" || mode === "close";
   const isSizePick = mode === "offSize" || mode === "listFlag";   // Flag on the list: what is wrong, then (duplicate, not on the roster) what size is it?
@@ -2067,8 +2085,8 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
   const fixIn = state.fixing?.inPlace;   // the words of that reason's screen (config.js `inPlace`); set whenever the mode is "clean"
   const isLocate = mode === "locate";  // where on the garment the damage is: drawn like the reasons menu it follows
 
-  const bg     = isGreen ? "var(--k-bg-green)" : (isList || isManual || isSizePick) ? "var(--k-bg-amber)" : (isMenu || isLocate) ? "var(--k-bg-violet)" : isClean ? "var(--k-bg-sky)" : "var(--k-bg-red)";
-  const accent = isGreen ? "var(--k-green)" : (isList || isManual || isSizePick) ? "var(--k-amber)" : (isMenu || isLocate) ? "var(--k-violet)" : isClean ? "var(--k-sky)" : "var(--k-red)";
+  const bg     = isGreen ? (stopMissing ? "var(--k-bg-stop)" : "var(--k-bg-green)") : (isList || isManual || isSizePick) ? "var(--k-bg-amber)" : (isMenu || isLocate) ? "var(--k-bg-violet)" : isClean ? "var(--k-bg-sky)" : "var(--k-bg-red)";
+  const accent = isGreen ? (stopMissing ? "var(--k-amber-ink)" : "var(--k-green)") : (isList || isManual || isSizePick) ? "var(--k-amber)" : (isMenu || isLocate) ? "var(--k-violet)" : isClean ? "var(--k-sky)" : "var(--k-red)";
 
   const match      = state.match || state.scan?.match || null;
   // By size unless the station says otherwise (Settings → Pick list); the last jersey's size first; on a
@@ -2370,9 +2388,9 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
                   ⚠ Camera could not see the whole number — check it is #{match.number}
                 </div>
               )}
-              {stopSeen !== null && (
-                <div data-testid="stop-sign" style={{ marginTop: 12, padding: "10px 26px", borderRadius: 14, background: "var(--k-page)", border: `4px solid ${stopSeen === "yes" ? "var(--k-green)" : stopSeen === "no" ? "var(--k-red)" : "var(--k-amber)"}`, color: stopSeen === "yes" ? "var(--k-green-ink-2)" : stopSeen === "no" ? "var(--k-red-ink)" : "var(--k-amber-ink-2)", fontWeight: 900, fontSize: "clamp(22px, 3vw, 32px)", textAlign: "center", maxWidth: "94%" }}>
-                  {stopSeen === "yes" ? "🛑 STOP sign ✓" : stopSeen === "no" ? "🛑 NO STOP sign — check below the collar" : "🛑 STOP sign? Camera could not see the collar — check it"}
+              {stopMissing && (
+                <div data-testid="stop-sign" style={{ marginTop: 12, padding: "10px 26px", borderRadius: 14, background: "var(--k-page)", border: "4px solid var(--k-amber-ink)", color: "var(--k-amber-ink-3)", fontWeight: 900, fontSize: "clamp(22px, 3vw, 32px)", textAlign: "center", maxWidth: "94%" }}>
+                  {stopSeen === "no" ? "🛑 No STOP sign seen — check below the collar" : stopSeen === "typed" ? "🛑 Check the STOP sign below the collar" : "🛑 Camera could not see the collar — check the STOP sign"}
                 </div>
               )}
               {inspect && (
@@ -2384,7 +2402,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>
                 <span style={{ fontSize: 18, color: "var(--k-green-ink-2)", fontWeight: 700, marginRight: 6 }}>Tick each</span>
                 {mustCheck.map(c => {
-                  const on = ticked.has(c.id), next = !on && toTick[0]?.id === c.id;
+                  const on = isTicked(c.id), next = !on && toTick[0]?.id === c.id;
                   return (
                     <button key={c.id} onClick={() => toggleTick(c.id)} aria-pressed={on}
                       style={{ padding: "7px 16px", borderRadius: 999, cursor: "pointer", border: `3px solid ${on ? "var(--k-green)" : next ? "var(--k-amber-ink-2)" : "var(--k-tint-green-line)"}`, background: on ? "var(--k-green)" : "var(--k-tint-green)", color: on ? "var(--k-page)" : "var(--k-strong)", fontWeight: 800, fontSize: "clamp(18px, 2.1vw, 23px)", whiteSpace: "nowrap", fontFamily: "inherit" }}>
