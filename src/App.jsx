@@ -42,6 +42,7 @@ import { baseSettings, effectiveSettings, recordOwn, loadOwn, saveOwn, loadFloor
 import { applyTheme, THEMES } from "./lib/theme.js";
 import { ofRun, pickRun, orderDone, doneAt, eventsAsLog } from "./lib/ledgerview.js";
 import { outOf, outList, outGroups, jerseyWords, dropOrder, listOrders, applyCheckOff, kindOfRole, kindOfSession, kindOfEntry, moveLocalToServer } from "./lib/orderstore.js";
+import akLogo from "./assets/ak-logo.jpg";
 import { replaySteps, findReplayRow, sameReplayRow, placeholderFrame } from "./lib/replay.js";
 import { PRIOR as BOX_PRIOR, BOXES, predictBox, binCounts } from "./lib/boxmodel.js";
 import { duplicateOptions } from "./lib/dupoptions.js";
@@ -88,18 +89,20 @@ const card     = { background: "var(--k-card)", borderRadius: 10, border: "1px s
 const FONT_UI      = '"Barlow", system-ui, sans-serif';                          // the interface text (brand body face)
 const FONT_READ    = '"Atkinson Hyperlegible", system-ui, sans-serif';           // a player's name and the roster cells: keeps 0/O, 1/l/I, 6/9 apart from 4-5 ft
 const FONT_DISPLAY = '"Barlow Condensed", "Arial Narrow", system-ui, sans-serif'; // the big numerals: number, size, bin, counters
-const btnPri   = { padding: "10px 20px", borderRadius: 8, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 700, fontSize: 16, cursor: "pointer" };
-const btnGhost = { padding: "8px 14px", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: "transparent", color: "var(--k-ink-2)", fontWeight: 700, fontSize: 14, cursor: "pointer" };
+const btnPri   = { padding: "10px 20px", borderRadius: 8, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 600, fontSize: 16, cursor: "pointer" };
+const btnGhost = { padding: "8px 14px", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: "transparent", color: "var(--k-ink-2)", fontWeight: 600, fontSize: 14, cursor: "pointer" };
 const btnSm    = { padding: "7px 14px", borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: "pointer" };
 const codeSt   = { background: "var(--k-field)", padding: "2px 8px", borderRadius: 4, fontSize: 14 };
 const thSt     = { padding: "10px 12px", textAlign: "left", fontSize: 14, fontWeight: 700, color: "var(--k-ink-3)" };
 const tdSt     = { padding: "10px 12px", color: "var(--k-ink-1)", fontSize: 18 };
 const inputSt  = { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: "var(--k-field)", color: "var(--k-ink-1)", fontSize: 17 };
 const labelSt  = { fontSize: 14, color: "var(--k-ink-3)", fontWeight: 700, display: "block", marginBottom: 6 };
+const titleSt   = { fontFamily: FONT_DISPLAY, fontWeight: 800, color: "var(--k-blue)" };                 // a dialog or screen title
+const titleBig  = { ...titleSt, fontStyle: "italic" };                                                   // the big screen titles
 const modalBg   = { position: "fixed", inset: 0, background: "var(--k-page)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto" };
-const modalCard = { background: "var(--k-card)", borderRadius: 16, border: "1px solid var(--k-rule)", padding: 40, width: 560, maxWidth: "90vw" };
+const modalCard = { background: "var(--k-card)", borderRadius: 10, border: "1px solid var(--k-rule)", padding: 40, width: 560, maxWidth: "90vw" };
 const errSt     = { fontSize: 15, color: "var(--k-red-ink)", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 };
-const bigBtn    = { width: "100%", padding: "15px", borderRadius: 10, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 700, fontSize: 19, cursor: "pointer" };
+const bigBtn    = { width: "100%", padding: "15px", borderRadius: 8, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 600, fontSize: 19, cursor: "pointer" };
 
 // A log entry's colour by its status: green passed, red flagged, amber undone or missing.
 function statusColor(s) {
@@ -112,9 +115,23 @@ function statusColor(s) {
 
 // A small rounded count in the header ("3 By hand"); `active` fills it, when it is the filter shown.
 function Pill({ color, children, onClick, active = false, title }) {
+  // The brand's status tag: a coloured dot and a word, never the colour alone. The selected
+  // filter is outlined and tinted in its own colour.
   return (
-    <span onClick={onClick} title={title} style={{ background: active ? color : `color-mix(in srgb, ${color} 13.33%, transparent)`, color: active ? "var(--k-page)" : color, fontSize: 14, fontWeight: 700, padding: "4px 11px", borderRadius: 20, border: `1px solid color-mix(in srgb, ${color} 33%, transparent)`, whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", userSelect: "none" }}>
+    <span onClick={onClick} title={title} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: active ? `color-mix(in srgb, ${color} 16%, var(--k-card))` : "var(--k-card)", color: "var(--k-ink-1)", fontFamily: FONT_DISPLAY, fontSize: 15, fontWeight: 700, padding: "3px 11px", borderRadius: 20, border: active ? `2px solid ${color}` : "1px solid var(--k-rule)", margin: active ? -1 : 0, whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", userSelect: "none" }}>
+      <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
       {children}
+    </span>
+  );
+}
+
+// The Athletic Knit logo and "Jersey QC". The logo is a colour picture on white: bare in the
+// light theme, on a white tile in the dark one (.ak-logo in index.css decides, so nothing re-renders).
+function BrandMark({ height = 28, size = 22, title = "Jersey QC", color = "var(--k-blue)", style }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0, ...style }}>
+      <img src={akLogo} alt="Athletic Knit" className="ak-logo" style={{ height, width: "auto", display: "block", flexShrink: 0 }} />
+      <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: size, lineHeight: 1, color, whiteSpace: "nowrap" }}>{title}</span>
     </span>
   );
 }
@@ -334,7 +351,7 @@ function ResumeModal({ session, onResume, onDiscard, role = "", onSetAside, onSi
   if (role && kind !== kindOfRole(role)) return (
     <div style={{ position: "fixed", inset: 0, background: "var(--k-page)", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-amber)", padding: 40, width: 600, maxWidth: "90vw", textAlign: "center" }}>
-        <div style={{ fontWeight: 900, fontSize: 26, marginBottom: 8 }}>Order {session.orderNumber || "—"} is {kind === "sorter" ? "a sorting order" : "an inspection order"}</div>
+        <div style={{ ...titleSt, fontSize: 28, marginBottom: 8 }}>Order {session.orderNumber || "—"} is {kind === "sorter" ? "a sorting order" : "an inspection order"}</div>
         <div style={{ fontSize: 17, color: "var(--k-ink-2)", marginBottom: 20, lineHeight: 1.4 }}>
           It was started by {session.operatorName || "someone"} as {kind === "sorter" ? "a sorter" : "an inspector"} ({done} of {session.roster.length} done). Only {kind === "sorter" ? "a sorter" : "an inspector"} can continue it.
           {" "}Set it aside to keep it under Unfinished orders for {kind === "sorter" ? "a sorter" : "an inspector"}, and start your own order here.
@@ -351,7 +368,7 @@ function ResumeModal({ session, onResume, onDiscard, role = "", onSetAside, onSi
     <div style={{ position: "fixed", inset: 0, background: "var(--k-page)", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue)", padding: 40, width: 560, maxWidth: "90vw", textAlign: "center" }}>
         <div style={{ fontSize: 48, marginBottom: 8 }}>🔄</div>
-        <div style={{ fontWeight: 900, fontSize: 28, marginBottom: 6 }}>Resume order {session.orderNumber || "—"}?</div>
+        <div style={{ ...titleSt, fontSize: 30, marginBottom: 6 }}>Resume order {session.orderNumber || "—"}?</div>
         <div style={{ fontSize: 17, color: "var(--k-ink-2)", marginBottom: 4 }}>
           {done} of {session.roster.length} garments done · {session.log.length} scans · started by {session.operatorName || "an unknown operator"}
         </div>
@@ -477,7 +494,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
           keypad on the right. On a narrow screen the columns stack. */}
       <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED && !isAdmin ? 940 : 560, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <div style={{ fontWeight: 900, fontSize: 26 }}>🏭 Jersey QC Scanner</div>
+          <BrandMark height={40} size={30} title="Jersey QC Scanner" />
           <div style={{ fontSize: 16, color: "var(--k-ink-3)" }}>{title || "Sign in once per shift"}</div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 32px", alignItems: "flex-start" }}>
@@ -808,7 +825,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
     <div style={modalBg}>
       <div style={modalCard}>
         <div style={{ fontSize: 40, marginBottom: 6, textAlign: "center" }}>📋</div>
-        <div style={{ fontWeight: 900, fontSize: 28, textAlign: "center", marginBottom: 4 }}>Set up the order</div>
+        <div style={{ ...titleBig, fontSize: 32, textAlign: "center", marginBottom: 4 }}>Set up the order</div>
         <div style={{ fontSize: 17, color: "var(--k-ink-3)", textAlign: "center", marginBottom: 24, display: "flex", gap: 8, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
           <span>{operatorName} · {cap(role || "")}</span>
           <button onClick={onSignOut} style={{ ...btnGhost, padding: "5px 12px", fontSize: 14 }}>Sign out</button>
@@ -831,7 +848,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue-ink)", padding: 30, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
               <div style={STICKY_HEAD}>
-                <div style={{ fontSize: 28, fontWeight: 900, color: "var(--k-blue-ink-2)", flex: 1 }}>📥 Assigned orders</div>
+                <div style={{ ...titleSt, fontSize: 32, flex: 1 }}>📥 Assigned orders</div>
                 <button onClick={() => setShowAssigned(false)} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
               </div>
               {hubRosters.length === 0 && (
@@ -865,7 +882,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-amber)", padding: 30, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
               <div style={STICKY_HEAD}>
-                <div style={{ fontSize: 28, fontWeight: 900, color: "var(--k-amber-ink-2)", flex: 1 }}>⏸ Unfinished orders</div>
+                <div style={{ ...titleSt, fontSize: 32, flex: 1 }}>⏸ Unfinished orders</div>
                 <button onClick={() => setShowUnfinished(false)} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
               </div>
               <div style={{ marginTop: 12 }}><UnfinishedOrders tall role={role} onPickUp={x => Promise.resolve(onPickUp(x)).then(() => setShowUnfinished(false))} stationLabel={stationLabel} /></div>
@@ -1305,7 +1322,7 @@ function UnfinishedPile({ by, onClose }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-amber)", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: "var(--k-amber-ink-2)" }}>⏸ Unfinished orders{list ? ` · ${list.length}` : ""}</div>
+          <div style={{ ...titleSt, fontSize: 32 }}>⏸ Unfinished orders{list ? ` · ${list.length}` : ""}</div>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search order number" style={{ ...inputSt, flex: 1, minWidth: 160, fontSize: 16 }} />
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
@@ -1495,7 +1512,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       <div onClick={() => setWall(false)} style={{ position: "fixed", inset: 0, zIndex: 1950, background: "#000", color: "#fff", fontFamily: FONT_UI, display: "flex", flexDirection: "column", padding: "2cqh 2cqw", boxSizing: "border-box", containerType: "size", cursor: "pointer", userSelect: "none" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "1.5cqh", flexShrink: 0 }}>
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: "7cqh", fontWeight: 900, lineHeight: 1, color: openCount > 0 ? "#f87171" : "#4ade80" }}>{openCount > 0 ? `${openCount} NEED YOU` : "ALL CLEAR"}</div>
-          <div style={{ fontSize: "3cqh", color: "#94a3b8" }}>{todayTotal} {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} live · {new Date(clock).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+          <div style={{ fontSize: "3cqh", color: "#94a3b8", display: "flex", alignItems: "center", gap: "1.5cqw" }}><img src={akLogo} alt="Athletic Knit" style={{ height: "4.5cqh", background: "#fff", padding: "0.5cqh 0.8cqh", borderRadius: "0.8cqh" }} /><span>{todayTotal} {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} live · {new Date(clock).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>
         </div>
         {hubDown && <div style={{ background: "#7f1d1d", fontSize: "3cqh", fontWeight: 700, padding: "1cqh 2cqw", borderRadius: "1cqh", marginBottom: "1.5cqh" }}>⚠ The hub stopped answering at {new Date(hubDown).toLocaleTimeString()} — nothing here is live.</div>}
         <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: `repeat(${rows}, 1fr)`, gap: "1.2cqh" }}>
@@ -1534,7 +1551,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "var(--k-page)", zIndex: 1800, display: "flex", flexDirection: "column", color: "var(--k-ink-1)", fontFamily: FONT_UI }}>
       <div style={{ background: "var(--k-card)", borderBottom: "1px solid var(--k-rule)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div><div style={{ fontWeight: 800, fontSize: 15 }}>🧭 Supervisor — stations {openCount > 0 && <Pill color="var(--k-red)">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "var(--k-ink-3)" }}><strong style={{ color: "var(--k-ink-1)", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
+        <div><div style={{ display: "flex", alignItems: "center", gap: 12, fontWeight: 800, fontSize: 15 }}><BrandMark height={26} size={20} title="Supervisor" /> <span style={{ fontWeight: 700 }}>stations</span> {openCount > 0 && <Pill color="var(--k-red)">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "var(--k-ink-3)" }}><strong style={{ color: "var(--k-ink-1)", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={() => setShowPile(true)} title="Orders parked with Finish later: search, assign to a station, check off" style={{ ...btnGhost, padding: "6px 12px", borderColor: pileCount ? "var(--k-amber)" : "var(--k-rule-2)", color: pileCount ? "var(--k-amber-ink-2)" : undefined }}>⏸ Unfinished · {pileCount}</button>
           <button onClick={toggleFull} title={fullScreen ? "Leave full screen (Esc also works)" : "Full screen: hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px" }}>{fullScreen ? "⛶ Exit" : "⛶ Full screen"}</button>
@@ -2822,7 +2839,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
       {/* Fits any screen height: the title, words and buttons always show, only the list of boxes scrolls (it ran off a screen with the taskbar showing, 20 Nov 2026). */}
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue)", padding: "28px 44px", maxWidth: 680, width: "90vw", maxHeight: "96%", display: "flex", flexDirection: "column", textAlign: "center", boxSizing: "border-box" }}>
         <div style={{ fontSize: 48, marginBottom: 4, flexShrink: 0 }}>🗂️</div>
-        <div style={{ fontSize: 36, fontWeight: 900, color: "var(--k-blue-ink)", marginBottom: 8 }}>Set out {labels.length || entries.length} {(labels.length || entries.length) === 1 ? "box" : "boxes"}</div>
+        <div style={{ ...titleBig, fontSize: 40, marginBottom: 8 }}>Set out {labels.length || entries.length} {(labels.length || entries.length) === 1 ? "box" : "boxes"}</div>
         <div style={{ fontSize: 19, color: "var(--k-ink-2)", marginBottom: 26 }}>
           {by === "all"
             ? <>This order is <strong style={{ color: "var(--k-ink-1)" }}>not sorted</strong>: one run of boxes. </>
@@ -2889,7 +2906,7 @@ function ReplayFinder({ onPick, onClose, stationLabel }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px dashed var(--k-purple-2)", padding: 30, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: "var(--k-purple-ink)", flex: 1 }}>▶ Replay an order</div>
+          <div style={{ ...titleSt, fontSize: 32, flex: 1 }}>▶ Replay an order</div>
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ fontSize: 16, color: "var(--k-ink-2)", margin: "10px 0 12px", lineHeight: 1.45 }}>
@@ -2955,7 +2972,7 @@ function StillOutModal({ orderNumber, groups, rowOf, binOf, onPass, onClose }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-sky)", padding: 28, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: "var(--k-sky-ink)", flex: 1 }}>🔧 Still out on order {orderNumber}</div>
+          <div style={{ ...titleSt, fontSize: 32, flex: 1 }}>🔧 Still out on order {orderNumber}</div>
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ fontSize: 17, color: "var(--k-ink-2)", marginTop: 10, lineHeight: 1.45 }}>
@@ -3103,7 +3120,7 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2400, display: "flex", alignItems: "center", justifyContent: "center" }}>{/* above the done screen (2300) and the Finish confirm (1600), which open it; below the Print menu (2500) */}
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-green)", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
-          <div style={{ fontSize: 32, fontWeight: 900, color: "var(--k-green-ink)", whiteSpace: "nowrap" }}>📦 Packing · order {orderNumber || "—"}</div>
+          <div style={{ ...titleBig, fontSize: 36, whiteSpace: "nowrap" }}>📦 Packing · order {orderNumber || "—"}</div>
           <div style={{ flex: 1 }} />
           {onLabels && <button onClick={onLabels} title="The box labels of this order, to print again" style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>🖨 Box labels</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
@@ -3208,7 +3225,7 @@ function IssuesModal({ missing, dups, flagged, binOf, onClose }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-amber)", padding: 30, maxWidth: 1300, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
-          <div style={{ fontSize: 30, fontWeight: 900, color: "var(--k-amber-ink-2)", flex: 1 }}>Missing · Duplicate · Flagged</div>
+          <div style={{ ...titleSt, fontSize: 34, flex: 1 }}>Missing · Duplicate · Flagged</div>
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start", marginTop: 16 }}>
@@ -3320,7 +3337,7 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
     <div style={modalBg} onClick={onClose}>
       <div style={{ ...modalCard, maxWidth: 780, width: "100%", maxHeight: "90%", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-          <div style={{ fontWeight: 900, fontSize: 26 }}>Scanned this order</div>
+          <div style={{ ...titleSt, fontSize: 28 }}>Scanned this order</div>
           <span style={{ color: "var(--k-ink-3)", fontSize: 15 }}>{rows.length} · latest first</span>
           <button onClick={onClose} style={{ ...btnGhost, marginLeft: "auto", padding: "6px 14px", fontSize: 14 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
@@ -3377,7 +3394,7 @@ function BlanksModal({ groups, boxOf, last, sticker, scanKey, onCount, onFlag, o
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue)", padding: 30, maxWidth: 860, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
-          <div style={{ fontSize: 32, fontWeight: 900, color: "var(--k-blue-ink)" }}>Blank garments</div>
+          <div style={{ ...titleBig, fontSize: 36 }}>Blank garments</div>
           <div style={{ fontSize: 17, color: "var(--k-ink-3)", flex: 1 }}>{left} still to count</div>
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 15 }}>Close <Kbd light>Esc</Kbd></button>
         </div>
@@ -3427,7 +3444,7 @@ function FinishedModal({ orderNumber, status, onReprint, onPrint, onPacking, onN
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-green)", padding: 44, maxWidth: 680, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
         <div style={{ fontSize: 56, marginBottom: 10 }}>🏁</div>
-        <div style={{ fontSize: 36, fontWeight: 900, color: "var(--k-ink-1)", marginBottom: 12 }}>Order {orderNumber || "—"} is done</div>
+        <div style={{ ...titleBig, fontSize: 40, marginBottom: 12 }}>Order {orderNumber || "—"} is done</div>
         <div style={{ fontSize: 19, fontWeight: 700, color: colour, marginBottom: 26, minHeight: 26 }}>{status?.status === "printing" ? "🖨 " : ""}{status?.text || ""}</div>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 14 }}>
           <button onClick={onReprint} disabled={busy} style={{ ...btnGhost, fontSize: 18, padding: "14px 22px", opacity: busy ? 0.5 : 1 }}>🖨 Print the box lists again</button>
@@ -3522,7 +3539,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue)", padding: 30, maxWidth: 860, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
-          <div style={{ fontSize: 32, fontWeight: 900, color: "var(--k-blue-ink)" }}>🖨 Print</div>
+          <div style={{ ...titleBig, fontSize: 36 }}>🖨 Print</div>
           <div style={{ fontSize: 19, color: "var(--k-ink-1)", fontWeight: 700, flex: 1 }}>
             {pack ? <>Order {pack.orderNumber || "—"}{past ? <span style={{ color: "var(--k-amber-ink-2)", fontWeight: 400 }}> · a past order{pack.past?.date ? `, ${pack.past.date}` : ""}{pack.past?.station ? `, ${String(pack.past.station).replace(/^st-/, "")}` : ""}</span> : <span style={{ color: "var(--k-ink-3)", fontWeight: 400 }}> · the order on this station</span>}</> : <span style={{ color: "var(--k-ink-3)", fontWeight: 400 }}>No order is open: find one by its number</span>}
           </div>
@@ -3660,7 +3677,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
           and only the lists in the middle scroll, as one. */}
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: `2px solid ${remaining ? "var(--k-amber)" : "var(--k-green)"}`, padding: "24px 32px", maxWidth: 760, width: "92vw", maxHeight: "94%", display: "flex", flexDirection: "column", textAlign: "center", boxSizing: "border-box" }}>
         <div style={{ flexShrink: 0 }}>
-        <div style={{ fontSize: 34, fontWeight: 900, color: "var(--k-ink-1)", marginBottom: 8 }}>🏁 Finish order {orderNumber || "—"}?</div>
+        <div style={{ ...titleBig, fontSize: 38, marginBottom: 8 }}>🏁 Finish order {orderNumber || "—"}?</div>
         <div style={{ fontSize: 18, color: "var(--k-ink-2)", marginBottom: 14, lineHeight: 1.4 }}>
           {remaining
             ? `${remaining} ${remaining === 1 ? "garment is" : "garments are"} unscanned. You can finish anyway; the supervisor keeps this order's record and sheets.`
@@ -5607,7 +5624,7 @@ export default function App() {
       {showPark && (
         <div style={modalBg}>
           <div style={{ ...modalCard, maxWidth: 640, width: "92vw" }}>
-            <div style={{ fontSize: 28, fontWeight: 900, color: "var(--k-amber-ink-2)", marginBottom: 8 }}>⏸ Finish order {orderNumber} later?</div>
+            <div style={{ ...titleSt, fontSize: 32, marginBottom: 8 }}>⏸ Finish order {orderNumber} later?</div>
             {/* Plain words and big numbers (the owner, 19 Nov 2026: "Still out" was confusing). */}
             {(() => { const s = outOf(roster); const tiles = [
               { n: s.done, label: "Done", colour: "var(--k-green-ink)" },
@@ -5676,7 +5693,7 @@ export default function App() {
       <div style={{ background: "var(--k-card)", borderBottom: "1px solid var(--k-rule)", padding: "0 16px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "nowrap", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 18, whiteSpace: "nowrap" }}>🏭 Jersey QC</div>
+            <BrandMark height={26} size={20} />
             {rosterFile && (
               <div style={{ fontSize: 13, color: "var(--k-ink-3)", whiteSpace: "nowrap", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>
                 {rosterFile}{operatorName ? ` · ${operatorName}` : ""}{role ? ` (${role})` : ""}

@@ -5,6 +5,7 @@
 // on the floor yet. Every colour comes from the tokens in index.css, so it is the first
 // screen that works in both themes.
 import { useCallback, useEffect, useState } from "react";
+import akLogo from "../assets/ak-logo.jpg";
 import { THEMES, loadTheme, saveTheme } from "../lib/theme.js";
 import { DEFAULT_SETTINGS, MODEL, EFFORT, THINKING, SEND_MAX_PX } from "../config.js";
 
@@ -24,16 +25,25 @@ const when = ms => (ms ? new Date(ms).toLocaleString("en-CA", { hour12: false, m
 const ago = (ms, now = Date.now()) => { const s = Math.max(0, Math.round((now - ms) / 1000)); return s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : s < 129600 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`; };
 const mb = n => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
+const DISPLAY = '"Barlow Condensed", "Arial Narrow", system-ui, sans-serif';
+// The logo (colour on white: bare in light, on a white tile in dark, see .ak-logo in index.css) and a title.
+const Brand = ({ title, size = 24 }) => (
+  <span style={{ display: "inline-flex", alignItems: "center", gap: 12, marginRight: "auto" }}>
+    <img src={akLogo} alt="Athletic Knit" className="ak-logo" style={{ height: 30, width: "auto", display: "block" }} />
+    <h1 style={{ margin: 0, fontSize: size, fontFamily: DISPLAY, fontWeight: 800, fontStyle: "italic", color: "var(--accent)" }}>{title}</h1>
+  </span>
+);
+
 const st = {
   page: { height: "100%", overflowY: "auto", background: "var(--bg)", color: "var(--text)" },
   wrap: { maxWidth: 1100, margin: "0 auto", padding: "20px max(16px, env(safe-area-inset-left, 0px)) 48px", display: "flex", flexDirection: "column", gap: 16 },
   card: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, padding: "14px 16px", minWidth: 0 },
-  h2: { margin: "0 0 10px", fontSize: 18, fontWeight: 700 },
+  h2: { margin: "0 0 10px", fontSize: 20, fontWeight: 700, fontFamily: DISPLAY, color: "var(--accent)" },
   dl: { display: "grid", gridTemplateColumns: "minmax(140px, max-content) 1fr", gap: "6px 14px", margin: 0, fontSize: 15 },
   dt: { color: "var(--text-dim)" },
   dd: { margin: 0, minWidth: 0, overflowWrap: "anywhere" },
-  btn: { background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--line-strong)", borderRadius: 8, padding: "8px 14px", fontSize: 15, fontWeight: 700, cursor: "pointer" },
-  pri: { background: "var(--accent)", color: "var(--on-accent)", border: "1px solid var(--accent)", borderRadius: 8, padding: "10px 18px", fontSize: 16, fontWeight: 700, cursor: "pointer" },
+  btn: { background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--line-strong)", borderRadius: 8, padding: "8px 14px", fontSize: 15, fontWeight: 600, cursor: "pointer" },
+  pri: { background: "var(--accent)", color: "var(--on-accent)", border: "1px solid var(--accent)", borderRadius: 8, padding: "10px 18px", fontSize: 16, fontWeight: 600, cursor: "pointer" },
   input: { background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--line-strong)", borderRadius: 8, padding: "10px 12px", fontSize: 16, width: "100%", boxSizing: "border-box" },
 };
 const Pill = ({ tone = "info", children }) => (
@@ -70,7 +80,7 @@ function SignIn({ onDone }) {
   };
   return (
     <form onSubmit={go} style={{ ...st.card, maxWidth: 420, margin: "40px auto", display: "flex", flexDirection: "column", gap: 12 }}>
-      <h1 style={{ margin: 0, fontSize: 24 }}>Admin panel</h1>
+      <Brand title="Admin panel" />
       <p style={{ margin: 0, color: "var(--text-dim)" }}>For developers. Your name goes in the change log.</p>
       <label htmlFor="adm-name" style={{ fontWeight: 700 }}>Your name</label>
       <input id="adm-name" style={st.input} value={name} onChange={e => setName(e.target.value)} autoComplete="username" required />
@@ -753,7 +763,7 @@ export default function AdminPanel() {
         {!s ? <div style={st.card}>Loading…</div>
           : !s.setup ? (
             <div style={{ ...st.card, maxWidth: 640 }}>
-              <h1 style={{ marginTop: 0, fontSize: 22 }}>The admin panel is not set up on this server</h1>
+              <h1 style={{ marginTop: 0, fontSize: 26, fontFamily: DISPLAY, fontWeight: 800, fontStyle: "italic", color: "var(--accent)" }}>The admin panel is not set up on this server</h1>
               <p>Add one line to <code>.env.local</code> in this server's folder, then the server restarts by itself:</p>
               <pre style={{ background: "var(--surface-2)", padding: 10, borderRadius: 8, overflowX: "auto" }}>JQC_ADMIN_PASSWORD=the shared admin password</pre>
               <p style={{ color: "var(--text-dim)", marginBottom: 0 }}>No <code>VITE_</code> in front: that would send it to every browser. On production, saving .env.local puts every station on Resume, so do it on a break.</p>
@@ -762,7 +772,7 @@ export default function AdminPanel() {
           : (
             <>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-                <h1 style={{ margin: 0, fontSize: 24, marginRight: "auto" }}>Admin panel</h1>
+                <Brand title="Admin panel" />
                 <span style={{ color: "var(--text-dim)" }}>Signed in as <strong style={{ color: "var(--text)" }}>{s.name}</strong></span>
                 <button style={st.btn} onClick={signOut}>Sign out</button>
               </div>

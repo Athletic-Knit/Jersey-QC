@@ -383,7 +383,8 @@ describe("Fable's review of phases 1-4 (26 Nov 2026)", () => {
     const src = fs.readFileSync(new URL("../../App.jsx", import.meta.url), "utf8");
     expect(src).not.toMatch(/\$\{s\.colour\}22/);
     expect(src).toMatch(/color-mix\(in srgb, \$\{s\.colour\} 13\.33%, transparent\)/);
-    expect(src).toMatch(/color-mix\(in srgb, \$\{color\} 13\.33%, transparent\)/);
+    // the Pill (brand status tag, 27 Nov 2026) tints the selected filter 16% over the card; its dot is the colour itself
+    expect(src).toMatch(/color-mix\(in srgb, \$\{color\} 16%, var\(--k-card\)\)/);
     const css = fs.readFileSync(new URL("../../index.css", import.meta.url), "utf8");
     // The --k-* set is the brand palette (27 Nov 2026): the same token names in the light block (the default) and the dark one.
     const names = from => { const at = css.indexOf("--k-page", css.indexOf(from)); return [...css.slice(at, css.indexOf("}", at)).matchAll(/--(k-[a-z0-9-]+):/g)].map(m => m[1]).sort(); };
