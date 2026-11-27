@@ -3157,11 +3157,13 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
   onPrintList, onPrintAll, onFull, onReprint, onDamagedList, onLabels, onExport, onPrintSummary, onFinish, onClose }) {
   const [asking, setAsking] = useState(null);       // { bin, mode: "full" | "list" }
   const [unfolded, setUnfolded] = useState(null);   // the box whose jerseys still to scan are listed
-  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);   // the summary, laid over the Packing screen (the co-op, 27 Nov 2026)
+  const summaryOpenRef = useRef(false);
+  useEffect(() => { summaryOpenRef.current = summaryOpen; }, [summaryOpen]);
   useEffect(() => {
-    // Esc closes; Enter does nothing (the pedal is Enter: a reflex press must not print or finish anything).
+    // Esc closes the summary when it is up, else the Packing screen; Enter does nothing (the pedal is Enter: a reflex press must not print or finish anything).
     const h = e => {
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); }
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (summaryOpenRef.current) setSummaryOpen(false); else onClose(); }
       else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); }
     };
     window.addEventListener("keydown", h, true);
@@ -3181,7 +3183,10 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-green)", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ ...titleBig, fontSize: 36, whiteSpace: "nowrap" }}>📦 Packing · order {orderNumber || "—"}</div>
+          {/* Summary and its print up here, in reach whatever is scrolled (the co-op, 27 Nov 2026). */}
+          <button onClick={() => setSummaryOpen(true)} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap", alignSelf: "center" }}>📋 Summary</button>
           <div style={{ flex: 1 }} />
+          <button onClick={() => onPrintSummary(false)} disabled={printing} title="The count label, the FAILED list and the MISSING list" style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap", opacity: printing ? 0.5 : 1 }}>🖨 Print summary · {summaryLabels} {summaryLabels === 1 ? "label" : "labels"}</button>
           {onLabels && <button onClick={onLabels} title="The box labels of this order, to print again" style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>🖨 Box labels</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
         </div>
@@ -3200,20 +3205,6 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
         {status && (
           <div style={{ marginTop: 12, fontSize: 18, fontWeight: 600, color: status.status === "done" ? "var(--k-green-ink)" : status.status === "printing" ? "var(--k-ink-3)" : "var(--k-amber-ink)" }}>
             {status.status === "printing" ? "🖨 Printing… " : "🖨 "}{status.text}
-          </div>
-        )}
-        {/* The summary, folded, under the Now strip (the co-op, 27 Nov 2026: it sat under every box, a long scroll on a
-            30-box order): passed with its box, failed with its reason, missing; with Excel and Print summary beside it. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 14 }}>
-          <button onClick={() => setSummaryOpen(o => !o)} style={{ ...btnGhost, fontSize: 18, padding: "10px 18px", borderColor: "var(--k-blue)", color: "var(--k-blue-ink-2)" }}>Summary {summaryOpen ? "▾" : "▸"}</button>
-          <div style={{ flex: 1 }} />
-          {onExport && <button onClick={onExport} style={{ ...btnGhost, fontSize: 17, padding: "10px 18px" }}>⬇ Excel</button>}
-          <button onClick={() => onPrintSummary(false)} disabled={printing} title="The count label, the FAILED list and the MISSING list, on the 2 x 1 in roll" style={{ ...btnGhost, fontSize: 17, padding: "10px 18px", opacity: printing ? 0.5 : 1 }}>🖨 Print summary · {summaryLabels} {summaryLabels === 1 ? "label" : "labels"}</button>
-        </div>
-        {summaryOpen && (
-          <div style={{ marginTop: 10, padding: "4px 16px 12px", borderRadius: 12, border: "1px solid var(--k-rule-3)" }}>
-            <SummaryCounts summary={summary} stats={stats} />
-            <OrderSummaryBody summary={summary} bins={[]} />{/* the boxes are the rows above */}
           </div>
         )}
         {open.length > 0 && <div style={{ fontSize: 16, color: "var(--k-ink-3)", margin: "14px 0 8px" }}>
@@ -3251,6 +3242,25 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 17, padding: "12px 24px" }}>Close <Kbd light>Esc</Kbd></button>
         </div>
       </div>
+      {/* The summary over the Packing screen, its head (Print, Excel, Close) kept on top while it scrolls. */}
+      {summaryOpen && (
+        <div onClick={() => setSummaryOpen(false)} style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2450, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Order summary" style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue)", padding: 30, maxWidth: 1000, width: "94vw", maxHeight: "92%", overflowY: "auto", boxSizing: "border-box" }}>
+            <div style={STICKY_HEAD}>
+              <div style={{ ...titleBig, fontSize: 32, whiteSpace: "nowrap" }}>📋 Summary · order {orderNumber || "—"}</div>
+              <div style={{ flex: 1 }} />
+              {onExport && <button onClick={onExport} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>⬇ Excel</button>}
+              <button onClick={() => onPrintSummary(false)} disabled={printing} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap", opacity: printing ? 0.5 : 1 }}>🖨 Print summary · {summaryLabels} {summaryLabels === 1 ? "label" : "labels"}</button>
+              <button onClick={() => setSummaryOpen(false)} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
+            </div>
+            {status && <div style={{ marginTop: 10, fontSize: 17, fontWeight: 600, color: status.status === "done" ? "var(--k-green-ink)" : status.status === "printing" ? "var(--k-ink-3)" : "var(--k-amber-ink)" }}>{status.status === "printing" ? "🖨 Printing… " : "🖨 "}{status.text}</div>}
+            <div style={{ marginTop: 10 }}>
+              <SummaryCounts summary={summary} stats={stats} />
+              <OrderSummaryBody summary={summary} bins={[]} />{/* the boxes are the Packing screen's rows */}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

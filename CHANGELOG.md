@@ -738,3 +738,8 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Asked for (the co-op):** the Now strip's "X with the supervisor" should say "X flagged"; the summary and its print sat under every box, a long scroll on a big order.
 - **What changed:** the Now strip says "N flagged". The "Summary ▸" fold with ⬇ Excel and 🖨 Print summary is right under the Now strip, above the boxes; opened, the summary shows there in a frame. Finish order and Close stay at the bottom. The board's order view (Summary tab) says "N flagged" too.
 - **Tests:** 1080 pass. Not looked at on 5174: station 3 was in use by the co-op's own browser.
+
+## 2026-11-27 · Packing: Summary in the header, opened over the screen
+- **Asked for (the co-op):** Summary next to the title and Print summary beside Box labels; the summary laid over the Packing screen with a Close (Esc), not a fold with an arrow.
+- **What changed:** "📋 Summary" sits beside "Packing · order N", "🖨 Print summary · N labels" beside Box labels, both in the sticky head. Summary opens over the Packing screen; its own head (Excel for supervisors, Print summary, Close Esc) stays on top while it scrolls. Esc or a click outside closes the summary, a second Esc closes Packing. The fold under the Now strip is gone.
+- **Tests:** eslint clean, 1080 pass. Not looked at on 5174 (station 3 was in use by the co-op's browser).
