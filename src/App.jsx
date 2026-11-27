@@ -205,7 +205,7 @@ function ShipWithField({ value, onChange, placeholder }) {
 // A key cap drawn beside a button's label, so the operator sees which key does it.
 function Kbd({ light, children }) {
   return (
-    <kbd style={{ background: light ? "rgba(255,255,255,0.12)" : "var(--k-kbd-bg)", border: light ? "1px solid rgba(255,255,255,0.3)" : "1px solid var(--k-kbd-line)", padding: "3px 9px", borderRadius: 6, fontSize: 15, fontWeight: 700 }}>
+    <kbd style={{ background: light ? "color-mix(in srgb, var(--k-strong) 12%, transparent)" : "var(--k-kbd-bg)", border: light ? "1px solid color-mix(in srgb, var(--k-strong) 30%, transparent)" : "1px solid var(--k-kbd-line)", padding: "3px 9px", borderRadius: 6, fontSize: 15, fontWeight: 700 }}>
       {children}
     </kbd>
   );
@@ -1563,7 +1563,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       {hubDown && (
         <div style={{ background: "var(--k-red)", color: "var(--k-on-red)", padding: "10px 16px", fontSize: 14, fontWeight: 700, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <span>⚠ The hub stopped answering at {new Date(hubDown).toLocaleTimeString()} — nothing below is live. Stations keep scanning on their own. Is the server window still open on the host PC?</span>
-          <button onClick={refresh} style={{ ...btnGhost, padding: "4px 10px", color: "var(--k-strong)", borderColor: "var(--k-strong)" }}>Retry</button>
+          <button onClick={refresh} style={{ ...btnGhost, padding: "4px 10px", color: "var(--k-on-red)", borderColor: "var(--k-on-red)" }}>Retry</button>
         </div>
       )}
       {openOrder && <OrderView station={openOrder.station} order={openOrder.order} run={openOrder.run || 0} date={openOrder.date ?? day} stationLabel={stationLabel} onClose={() => setOpenOrder(null)} onDownload={downloadOrderSheet} onPhoto={setBigPhoto} />}

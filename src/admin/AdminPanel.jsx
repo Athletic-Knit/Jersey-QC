@@ -53,14 +53,14 @@ const Pill = ({ tone = "info", children }) => (
 function StageBar({ s }) {
   const look = STAGE_LOOK[s?.stage] || { name: (s?.stage || "?").toUpperCase(), note: "", bg: "var(--line-strong)" };
   return (
-    <div style={{ background: look.bg, color: "#fff", padding: "10px max(16px, env(safe-area-inset-left, 0px))", display: "flex", flexWrap: "wrap", gap: "4px 18px", alignItems: "baseline", fontWeight: 700 }}>
+    <div style={{ background: look.bg, color: "var(--on-accent)", padding: "10px max(16px, env(safe-area-inset-left, 0px))", display: "flex", flexWrap: "wrap", gap: "4px 18px", alignItems: "baseline", fontWeight: 700 }}>
       <span style={{ fontSize: 20, letterSpacing: 1 }}>{look.name}</span>
       <span style={{ opacity: 0.92 }}>{look.note}</span>
       <span style={{ opacity: 0.92 }}>port {s?.port || "?"} · {s?.host || "?"}</span>
       <span style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
         {s && !s.writable && <span style={{ background: "rgba(0,0,0,0.25)", padding: "2px 10px", borderRadius: 999 }}>Read only</span>}
         {/* Back to the stations' app, on the sign-in page and signed in (the co-op, 27 Nov 2026): a kiosk has no address bar. */}
-        <a href="/" style={{ color: "#fff", background: "rgba(0,0,0,0.25)", padding: "4px 12px", borderRadius: 8, textDecoration: "none", whiteSpace: "nowrap" }}>← Back to the app</a>
+        <a href="/" style={{ color: "var(--on-accent)", background: "rgba(0,0,0,0.25)", padding: "4px 12px", borderRadius: 8, textDecoration: "none", whiteSpace: "nowrap" }}>← Back to the app</a>
       </span>
     </div>
   );
