@@ -809,3 +809,11 @@ describe("Admin on the sign-in screen (the co-op, 27 Nov 2026)", () => {
     expect(src).toMatch(/\{PIN_REQUIRED && !isAdmin && \(/);   // no PIN keypad for Admin
   });
 });
+
+describe("Back to the app from the admin panel (the co-op, 27 Nov 2026)", () => {
+  it("the stage bar, on every admin page, links back to the app", () => {
+    const src = fs.readFileSync(new URL("../../admin/AdminPanel.jsx", import.meta.url), "utf8");
+    const bar = src.slice(src.indexOf("function StageBar("), src.indexOf("function SignIn("));
+    expect(bar).toMatch(/<a href="\/"[^>]*>← Back to the app<\/a>/);
+  });
+});

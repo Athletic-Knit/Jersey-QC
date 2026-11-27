@@ -47,7 +47,11 @@ function StageBar({ s }) {
       <span style={{ fontSize: 20, letterSpacing: 1 }}>{look.name}</span>
       <span style={{ opacity: 0.92 }}>{look.note}</span>
       <span style={{ opacity: 0.92 }}>port {s?.port || "?"} · {s?.host || "?"}</span>
-      {s && !s.writable && <span style={{ marginLeft: "auto", background: "rgba(0,0,0,0.25)", padding: "2px 10px", borderRadius: 999 }}>Read only</span>}
+      <span style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
+        {s && !s.writable && <span style={{ background: "rgba(0,0,0,0.25)", padding: "2px 10px", borderRadius: 999 }}>Read only</span>}
+        {/* Back to the stations' app, on the sign-in page and signed in (the co-op, 27 Nov 2026): a kiosk has no address bar. */}
+        <a href="/" style={{ color: "#fff", background: "rgba(0,0,0,0.25)", padding: "4px 12px", borderRadius: 8, textDecoration: "none", whiteSpace: "nowrap" }}>← Back to the app</a>
+      </span>
     </div>
   );
 }

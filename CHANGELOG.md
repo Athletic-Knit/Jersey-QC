@@ -707,3 +707,8 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Asked for (the co-op):** an Admin choice on the sign-in screen, beside Inspector, Sorter, Packer and Supervisor, that takes you to the admin panel.
 - **What changed:** Admin is the last role button. Picked, the name and PIN go away and the button reads "Open the admin panel →"; it opens `?view=admin`, where the panel's own password is asked. Not a floor role (not in `ROLES`, no PIN); no PIN changed.
 - **Tests:** `admin.test.js`: Admin opens the panel before any PIN check, shows no PIN keypad, and is not in `ROLES`. Lint clean; 1074 tests pass. On 5174: Admin picked, then the button opened the admin panel's sign-in.
+
+## 2026-11-27 · Back to the app from the admin panel
+- **Asked for (the co-op):** a way back to the app from the admin panel.
+- **What changed:** "← Back to the app" at the right of the admin panel's stage bar, on its sign-in page and when signed in; it opens the app's sign-in screen.
+- **Tests:** `admin.test.js` checks the link. 1075 tests pass. On 5174: the link took the admin sign-in page back to the app's sign-in.
