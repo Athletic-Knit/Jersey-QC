@@ -702,3 +702,8 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Tried on 5174 (Station 3, order 990026, a hoodie):** the picker's groups, the roster's garment picked by itself, Flag → Holes → three spots: "Front: pouch pocket, left sleeve · Back: hood". Two fixes from it: the tap screen puts front above back when that draws the garment bigger (side by side, the wide new drawings were a third of the panel's height), and a group's buttons wrap under each other, not under the group's name. Done was not pressed (the development server prints on the real Zebra).
 - **The ticket's curves (the owner's test print):** the garment printed as many short `^GB` / `^GD` lines, each rounded to whole dots, so curves came out as stacked flat bars. The printer takes no vector file, so the hub now draws each side once on the printer's own 203 dpi dot grid and sends it as one `^GFA` picture (compressed); the spots, numbers and captions stay as they were. A test unpacks the picture dot for dot as the printer does. Not yet printed.
 
+
+## 2026-11-27 · Admin on the sign-in screen
+- **Asked for (the co-op):** an Admin choice on the sign-in screen, beside Inspector, Sorter, Packer and Supervisor, that takes you to the admin panel.
+- **What changed:** Admin is the last role button. Picked, the name and PIN go away and the button reads "Open the admin panel →"; it opens `?view=admin`, where the panel's own password is asked. Not a floor role (not in `ROLES`, no PIN); no PIN changed.
+- **Tests:** `admin.test.js`: Admin opens the panel before any PIN check, shows no PIN keypad, and is not in `ROLES`. Lint clean; 1074 tests pass. On 5174: Admin picked, then the button opened the admin panel's sign-in.

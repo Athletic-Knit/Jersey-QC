@@ -387,7 +387,12 @@ const goToStation = id => { const u = new URL(window.location.href); u.searchPar
 // Each inspection station has its own PIN; packer and supervisor have a role
 // PIN. The page's ?station= says where it is: station1..3 for inspectors,
 // "packing" for the packer, "supervisor" for the supervisor's board.
-const ROLE_CHOICES = ROLES;
+// Admin (the co-op, 27 Nov 2026): a choice on the sign-in screen that opens the admin panel
+// (?view=admin), where the panel's own password (JQC_ADMIN_PASSWORD, checked by the server) is
+// the gate. It is not a floor role: no PIN, no name, no station, nothing in ROLES.
+const ADMIN_CHOICE = { id: "admin", label: "Admin" };
+const ROLE_CHOICES = [...ROLES, ADMIN_CHOICE];
+const openAdminPanel = () => { const u = new URL(window.location.href); u.search = "?view=admin"; u.hash = ""; window.location.href = u.toString(); };
 // The head of a long dialog (its title and Close) stays at the top while the
 // list under it scrolls, like a frozen header row in Excel (the owner, 19 Nov
 // 2026: no keyboard on the floor, so Esc was a scroll to the end and a click).
@@ -432,13 +437,14 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
     return () => { on = false; clearInterval(t); };
   }, []);
   const busyBy = id => { const u = use["st-" + id]; return u && u.live && !u.mine ? (u.operator || "someone") : ""; };
-  const roleDef = ROLES.find(r => r.id === role);
+  const roleDef = ROLE_CHOICES.find(r => r.id === role);
+  const isAdmin = role === ADMIN_CHOICE.id;
   const stDef   = stationOf(station);
   const pinOwner = atStation(role) ? stDef : roleDef;      // whose PIN opens this page
   const target   = pageFor(role, station);                      // where the page should be for this choice
   // A new sign-in moves the page to the chosen station or board (reload, so the
   // saved order, the sign-in and the hub id follow); a take-over keeps it.
-  const pickRole    = r  => { setRole(r.id); const t = pageFor(r.id, station); if (!atStation(r.id) && t !== here && !onCancel) goToStation(t); };
+  const pickRole    = r  => { setRole(r.id); setError(null); if (r.id === ADMIN_CHOICE.id) return; const t = pageFor(r.id, station); if (!atStation(r.id) && t !== here && !onCancel) goToStation(t); };
   const pickStation = id => { setStation(id); if (id !== here && !onCancel) goToStation(id); };
 
   // The PIN is checked by the server (phase 7, checkPin in hub.js): the page holds none.
@@ -446,6 +452,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const checkingRef = useRef(false);
   const submit = async () => {
     if (checkingRef.current) return;
+    if (isAdmin) { openAdminPanel(); return; }   // the panel asks for its password
     if (PIN_REQUIRED) {
       checkingRef.current = true; setChecking(true);
       const r = await checkPin(pinOwner.id, pin).finally(() => { checkingRef.current = false; setChecking(false); });
@@ -467,7 +474,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
       {/* Two columns, so the whole sign-in fits one screen with no scrolling:
           who and where on the left with the Sign in button, the PIN and its
           keypad on the right. On a narrow screen the columns stack. */}
-      <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED ? 940 : 560, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
+      <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED && !isAdmin ? 940 : 560, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
           <div style={{ fontWeight: 900, fontSize: 26 }}>🏭 Jersey QC Scanner</div>
           <div style={{ fontSize: 16, color: "var(--k-ink-3)" }}>{title || "Sign in once per shift"}</div>
@@ -502,7 +509,12 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
             <div style={{ fontSize: 14, color: "var(--k-ink-3b)", marginTop: 6 }}>{busyBy(station) ? <span style={{ color: "var(--k-red-ink)" }}>{stDef?.label} is in use by {busyBy(station)} on another PC right now.</span> : <>Each station has its own PIN. The supervisor's board shows this page as {stDef?.label}.</>}</div>
           </div>
         )}
-        <div style={{ marginBottom: 14 }}>
+        {isAdmin && (
+          <div style={{ marginBottom: 14, fontSize: 16, color: "var(--k-ink-2)", lineHeight: 1.4 }}>
+            The admin panel, for the developers. It asks for its own password; no PIN here.
+          </div>
+        )}
+        {!isAdmin && <div style={{ marginBottom: 14 }}>
           <label style={labelSt}>Your name</label>
           <select value={nameChoice} onChange={e => { const v = e.target.value; setNameChoice(v); setName(v === "other" ? "" : v); }} style={{ ...inputSt, cursor: "pointer" }}>
             {operators.map(n => <option key={n} value={n}>{n}</option>)}
@@ -516,12 +528,12 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
               <div style={{ marginTop: 6 }}><ScreenKeys layout="search" onKey={k => setName(v => typeKey(v, k))} onEnter={submit} enterLabel="Sign in" /></div>
             </>
           )}
-        </div>
+        </div>}
         {error && <div style={errSt}>{error}</div>}
-        <button onClick={submit} disabled={checking} style={checking ? { ...bigBtn, opacity: 0.6 } : bigBtn}>{checking ? "Checking the PIN…" : onCancel ? "Take over →" : "Sign in →"}</button>
+        <button onClick={submit} disabled={checking} style={checking ? { ...bigBtn, opacity: 0.6 } : bigBtn}>{checking ? "Checking the PIN…" : isAdmin ? "Open the admin panel →" : onCancel ? "Take over →" : "Sign in →"}</button>
         {onCancel && <button onClick={onCancel} style={{ ...btnGhost, width: "100%", marginTop: 8 }}>← Back, keep the current operator</button>}
         </div>
-        {PIN_REQUIRED && (
+        {PIN_REQUIRED && !isAdmin && (
           <div style={{ flex: "1 1 300px", minWidth: 0 }}>
             <label style={labelSt}>PIN</label>
             <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} placeholder="••••" autoFocus onKeyDown={onEnter} onFocus={() => setPinFocus(true)} onBlur={() => setPinFocus(false)} style={{ ...inputSt, borderColor: pinFocus ? "var(--k-blue-ink)" : inputSt.borderColor }} />

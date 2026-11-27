@@ -795,3 +795,17 @@ describe("the guard as an allow-list (Fable's review of the final fixes, 26 Nov 
     expect(blockedPath("/extra.png", { publicNames: ["extra.png"] })).toBe(false);   // what public/ holds when the server starts
   });
 });
+
+describe("Admin on the sign-in screen (the co-op, 27 Nov 2026)", () => {
+  it("is a choice that opens the admin panel before any PIN check, and is not a floor role", async () => {
+    const { ROLES } = await import("../../config.js");
+    expect(ROLES.map(r => r.id)).not.toContain("admin");   // no PIN, no station, nothing for the floor
+    const src = fs.readFileSync(new URL("../../App.jsx", import.meta.url), "utf8");
+    expect(src).toMatch(/const ROLE_CHOICES = \[\.\.\.ROLES, ADMIN_CHOICE\];/);
+    expect(src).toMatch(/u\.search = "\?view=admin"/);
+    const submit = src.slice(src.indexOf("  const submit = async () => {"), src.indexOf("  const onEnter = e =>"));
+    expect(submit.indexOf("if (isAdmin) { openAdminPanel(); return; }")).toBeGreaterThan(-1);
+    expect(submit.indexOf("if (isAdmin)")).toBeLessThan(submit.indexOf("checkPin("));
+    expect(src).toMatch(/\{PIN_REQUIRED && !isAdmin && \(/);   // no PIN keypad for Admin
+  });
+});
