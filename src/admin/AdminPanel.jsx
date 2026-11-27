@@ -42,7 +42,7 @@ const st = {
   dl: { display: "grid", gridTemplateColumns: "minmax(140px, max-content) 1fr", gap: "6px 14px", margin: 0, fontSize: 15 },
   dt: { color: "var(--text-dim)" },
   dd: { margin: 0, minWidth: 0, overflowWrap: "anywhere" },
-  btn: { background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--line-strong)", borderRadius: 8, padding: "8px 14px", fontSize: 15, fontWeight: 600, cursor: "pointer" },
+  btn: { background: "transparent", color: "var(--accent)", border: "1px solid var(--accent)", borderRadius: 8, padding: "8px 14px", fontSize: 15, fontWeight: 600, cursor: "pointer" },
   pri: { background: "var(--accent)", color: "var(--on-accent)", border: "1px solid var(--accent)", borderRadius: 8, padding: "10px 18px", fontSize: 16, fontWeight: 600, cursor: "pointer" },
   input: { background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--line-strong)", borderRadius: 8, padding: "10px 12px", fontSize: 16, width: "100%", boxSizing: "border-box" },
 };

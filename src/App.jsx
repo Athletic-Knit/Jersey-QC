@@ -90,15 +90,15 @@ const FONT_UI      = '"Barlow", system-ui, sans-serif';                         
 const FONT_READ    = '"Atkinson Hyperlegible", system-ui, sans-serif';           // a player's name and the roster cells: keeps 0/O, 1/l/I, 6/9 apart from 4-5 ft
 const FONT_DISPLAY = '"Barlow Condensed", "Arial Narrow", system-ui, sans-serif'; // the big numerals: number, size, bin, counters
 const btnPri   = { padding: "10px 20px", borderRadius: 8, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 600, fontSize: 16, cursor: "pointer" };
-const btnGhost = { padding: "8px 14px", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: "transparent", color: "var(--k-ink-2)", fontWeight: 600, fontSize: 14, cursor: "pointer" };
+const btnGhost = { padding: "8px 14px", borderRadius: 8, border: "1px solid var(--k-blue)", background: "transparent", color: "var(--k-blue)", fontWeight: 600, fontSize: 14, cursor: "pointer" };
 const btnSm    = { padding: "7px 14px", borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: "pointer" };
 const codeSt   = { background: "var(--k-field)", padding: "2px 8px", borderRadius: 4, fontSize: 14 };
 const thSt     = { padding: "10px 12px", textAlign: "left", fontSize: 14, fontWeight: 700, color: "var(--k-ink-3)" };
 const tdSt     = { padding: "10px 12px", color: "var(--k-ink-1)", fontSize: 18 };
 const inputSt  = { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, border: "1px solid var(--k-rule-3)", background: "var(--k-field)", color: "var(--k-ink-1)", fontSize: 17 };
 const labelSt  = { fontSize: 14, color: "var(--k-ink-3)", fontWeight: 700, display: "block", marginBottom: 6 };
-const titleSt   = { fontFamily: FONT_DISPLAY, fontWeight: 800, color: "var(--k-blue)" };                 // a dialog or screen title
-const titleBig  = { ...titleSt, fontStyle: "italic" };                                                   // the big screen titles
+const titleSt   = { fontFamily: FONT_DISPLAY, fontWeight: 700, color: "var(--k-blue)" };                 // a dialog or screen title
+const titleBig  = { ...titleSt, fontWeight: 800, fontStyle: "italic" };                                                   // the big screen titles
 const modalBg   = { position: "fixed", inset: 0, background: "var(--k-page)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto" };
 const modalCard = { background: "var(--k-card)", borderRadius: 10, border: "1px solid var(--k-rule)", padding: 40, width: 560, maxWidth: "90vw" };
 const errSt     = { fontSize: 15, color: "var(--k-red-ink)", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 };
@@ -114,11 +114,11 @@ function statusColor(s) {
 }
 
 // A small rounded count in the header ("3 By hand"); `active` fills it, when it is the filter shown.
-function Pill({ color, children, onClick, active = false, title }) {
+function Pill({ color, children, onClick, active = false, alert = false, title }) {
   // The brand's status tag: a coloured dot and a word, never the colour alone. The selected
   // filter is outlined and tinted in its own colour.
   return (
-    <span onClick={onClick} title={title} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: active ? `color-mix(in srgb, ${color} 16%, var(--k-card))` : "var(--k-card)", color: "var(--k-ink-1)", fontFamily: FONT_DISPLAY, fontSize: 15, fontWeight: 700, padding: "3px 11px", borderRadius: 20, border: active ? `2px solid ${color}` : "1px solid var(--k-rule)", margin: active ? -1 : 0, whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", userSelect: "none" }}>
+    <span onClick={onClick} title={title} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: active || alert ? `color-mix(in srgb, ${color} 16%, var(--k-card))` : "var(--k-card)", color: alert ? "var(--k-red-ink)" : "var(--k-ink-1)", fontFamily: FONT_DISPLAY, fontSize: 15, fontWeight: 700, padding: "3px 11px", borderRadius: 20, border: active || alert ? `2px solid ${color}` : "1px solid var(--k-rule)", margin: active || alert ? -1 : 0, whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", userSelect: "none" }}>
       <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
       {children}
     </span>
@@ -131,7 +131,7 @@ function BrandMark({ height = 28, size = 22, title = "Jersey QC", color = "var(-
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0, ...style }}>
       <img src={akLogo} alt="Athletic Knit" className="ak-logo" style={{ height, width: "auto", display: "block", flexShrink: 0 }} />
-      <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: size, lineHeight: 1, color, whiteSpace: "nowrap" }}>{title}</span>
+      {title ? <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: size, lineHeight: 1, color, whiteSpace: "nowrap" }}>{title}</span> : null}
     </span>
   );
 }
@@ -1553,7 +1553,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       <div style={{ background: "var(--k-card)", borderBottom: "1px solid var(--k-rule)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div><div style={{ display: "flex", alignItems: "center", gap: 12, fontWeight: 800, fontSize: 15 }}><BrandMark height={26} size={20} title="Supervisor" /> <span style={{ fontWeight: 700 }}>stations</span> {openCount > 0 && <Pill color="var(--k-red)">{openCount} need you</Pill>}</div><div style={{ fontSize: 13, color: "var(--k-ink-3)" }}><strong style={{ color: "var(--k-ink-1)", fontSize: 15 }}>{todayTotal}</strong> {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} {active.length === 1 ? "station" : "stations"} live{parked.length ? ` · ${parked.length} not reporting` : ""}</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={() => setShowPile(true)} title="Orders parked with Finish later: search, assign to a station, check off" style={{ ...btnGhost, padding: "6px 12px", borderColor: pileCount ? "var(--k-amber)" : "var(--k-rule-2)", color: pileCount ? "var(--k-amber-ink-2)" : undefined }}>⏸ Unfinished · {pileCount}</button>
+          <button onClick={() => setShowPile(true)} title="Orders parked with Finish later: search, assign to a station, check off" style={{ ...btnGhost, padding: "6px 12px", borderColor: pileCount ? "var(--k-amber)" : "var(--k-rule-2)", color: pileCount ? "var(--k-amber-ink-2)" : "var(--k-blue)" }}>⏸ Unfinished · {pileCount}</button>
           <button onClick={toggleFull} title={fullScreen ? "Leave full screen (Esc also works)" : "Full screen: hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px" }}>{fullScreen ? "⛶ Exit" : "⛶ Full screen"}</button>
           <button onClick={() => setWall(true)} title="One row per station in big letters, for a TV on the floor. Click or Esc comes back; ?view=wall in the address opens straight into it." style={{ ...btnGhost, padding: "6px 12px" }}>📺 Wall</button>
           <button onClick={onSignOut} title="End your shift on this PC" style={{ ...btnGhost, padding: "6px 14px" }}>Sign out</button>
@@ -5693,7 +5693,7 @@ export default function App() {
       <div style={{ background: "var(--k-card)", borderBottom: "1px solid var(--k-rule)", padding: "0 16px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "nowrap", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
           <div>
-            <BrandMark height={26} size={20} />
+            <BrandMark height={22} title="" />
             {rosterFile && (
               <div style={{ fontSize: 13, color: "var(--k-ink-3)", whiteSpace: "nowrap", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>
                 {rosterFile}{operatorName ? ` · ${operatorName}` : ""}{role ? ` (${role})` : ""}
@@ -5711,8 +5711,8 @@ export default function App() {
           {!sorting && checksLeft > 0 && <span title="After a mistake the next garments are read twice and must agree before a green"><Pill color="var(--k-blue-ink)">Checking · {checksLeft}</Pill></span>}
           {!sorting && sessionStarted && <span title={`After a defect, inspect the next ${inspect.full} fully; after ${inspect.every} clean, one spot check`}><Pill color={inspect.phase === "quick" ? "var(--k-ink-3)" : "var(--k-amber)"}>{inspectLabel(inspect, CHECKS)}</Pill></span>}
           {manualCount > 0 && <Pill color="var(--k-amber)" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the garments entered by hand">{manualCount} By hand</Pill>}
-          {hubOk === false && <Pill color="var(--k-red-ink)" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
-          {saveOk === false && <Pill color="var(--k-red-ink)" title="This PC's storage is full or blocked: the order is not being saved, so a reload or a crash would lose the work since. Tell the supervisor; do not close or reload this page.">⚠ NOT SAVING — tell the supervisor</Pill>}
+          {hubOk === false && <Pill alert color="var(--k-red-ink)" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
+          {saveOk === false && <Pill alert color="var(--k-red-ink)" title="This PC's storage is full or blocked: the order is not being saved, so a reload or a crash would lose the work since. Tell the supervisor; do not close or reload this page.">⚠ NOT SAVING — tell the supervisor</Pill>}
           {openCount - flagCount > 0 && <Pill color="var(--k-amber)">{openCount - flagCount} Missing</Pill>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
