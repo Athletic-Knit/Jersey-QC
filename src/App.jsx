@@ -493,9 +493,15 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
           who and where on the left with the Sign in button, the PIN and its
           keypad on the right. On a narrow screen the columns stack. */}
       <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED && !isAdmin ? 940 : 560, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <BrandMark height={40} size={30} title="Jersey QC Scanner" />
-          <div style={{ fontSize: 16, color: "var(--k-ink-3)" }}>{title || "Sign in once per shift"}</div>
+        {/* The letterhead (the co-op, 27 Nov 2026): a white band across the card's top in both themes, a brand-blue rule
+            under it, the logo on the left and the title on the right. The logo is a JPEG on white, so the white belongs to
+            the band and dark mode shows no white patch around it. The band's colours are the light brand set on purpose. */}
+        <div style={{ margin: "-24px -32px 20px", padding: "14px 32px", background: "#FFFFFF", borderBottom: "3px solid #00519B", borderRadius: "10px 10px 0 0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px 24px", flexWrap: "wrap" }}>
+          <img src={akLogo} alt="Athletic Knit" style={{ height: 44, width: "auto", display: "block", flexShrink: 0 }} />
+          <div style={{ textAlign: "right", marginLeft: "auto" }}>
+            <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 30, lineHeight: 1, color: "#00519B", whiteSpace: "nowrap" }}>Jersey QC Scanner</div>
+            <div style={{ fontSize: 16, color: "#55607A", marginTop: 4 }}>{title || "Sign in once per shift"}</div>
+          </div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 32px", alignItems: "flex-start" }}>
         <div style={{ flex: "1 1 340px", minWidth: 0 }}>
