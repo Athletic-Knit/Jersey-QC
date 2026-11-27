@@ -9,6 +9,7 @@ import { createRoot } from 'react-dom/client'
 import '@fontsource/barlow/400.css'
 import '@fontsource/barlow/500.css'
 import '@fontsource/barlow/600.css'
+import '@fontsource/barlow/700.css'   // a true bold for labels and headings read from 4-5 ft (the guide lists 400-600)
 import '@fontsource/atkinson-hyperlegible/400.css'
 import '@fontsource/atkinson-hyperlegible/700.css'
 import '@fontsource/barlow-condensed/700.css'

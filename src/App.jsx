@@ -686,7 +686,7 @@ function UnfinishedOrders({ onPickUp, stationLabel, tall = false, role = "" }) {
               <div style={{ fontSize: 14, color: "var(--k-ink-3)", marginTop: 2 }}>
                 Put aside on {stationLabel(e.station)} by {e.operator || "—"}, {day(e.parkedAt)}
                 {givenHere && <span style={{ color: "var(--k-blue-ink)", fontWeight: 800 }}> · Given to this station by {e.assignedBy || "the supervisor"}</span>}
-                {busyElsewhere && <span style={{ color: "var(--k-amber)", fontWeight: 800 }}> · Open on {stationLabel(e.openOn.station)} right now</span>}
+                {busyElsewhere && <span style={{ color: "var(--k-amber-ink)", fontWeight: 800 }}> · Open on {stationLabel(e.openOn.station)} right now</span>}
               </div>
             </button>
           );
@@ -863,7 +863,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
                   style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "var(--k-green)" : "var(--k-rule-2)", color: picked?.id === r.id ? "var(--k-strong)" : "var(--k-ink-3)", background: picked?.id === r.id ? "var(--k-tint-green)" : "transparent", opacity: takenElsewhere(r) ? 0.5 : 1, cursor: takenElsewhere(r) ? "not-allowed" : "pointer" }}>
                   <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "var(--k-ink-3)" }}>· {r.rowCount} garments · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}{r.binBy && r.binBy !== "team" ? ` · ${BIN_BY.find(b => b.id === r.binBy)?.label.toLowerCase() || r.binBy}` : ""}</span>{r.forStation && !r.takenBy && <span style={{ fontWeight: 700, color: "var(--k-blue-ink)", marginLeft: 8 }}>for this station</span>}</div>
                   <div style={{ fontSize: 14, color: "var(--k-ink-3)" }}>{r.by ? `sent by ${r.by} · ` : ""}{new Date(r.createdAt).toLocaleString()}</div>
-                  {r.takenBy && <div style={{ fontSize: 14, fontWeight: 700, color: takenElsewhere(r) ? "var(--k-amber)" : "var(--k-green-ink)" }}>{takenElsewhere(r) ? `⛔ In progress on ${stationLabel(r.takenBy.station)} · ${r.takenBy.operator || "—"} · since ${new Date(r.takenBy.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "↻ Started on this station — pick it to continue"}</div>}
+                  {r.takenBy && <div style={{ fontSize: 14, fontWeight: 700, color: takenElsewhere(r) ? "var(--k-amber-ink)" : "var(--k-green-ink)" }}>{takenElsewhere(r) ? `⛔ In progress on ${stationLabel(r.takenBy.station)} · ${r.takenBy.operator || "—"} · since ${new Date(r.takenBy.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "↻ Started on this station — pick it to continue"}</div>}
                 </button>
               ))}
               </div>
@@ -1181,8 +1181,8 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
   const c = rec?.counts || {}; const total = c.total ?? rows.length; const done = total - (c.remaining ?? 0);
   const latestByRow = new Map(); [...events].reverse().forEach(e => { if (e.rowId !== undefined && e.rowId !== null) latestByRow.set(e.rowId, e); });
   const label = s => ({ pass: "PASS", flag: "FLAGGED", manual: "BY HAND", missing: "MISSING", short: "SHORT-SHIPPED" }[s] || "unscanned");
-  const colour = s => s === "pass" ? "var(--k-green)" : s === "flag" ? "var(--k-red)" : s === "manual" ? "var(--k-amber)" : s === "missing" || s === "short" ? "var(--k-amber)" : "var(--k-ink-5)";
-  const evColour = s => s === "pass" ? "var(--k-green)" : s === "flagged" ? "var(--k-red)" : s === "manual" ? "var(--k-amber)" : s === "undo" ? "var(--k-amber)" : "var(--k-ink-3)";
+  const colour = s => s === "pass" ? "var(--k-green)" : s === "flag" ? "var(--k-red)" : s === "manual" ? "var(--k-amber-ink)" : s === "missing" || s === "short" ? "var(--k-amber-ink)" : "var(--k-ink-5)";
+  const evColour = s => s === "pass" ? "var(--k-green)" : s === "flagged" ? "var(--k-red)" : s === "manual" ? "var(--k-amber-ink)" : s === "undo" ? "var(--k-amber-ink)" : "var(--k-ink-3)";
   const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
   const flaggedRows = rows.filter(r => r.scanned === "flag"), byHandRows = rows.filter(r => r.scanned === "manual");
   const offRoster = events.filter(e => e.status === "flagged" && e.offRoster);
@@ -1227,7 +1227,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                   return (
                     <tr key={r._id ?? i} style={{ background: r.scanned === "flag" ? "var(--k-tint-red-faint)" : r.scanned === "manual" ? "var(--k-tint-amber-faint)" : "transparent" }}>
                       <td style={{ ...td, color: colour(r.scanned), fontWeight: 700, whiteSpace: "nowrap" }}>{label(r.scanned)}</td>
-                      <td style={td}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "var(--k-amber-ink-2)" }}>{shortSize(r.size) || ""}</td>
+                      <td style={{ ...td, fontFamily: FONT_READ }}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "var(--k-amber-ink-2)" }}>{shortSize(r.size) || ""}</td>
                       <td style={{ ...td, color: "var(--k-blue-ink)" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Box ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
                       <td style={{ ...td, color: "var(--k-ink-2)" }}>{e?.status === "flagged" && <><RouteTag item={e} /> </>}{e?.reason || ""}{e?.resolution ? <div style={{ color: "var(--k-ink-3)", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                       <td style={{ ...td, color: "var(--k-ink-4)", fontSize: 12, whiteSpace: "nowrap" }}>{e ? `${e.operator || ""} · ${String(e.t).slice(11)}` : ""}</td>
@@ -1238,7 +1238,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                 {tab === "problems" && offRoster.map((e, i) => (
                   <tr key={"off" + i} style={{ background: "var(--k-tint-red-faint)" }}>
                     <td style={{ ...td, color: "var(--k-red)", fontWeight: 700, whiteSpace: "nowrap" }}>NOT ON ROSTER</td>
-                    <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "var(--k-amber-ink-2)" }}>{shortSize(e.size) || ""}</td><td style={td}></td>
+                    <td style={{ ...td, fontFamily: FONT_READ }}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "var(--k-amber-ink-2)" }}>{shortSize(e.size) || ""}</td><td style={td}></td>
                     <td style={{ ...td, color: "var(--k-ink-2)" }}><RouteTag item={e} /> {e.reason}{e.resolution ? <div style={{ color: "var(--k-ink-3)", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
                     <td style={{ ...td, color: "var(--k-ink-4)", fontSize: 12, whiteSpace: "nowrap" }}>{e.operator || ""} · {String(e.t).slice(11)}</td>
                     <td style={td}><div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}><PhotoThumbs photo={e.photo} damagePhotos={e.damagePhotos} onOpen={onPhoto} caption={photoCaption(e.number, e.name, e.reason)} /><FlagMarks item={e} /></div></td>
@@ -1281,7 +1281,7 @@ const attnColour = s => (s === "manual" || s === "missing" || s === "short") ? "
 // How much an item weighs: a flag by where it goes (REMAKE over DECORATION and
 // STITCHER over CLEANING over DECIDE); by-hand, missing and short are light.
 // Open items come before resolved ones, then the heavier, then the newer.
-const attnSeverity = a => a.status === "flagged" ? severityOf(a.reason) : { tag: a.status === "manual" ? "SIGN OFF" : a.status === "missing" ? "MISSING" : "SHORT", weight: 1, colour: "var(--k-amber)" };
+const attnSeverity = a => a.status === "flagged" ? severityOf(a.reason) : { tag: a.status === "manual" ? "SIGN OFF" : a.status === "missing" ? "MISSING" : "SHORT", weight: 1, colour: "var(--k-amber-ink)" };
 const bySeverity = (a, b) => ((a.resolution ? 1 : 0) - (b.resolution ? 1 : 0)) || (attnSeverity(b).weight - attnSeverity(a).weight) || String(b.time || b.t || "").localeCompare(String(a.time || a.t || ""));
 // The board's tag on an open item (REMAKE, STITCHER, SIGN OFF…), filled when it weighs most.
 function RouteTag({ item, size = 10 }) {
@@ -2345,7 +2345,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
 
           {state.twinOf && !state.typed && <div style={{ fontSize: 17, color: "var(--k-stone-ink)", textAlign: "center", marginTop: 4 }}>{`${detected?.number || "?"} or ${state.twinOf}? both are listed · #${detected?.number || "?"} first`}</div>}
           {lastRank < 2 && <div style={{ fontSize: 17, color: "var(--k-stone-ink)", textAlign: "center", marginTop: 4 }}>{lastRank === 0 ? `${shortSize(lastSize)} first · the last garment` : `${lastSizeLetter(lastSize)} sizes first · the last garment was ${shortSize(lastSize)}`}</div>}
-          <div style={{ fontSize: 20, color: "var(--k-stone-ink-2)", marginBottom: 16, textAlign: "center" }}>
+          <div style={{ fontSize: 20, color: "var(--k-stone-ink-2)", marginBottom: 16, textAlign: "center", fontFamily: FONT_READ }}>
             {/* Typed by hand: what was typed, not the camera's empty read ("Read: #? · no name"; code review, low finding). */}
             {state.typed ? `Typed: #${state.typed.number || "?"}${state.typed.name ? " · " + state.typed.name : ""}` : <>
             Read: #{detected?.number || "?"}{detected?.number && detected?.number_complete === false ? "?" : ""}{detected?.name ? ` · ${detected.name}${detected.name_complete === false ? "…" : ""}` : " · no name"}{detected?.jersey_colour ? ` · ${detected.jersey_colour} garment` : ""}
@@ -2950,7 +2950,7 @@ function StillOutModal({ orderNumber, groups, rowOf, binOf, onPass, onClose }) {
     <div key={j.rowId ?? "x" + j.xid} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10, background: "var(--k-page)", border: `1px solid color-mix(in srgb, ${colour} 33%, transparent)` }}>
       <div style={{ fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, minWidth: 64 }}>#{j.number || "?"}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>{j.name || "—"} <span style={{ color: "var(--k-amber-ink)" }}>{shortSize(j.size)}</span> <span style={{ color: "var(--k-ink-3)", fontWeight: 400 }}>{j.team}</span></div>
+        <div style={{ fontSize: 18, fontWeight: 800 }}><span style={{ fontFamily: FONT_READ }}>{j.name || "—"}</span> <span style={{ color: "var(--k-amber-ink)" }}>{shortSize(j.size)}</span> <span style={{ color: "var(--k-ink-3)", fontWeight: 400 }}>{j.team}</span></div>
         <div style={{ fontSize: 15, color: "var(--k-ink-2)" }}>{j.status === "flag" ? `Was flagged: ${j.reason || "—"}` : j.status === "extra" ? j.reason : "Marked missing"}{boxOf(j) ? <span style={{ color: "var(--k-blue-ink)", fontWeight: 800 }}> · goes in Box {boxOf(j)}</span> : null}</div>
       </div>
       {passLabel && (sure === j.rowId
@@ -6101,9 +6101,9 @@ export default function App() {
                       {(l.damagePhotos || []).map((p, i) => <img key={i} src={p} alt="" title="Damage photo — click to enlarge" onClick={() => setBigPhoto(photoSet(l.photo, l.damagePhotos, (l.photo ? 1 : 0) + i, photoCaption(l.match?.number, l.match?.name, l.reason)))} style={{ width: 72, height: 54, objectFit: "cover", borderRadius: 4, flexShrink: 0, cursor: "zoom-in", border: "2px solid var(--k-red)" }} />)}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: statusColor(l.status) }}>{cap(l.status)}</span>
-                        <div style={{ fontWeight: 700, fontSize: 18, marginTop: 2 }}>{l.typed ? `Typed: #${l.typed.number || "?"} · ${l.typed.name || "—"}` : `Read: #${l.detected?.number || "?"} · ${l.detected?.name || "—"}`}</div>
+                        <div style={{ fontWeight: 700, fontSize: 18, marginTop: 2, fontFamily: FONT_READ }}>{l.typed ? `Typed: #${l.typed.number || "?"} · ${l.typed.name || "—"}` : `Read: #${l.detected?.number || "?"} · ${l.detected?.name || "—"}`}</div>
                         {l.match && (
-                          <div style={{ fontSize: 15, color: "var(--k-ink-2)", marginTop: 2 }}>
+                          <div style={{ fontSize: 15, color: "var(--k-ink-2)", marginTop: 2, fontFamily: FONT_READ }}>
                             Matched: {l.match.name || "—"} #{l.match.number}{l.match.size ? ` · ${shortSize(l.match.size)}` : ""}{l.match.team ? ` · ${l.match.team}` : ""}{binOf(l.match) !== null ? ` · Box ${binOf(l.match)}` : ""}
                           </div>
                         )}

@@ -27,9 +27,9 @@ const mb = n => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1
 
 const DISPLAY = '"Barlow Condensed", "Arial Narrow", system-ui, sans-serif';
 // The logo (colour on white: bare in light, on a white tile in dark, see .ak-logo in index.css) and a title.
-const Brand = ({ title, size = 24 }) => (
+const Brand = ({ title, size = 24, tile = false }) => (
   <span style={{ display: "inline-flex", alignItems: "center", gap: 12, marginRight: "auto" }}>
-    <img src={akLogo} alt="Athletic Knit" className="ak-logo" style={{ height: 30, width: "auto", display: "block" }} />
+    <img src={akLogo} alt="Athletic Knit" className={tile ? "ak-logo ak-logo-tile" : "ak-logo"} style={{ height: 30, width: "auto", display: "block" }} />
     <h1 style={{ margin: 0, fontSize: size, fontFamily: DISPLAY, fontWeight: 800, fontStyle: "italic", color: "var(--accent)" }}>{title}</h1>
   </span>
 );
@@ -47,7 +47,7 @@ const st = {
   input: { background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--line-strong)", borderRadius: 8, padding: "10px 12px", fontSize: 16, width: "100%", boxSizing: "border-box" },
 };
 const Pill = ({ tone = "info", children }) => (
-  <span style={{ display: "inline-block", padding: "1px 10px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: `var(--${tone}-bg)`, color: `var(--${tone}-text)`, border: `1px solid var(--${tone})`, whiteSpace: "nowrap" }}>{children}</span>
+  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "1px 10px 1px 8px", borderRadius: 999, fontSize: 14, fontWeight: 700, fontFamily: DISPLAY, background: "var(--surface)", color: "var(--text)", border: "1px solid var(--line)", whiteSpace: "nowrap" }}><span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: "50%", background: `var(--${tone})`, flex: "none" }} />{children}</span>
 );
 
 function StageBar({ s }) {
@@ -58,9 +58,9 @@ function StageBar({ s }) {
       <span style={{ opacity: 0.92 }}>{look.note}</span>
       <span style={{ opacity: 0.92 }}>port {s?.port || "?"} · {s?.host || "?"}</span>
       <span style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
-        {s && !s.writable && <span style={{ background: "rgba(0,0,0,0.25)", padding: "2px 10px", borderRadius: 999 }}>Read only</span>}
+        {s && !s.writable && <span style={{ background: "color-mix(in srgb, var(--on-accent) 18%, transparent)", padding: "2px 10px", borderRadius: 999 }}>Read only</span>}
         {/* Back to the stations' app, on the sign-in page and signed in (the co-op, 27 Nov 2026): a kiosk has no address bar. */}
-        <a href="/" style={{ color: "var(--on-accent)", background: "rgba(0,0,0,0.25)", padding: "4px 12px", borderRadius: 8, textDecoration: "none", whiteSpace: "nowrap" }}>← Back to the app</a>
+        <a href="/" style={{ color: "var(--on-accent)", background: "color-mix(in srgb, var(--on-accent) 18%, transparent)", padding: "4px 12px", borderRadius: 8, textDecoration: "none", whiteSpace: "nowrap" }}>← Back to the app</a>
       </span>
     </div>
   );
@@ -772,7 +772,7 @@ export default function AdminPanel() {
           : (
             <>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-                <Brand title="Admin panel" />
+                <Brand title="Admin panel" tile />
                 <span style={{ color: "var(--text-dim)" }}>Signed in as <strong style={{ color: "var(--text)" }}>{s.name}</strong></span>
                 <button style={st.btn} onClick={signOut}>Sign out</button>
               </div>

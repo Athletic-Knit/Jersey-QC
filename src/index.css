@@ -245,3 +245,5 @@ button:focus:not(:focus-visible) { outline: none; }
 /* The Athletic Knit logo is a colour picture on white: bare on the light theme's white header,
    on a white tile in the dark theme (brand-ui). */
 :root[data-theme="dark"] .ak-logo { background: #FFFFFF; padding: 4px 8px; border-radius: 6px; box-sizing: content-box; }
+/* Where the logo sits on the page colour, not a white card, it gets the tile in light too (the JPEG's white would show as a box). */
+.ak-logo-tile { background: #FFFFFF; padding: 4px 8px; border-radius: 6px; box-sizing: content-box; border: 1px solid var(--line); }
