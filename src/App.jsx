@@ -3181,11 +3181,11 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
   return (
     <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2400, display: "flex", alignItems: "center", justifyContent: "center" }}>{/* above the done screen (2300) and the Finish confirm (1600), which open it; below the Print menu (2500) */}
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-green)", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
-        <div style={STICKY_HEAD}>
+        <div style={{ ...STICKY_HEAD, alignItems: "center", gap: 12 }}>
           <div style={{ ...titleBig, fontSize: 36, whiteSpace: "nowrap" }}>📦 Packing · order {orderNumber || "—"}</div>
-          {/* Summary and its print up here, in reach whatever is scrolled (the co-op, 27 Nov 2026). */}
-          <button onClick={() => setSummaryOpen(true)} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap", alignSelf: "center" }}>📋 Summary</button>
           <div style={{ flex: 1 }} />
+          {/* Summary and its print up here, in reach whatever is scrolled, in one row with Box labels and Close (the co-op, 27 Nov 2026). */}
+          <button onClick={() => setSummaryOpen(true)} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>📋 Summary</button>
           <button onClick={() => onPrintSummary(false)} disabled={printing} title="The count label, the FAILED list and the MISSING list" style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap", opacity: printing ? 0.5 : 1 }}>🖨 Print summary · {summaryLabels} {summaryLabels === 1 ? "label" : "labels"}</button>
           {onLabels && <button onClick={onLabels} title="The box labels of this order, to print again" style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>🖨 Box labels</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
@@ -3198,7 +3198,6 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
               <strong style={{ color: "var(--k-green-ink)" }}>{c.passed}</strong> of {c.total} passed · <strong style={{ color: c.failed ? "var(--k-red-ink)" : "var(--k-ink-2)" }}>{c.failed}</strong> flagged · <strong style={{ color: c.notScanned ? "var(--k-amber-ink)" : "var(--k-ink-2)" }}>{c.notScanned}</strong> unscanned{c.marked > 0 && <> · <strong style={{ color: "var(--k-amber-ink)" }}>{c.marked}</strong> marked missing</>}
             </div>
           </div>
-          {now.step === "scan" && <button onClick={onClose} style={bigBtn}>Close</button>}
           {now.step === "print" && <button onClick={onPrintAll} disabled={printing} style={{ ...bigBtn, opacity: printing ? 0.5 : 1 }}>🖨 Print every list</button>}
           {now.step === "finish" && <button onClick={onFinish} style={bigBtn}>🏁 Finish order</button>}
         </div>
