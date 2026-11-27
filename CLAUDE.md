@@ -63,6 +63,7 @@ How to use the screens, step by step, is in `docs/OPERATOR-GUIDE.md`. The rules 
 - **Supervisor** gets the board and nothing else: no station behind it, no scanning, no resume; its header button is Sign out.
 - **Packer** is shown but cannot sign in (`BLOCKED_ROLES`): the packer side is not built.
 - **Admin** (the co-op, 27 Nov 2026) is the last choice on the sign-in screen (`ADMIN_CHOICE` in App.jsx, added to `ROLE_CHOICES`, not to `ROLES`): no name and no PIN; "Open the admin panel →" goes to `?view=admin`, whose own password (`JQC_ADMIN_PASSWORD`, checked by the server) is the gate. It is not a floor role.
+- **The sign-in card keeps one shape** (the co-op, 27 Nov 2026): one width (940) and one body height (`SIGNIN_BODY_MIN`, the PIN and its keypad) whatever role is picked; the role row spans the card under the letterhead, five tiles in one row. Under it, the left column is the role's own (station and name; the board's line and name; the admin panel's line) with Sign in at the bottom, level with the keypad's last row; the right is the PIN, or for Admin a box of the same size saying the panel asks its own password.
 - An operator's station goes full screen on sign-in. One browser per station: a station live from another PC (reported within 20 s, `LIVE_MS` in hub.js) is shown as in use; a signed-out station is free at once.
 
 ### An order at a station

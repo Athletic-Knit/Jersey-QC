@@ -410,6 +410,8 @@ const goToStation = id => { const u = new URL(window.location.href); u.searchPar
 // (?view=admin), where the panel's own password (JQC_ADMIN_PASSWORD, checked by the server) is
 // the gate. It is not a floor role: no PIN, no name, no station, nothing in ROLES.
 const ADMIN_CHOICE = { id: "admin", label: "Admin" };
+// The sign-in card's body under the role row: as tall as the PIN and its keypad, so it keeps one height whatever role is picked.
+const SIGNIN_BODY_MIN = 296;
 const ROLE_CHOICES = [...ROLES, ADMIN_CHOICE];
 const openAdminPanel = () => { const u = new URL(window.location.href); u.search = "?view=admin"; u.hash = ""; window.location.href = u.toString(); };
 // The head of a long dialog (its title and Close) stays at the top while the
@@ -493,7 +495,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
       {/* Two columns, so the whole sign-in fits one screen with no scrolling:
           who and where on the left with the Sign in button, the PIN and its
           keypad on the right. On a narrow screen the columns stack. */}
-      <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED && !isAdmin ? 940 : 560, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
+      <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED ? 940 : 600, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
         {/* The letterhead (the co-op, 27 Nov 2026): a white band across the card's top in both themes, a brand-blue rule
             under it, the logo on the left and the title on the right. The logo is a JPEG on white, so the white belongs to
             the band and dark mode shows no white patch around it. The band's colours are the light brand set on purpose. */}
@@ -504,29 +506,39 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
             <div style={{ fontSize: 16, color: "#55607A", marginTop: 4 }}>{title || "Sign in once per shift"}</div>
           </div>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 32px", alignItems: "flex-start" }}>
-        <div style={{ flex: "1 1 340px", minWidth: 0 }}>
-        <div style={{ marginBottom: 12 }}>
+        {/* The role row is the same on every choice (the co-op, 27 Nov 2026: switching roles must not move or
+            resize what every choice shares): full width under the letterhead, so each tile has room for its word.
+            The card keeps one width and one body height whatever is picked; only the part under the row changes. */}
+        <div style={{ marginBottom: 18 }}>
           <label style={labelSt}>Role</label>
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${ROLE_CHOICES.length},1fr)`, gap: 6 }}>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${ROLE_CHOICES.length},minmax(0,1fr))`, gap: 10 }}>
             {ROLE_CHOICES.map(r => {
               const blocked = BLOCKED_ROLES.includes(r.id);   // under development: nobody signs in as it
+              const on = role === r.id;
               return (
-              <button key={r.id} onClick={blocked ? undefined : () => pickRole(r)} disabled={!!onCancel && r.id !== role} aria-disabled={blocked || undefined} title={blocked ? "Under development" : undefined}
-                style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: role === r.id ? "var(--k-blue)" : "var(--k-rule-2)", color: role === r.id ? "var(--k-strong)" : "var(--k-ink-3)", background: role === r.id ? "var(--k-tint-blue)" : "transparent", opacity: blocked || (onCancel && r.id !== role) ? 0.4 : 1, cursor: blocked ? "not-allowed" : "pointer" }}>
-                {r.label}{blocked && <div style={{ fontSize: 12, fontWeight: 400, marginTop: 2 }}>under development</div>}
+              <button key={r.id} onClick={blocked ? undefined : () => pickRole(r)} disabled={!!onCancel && r.id !== role} aria-disabled={blocked || undefined} aria-pressed={on} title={blocked ? "Under development" : undefined}
+                style={{ ...btnGhost, minHeight: 64, padding: "8px 12px", fontSize: 18, fontWeight: on ? 700 : 600, lineHeight: 1.15, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderWidth: on ? 2 : 1, borderColor: on ? "var(--k-blue)" : "var(--k-rule-2)", color: on ? "var(--k-strong)" : "var(--k-ink-2)", background: on ? "var(--k-tint-blue)" : "transparent", opacity: blocked || (onCancel && !on) ? 0.45 : 1, cursor: blocked ? "not-allowed" : "pointer" }}>
+                {r.label}{blocked && <span style={{ fontSize: 12, fontWeight: 400, marginTop: 3 }}>under development</span>}
               </button>
               );
             })}
           </div>
         </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px 32px", alignItems: "stretch", minHeight: SIGNIN_BODY_MIN }}>
+        <div style={{ flex: "1 1 340px", minWidth: 0, display: "flex", flexDirection: "column" }}>
+        {role === "supervisor" && (
+          <div style={{ marginBottom: 14, fontSize: 16, color: "var(--k-ink-2)", lineHeight: 1.45 }}>
+            <label style={labelSt}>The board</label>
+            The supervisor's board: every station's progress, the flags waiting on you, rosters to send and the day's orders. No station to pick.
+          </div>
+        )}
         {atStation(role) && (
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Which station?</label>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${STATIONS.length},1fr)`, gap: 6 }}>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${STATIONS.length},1fr)`, gap: 10 }}>
               {STATIONS.map(s => { const by = busyBy(s.id); return (
                 <button key={s.id} onClick={() => pickStation(s.id)} disabled={!!onCancel && s.id !== station} title={by ? `In use by ${by} on another PC` : ""}
-                  style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: station === s.id ? (by ? "var(--k-red)" : "var(--k-blue-ink)") : by ? "var(--k-tint-red-line)" : "var(--k-rule-2)", color: station === s.id ? "var(--k-strong)" : by ? "var(--k-red-ink)" : "var(--k-ink-3)", background: station === s.id ? (by ? "var(--k-tint-red)" : "var(--k-tint-blue)") : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
+                  style={{ ...btnGhost, minHeight: 56, padding: "8px 10px", fontSize: 17, fontWeight: station === s.id ? 700 : 600, borderWidth: station === s.id ? 2 : 1, borderColor: station === s.id ? (by ? "var(--k-red)" : "var(--k-blue-ink)") : by ? "var(--k-tint-red-line)" : "var(--k-rule-2)", color: station === s.id ? "var(--k-strong)" : by ? "var(--k-red-ink)" : "var(--k-ink-3)", background: station === s.id ? (by ? "var(--k-tint-red)" : "var(--k-tint-blue)") : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
                   {s.label}{by && <div style={{ fontSize: 13, fontWeight: 400, color: "var(--k-red-ink)", marginTop: 2 }}>in use · {by}</div>}
                 </button>
               ); })}
@@ -535,8 +547,9 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
           </div>
         )}
         {isAdmin && (
-          <div style={{ marginBottom: 14, fontSize: 16, color: "var(--k-ink-2)", lineHeight: 1.4 }}>
-            The admin panel, for the developers. It asks for its own password; no PIN here.
+          <div style={{ marginBottom: 14, fontSize: 16, color: "var(--k-ink-2)", lineHeight: 1.45 }}>
+            <label style={labelSt}>The admin panel</label>
+            The admin panel, for the developers: the server's health, operators, printers, station defaults, data and floor rules.
           </div>
         )}
         {!isAdmin && <div style={{ marginBottom: 14 }}>
@@ -554,10 +567,20 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
             </>
           )}
         </div>}
+        <div style={{ marginTop: "auto" }} />
         {error && <div style={errSt}>{error}</div>}
         <button onClick={submit} disabled={checking} style={checking ? { ...bigBtn, opacity: 0.6 } : bigBtn}>{checking ? "Checking the PIN…" : isAdmin ? "Open the admin panel →" : onCancel ? "Take over →" : "Sign in →"}</button>
         {onCancel && <button onClick={onCancel} style={{ ...btnGhost, width: "100%", marginTop: 8 }}>← Back, keep the current operator</button>}
         </div>
+        {PIN_REQUIRED && isAdmin && (
+          <div style={{ flex: "1 1 300px", minWidth: 0, display: "flex", flexDirection: "column" }}>
+            <label style={labelSt}>Password</label>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: 24, textAlign: "center", border: "1px dashed var(--k-rule-2)", borderRadius: 8, background: "var(--k-field)", color: "var(--k-ink-2)", fontSize: 16, lineHeight: 1.45 }}>
+              <span style={{ fontSize: 40, lineHeight: 1 }} aria-hidden="true">🔒</span>
+              No PIN here. The admin panel asks for its own password on the next page.
+            </div>
+          </div>
+        )}
         {PIN_REQUIRED && !isAdmin && (
           <div style={{ flex: "1 1 300px", minWidth: 0 }}>
             <label style={labelSt}>PIN</label>
