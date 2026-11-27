@@ -760,3 +760,8 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Asked for (the co-op):** the tracker was cut off at the end of the bottom bar on a smaller screen; keep it outside the Packing screen, always in view.
 - **What changed:** one header pill "⚠ Mis N · Dup N · Flag N" (amber when anything is in it) opens the Missing · Duplicate · Flagged lists; it replaces the header's "N Flag" pill (which filtered the roster table) and "N Missing" pill. The bottom bar is Still out, History, Packing / Summary.
 - **Tests:** eslint clean, 1088 pass. Not looked at in the browser pane (its certificate was refused again).
+
+## 2026-11-27 · A dark header band, no beige, a striped roster
+- **Asked for (the co-op):** the station's white header dark, for contrast with its buttons, with a pattern that goes with the AK logo; no more yellowish beige (the order notes bar, the missing rows); the roster striped like a spreadsheet by status.
+- **What changed:** the header is a deep navy band fading to the brand blue, faint diagonal speed stripes and a red rule under it (`--k-head-*` tokens, light and dark); the logo on a white tile (`.k-head .ak-logo`); every button, pill and the order number box a chip (`headChip`, and `--k-card` set to the chip colour inside the band). The order notes bar is a light blue wash with a brand-blue edge. The roster rows are coloured by status and striped, every other row a shade darker (`--k-row-pass/flag/miss/todo` and `-alt`; `rowTone`, `alt` on `RosterRow`): green passed (by hand too), red flagged, sky missing, white and light grey not scanned.
+- **Tests:** eslint clean, 1088 pass. On 5174 (station 2): the header, the missing and passed rows, light and dark; a flagged row was not looked at.

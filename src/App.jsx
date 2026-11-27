@@ -91,6 +91,7 @@ const FONT_UI      = '"Barlow", system-ui, sans-serif';                         
 const FONT_READ    = '"Atkinson Hyperlegible", system-ui, sans-serif';           // a player's name and the roster cells: keeps 0/O, 1/l/I, 6/9 apart from 4-5 ft
 const FONT_DISPLAY = '"Barlow Condensed", "Arial Narrow", system-ui, sans-serif'; // the big numerals: number, size, bin, counters
 const btnPri   = { padding: "10px 20px", borderRadius: 8, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 600, fontSize: 16, cursor: "pointer" };
+const headChip = { padding: "6px 12px", fontSize: 14, background: "var(--k-head-chip)" };   // a button on the station's dark header band: a chip of its own
 const btnGhost = { padding: "8px 14px", borderRadius: 8, border: "1px solid var(--k-blue)", background: "transparent", color: "var(--k-blue)", fontWeight: 600, fontSize: 14, cursor: "pointer" };
 const btnSm    = { padding: "7px 14px", borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: "pointer" };
 const codeSt   = { background: "var(--k-field)", padding: "2px 8px", borderRadius: 4, fontSize: 14 };
@@ -270,11 +271,14 @@ function IdleWatch({ pulse, onSpell }) {
 // table is 500 rows with a menu each, and rebuilding all of them on every
 // render of the app (several a scan) held the screen for most of a second
 // (measured 11 Nov 2026). A row is rebuilt only when its own jersey changes.
-const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise, onMark }) {
+// Each row is coloured by its status and striped, every other row a shade darker, so a long roster reads like
+// a spreadsheet (the co-op, 27 Nov 2026): green passed (by hand too), red flagged, sky missing, greys not scanned.
+const rowTone = s => (s === "pass" || s === "manual" ? "pass" : s === "flag" ? "flag" : s === "missing" || s === "short" ? "miss" : "todo");
+const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise, onMark, alt = false }) {
   return (
     <tr style={{
-      background: r.scanned === "pass" ? "var(--k-tint-green-faint)" : r.scanned === "flag" ? "var(--k-tint-red-faint)" : r.scanned ? "var(--k-tint-amber-faint)" : "transparent",
-      borderBottom: "1px solid var(--k-field)",
+      background: `var(--k-row-${rowTone(r.scanned)}${alt ? "-alt" : ""})`,
+      borderBottom: "1px solid var(--k-rule)",
     }}>
       <td style={{ ...tdSt, textAlign: "center" }}>
         {r.scanned === "pass" ? "✅" : r.scanned === "flag" ? "🛑" : r.scanned === "manual" ? "✍" : r.scanned === "missing" ? "❓" : r.scanned === "short" ? "📦" : <span style={{ color: "var(--k-ink-5)" }}>—</span>}
@@ -5760,20 +5764,21 @@ export default function App() {
           onConfirm={finishOrder} onCancel={() => closeDialog(() => setShowFinish(false))} onSummary={() => { setShowFinish(false); setShowPacking("summary"); }} />
       )}
 
-      {/* Header */}
-      <div style={{ background: "var(--k-card)", borderBottom: "1px solid var(--k-rule)", padding: "0 16px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "nowrap", flexShrink: 0, overflow: "hidden" }}>
+      {/* Header: a dark brand band (the co-op, 27 Nov 2026) so the buttons and pills, white chips on it, stand out.
+          Inside it --k-card is the chip colour, so every Pill picks it up. */}
+      <div className="k-head" style={{ "--k-card": "var(--k-head-chip)", background: "repeating-linear-gradient(120deg, var(--k-head-stripe) 0 10px, transparent 10px 26px), linear-gradient(100deg, var(--k-head-bg) 30%, var(--k-head-bg-2))", borderBottom: "3px solid var(--k-head-accent)", padding: "0 16px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "nowrap", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
           <div>
             <BrandMark height={22} title="" />
             {rosterFile && (
-              <div style={{ fontSize: 13, color: "var(--k-ink-3)", whiteSpace: "nowrap", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div style={{ fontSize: 13, color: "var(--k-head-ink-dim)", whiteSpace: "nowrap", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>
                 {rosterFile}{operatorName ? ` · ${operatorName}` : ""}{role ? ` (${role})` : ""}
               </div>
             )}
           </div>
           <input value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder="Order number…" title="Order number"
             onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
-            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--k-rule-3)", background: "var(--k-field)", color: "var(--k-ink-1)", fontSize: 16, fontWeight: 700, width: 140 }} />
+            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--k-rule-3)", background: "var(--k-head-chip)", color: "var(--k-ink-1)", fontSize: 16, fontWeight: 700, width: 140 }} />
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flex: 1, minWidth: 0, overflow: "hidden", justifyContent: "flex-end" }}>
           <Pill color="var(--k-green)" active={rosterFilter === "pass"} onClick={() => filterRoster("pass")} title="Show the passed garments">{passCount} Pass</Pill>
@@ -5793,20 +5798,20 @@ export default function App() {
 
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
-          {sessionStarted && <button onClick={() => setShowPrint(true)} title="Print any label of this order again, or of an order done before" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>🖨 Print</button>}
-          {sessionStarted && <button onClick={() => setShowPark(true)} disabled={locatingUp} title="Put this order aside: it is saved on the server until the garments come back. Any station opens it again from Unfinished orders" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "var(--k-amber)", color: "var(--k-amber-ink-2)" }}>⏸ Finish later</button>}
-          {sessionStarted && <button onClick={askFinish} disabled={locatingUp} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14, borderColor: "var(--k-green)", color: "var(--k-green-ink)" }}>🏁 Finish order</button>}
-          {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>Sign out</button>}
-          <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, padding: "6px 12px", fontSize: 14 }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>
-          {fsHint && <span style={{ fontSize: 14, color: "var(--k-amber-ink-2)" }}>{fsHint}</span>}
-          <button onClick={() => setShowSettings(true)} title="Settings" style={{ ...btnGhost, padding: "6px 12px", fontSize: 16 }}>⚙</button>
+          {sessionStarted && <button onClick={() => setShowPrint(true)} title="Print any label of this order again, or of an order done before" style={{ ...btnGhost, ...headChip }}>🖨 Print</button>}
+          {sessionStarted && <button onClick={() => setShowPark(true)} disabled={locatingUp} title="Put this order aside: it is saved on the server until the garments come back. Any station opens it again from Unfinished orders" style={{ ...btnGhost, ...headChip, borderColor: "var(--k-amber)", color: "var(--k-amber-ink-2)" }}>⏸ Finish later</button>}
+          {sessionStarted && <button onClick={askFinish} disabled={locatingUp} title="Close this order, after a confirm, and go back to waiting for the next — no PIN needed" style={{ ...btnGhost, ...headChip, borderColor: "var(--k-green)", color: "var(--k-green-ink)" }}>🏁 Finish order</button>}
+          {signedIn && <button onClick={signOut} title="End your shift at this station" style={{ ...btnGhost, ...headChip }}>Sign out</button>}
+          <button onClick={toggleFullscreen} title={isFullscreen ? "Leave full screen (Esc also works)" : "Full screen — hides the browser's tabs and address bar (F11 does the same)"} style={{ ...btnGhost, ...headChip }}>{isFullscreen ? "⛶ Exit" : "⛶"}</button>
+          {fsHint && <span style={{ fontSize: 14, color: "var(--k-head-ink)" }}>{fsHint}</span>}
+          <button onClick={() => setShowSettings(true)} title="Settings" style={{ ...btnGhost, ...headChip, fontSize: 16 }}>⚙</button>
         </div>
       </div>
 
       {(notes || jerseyType) && (
-        <div style={{ background: "var(--k-tint-amber)", borderBottom: "1px solid var(--k-tint-amber-line)", padding: "9px 16px", fontSize: 16, color: "var(--k-amber-ink-2)", flexShrink: 0, display: "flex", gap: 14, alignItems: "center" }}>
+        <div style={{ background: "var(--k-tint-blue-faint)", borderBottom: "1px solid var(--k-rule)", borderLeft: "5px solid var(--k-blue)", padding: "9px 16px", fontSize: 16, color: "var(--k-ink-1)", flexShrink: 0, display: "flex", gap: 14, alignItems: "center" }}>
           {jerseyType && <span style={{ border: "1px solid var(--k-blue-ink)", color: "var(--k-blue-ink-2)", borderRadius: 999, padding: "2px 12px", fontWeight: 700, whiteSpace: "nowrap" }}>{jerseyTypeLabel(jerseyType)} · {jerseyTypeOf(jerseyType)?.construction}</span>}
-          {notes && <span><strong>Order notes:</strong> {notes}</span>}
+          {notes && <span><strong style={{ color: "var(--k-blue-ink-2)" }}>Order notes:</strong> {notes}</span>}
         </div>
       )}
 
@@ -6128,7 +6133,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {shownRows.map(r => <RosterRow key={r._id} r={r} cols={rosterColsStable} hasBins={!!binMap} bin={binMap ? binOf(r) : null} canSupervise={canSupervise} onMark={onMarkRow} />)}
+                      {shownRows.map((r, i) => <RosterRow key={r._id} alt={i % 2 === 1} r={r} cols={rosterColsStable} hasBins={!!binMap} bin={binMap ? binOf(r) : null} canSupervise={canSupervise} onMark={onMarkRow} />)}
                       {shownRows.length === 0 && !(rosterFilter === "flag" && offRosterFlags > 0) && (
                         <tr><td colSpan={rosterColsStable.length + (binMap ? 3 : 2)} style={{ ...tdSt, textAlign: "center", color: "var(--k-ink-3)", padding: "28px 12px", fontSize: 17 }}>
                           No garment on this order matches{rosterSearch.trim() ? ` “${rosterSearch.trim()}”` : " these filters"}. Press Show all to see the whole roster.
