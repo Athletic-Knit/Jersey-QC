@@ -41,7 +41,7 @@ describe("the board's order view: Summary tab", () => {
     expect(screen.queryByText(/marked missing/)).toBeNull();
     expect(screen.getAllByText(/Box 1\.1/).length).toBeGreaterThan(0);   // the boxes strip and the passed rows' box
     expect(screen.getByText(/pass rate/)).toBeTruthy();
-    expect(screen.getByText(/1 with the supervisor/)).toBeTruthy();
+    expect(screen.getByText(/1 flagged/)).toBeTruthy();
   });
   // Dirt wiped off a passed garment is still a flag, resolved at once (the owner, 25 Nov 2026): the order
   // view shows it on the garment's row, which stays PASS; it is not a problem and not failed.

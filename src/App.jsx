@@ -1274,7 +1274,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
           {sumView && tab === "summary" && (
             <div style={{ padding: "14px 18px" }}>
               <div style={{ display: "flex" }}><SummaryCounts summary={sumView.summary} stats={sumView.stats} /></div>
-              {c.flag > 0 && <div style={{ fontSize: 14, color: "var(--k-red-ink)", marginTop: 4 }}>{c.flag} with the supervisor</div>}
+              {c.flag > 0 && <div style={{ fontSize: 14, color: "var(--k-red-ink)", marginTop: 4 }}>{c.flag} flagged</div>}
               <OrderSummaryBody summary={sumView.summary} bins={rec.binSummary || []} />
             </div>
           )}

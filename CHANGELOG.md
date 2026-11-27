@@ -736,5 +736,5 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 
 ## 2026-11-27 · Packing: "flagged", and the summary at the top
 - **Asked for (the co-op):** the Now strip's "X with the supervisor" should say "X flagged"; the summary and its print sat under every box, a long scroll on a big order.
-- **What changed:** the Now strip says "N flagged". The "Summary ▸" fold with ⬇ Excel and 🖨 Print summary is right under the Now strip, above the boxes; opened, the summary shows there in a frame. Finish order and Close stay at the bottom. The board's order view still says "with the supervisor" (not asked).
+- **What changed:** the Now strip says "N flagged". The "Summary ▸" fold with ⬇ Excel and 🖨 Print summary is right under the Now strip, above the boxes; opened, the summary shows there in a frame. Finish order and Close stay at the bottom. The board's order view (Summary tab) says "N flagged" too.
 - **Tests:** 1080 pass. Not looked at on 5174: station 3 was in use by the co-op's own browser.
