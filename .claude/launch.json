@@ -31,6 +31,16 @@
       ],
       "port": 5174,
       "url": "https://localhost:5174"
+    },
+    {
+      "name": "jersey-qc-stopsign",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set JQC_STAGE=development&& npx vite --config vite.config.stage.js --port 5176"
+      ],
+      "port": 5176,
+      "url": "https://localhost:5176"
     }
   ]
 }

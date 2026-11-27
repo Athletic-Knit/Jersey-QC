@@ -654,6 +654,23 @@ function JerseyTypePicker({ value, onChange }) {
   );
 }
 
+// Do this order's garments carry the STOP patch below the collar (the co-op,
+// 27 Nov 2026)? Picked on the order screen. On: the green screen says what the
+// camera saw there. The read itself always reports it (vision.js, stop_sign).
+function StopSignPicker({ value, onChange }) {
+  const opts = [{ id: false, label: "No STOP sign" }, { id: true, label: "🛑 Has a STOP sign" }];
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {opts.map(o => (
+        <button key={String(o.id)} type="button" onClick={() => onChange(o.id)} aria-pressed={value === o.id}
+          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === o.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: value === o.id ? "var(--k-tint-blue)" : "transparent", color: value === o.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: value === o.id ? 700 : 400 }}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // What the order's garments are, for the outline of the "where is the damage"
 // step and the flag ticket (the plan, 23 Nov 2026): one button a kind, hockey
 // by default. A roster whose rows mostly carry a known style picks it by itself.
@@ -771,6 +788,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
   const [customerKeys, setCustomerKeys] = useState(false);   // on-screen keys under the customer while the cursor is in it
   const customerRef = useRef(null);
   const [jerseyType, setJerseyType] = useState("");
+  const [stopSign, setStopSign] = useState(false);   // the garments carry the STOP patch below the collar
   const [garment, setGarment] = useState(DEFAULT_ORDER_GARMENT);   // the outline of "where is the damage"; a roster of known styles picks it
   const garmentByHand = useRef(false);   // picked on the screen: a roster file chosen later leaves it alone
   const [binBy, setBinBy] = useState("team");       // bins by team, by size, or none — the supervisor's roster brings its own
@@ -866,14 +884,14 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         }
         const rows = normaliseRosterRows(picked.rows), num = order.trim(), shipWith = orderList(shipText).filter(n => n !== num);
         const carried = await takeOpenBoxes({ order: num, shipWith, rows, binBy, station: stationId() });
-        onStart({ roster: rows, orderNumber: num, notes: notes.trim(), customer: customer.trim(), jerseyType, garment, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})`, hubRosterId: picked.id, shipWith, carried }); return;
+        onStart({ roster: rows, orderNumber: num, notes: notes.trim(), customer: customer.trim(), jerseyType, stopSign, garment, binBy, rosterFile: `${picked.fileName || "roster"} (from ${picked.by || "supervisor"})`, hubRosterId: picked.id, shipWith, carried }); return;
       }
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed  = isExcel ? await parseExcel(file) : parseCSV(await file.text());
       if (parsed.length === 0) { setError("No valid rows found. The file needs a header row with name and/or number columns."); setLoading(false); starting.current = false; return; }
       const num = order.trim() || orderNumberOf(parsed) || file.name.replace(/\.[^.]+$/, ""), shipWith = orderList(shipText || shipWithOf(parsed).join(" ")).filter(n => n !== num);
       const carried = await takeOpenBoxes({ order: num, shipWith, rows: parsed, binBy, station: stationId() });
-      onStart({ roster: parsed, orderNumber: num, notes: notes.trim(), customer: customer.trim(), jerseyType, garment, binBy, rosterFile: file.name, shipWith, carried });
+      onStart({ roster: parsed, orderNumber: num, notes: notes.trim(), customer: customer.trim(), jerseyType, stopSign, garment, binBy, rosterFile: file.name, shipWith, carried });
     } catch (err) {
       setError("Failed to parse roster: " + err.message);
       setLoading(false); starting.current = false;
@@ -972,6 +990,8 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           {/* No order-notes box here (the owner, 17 Nov 2026): the notes come with the supervisor's roster, when there are any. */}
           <label style={labelSt}>Garment type <span style={{ color: "var(--k-ink-3b)", fontWeight: 400 }}>— sets the flag reasons and the reports; leave it unset to offer every reason</span></label>
           <JerseyTypePicker value={jerseyType} onChange={setJerseyType} />
+          <label style={{ ...labelSt, marginTop: 12 }}>STOP sign <span style={{ color: "var(--k-ink-3b)", fontWeight: 400 }}>— the red octagon below the collar; the camera says whether it is there</span></label>
+          <StopSignPicker value={stopSign} onChange={setStopSign} />
           <label style={{ ...labelSt, marginTop: 12 }}>Garment <span style={{ color: "var(--k-ink-3b)", fontWeight: 400 }}>— the outline the operator taps to show where the damage is</span></label>
           <GarmentPicker value={garment} onChange={g => { garmentByHand.current = true; setGarment(g); }} />
           <label style={{ ...labelSt, marginTop: 12 }}>Boxes — how the order is sorted{picked?.binBy ? <span style={{ color: "var(--k-blue-ink)", fontWeight: 400 }}> · set by the supervisor</span> : null}</label>
@@ -2008,7 +2028,7 @@ function GarmentMap({ kind, spots = [], onTap, onRemove, fit = null, stackFit = 
 // what each choice does is in `actions` (App).
 // tapOnly / holdBack (a flagged garment of an order not parked: a tap, never the pedal) are in src/lib/scanpolicy.js.
 
-export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", lastSize = "", paused = false }) {
+export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyType = "", stopSign = false, inspect = null, sorter = false, confirmKey, cancelKey, upKey = "ArrowUp", retryKey, byHandKey, stream, rotation, embedded, canPhoto = false, ticket = null, reprintTicket, listSort = "size", lastSize = "", paused = false }) {
   const reasons = reasonsFor(jerseyType);
   // Runs an option: a click, the Select key or the pedal.
   const fire = useCallback(o => o?.run(), []);
@@ -2023,6 +2043,10 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
   const seen = state.scan?.detected;
   const numberDoubt = mode === "confirm" && !!seen && String(state.match?.number ?? "") !== ""
     && seen.number_complete === false;   // only when the camera says the number itself is covered or cut off: not for a jersey that is merely not flat or a number off centre, or the line would show too often to be read
+  // The STOP patch (the co-op, 27 Nov 2026): on an order that has one, the green
+  // says what the camera saw below the collar. Only a camera read says anything:
+  // a typed entry shows nothing. It never changes the match or locks Confirm.
+  const stopSeen = mode === "confirm" && stopSign && seen ? (seen.stop_sign || "") : null;
   // The checks to tick before Confirm works (the owner, 20 Nov 2026): all of
   // them on Inspect fully; on a quick look only the ones a flag added, while
   // Decoration and Size tag are shown big to look at and the rest small, with
@@ -2344,6 +2368,11 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               {numberDoubt && (
                 <div style={{ marginTop: 12, padding: "10px 26px", borderRadius: 14, background: "var(--k-page)", border: "4px solid var(--k-amber)", color: "var(--k-amber-ink-2)", fontWeight: 900, fontSize: "clamp(22px, 3vw, 32px)", textAlign: "center", maxWidth: "94%" }}>
                   ⚠ Camera could not see the whole number — check it is #{match.number}
+                </div>
+              )}
+              {stopSeen !== null && (
+                <div data-testid="stop-sign" style={{ marginTop: 12, padding: "10px 26px", borderRadius: 14, background: "var(--k-page)", border: `4px solid ${stopSeen === "yes" ? "var(--k-green)" : stopSeen === "no" ? "var(--k-red)" : "var(--k-amber)"}`, color: stopSeen === "yes" ? "var(--k-green-ink-2)" : stopSeen === "no" ? "var(--k-red-ink)" : "var(--k-amber-ink-2)", fontWeight: 900, fontSize: "clamp(22px, 3vw, 32px)", textAlign: "center", maxWidth: "94%" }}>
+                  {stopSeen === "yes" ? "🛑 STOP sign ✓" : stopSeen === "no" ? "🛑 NO STOP sign — check below the collar" : "🛑 STOP sign? Camera could not see the collar — check it"}
                 </div>
               )}
               {inspect && (
@@ -3934,7 +3963,8 @@ export default function App() {
   const [hubRosterId,        setHubRosterId]        = useState(null);   // the hub roster this order came from, taken by this station; Finish order removes it
   const [operatorName,       setOperatorName]       = useState(() => savedSignIn?.name || "");
   const [notes,              setNotes]              = useState("");
-  const [jerseyType,         setJerseyType]         = useState("");   // echl | echl_replica | sublimated | "" 
+  const [jerseyType,         setJerseyType]         = useState("");   // echl | echl_replica | sublimated | ""
+  const [stopSign,           setStopSign]           = useState(false);   // the order's garments carry the STOP patch: the green says what the camera saw
   const [orderCustomer,      setOrderCustomer]      = useState("");   // the customer, for the box's outside label and the sign-off ticket (empty: the box's team name)
   const [orderGarment,       setOrderGarment]       = useState(DEFAULT_ORDER_GARMENT);   // the order's garment kind (garments.js): the outline of "where is the damage"
   const [cameraOn,           setCameraOn]           = useState(false);
@@ -4292,10 +4322,10 @@ export default function App() {
   // Persist the session after every change; warn before leaving mid-order.
   useEffect(() => {
     if (!sessionStarted) return;
-    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, garment: orderGarment, customer: orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole: orderRole || kindOfRole(role), vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
+    const saved = saveSession({ sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, stopSign, garment: orderGarment, customer: orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole: orderRole || kindOfRole(role), vigil: vigilRef.current.state(), inspect: inspectRef.current.state() });
     const t = setTimeout(() => setSaveOk(prev => (prev === saved ? prev : saved)), 0);   // said in the header when it fails
     return () => clearTimeout(t);
-  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, orderGarment, orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole, checksLeft, inspect]);
+  }, [sessionStarted, role, roster, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, stopSign, orderGarment, orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, finishedAt, orderRole, checksLeft, inspect]);
 
   // An order with scans in it asks "Leave site?" before the tab closes or reloads.
   useEffect(() => {
@@ -4368,7 +4398,7 @@ export default function App() {
     const s = from || savedSession;
     setPickedUp(s.pickedUp || null); setOrderRole(kindOfSession(s));
     setRoster(s.roster); setRosterFile(s.rosterFile || null);
-    setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setFinishedAt(s.finishedAt || null); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || "");
+    setOrderNumber(s.orderNumber || ""); setOrderRun(s.orderRun || s.savedAt || 0); setFinishedAt(s.finishedAt || null); setHubRosterId(s.hubRosterId || null); setNotes(s.notes || ""); setJerseyType(s.jerseyType || ""); setStopSign(s.stopSign === true);
     // A flag left on "where is the damage" (the page reloaded there, or the order was parked)
     // is cleared, unmarked: its ticket never printed, so it prints now, once, wherever it is in
     // the log (the held-ticket effect). Every other flag printed when it happened.
@@ -4409,7 +4439,7 @@ export default function App() {
     gateRef.current.disarm(); setArmed(false); setCameraOn(false);
     rosterVersion.current++;
     setSessionStarted(false); setResumeDecided(true); setPickedUp(null); setOrderRole("");
-    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setFinishedAt(null); setHubRosterId(null); setNotes(""); setOrderGarment(DEFAULT_ORDER_GARMENT); setOrderCustomer(""); setLog([]); setBinMap(null); setClosedBins([]); setShipWith([]); setCarried([]); keptOpen.current = new Set(); setBoxLabelled([]); setListPrinted({}); setBinPrint(null); setShowPacking(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
+    setRoster([]); setRosterFile(null); setOrderNumber(""); setOrderRun(0); setFinishedAt(null); setHubRosterId(null); setNotes(""); setStopSign(false); setOrderGarment(DEFAULT_ORDER_GARMENT); setOrderCustomer(""); setLog([]); setBinMap(null); setClosedBins([]); setShipWith([]); setCarried([]); keptOpen.current = new Set(); setBoxLabelled([]); setListPrinted({}); setBinPrint(null); setShowPacking(false); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]); setNewRosters([]); setOrderSetBy(null); setHandsFreePaused(false);
     setLastResult(null); setLastConfirmed(null); setOverlay(null); setThumb(null); setShowRosterComplete(false); setRetried(null);
     // the Packing screen, opened on the done screen, must not come back over the next order (review, 24 Nov 2026; setShowPacking above)
     waitPedalRef.current = false; setWaitPedal(false);
@@ -4635,7 +4665,7 @@ export default function App() {
   const parkOrder = useCallback(async () => {
     const st = stationId(), summary = outOf(roster);
     const kind = orderRole || kindOfRole(role);
-    const session = { sessionStarted: true, role, orderRole: kind, roster, rosterFile, orderNumber, orderRun, hubRosterId: null, operatorName, notes, jerseyType, garment: orderGarment, customer: orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() };
+    const session = { sessionStarted: true, role, orderRole: kind, roster, rosterFile, orderNumber, orderRun, hubRosterId: null, operatorName, notes, jerseyType, stopSign, garment: orderGarment, customer: orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, vigil: vigilRef.current.state(), inspect: inspectRef.current.state() };
     setParking(true); setParkErr("");
     try { await hub.parkOrder({ id: pickedUp?.hubId || undefined, station: st, order: orderNumber, run: orderRun, operator: operatorName, jerseyType, kind: kind === "sorter" ? "sorter" : "", ...summary, out: outList(roster, log), session }); }
     catch (e) { setParkErr(`The order could NOT be saved on the server (${e.message}). Nothing was lost: it is still open here. Try again, or call the supervisor.`); return; }
@@ -4644,7 +4674,7 @@ export default function App() {
     if (hubRosterId) hub.removeRoster(hubRosterId).catch(() => {});
     setShowPark(false); setParkErr("");
     resetOrder();
-  }, [roster, role, orderRole, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, orderGarment, orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, resetOrder]);
+  }, [roster, role, orderRole, rosterFile, orderNumber, orderRun, hubRosterId, operatorName, notes, jerseyType, stopSign, orderGarment, orderCustomer, log, binMap, closedBins, shipWith, carried, boxLabelled, listPrinted, firstScanTime, idleSpells, awaySpells, pickedUp, resetOrder]);
   // Pick an unfinished order up again, at any station: the server says this station has it
   // now (another station gets "open on Station N"), then sends the whole order. One put
   // aside before the server kept them is taken from this PC, or rebuilt from the order's record.
@@ -5627,11 +5657,11 @@ export default function App() {
       {!showResume && signedIn && !sessionStarted && !showSupervisor && (
         <OrderSetupModal operatorName={operatorName} role={role} xlsxReady={xlsxReady} onSignOut={signOut} onPrint={() => setShowPrint(true)} stationLabel={stationLabel} onPickUp={pickUpOrder}
           onReplay={REPLAY_ON ? startReplay : null}
-          onStart={({ roster, orderNumber, notes, jerseyType, garment, customer = "", binBy, rosterFile, hubRosterId = null, shipWith: sw = [], carried: boxesIn = [] }) => {
+          onStart={({ roster, orderNumber, notes, jerseyType, stopSign: stop = false, garment, customer = "", binBy, rosterFile, hubRosterId = null, shipWith: sw = [], carried: boxesIn = [] }) => {
             setBinMap(null);
             applyRoster(roster, rosterFile, { binBy: binBy || "team", carried: boxesIn });
             setShipWith(sw); setCarried(boxesIn);
-            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || ""); setOrderGarment(orderGarmentOf(garment)); setOrderCustomer(String(customer || "").trim()); setOrderRole(kindOfRole(role));
+            setOrderNumber(orderNumber); setOrderRun(Date.now()); setHubRosterId(hubRosterId); setNotes(notes); setJerseyType(jerseyType || ""); setStopSign(stop === true); setOrderGarment(orderGarmentOf(garment)); setOrderCustomer(String(customer || "").trim()); setOrderRole(kindOfRole(role));
             setSessionStarted(true); setResumeDecided(true);
           }} />
       )}
@@ -5798,9 +5828,10 @@ export default function App() {
         </div>
       </div>
 
-      {(notes || jerseyType) && (
+      {(notes || jerseyType || stopSign) && (
         <div style={{ background: "var(--k-tint-amber)", borderBottom: "1px solid var(--k-tint-amber-line)", padding: "9px 16px", fontSize: 16, color: "var(--k-amber-ink-2)", flexShrink: 0, display: "flex", gap: 14, alignItems: "center" }}>
           {jerseyType && <span style={{ border: "1px solid var(--k-blue-ink)", color: "var(--k-blue-ink-2)", borderRadius: 999, padding: "2px 12px", fontWeight: 700, whiteSpace: "nowrap" }}>{jerseyTypeLabel(jerseyType)} · {jerseyTypeOf(jerseyType)?.construction}</span>}
+          {stopSign && <span style={{ border: "1px solid var(--k-red)", color: "var(--k-red-ink)", borderRadius: 999, padding: "2px 12px", fontWeight: 700, whiteSpace: "nowrap" }}>🛑 STOP sign</span>}
           {notes && <span><strong>Order notes:</strong> {notes}</span>}
         </div>
       )}
@@ -5981,7 +6012,7 @@ export default function App() {
         {/* RIGHT: Info panel — the result screen takes this half so the camera stays in view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative" }}>
           {overlay && (   /* the result screen takes this half, so the camera stays in view: one layout on every PC */
-            <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} listSort={settings.listSort} lastSize={lastConfirmed?.match?.size || ""} paused={overlayPaused}
+            <ScanOverlay key={overlayKey} inspect={sorting ? null : inspect} sorter={sorting} embedded state={overlay} actions={actions} binMap={binMap} extraCols={extraCols} notes={notes} jerseyType={jerseyType} stopSign={stopSign} confirmKey={confirmKey} cancelKey={cancelKey} upKey={upKey} retryKey={retryKey} byHandKey={byHandKey} ticket={overlay?.mode === "supervisor" ? ticketFor(overlay.entryId) : null} reprintTicket={reprintTicket} listSort={settings.listSort} lastSize={lastConfirmed?.match?.size || ""} paused={overlayPaused}
               stream={cameraOn ? streamRef.current : null} rotation={settings.rotation} canPhoto={cameraOn && inputMode === "camera" && !sorting} />
           )}
 
