@@ -79,7 +79,7 @@ export async function loadFloorConfig() {
   // Only a real answer replaces what is kept: a server without the admin panel answers the
   // page itself, which would wipe the names and defaults (Fable's review, L4).
   if (!c || !Number.isFinite(c.configVersion)) throw new Error("no admin settings on this server");
-  const kept = { configVersion: c.configVersion || 0, operators: Array.isArray(c.operators) ? c.operators : [], defaults: c.defaults && typeof c.defaults === "object" ? c.defaults : {}, ai: c.ai && typeof c.ai === "object" ? c.ai : {}, inspection: c.inspection && typeof c.inspection === "object" ? c.inspection : {} };
+  const kept = { configVersion: c.configVersion || 0, operators: Array.isArray(c.operators) ? c.operators : [], defaults: c.defaults && typeof c.defaults === "object" ? c.defaults : {}, ai: c.ai && typeof c.ai === "object" ? c.ai : {}, inspection: c.inspection && typeof c.inspection === "object" ? c.inspection : {}, checks: Array.isArray(c.checks) ? c.checks : [] };
   try { localStorage.setItem(FLOOR_KEY, JSON.stringify(kept)); } catch { /* private window: this page only */ }
   try { window.dispatchEvent(new CustomEvent("jqc-floorconfig", { detail: kept })); } catch { /* not a browser (tests) */ }   // the station takes the defaults when no order is open (App)
   return c;

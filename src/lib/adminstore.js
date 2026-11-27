@@ -9,6 +9,8 @@
 // it is whole or not there; a file that cannot be read is never written over (the
 // store says why, and the panel shows it); a file that reads but does not parse is
 // kept aside as .unreadable-… and the store starts fresh.
+import { cleanChecks } from "./checks.js";
+export { cleanChecks };
 import fs from "node:fs";
 import path from "node:path";
 import { KEY_DEFAULTS, ON_SCREEN_KEYS } from "./keydefaults.js";
@@ -33,9 +35,10 @@ export function cleanAdmin(raw, dropped = []) {
   const audit = Array.isArray(o.audit) ? o.audit.filter(e => e && typeof e === "object" && Number.isFinite(e.at) && typeof e.what === "string") : [];
   const given = o.settings && typeof o.settings === "object" && !Array.isArray(o.settings) ? o.settings : {};
   const settings = {};
-  for (const [k, v] of Object.entries(given)) if (!["operators", "printers", "defaults", "ai", "prices", "inspection"].includes(k)) settings[k] = v;   // a later version's section: kept
+  for (const [k, v] of Object.entries(given)) if (!["operators", "printers", "defaults", "ai", "prices", "inspection", "checks"].includes(k)) settings[k] = v;   // a later version's section: kept
   if (given.ai && typeof given.ai === "object") { const r = cleanAi(given.ai); if (r.error) dropped.push(`ai: ${r.error}`); else if (Object.keys(r.map).length) settings.ai = r.map; }
   if (given.inspection && typeof given.inspection === "object") { const r = cleanInspection(given.inspection); if (r.error) dropped.push(`inspection: ${r.error}`); else if (Object.keys(r.map).length) settings.inspection = r.map; }
+  if (Array.isArray(given.checks)) { const r = cleanChecks(given.checks); if (r.error) dropped.push(`checks: ${r.error}`); else settings.checks = r.list; }   // the whole list or none: a check alone means nothing
   if (given.prices && typeof given.prices === "object") { const r = cleanPrices(given.prices); if (r.error) dropped.push(`prices: ${r.error}`); else if (Object.keys(r.map).length) settings.prices = r.map; }
   if (Array.isArray(given.operators)) {
     const ok = given.operators.filter(n => { const r = cleanOperators([n]); if (r.error) dropped.push(`operator ${JSON.stringify(n)}: ${r.error}`); return !r.error; });

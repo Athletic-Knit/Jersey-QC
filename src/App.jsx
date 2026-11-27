@@ -37,6 +37,7 @@ import { playTone } from "./lib/audio.js";
 import { readJersey, uprightRotation } from "./lib/vision.js";
 import { sampleFrame, createMotionGate } from "./lib/motion.js";
 import { createVigilance, reconcile, turnMatters, settleTurned, createInspection, inspectLabel, checksFor } from "./lib/vigilance.js";
+import { checkOfReason } from "./lib/checks.js";
 import { hub, stationId, snapshotOf, stationUse, holdPrints, setPrintRolls, rollFor, cachedFloorConfig, loadFloorConfig, operatorsFrom, checkPin } from "./lib/hub.js";
 import { baseSettings, effectiveSettings, recordOwn, loadOwn, saveOwn, loadFloorInUse, saveFloorInUse } from "./lib/floorsettings.js";
 import { applyTheme, THEMES } from "./lib/theme.js";
@@ -53,7 +54,7 @@ const copiesNote = labels => (labels.some(l => l?.kind === "packlist") ? `, the 
 import { nowStep, listUnchanged, listIds } from "./lib/packing.js";
 import { photoSet, photoCaption } from "./lib/photoset.js";
 import { packBoxes, boxLabelJobs, boxListJobs, boxListLabels, boxFaceJobs, signoffJobs, stickerRows, stickerJobs, flagJobs, packFromRecord, damagedItems, damagedListJobs, damagedBoxLabel, orderSummary, summaryJobs, notInBox, notInBoxJobs, finishNotInBoxJobs, isLastBox } from "./lib/printjobs.js";
-import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASON_CHECK, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, NO_SIZE_TAG, FIXED_AT_STATION, GARMENT_MENU, DEFAULT_ORDER_GARMENT, LABEL_ROLLS } from "./config.js";
+import { MODEL, EFFORT, THINKING, SEND_MAX_PX, OPERATORS, CHECKS, REASONS, JERSEY_TYPES, jerseyTypeOf, jerseyTypeLabel, reasonsFor, ROLES, STATIONS, stationOf, PIN_REQUIRED, DEFAULT_SETTINGS, severityOf, reasonCategory, NO_SIZE_TAG, FIXED_AT_STATION, GARMENT_MENU, DEFAULT_ORDER_GARMENT, LABEL_ROLLS } from "./config.js";
 import { garment as garmentShape, garmentOf, garmentView, toView, fromView, spotAt, spotWords, rosterGarment, orderGarmentOf, SIDES, sideLabel, MAX_SPOTS, GARMENT_GROUPS } from "./lib/garments.js";
 
 
@@ -1950,7 +1951,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
   // Decoration and Size tag are shown big to look at and the rest small, with
   // nothing to tick (the owner, 23 Nov 2026). Tap a check to tick it; the
   // Select key ticks the next one while any is left, then confirms.
-  const { required: mustCheck, look: lookAt, remind: alsoLook } = useMemo(() => checksFor(mode === "confirm" ? inspect : null, CHECKS), [mode, inspect]);
+  const { required: mustCheck, look: lookAt, remind: alsoLook } = useMemo(() => checksFor(mode === "confirm" ? inspect : null, inspect?.checks || CHECKS), [mode, inspect]);
   const [ticked, setTicked] = useState(() => new Set());
   const toTick = mustCheck.filter(c => !ticked.has(c.id));
   const allTicked = toTick.length === 0;
@@ -2270,7 +2271,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               )}
               {inspect && (
                 <div style={{ marginTop: 12, padding: "8px 24px", borderRadius: 14, background: inspect.phase === "quick" ? "var(--k-rule-2)" : "var(--k-amber)", color: inspect.phase === "quick" ? "var(--k-strong)" : "var(--k-page)", fontWeight: 900, fontSize: "clamp(20px, 2.6vw, 26px)", letterSpacing: 0.5 }}>
-                  🔍 {inspectLabel(inspect, CHECKS)}
+                  🔍 {inspectLabel(inspect, inspect?.checks || CHECKS)}
                 </div>
               )}
               {mustCheck.length > 0 && (
@@ -4252,9 +4253,10 @@ export default function App() {
     if (!keepLog) {
       setLog([]); setLastResult(null); setLastConfirmed(null); setFirstScanTime(null); setIdleSpells([]); setAwaySpells([]);
       // A new order takes the floor's inspection counts as they are now (the admin panel,
-      // phase 7; blank = the app's own 5 / 10 / 5); the order keeps them to its end, a resume too.
+      // phase 7; blank = the app's own 5 / 10 / 5) and its checklist (none saved = CHECKS); the
+      // order keeps them to its end, a resume too.
       const counts = cachedFloorConfig()?.inspection || {};
-      inspectRef.current = createInspection({ full: counts.full, every: counts.every, log: m => console.log(m) }); syncInspect();
+      inspectRef.current = createInspection({ full: counts.full, every: counts.every, checks: cachedFloorConfig()?.checks, log: m => console.log(m) }); syncInspect();
       const was = vigilRef.current.state();   // a self-check under way carries on into the new order, as before
       vigilRef.current = createVigilance({ checks: counts.selfCheck, log: m => console.log(m) });
       vigilRef.current.load({ ...was, remaining: Math.min(was.remaining, vigilRef.current.checks), checks: vigilRef.current.checks }); setChecksLeft(vigilRef.current.remaining);
@@ -5068,7 +5070,7 @@ export default function App() {
     back()   { setOverlay(o => o.returnTo || null); },
     chooseReason(r) {
       const o = overlay; if (!o) return;
-      if (!r.custom) { inspectRef.current.defect(REASON_CHECK[r.id]); syncInspect(); }
+      if (!r.custom) { inspectRef.current.defect(checkOfReason(r.id, inspectRef.current.current().checks || CHECKS)); syncInspect(); }
       // Dirt or a mark is cleaned at the station (a flag resolved at once, 5j): say so, and ask.
       // (Before 17 Nov 2026 the menu just closed, and nobody could tell what had happened.)
       if (r.inPlace) { setOverlay({ mode: "clean", fixing: r, scan: o.scan, match: o.match || null, returnTo: o.returnTo || null, reopened: !!o.reopened, late: o.late }); return; }
@@ -5165,7 +5167,7 @@ export default function App() {
       const who = flaggedAs(o);
       const teams = [...new Set((o.candidates || []).map(c => teamKey(c.team)).filter(Boolean))];
       const row = { number: who.number, name: who.name, team: o.typed ? who.team : teams.length === 1 ? (o.candidates.find(c => c.team)?.team || "") : "", size: "", noRow: true };
-      inspectRef.current.defect(REASON_CHECK[NO_SIZE_TAG.id]); syncInspect();   // Size tag is ticked on the next 5 jerseys (REASON_CHECK)
+      inspectRef.current.defect(checkOfReason(NO_SIZE_TAG.id, inspectRef.current.current().checks || CHECKS)); syncInspect();   // Size tag (the check that names No size tag) is ticked on the next 5 garments
       const entry = { id: o.scan?.id || Date.now(), detected: d, thumb: o.scan?.smallThumb, photo: o.scan?.photo || null, match: row, status: S_FLAGGED, reason: NO_SIZE_TAG.label, reasonId: NO_SIZE_TAG.id, ...stamp() };
       setLog(prev => [entry, ...prev]); setLastResult(entry);
       setOverlay({ mode: "supervisor", scan: o.scan, match: row, reason: NO_SIZE_TAG.label, route: NO_SIZE_TAG.route, entryId: entry.id, photoFirst: false, damagePhotos: [] });
@@ -5691,7 +5693,7 @@ export default function App() {
           <Pill color="var(--k-red)" active={rosterFilter === "flag"} onClick={() => filterRoster("flag")} title="Show the flagged garments">{flagCount} Flag</Pill>
           {sorting && <span title="Signed in as a sorter: sorting only, no inspection"><Pill color="var(--k-violet)">Sorting</Pill></span>}
           {!sorting && checksLeft > 0 && <span title="After a mistake the next garments are read twice and must agree before a green"><Pill color="var(--k-blue-ink)">Checking · {checksLeft}</Pill></span>}
-          {!sorting && sessionStarted && <span title={`After a defect, inspect the next ${inspect.full} fully; after ${inspect.every} clean, one spot check`}><Pill color={inspect.phase === "quick" ? "var(--k-ink-3)" : "var(--k-amber)"}>{inspectLabel(inspect, CHECKS)}</Pill></span>}
+          {!sorting && sessionStarted && <span title={`After a defect, inspect the next ${inspect.full} fully; after ${inspect.every} clean, one spot check`}><Pill color={inspect.phase === "quick" ? "var(--k-ink-3)" : "var(--k-amber)"}>{inspectLabel(inspect, inspect.checks || CHECKS)}</Pill></span>}
           {manualCount > 0 && <Pill color="var(--k-amber)" active={rosterFilter === "manual"} onClick={() => filterRoster("manual")} title="Show the garments entered by hand">{manualCount} By hand</Pill>}
           {hubOk === false && <Pill color="var(--k-red-ink)" title="The supervisor's board cannot be reached; scanning still works">Board offline</Pill>}
           {saveOk === false && <Pill color="var(--k-red-ink)" title="This PC's storage is full or blocked: the order is not being saved, so a reload or a crash would lose the work since. Tell the supervisor; do not close or reload this page.">⚠ NOT SAVING — tell the supervisor</Pill>}

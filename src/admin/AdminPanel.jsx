@@ -6,7 +6,8 @@
 // screen that works in both themes.
 import { useCallback, useEffect, useState } from "react";
 import { THEMES, loadTheme, saveTheme } from "../lib/theme.js";
-import { DEFAULT_SETTINGS, MODEL, EFFORT, THINKING, SEND_MAX_PX } from "../config.js";
+import { DEFAULT_SETTINGS, MODEL, EFFORT, THINKING, SEND_MAX_PX, CHECKS, REASONS, MARK_STAYS, THREAD_STAYS, NO_SIZE_TAG } from "../config.js";
+import { cleanChecks, checkIdFor, MAX_CHECKS, CHECK_LABEL_MAX } from "../lib/checks.js";
 
 const api = async (path, opts = {}) => {
   const r = await fetch(`/api/admin${path}`, { credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...opts });
@@ -112,7 +113,6 @@ function Health({ h, onRefresh }) {
             <dt style={st.dt}>PC</dt><dd style={st.dd}>{h.server.host}</dd>
             <dt style={st.dt}>Running since</dt><dd style={st.dd}>{when(h.server.startedAt)} ({ago(h.server.startedAt, h.server.now)})</dd>
             <dt style={st.dt}>Code</dt><dd style={st.dd}>{g.error ? g.error : <>{g.branch} · <code>{g.commit}</code> · {g.date?.slice(0, 16)}<br /><span style={{ color: "var(--text-dim)" }}>{g.subject}</span></>}</dd>
-            <dt style={st.dt}>Uncommitted files</dt><dd style={st.dd}>{g.error ? "?" : g.dirty ? <Pill tone="warn">{g.dirty}</Pill> : "none"}</dd>
             <dt style={st.dt}>Node</dt><dd style={st.dd}>{h.server.node}</dd>
             <dt style={st.dt}>Admin changes</dt><dd style={st.dd}>{h.server.stage === "production" ? (h.server.writable ? <Pill tone="warn">allowed (JQC_ADMIN_WRITE=1)</Pill> : <Pill>read only</Pill>) : <Pill tone="pass">allowed</Pill>}</dd>
           </dl>
@@ -579,6 +579,86 @@ const COUNT_ROWS = [
   ["selfCheck", "Camera self-check", "After the operator corrects the app, the next garments are read twice and must agree before a green.", 5, 1, 20],
 ];
 const PIN_LABEL = { inspector: "Inspector", sorter: "Sorter", packer: "Packer", supervisor: "Supervisor", station1: "Station 1", station2: "Station 2", station3: "Station 3" };
+// The inspector's checks (the co-op, 27 Nov 2026): the tick buttons on the green screen. Add,
+// rename, remove, put in order; "Look at" = shown big on a quick look; the flag reasons that ask
+// for the check on the next garments (a reason on one check at most: picking it here takes it off
+// the other). Saved whole in the admin file (`settings.checks`); a station takes it at its next order.
+const FLAG_REASONS = [...REASONS, MARK_STAYS, THREAD_STAYS, NO_SIZE_TAG];
+const APP_CHECKS = CHECKS.map(c => ({ id: c.id, label: c.label, ...(c.quick ? { quick: true } : {}), reasons: [...c.reasons] }));
+function CheckEditor({ cfg, onSaved, setMsg }) {
+  const saved = cfg.checks?.length ? cfg.checks : APP_CHECKS;
+  const [draft, setDraft] = useState(saved);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setDraft(cfg.checks?.length ? cfg.checks : APP_CHECKS); }, [cfg]);
+  const changed = JSON.stringify(draft) !== JSON.stringify(saved);
+  const { error } = cleanChecks(draft);
+  const ro = !cfg.writable;
+  const put = (i, patch) => setDraft(d => d.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const move = (i, by) => setDraft(d => { const n = [...d], j = i + by; if (j < 0 || j >= n.length) return d; [n[i], n[j]] = [n[j], n[i]]; return n; });
+  const toggleReason = (i, rid) => setDraft(d => d.map((c, j) => {
+    if (j === i) return { ...c, reasons: c.reasons.includes(rid) ? c.reasons.filter(r => r !== rid) : [...c.reasons, rid] };
+    return c.reasons.includes(rid) ? { ...c, reasons: c.reasons.filter(r => r !== rid) } : c;   // a reason asks for one check
+  }));
+  const add = () => {
+    const label = name.replace(/\s+/g, " ").trim();
+    if (!label) return;
+    setDraft(d => [...d, { id: checkIdFor(label, d.map(c => c.id)), label, reasons: [] }]); setName("");
+  };
+  const save = async body => {
+    setBusy(true); setMsg({ tone: "", text: "" });
+    try { const r = await api("/settings/checks", { method: "PUT", body: JSON.stringify({ ...body, configVersion: cfg.configVersion }) }); setMsg({ tone: "pass", text: r.unchanged ? "Nothing to save." : "Saved. Each station uses the new checks from its next order; an order already open keeps its own." }); await onSaved(); }
+    catch (e) { setMsg({ tone: "fail", text: e.message }); }
+    finally { setBusy(false); }
+  };
+  const cell = { padding: "8px", borderBottom: "1px solid var(--line)", verticalAlign: "top" };
+  const owner = rid => draft.find(c => c.reasons.includes(rid));
+  return (
+    <section style={st.card}>
+      <h2 style={st.h2}>Inspector checks</h2>
+      <p style={{ margin: "0 0 10px", color: "var(--text-dim)" }}>
+        The tick buttons on the green screen. On Inspect fully every check is ticked before Confirm; on a quick look nothing is ticked: the ones marked <strong>Look at</strong> show big, the rest small under "Also look for". A flag for one of a check's reasons makes that check a tick on the next garments; a flag whose reason is on no check starts Inspect fully again.
+        {cfg.checks?.length ? "" : " Showing the app's own checks (nothing saved)."} {ro ? "Read only on this server." : ""}
+      </p>
+      <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 15 }}>
+        <thead><tr style={{ textAlign: "left", color: "var(--text-dim)" }}><th style={cell}>Order</th><th style={cell}>Name on the button</th><th style={cell}>Look at</th><th style={cell}>Asked after a flag for</th><th style={cell}></th></tr></thead>
+        <tbody>
+          {draft.map((c, i) => (
+            <tr key={c.id}>
+              <td style={{ ...cell, whiteSpace: "nowrap" }}>
+                <button aria-label={`Move ${c.label} up`} style={{ ...st.btn, padding: "4px 10px" }} disabled={ro || i === 0} onClick={() => move(i, -1)}>↑</button>{" "}
+                <button aria-label={`Move ${c.label} down`} style={{ ...st.btn, padding: "4px 10px" }} disabled={ro || i === draft.length - 1} onClick={() => move(i, 1)}>↓</button>
+              </td>
+              <td style={{ ...cell, minWidth: 180 }}><input aria-label={`Name of ${c.label || "the check"}`} maxLength={CHECK_LABEL_MAX} style={{ ...st.input, padding: "6px 8px" }} disabled={ro} value={c.label} onChange={e => put(i, { label: e.target.value })} /></td>
+              <td style={cell}><input type="checkbox" aria-label={`${c.label}: look at on a quick look`} style={{ width: 20, height: 20 }} disabled={ro} checked={!!c.quick} onChange={e => { const { quick: _q, ...rest } = c; setDraft(d => d.map((x, j) => (j === i ? (e.target.checked ? { ...rest, quick: true } : rest) : x))); }} /></td>
+              <td style={cell}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {FLAG_REASONS.map(r => {
+                    const on = c.reasons.includes(r.id), other = !on && owner(r.id);
+                    return <button key={r.id} disabled={ro} aria-pressed={on} title={other ? `Now on "${other.label}"; picking it here moves it` : undefined} onClick={() => toggleReason(i, r.id)}
+                      style={{ ...st.btn, padding: "3px 10px", fontSize: 13, fontWeight: on ? 700 : 400, ...(on ? { background: "var(--accent)", color: "var(--on-accent)", borderColor: "var(--accent)" } : other ? { opacity: 0.55 } : {}) }}>{r.label}</button>;
+                  })}
+                </div>
+              </td>
+              <td style={cell}><button aria-label={`Remove ${c.label}`} style={st.btn} disabled={ro || draft.length <= 1} onClick={() => setDraft(d => d.filter((_, j) => j !== i))}>Remove</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+      {!ro && <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+        <input aria-label="Name of a new check" placeholder="A new check, e.g. Zip works" maxLength={CHECK_LABEL_MAX} style={{ ...st.input, width: 280 }} value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} />
+        <button style={name.trim() && draft.length < MAX_CHECKS ? st.btn : { ...st.btn, opacity: 0.45, cursor: "not-allowed" }} disabled={!name.trim() || draft.length >= MAX_CHECKS} onClick={add}>+ Add check</button>
+      </div>}
+      {changed && error && <p style={{ margin: "8px 0 0", color: "var(--fail-text)" }}>{error}</p>}
+      {!ro && <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+        <button style={changed && !error ? st.pri : { ...st.pri, opacity: 0.45, cursor: "not-allowed" }} disabled={!changed || !!error || busy} onClick={() => save({ checks: draft })}>Save checks</button>
+        {changed && <button style={st.btn} onClick={() => setDraft(saved)}>Undo changes</button>}
+        {cfg.checks?.length > 0 && <button style={st.btn} disabled={busy} onClick={() => save({ checks: null })}>Use the app's own checks</button>}
+      </div>}
+    </section>
+  );
+}
+
 function FloorRules() {
   const [cfg, setCfg] = useState(null);
   const [pins, setPins] = useState([]);
@@ -601,6 +681,7 @@ function FloorRules() {
   return (
     <>
       {msg.text && <div role="status" style={{ ...st.card, borderColor: `var(--${msg.tone || "info"})`, background: `var(--${msg.tone || "info"}-bg)`, color: `var(--${msg.tone || "info"}-text)` }}>{msg.text}</div>}
+      <CheckEditor cfg={cfg} onSaved={load} setMsg={setMsg} />
       <section style={st.card}>
         <h2 style={st.h2}>Inspection counts</h2>
         <p style={{ margin: "0 0 10px", color: "var(--text-dim)" }}>Blank means the app's own number. {cfg.writable ? "A station takes a change at its next order, never in the middle of one." : "Read only on this server."}</p>

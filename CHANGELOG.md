@@ -712,3 +712,9 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Asked for (the co-op):** a way back to the app from the admin panel.
 - **What changed:** "← Back to the app" at the right of the admin panel's stage bar, on its sign-in page and when signed in; it opens the app's sign-in screen.
 - **Tests:** `admin.test.js` checks the link. 1075 tests pass. On 5174: the link took the admin sign-in page back to the app's sign-in.
+
+
+## 2026-11-27 · Admin panel: inspector checks editable, no uncommitted files
+- **Asked for (the co-op):** take "Uncommitted files" off the admin panel, and let the admins add new inspector checks and edit the old ones.
+- **What changed:** the Health page no longer lists uncommitted files (git status is no longer run). Floor rules has an "Inspector checks" section: rename, add, remove and reorder the green screen's checks, mark which ones show big on a quick look ("Look at"), and pick the flag reasons that ask for each check on the next garments. Saved in the admin file, served to the stations, taken at each station's next order start and kept by the order to its end; "Use the app's own checks" goes back to config.js's five.
+- **Tests:** `admin.test.js` (cleanChecks, the route, /config, the change log, production refused, an order keeping its checks through a resume). 1080 tests pass; operator simulation WRONG GREEN 0. On 5174 the server serves the new panel and `checks: []`; the panel itself was not looked at in a browser (the browser pane stopped at the certificate warning).

@@ -23,12 +23,14 @@ export const OPERATORS = String(import.meta.env.VITE_OPERATORS || "Person 1,Pers
 // one press; only a check a flag added (REASON_CHECK) must be ticked, for the
 // next 5 jerseys. "Decoration" is one check for the name, the number, the
 // logos and the crest (it was two, "Name & Number" and "Logos", until 23 Nov 2026).
+// `reasons`: the flag reasons that ask for the check on the next garments (REASON_CHECK below).
+// The admin panel's Floor rules can replace the whole list (src/lib/checks.js, the co-op, 27 Nov 2026).
 export const CHECKS = [
-  { id: "decoration", label: "Decoration",    quick: true },
-  { id: "size",       label: "Size tag",      quick: true },
-  { id: "fabric",     label: "Fabric damage" },
-  { id: "holes",      label: "Holes" },
-  { id: "thread",     label: "Thread damage" },
+  { id: "decoration", label: "Decoration",    quick: true, reasons: ["wrong_decoration", "logo", "print"] },   // the name, the number, a logo or crest, sublimated graphics
+  { id: "size",       label: "Size tag",      quick: true, reasons: ["label", "no_size_tag"] },
+  { id: "fabric",     label: "Fabric damage",              reasons: ["mark", "mark_stays"] },
+  { id: "holes",      label: "Holes",                      reasons: ["fabric"] },
+  { id: "thread",     label: "Thread damage",              reasons: ["twill", "stitching", "loose_thread", "thread_stays"] },
 ];
 export const CHECKLIST = CHECKS.map(c => c.label);   // the words alone, for anything that only lists them
 // The check a flag adds: the next INSPECT_FULL jerseys stay on a quick look
@@ -36,12 +38,7 @@ export const CHECKLIST = CHECKS.map(c => c.label);   // the words alone, for any
 // the damage reasons; 23 Nov 2026 for every reason: "when we flag something it
 // should ask for that flag to be checked off for the next 5 jerseys"). A
 // reason with no check here (Others, a typed reason) restarts Inspect fully.
-export const REASON_CHECK = {
-  wrong_decoration: "decoration", logo: "decoration", print: "decoration",   // the name, the number, a logo or crest, sublimated graphics: all decoration
-  label: "size", no_size_tag: "size",
-  mark: "fabric", mark_stays: "fabric", fabric: "holes", twill: "thread", stitching: "thread",
-  loose_thread: "thread", thread_stays: "thread",
-};
+export const REASON_CHECK = Object.fromEntries(CHECKS.flatMap(c => c.reasons.map(r => [r, c.id])));
 
 // The resolution of the flag written when dirt or a loose thread is dealt with at the
 // station: still a flag, resolved at once (the owner, 25 Nov 2026).

@@ -78,7 +78,7 @@ describe("admin routes", () => {
     const dataFile = path.join(dir, "hub-test.json");
     fs.writeFileSync(dataFile, "{}");
     hubsMap = new Map([[path.resolve(dataFile), { blocked: () => blocked, state: () => ({ stations: { "st-station1": { id: "st-station1", updatedAt: Date.now() } } }) }]]);
-    ({ handle } = createAdmin({ dataFile, stage: "development", port: 5174, env: ENV, git: () => ({ branch: "development", commit: "abc1234", dirty: 0 }), hubs: () => hubsMap }));
+    ({ handle } = createAdmin({ dataFile, stage: "development", port: 5174, env: ENV, git: () => ({ branch: "development", commit: "abc1234" }), hubs: () => hubsMap }));
   });
 
   it("with no password set, the panel only says it is not set up", async () => {
@@ -171,7 +171,7 @@ describe("phase 2: operator names", () => {
   it("/config is public and holds no secret; with nothing set it has no names (the stations keep .env.local's)", async () => {
     const r = await call(handle, "GET", "/config");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ configVersion: 0, operators: [], defaults: {}, ai: {}, inspection: {} });
+    expect(r.body).toEqual({ configVersion: 0, operators: [], defaults: {}, ai: {}, inspection: {}, checks: [] });
     expect(r.text).not.toContain(PASSWORD);
   });
   it("saving needs a sign-in; a save goes in the change log with before and after, raises the version and reaches /config", async () => {
@@ -181,7 +181,7 @@ describe("phase 2: operator names", () => {
     expect(s0).toMatchObject({ operators: [], fallbackOperators: ["Shiv", "Priya"], configVersion: 0, writable: true });
     const r = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv", "Priya", "Arshil"] } });
     expect(r.status).toBe(200);
-    expect((await call(handle, "GET", "/config")).body).toEqual({ configVersion: 1, operators: ["Shiv", "Priya", "Arshil"], defaults: {}, ai: {}, inspection: {} });
+    expect((await call(handle, "GET", "/config")).body).toEqual({ configVersion: 1, operators: ["Shiv", "Priya", "Arshil"], defaults: {}, ai: {}, inspection: {}, checks: [] });
     const same = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: ["Shiv", "Priya", "Arshil"] } });
     expect(same.body.unchanged).toBe(true);   // no new version, no log line
     const back = await call(handle, "PUT", "/settings/operators", { cookie: c, body: { operators: [] } });
@@ -815,5 +815,68 @@ describe("Back to the app from the admin panel (the co-op, 27 Nov 2026)", () => 
     const src = fs.readFileSync(new URL("../../admin/AdminPanel.jsx", import.meta.url), "utf8");
     const bar = src.slice(src.indexOf("function StageBar("), src.indexOf("function SignIn("));
     expect(bar).toMatch(/<a href="\/"[^>]*>← Back to the app<\/a>/);
+  });
+});
+
+describe("the inspector's checks in the admin panel (the co-op, 27 Nov 2026)", () => {
+  it("cleanChecks keeps a good list and says what is wrong with a bad one", async () => {
+    const { cleanChecks, checkIdFor, checkOfReason } = await import("../checks.js");
+    const good = cleanChecks([{ id: "decoration", label: "  Decoration ", quick: true, reasons: ["logo", "logo"] }, { id: "zip", label: "Zip works", quick: "yes", reasons: [] }]);
+    expect(good).toEqual({ list: [{ id: "decoration", label: "Decoration", quick: true, reasons: ["logo"] }, { id: "zip", label: "Zip works", reasons: [] }], error: "" });
+    expect(cleanChecks([]).error).toMatch(/at least one/);
+    expect(cleanChecks([{ id: "a", label: "A" }, { id: "a", label: "B" }]).error).toMatch(/twice/);
+    expect(cleanChecks([{ id: "a", label: "Holes" }, { id: "b", label: "holes" }]).error).toMatch(/Two checks/);
+    expect(cleanChecks([{ id: "a", label: "A", reasons: ["logo"] }, { id: "b", label: "B", reasons: ["logo"] }]).error).toMatch(/one check only/);
+    expect(cleanChecks([{ id: "Bad Id", label: "A" }]).error).toMatch(/not a check id/);
+    expect(cleanChecks([{ id: "a", label: "x".repeat(31) }]).error).toMatch(/longer/);
+    expect(cleanChecks([{ id: "a", label: "<b>" }]).error).toMatch(/character/);
+    expect(cleanChecks(Array.from({ length: 13 }, (_, i) => ({ id: `c${i}`, label: `C${i}` }))).error).toMatch(/At most/);
+    expect(checkIdFor("Zip works!", [])).toBe("zip-works");
+    expect(checkIdFor("Holes", ["holes", "holes-2"])).toBe("holes-3");
+    expect(checkOfReason("logo", good.list)).toBe("decoration");
+    expect(checkOfReason("mark", good.list)).toBeUndefined();
+  });
+  it("config.js's checks carry the reasons, and REASON_CHECK is built from them as before", async () => {
+    const { CHECKS, REASON_CHECK } = await import("../../config.js");
+    const { cleanChecks } = await import("../checks.js");
+    expect(cleanChecks(CHECKS).error).toBe("");
+    expect(REASON_CHECK).toEqual({ wrong_decoration: "decoration", logo: "decoration", print: "decoration", label: "size", no_size_tag: "size", mark: "fabric", mark_stays: "fabric", fabric: "holes", twill: "thread", stitching: "thread", loose_thread: "thread", thread_stays: "thread" });
+  });
+  it("PUT /settings/checks saves the list, serves it in /config, logs it, goes back to the app's own, and is refused on production", async () => {
+    const a = createAdmin({ dataFile: path.join(tmp(), "hub-test.json"), stage: "development", env: ENV, git: async () => ({}) });
+    const c = cookieFrom(await call(a.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    const list = [{ id: "decoration", label: "Decoration", quick: true, reasons: ["logo"] }, { id: "zip", label: "Zip works", reasons: ["stitching"] }];
+    expect((await call(a.handle, "PUT", "/settings/checks", { cookie: c, body: { checks: [{ id: "a", label: "" }] } })).status).toBe(400);
+    expect((await call(a.handle, "PUT", "/settings/checks", { cookie: c, body: { checks: list } })).status).toBe(200);
+    expect((await call(a.handle, "GET", "/config")).body.checks).toEqual(list);
+    expect((await call(a.handle, "GET", "/audit", { cookie: c })).body.entries[0]).toMatchObject({ what: "inspector checks", after: ["Decoration (look at) ← logo", "Zip works ← stitching"] });
+    expect((await call(a.handle, "PUT", "/settings/checks", { cookie: c, body: { checks: null } })).status).toBe(200);
+    expect((await call(a.handle, "GET", "/config")).body.checks).toEqual([]);
+    const prod = createAdmin({ dataFile: path.join(tmp(), "hub.json"), stage: "production", env: ENV, git: async () => ({}) });
+    const pc = cookieFrom(await call(prod.handle, "POST", "/login", { body: { name: "Coop", password: PASSWORD } }));
+    expect((await call(prod.handle, "PUT", "/settings/checks", { cookie: pc, body: { checks: list } })).status).toBe(403);
+  });
+  it("an order keeps the checks it started with: the ticks, the quick look and a flag's check follow them, a resume too", async () => {
+    const { checksFor } = await import("../vigilance.js");
+    const { checkOfReason } = await import("../checks.js");
+    const list = [{ id: "decoration", label: "Decoration", quick: true, reasons: ["logo"] }, { id: "zip", label: "Zip works", reasons: ["stitching"] }];
+    const i = createInspection({ full: 1, every: 10, checks: list });
+    expect(checksFor(i.current(), i.current().checks).required.map(c => c.label)).toEqual(["Decoration", "Zip works"]);
+    i.jerseyDone();
+    expect(checksFor(i.current(), i.current().checks)).toMatchObject({ required: [], look: [{ id: "decoration" }], remind: [{ id: "zip" }] });
+    i.defect(checkOfReason("stitching", i.current().checks));
+    expect(checksFor(i.current(), i.current().checks).required.map(c => c.id)).toEqual(["zip"]);
+    const back = createInspection(); back.load(i.state());
+    expect(back.current().checks).toEqual(list);
+    expect(createInspection().current().checks).toBeUndefined();                       // nothing saved: config.js's CHECKS
+    expect(createInspection({ checks: [{ id: "x", label: "" }] }).current().checks).toBeUndefined();   // a bad list: the same
+    const app = fs.readFileSync(new URL("../../App.jsx", import.meta.url), "utf8");
+    expect(app).toMatch(/checks: cachedFloorConfig\(\)\?\.checks/);
+    expect(app).not.toMatch(/REASON_CHECK\[/);
+  });
+  it("the Health page no longer lists uncommitted files", () => {
+    const panel = fs.readFileSync(new URL("../../admin/AdminPanel.jsx", import.meta.url), "utf8");
+    expect(panel).not.toMatch(/Uncommitted/);
+    expect(panel).toMatch(/<CheckEditor /);
   });
 });

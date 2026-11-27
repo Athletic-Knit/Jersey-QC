@@ -22,7 +22,7 @@ import path from "node:path";
 import process from "node:process";
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
-import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators, cleanPrinters, cleanDefaults, printerNameOk, cleanAi, cleanPrices, AI_MODELS, cleanInspection, INSPECTION_RULES } from "./src/lib/adminstore.js";
+import { adminFileFor, readAdmin, writeAdmin, auditEntry, withAudit, cleanOperators, cleanPrinters, cleanDefaults, printerNameOk, cleanAi, cleanPrices, AI_MODELS, cleanInspection, INSPECTION_RULES, cleanChecks } from "./src/lib/adminstore.js";
 import { pinFor, PIN_IDS } from "./src/lib/pins.js";
 
 export const SESSION_MS = 8 * 60 * 60 * 1000;
@@ -60,8 +60,8 @@ function gitReader(root) {
   return async () => {
     if (cache && Date.now() - at < 30000) return cache;
     try {
-      const [st, branch, commit, subject, date] = await Promise.all([git("status", "--porcelain"), git("rev-parse", "--abbrev-ref", "HEAD"), git("rev-parse", "--short", "HEAD"), git("log", "-1", "--format=%s"), git("log", "-1", "--format=%ci")]);
-      cache = { branch, commit, subject: subject.slice(0, 140), date, dirty: st.split("\n").filter(Boolean).length };
+      const [branch, commit, subject, date] = await Promise.all([git("rev-parse", "--abbrev-ref", "HEAD"), git("rev-parse", "--short", "HEAD"), git("log", "-1", "--format=%s"), git("log", "-1", "--format=%ci")]);
+      cache = { branch, commit, subject: subject.slice(0, 140), date };
     } catch (e) { cache = { error: `git is not available here (${String(e.message).split("\n")[0]})` }; }
     at = Date.now();
     return cache;
@@ -105,7 +105,7 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
   const fallbackOperators = String(env.VITE_OPERATORS || "Person 1,Person 2,Person 3").split(",").map(x => x.trim()).filter(Boolean);
   // The model settings reach stations on development and testing only (phase 6): a production station never takes them.
   const aiFor = () => (stage === "production" ? {} : store.data.settings.ai || {});
-  const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [], defaults: store.data.settings.defaults || {}, ai: aiFor(), inspection: store.data.settings.inspection || {} });
+  const floorConfig = () => ({ configVersion: store.data.configVersion || 0, operators: store.data.settings.operators || [], defaults: store.data.settings.defaults || {}, ai: aiFor(), inspection: store.data.settings.inspection || {}, checks: store.data.settings.checks || [] });
   (globalThis.__jqcAdminConfig ||= new Map()).set(path.resolve(dataFile), { version: () => store.data.configVersion || 0, printers: () => store.data.settings.printers || {}, ai: aiFor });
   const hubPrinting = () => hubs?.()?.get?.(path.resolve(dataFile))?.printing || null;
   const STATION_IDS = ["st-station1", "st-station2", "st-station3"];
@@ -359,6 +359,22 @@ export function createAdmin({ dataFile = path.resolve("data/hub.json"), stage = 
         const bad = change(req, me, "inspection counts", settings, show(before), show(map));
         if (bad) return send(res, bad.code, { error: bad.error });
         return send(res, 200, { inspection: map, configVersion: store.data.configVersion });
+      }
+      if (route === "/settings/checks" && req.method === "PUT") {
+        const body = await readJson(req);
+        if (Number.isFinite(body.configVersion) && body.configVersion !== (store.data.configVersion || 0)) return send(res, 409, { error: "Someone saved the admin settings since this page loaded them. Reload the page and make your change again." });
+        // null or [] = back to the app's own checks (config.js); else the whole list.
+        const back = body.checks === null || (Array.isArray(body.checks) && body.checks.length === 0);
+        const { list, error } = back ? { list: [], error: "" } : cleanChecks(body.checks);
+        if (error) return send(res, 400, { error });
+        const before = store.data.settings.checks || [];
+        if (JSON.stringify(before) === JSON.stringify(list)) return send(res, 200, { checks: list, unchanged: true });
+        const settings = { ...store.data.settings };
+        if (list.length) settings.checks = list; else delete settings.checks;
+        const show = l => l.length ? l.map(c => `${c.label}${c.quick ? " (look at)" : ""}${c.reasons.length ? ` ← ${c.reasons.join(", ")}` : ""}`) : "(the app's own checks)";
+        const bad = change(req, me, "inspector checks", settings, show(before), show(list));
+        if (bad) return send(res, bad.code, { error: bad.error });
+        return send(res, 200, { checks: list, configVersion: store.data.configVersion });
       }
       if (route === "/settings/prices" && req.method === "PUT") {
         const body = await readJson(req);
