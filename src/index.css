@@ -1,171 +1,218 @@
-/* Page reset: the app draws its own dark, full-window layout and manages its
+/* Page reset: the app draws its own full-window layout and manages its
    own scrolling (the roster list, the log, the dialogs). Nothing here may add
    a margin, a border or a page scrollbar around it — in full screen a default
    body margin showed as a white frame and a second scrollbar. */
 html, body, #root { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--text); }
 body { overflow: hidden; overscroll-behavior: none; }
-html { color-scheme: dark; }
 
-/* Colour tokens, named by job (the admin panel plan, 26 Nov 2026). The dark set is the
-   app's colours as they are; the light set is for the floor's bright lights: dark text
-   on white, strong borders, and signal colours deep enough to read from 4–5 ft. A page
-   picks one with data-theme on <html> (main.jsx). Phase 1: only the admin panel uses
-   them; the station still draws its own dark colours inline until it is converted. */
-:root, :root[data-theme="dark"] {
-  --bg: #0d1117; --surface: #161b22; --surface-2: #1e293b; --line: #30363d; --line-strong: #3f4b5c;
-  --text: #e2e8f0; --text-dim: #94a3b8; --text-faint: #64748b;
-  --accent: #3b82f6; --on-accent: #0d1117; --focus: #60a5fa;
-  --pass: #22c55e; --pass-bg: rgba(34,197,94,0.12); --pass-text: #86efac;
-  --warn: #f59e0b; --warn-bg: rgba(245,158,11,0.12); --warn-text: #fcd34d;
-  --fail: #ef4444; --fail-bg: rgba(239,68,68,0.12); --fail-text: #fca5a5;
-  --info: #38bdf8; --info-bg: rgba(56,189,248,0.12); --info-text: #7dd3fc;
-  --shadow: 0 8px 24px rgba(0,0,0,0.45);
-  color-scheme: dark;
-}
-:root[data-theme="light"] {
-  --bg: #eef1f5; --surface: #ffffff; --surface-2: #f6f8fb; --line: #b8c1cc; --line-strong: #7b8794;
-  --text: #0b1220; --text-dim: #334155; --text-faint: #52606d;
-  --accent: #1d4ed8; --on-accent: #ffffff; --focus: #1d4ed8;
-  --pass: #15803d; --pass-bg: #dcfce7; --pass-text: #14532d;
-  --warn: #b45309; --warn-bg: #fef3c7; --warn-text: #78350f;
-  --fail: #b91c1c; --fail-bg: #fee2e2; --fail-text: #7f1d1d;
-  --info: #0369a1; --info-bg: #e0f2fe; --info-text: #0c4a6e;
-  --shadow: 0 6px 18px rgba(15,23,42,0.15);
+/* Colour tokens, named by job, on the Athletic Knit brand palette (brand-ui, 27 Nov 2026).
+   Light is the default: a station draws light unless its Settings chose Dark, and until a
+   page sets data-theme on <html> (theme.js) it is light too, so nothing flashes dark first.
+   Light: page #F4F6FA, cards white, ink #101A2E, brand blue #00519B for headings and buttons,
+   red for alerts. Dark: page #0D1424, cards #151D33, ink #EEF1F8, the brand's lighter hues.
+   Status is always a dot and a word, never a colour alone. Every text token reads at 4.5:1
+   or more on the card, the page and the field of its theme, and on the result-screen fill of
+   its own hue (checked by a script, the table is in the brand-ui commit notes). */
+:root, :root[data-theme="light"] {
+  --bg: #F4F6FA; --surface: #FFFFFF; --surface-2: #ECF0F7; --line: #D5DBE8; --line-strong: #8590AB;
+  --text: #101A2E; --text-dim: #55607A; --text-faint: #55607A;
+  --accent: #00519B; --on-accent: #FFFFFF; --focus: #101A2E;
+  --pass: #1E7B3A; --pass-bg: #E3F2E8; --pass-text: #165C2B;
+  --warn: #B26A00; --warn-bg: #FBEFD9; --warn-text: #6E4100;
+  --fail: #CB1720; --fail-bg: #FBE6E7; --fail-text: #8F0E16;
+  --info: #0A87B5; --info-bg: #E1F2F8; --info-text: #055470;
+  --shadow: 0 6px 18px rgba(16,26,46,0.14);
   color-scheme: light;
 }
+:root[data-theme="dark"] {
+  --bg: #0D1424; --surface: #151D33; --surface-2: #1C2744; --line: #2A3555; --line-strong: #5B6C9C;
+  --text: #EEF1F8; --text-dim: #A2ADC6; --text-faint: #A2ADC6;
+  --accent: #8FB0FF; --on-accent: #0D1424; --focus: #EEF1F8;
+  --pass: #6FD08C; --pass-bg: rgba(111,208,140,0.14); --pass-text: #A4E5B8;
+  --warn: #FFB547; --warn-bg: rgba(255,181,71,0.14); --warn-text: #FFD08A;
+  --fail: #FF6B75; --fail-bg: rgba(255,107,117,0.14); --fail-text: #FF9BA2;
+  --info: #5CC8F0; --info-bg: rgba(92,200,240,0.14); --info-text: #9BDDF7;
+  --shadow: 0 8px 24px rgba(0,0,0,0.5);
+  color-scheme: dark;
+}
 
-/* The app's own colours as tokens (phase 4, 26 Nov 2026): the sign-in screen, the supervisor
-   board and the pieces they share (buttons, fields, pills, the order view, the garment map,
-   the order summary) use them instead of literal colours. Dark is each colour as it was, so
-   nothing changes in dark; light is a high-contrast partner for each. The wall view and the
-   photo viewer stay dark on purpose; the scanning screens are converted later. */
-:root, :root[data-theme="dark"] {
-  --k-page: #0d1117;
-  --k-card: #161b22;
-  --k-field: #1e293b;
-  --k-rule: #21262d;
-  --k-rule-2: #334155;
-  --k-rule-3: #3f4b5c;
-  --k-ink-5: #475569;
-  --k-ink-4: #64748b;
-  --k-ink-3b: #7c8ba1;
-  --k-ink-3: #94a3b8;
-  --k-ink-2: #cbd5e1;
-  --k-ink-1: #e2e8f0;
-  --k-ink-0: #f1f5f9;
-  --k-blue: #3b82f6;
-  --k-blue-ink: #60a5fa;
-  --k-blue-ink-2: #93c5fd;
-  --k-green: #22c55e;
-  --k-green-ink: #4ade80;
-  --k-green-ink-2: #86efac;
-  --k-green-deep: #166534;
-  --k-amber: #f59e0b;
-  --k-amber-ink: #fbbf24;
-  --k-amber-ink-2: #fcd34d;
-  --k-amber-ink-3: #fde68a;
-  --k-red: #ef4444;
-  --k-red-ink: #f87171;
-  --k-red-ink-2: #fca5a5;
-  --k-red-ink-3: #fecaca;
-  --k-pink-ink: #f9a8d4;
-  --k-violet-ink: #ddd6fe;
-  --k-strong: #ffffff;
+/* The app's own colours as tokens: every screen (sign-in, station, result screens, dialogs,
+   the supervisor board) uses them instead of literal colours. A hue family is its fill
+   (--k-blue: buttons, borders, dots), its text steps (-ink on the card, -ink-2 and -ink-3
+   darker in light and lighter in dark, for the big numerals and the lines on the result
+   screen's --k-bg-* fill of the same hue). Hues stay distinct (blue, green, amber, red,
+   cyan, purple), never shades of one blue. --k-on-blue is the text on a blue button. */
+:root, :root[data-theme="light"] {
+  --k-page: #F4F6FA;
+  --k-card: #FFFFFF;
+  --k-field: #ECF0F7;
+  --k-rule: #D5DBE8;
+  --k-rule-2: #B4BDD1;
+  --k-rule-3: #8590AB;
+  --k-rule-0: #C6CEDF;
+  --k-ink-5: #55607A;
+  --k-ink-4: #4D5873;
+  --k-ink-3b: #46516C;
+  --k-ink-3: #3C4762;
+  --k-ink-2: #232E47;
+  --k-ink-1: #101A2E;
+  --k-ink-0: #070E1D;
+  --k-blue: #00519B;
+  --k-on-blue: #FFFFFF;
+  --k-blue-ink: #00519B;
+  --k-blue-ink-2: #003F7A;
+  --k-blue-ink-3: #002E5A;
+  --k-green: #1E7B3A;
+  --k-green-ink: #1E7B3A;
+  --k-green-ink-2: #165C2B;
+  --k-green-ink-3: #0F4520;
+  --k-green-deep: #1E7B3A;
+  --k-green-locked: #CBE8D4;
+  --k-amber: #B26A00;
+  --k-amber-ink: #8F5500;
+  --k-amber-ink-2: #6E4100;
+  --k-amber-ink-3: #553200;
+  --k-red: #CB1720;
+  --k-red-ink: #B3121B;
+  --k-red-ink-2: #8F0E16;
+  --k-red-ink-3: #6E0A11;
+  --k-pink-ink: #9E1A4F;
+  --k-strong: #101A2E;
+  --k-kbd-bg: rgba(16,26,46,0.07);
+  --k-kbd-line: rgba(16,26,46,0.35);
+  --k-bg-green: #E3F2E8;
+  --k-bg-amber: #FBEFD9;
+  --k-bg-violet: #EEE7F7;
+  --k-bg-sky: #E1F2F8;
+  --k-bg-red: #FBE6E7;
+  --k-sky: #0A87B5;
+  --k-sky-ink: #076A90;
+  --k-sky-ink-2: #055470;
+  --k-sky-ink-3: #043E54;
+  --k-violet: #6B3FA0;
+  --k-violet-ink: #6B3FA0;
+  --k-violet-ink-2: #55307F;
+  --k-purple-ink: #6B3FA0;
+  --k-purple: #6B3FA0;
+  --k-purple-2: #5A3388;
+  --k-purple-deep: #6B3FA0;
+  --k-indigo: #34479A;
+  --k-teal-ink: #17695A;
+  --k-orange-ink: #8F4A00;
+  --k-stone-ink: #55607A;
+  --k-stone-ink-2: #3C4762;
+  --k-tint-blue: rgba(0,81,155,0.12);
+  --k-tint-blue-faint: rgba(0,81,155,0.07);
+  --k-tint-blue-line: rgba(0,81,155,0.45);
+  --k-tint-green: rgba(30,123,58,0.12);
+  --k-tint-green-faint: rgba(30,123,58,0.07);
+  --k-tint-green-line: rgba(30,123,58,0.45);
+  --k-tint-amber: rgba(178,106,0,0.12);
+  --k-tint-amber-faint: rgba(178,106,0,0.07);
+  --k-tint-amber-line: rgba(178,106,0,0.45);
+  --k-tint-red: rgba(203,23,32,0.12);
+  --k-tint-red-faint: rgba(203,23,32,0.07);
+  --k-tint-red-line: rgba(203,23,32,0.45);
+  --k-tint-violet: rgba(107,63,160,0.12);
+  --k-tint-violet-faint: rgba(107,63,160,0.07);
+  --k-tint-violet-line: rgba(107,63,160,0.45);
+  --k-tint-sky: rgba(10,135,181,0.12);
+  --k-tint-sky-faint: rgba(10,135,181,0.07);
+  --k-tint-sky-line: rgba(10,135,181,0.45);
+  --k-on-red: #FFFFFF;
+  --k-scrim: rgba(16,26,46,0.92);
+  --k-scrim-lite: rgba(16,26,46,0.6);
+}
+:root[data-theme="dark"] {
+  --k-page: #0D1424;
+  --k-card: #151D33;
+  --k-field: #1C2744;
+  --k-rule: #2A3555;
+  --k-rule-2: #3C4A74;
+  --k-rule-3: #5B6C9C;
+  --k-rule-0: #34416A;
+  --k-ink-5: #A2ADC6;
+  --k-ink-4: #A8B2CB;
+  --k-ink-3b: #B0B9D1;
+  --k-ink-3: #BCC4DA;
+  --k-ink-2: #D2D8E8;
+  --k-ink-1: #EEF1F8;
+  --k-ink-0: #F8FAFF;
+  --k-blue: #8FB0FF;
+  --k-on-blue: #0D1424;
+  --k-blue-ink: #8FB0FF;
+  --k-blue-ink-2: #B3CBFF;
+  --k-blue-ink-3: #D3E1FF;
+  --k-green: #6FD08C;
+  --k-green-ink: #6FD08C;
+  --k-green-ink-2: #9CE3B2;
+  --k-green-ink-3: #C4F0D2;
+  --k-green-deep: #2F7A48;
+  --k-green-locked: #1D4A31;
+  --k-amber: #FFB547;
+  --k-amber-ink: #FFB547;
+  --k-amber-ink-2: #FFCB7E;
+  --k-amber-ink-3: #FFE0B0;
+  --k-red: #FF6B75;
+  --k-red-ink: #FF8890;
+  --k-red-ink-2: #FFAAB0;
+  --k-red-ink-3: #FFCDD1;
+  --k-pink-ink: #FF9FC0;
+  --k-strong: #EEF1F8;
   --k-kbd-bg: rgba(0,0,0,0.3);
-  --k-kbd-line: rgba(255,255,255,0.3);
-  --k-bg-green: #052e16;
-  --k-bg-amber: #1c1a06;
-  --k-bg-violet: #1a1033;
-  --k-bg-sky: #082f49;
-  --k-bg-red: #450a0a;
-  --k-green-locked: #14532d;
-  --k-rule-0: #30363d;
-  --k-sky: #38bdf8;
-  --k-sky-ink: #7dd3fc;
-  --k-sky-ink-2: #bae6fd;
-  --k-sky-ink-3: #e0f2fe;
-  --k-violet: #a78bfa;
-  --k-violet-ink-2: #c4b5fd;
-  --k-purple-ink: #d8b4fe;
-  --k-purple: #c084fc;
-  --k-purple-2: #a855f7;
-  --k-purple-deep: #6b21a8;
-  --k-indigo: #818cf8;
-  --k-blue-ink-3: #bfdbfe;
-  --k-green-ink-3: #bbf7d0;
-  --k-teal-ink: #a7f3d0;
-  --k-orange-ink: #fed7aa;
-  --k-stone-ink: #a8a29e;
-  --k-stone-ink-2: #d6d3d1;
-}
-:root[data-theme="light"] {
-  --k-page: #eef1f5;
-  --k-card: #ffffff;
-  --k-field: #f1f4f8;
-  --k-rule: #d3d9e1;
-  --k-rule-2: #aab4c0;
-  --k-rule-3: #7b8794;
-  --k-ink-5: #5b6878;
-  --k-ink-4: #4b5866;
-  --k-ink-3b: #3f4b59;
-  --k-ink-3: #334155;
-  --k-ink-2: #1e293b;
-  --k-ink-1: #0b1220;
-  --k-ink-0: #020617;
-  --k-blue: #1d4ed8;
-  --k-blue-ink: #1d4ed8;
-  --k-blue-ink-2: #1e40af;
-  --k-green: #147a3a;   /* 4.8:1 likewise */
-  --k-green-ink: #166534;
-  --k-green-ink-2: #14532d;
-  --k-green-deep: #147a3a;
-  --k-amber: #a8500a;   /* 4.9:1 with --k-page letters on it (Fable's final review) */
-  --k-amber-ink: #92400e;
-  --k-amber-ink-2: #78350f;
-  --k-amber-ink-3: #713f12;
-  --k-red: #b91c1c;
-  --k-red-ink: #991b1b;
-  --k-red-ink-2: #991b1b;
-  --k-red-ink-3: #7f1d1d;
-  --k-pink-ink: #9d174d;
-  --k-violet-ink: #5b21b6;
-  --k-strong: #0b1220;
-  --k-kbd-bg: rgba(15,23,42,0.07);
-  --k-kbd-line: rgba(15,23,42,0.35);
-  --k-bg-green: #dcfce7;
-  --k-bg-amber: #fef3c7;
-  --k-bg-violet: #ede9fe;
-  --k-bg-sky: #e0f2fe;
-  --k-bg-red: #fee2e2;
-  --k-green-locked: #bbf7d0;
-  --k-rule-0: #d0d7de;
-  --k-sky: #0369a1;
-  --k-sky-ink: #075985;
-  --k-sky-ink-2: #0c4a6e;
-  --k-sky-ink-3: #0c4a6e;
-  --k-violet: #6d28d9;
-  --k-violet-ink-2: #5b21b6;
-  --k-purple-ink: #6b21a8;
-  --k-purple: #7e22ce;
-  --k-purple-2: #7e22ce;
-  --k-purple-deep: #7e22ce;
-  --k-indigo: #4338ca;
-  --k-blue-ink-3: #1e3a8a;
-  --k-green-ink-3: #14532d;
-  --k-teal-ink: #065f46;
-  --k-orange-ink: #9a3412;
-  --k-stone-ink: #57534e;
-  --k-stone-ink-2: #44403c;
+  --k-kbd-line: rgba(238,241,248,0.3);
+  --k-bg-green: #0F2F22;
+  --k-bg-amber: #33250D;
+  --k-bg-violet: #231A47;
+  --k-bg-sky: #0B2E48;
+  --k-bg-red: #3B1420;
+  --k-sky: #5CC8F0;
+  --k-sky-ink: #5CC8F0;
+  --k-sky-ink-2: #8EDAF6;
+  --k-sky-ink-3: #BCEAFA;
+  --k-violet: #B79CFF;
+  --k-violet-ink: #D6C8FF;
+  --k-violet-ink-2: #C9B8FF;
+  --k-purple-ink: #D3C2FF;
+  --k-purple: #B79CFF;
+  --k-purple-2: #9F7DF0;
+  --k-purple-deep: #5B3F96;
+  --k-indigo: #A3B4FF;
+  --k-teal-ink: #8EE3CC;
+  --k-orange-ink: #FFC08A;
+  --k-stone-ink: #A2ADC6;
+  --k-stone-ink-2: #BCC4DA;
+  --k-tint-blue: rgba(143,176,255,0.16);
+  --k-tint-blue-faint: rgba(143,176,255,0.09);
+  --k-tint-blue-line: rgba(143,176,255,0.5);
+  --k-tint-green: rgba(111,208,140,0.16);
+  --k-tint-green-faint: rgba(111,208,140,0.09);
+  --k-tint-green-line: rgba(111,208,140,0.5);
+  --k-tint-amber: rgba(255,181,71,0.16);
+  --k-tint-amber-faint: rgba(255,181,71,0.09);
+  --k-tint-amber-line: rgba(255,181,71,0.5);
+  --k-tint-red: rgba(255,107,117,0.16);
+  --k-tint-red-faint: rgba(255,107,117,0.09);
+  --k-tint-red-line: rgba(255,107,117,0.5);
+  --k-tint-violet: rgba(183,156,255,0.16);
+  --k-tint-violet-faint: rgba(183,156,255,0.09);
+  --k-tint-violet-line: rgba(183,156,255,0.5);
+  --k-tint-sky: rgba(92,200,240,0.16);
+  --k-tint-sky-faint: rgba(92,200,240,0.09);
+  --k-tint-sky-line: rgba(92,200,240,0.5);
+  --k-on-red: #0D1424;
+  --k-scrim: rgba(5,9,18,0.92);
+  --k-scrim-lite: rgba(5,9,18,0.65);
 }
 
-/* Type. Atkinson Hyperlegible for everything the operator reads as text: its
-   letterforms were drawn so 0/O, 1/l/I and 6/9 cannot be confused, which is
-   what matters when a name and a number are read from several feet away.
-   Barlow Condensed carries the big numerals (the jersey number, the size, the
-   bin, the counters): a condensed black weight lets the figures run taller in
-   the same width, so they read from farther. Both ship with the app, so the
-   floor does not depend on a font CDN. */
-body { font-family: "Atkinson Hyperlegible", system-ui, sans-serif; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+/* Type. Barlow for the interface text (brand body face, 400/500/600). Atkinson
+   Hyperlegible stays for what the operator must read exactly from 4-5 ft: a player's
+   name and the roster cells (FONT_READ in App.jsx), because its letterforms were drawn so
+   0/O, 1/l/I and 6/9 cannot be confused. Barlow Condensed carries the big numerals (the
+   jersey number, the size, the bin, the counters) and the titles: a condensed heavy
+   weight lets the figures run taller in the same width, so they read from farther. All
+   ship with the app, so the floor does not depend on a font CDN. */
+body { font-family: "Barlow", system-ui, sans-serif; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 button, input, select, textarea, kbd { font-family: inherit; }
 
 /* Far-view scale. The stations run on 27" monitors that the operator reads
@@ -194,3 +241,9 @@ button:focus:not(:focus-visible) { outline: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* The Athletic Knit logo is a colour picture on white: bare on the light theme's white header,
+   on a white tile in the dark theme (brand-ui). */
+:root[data-theme="dark"] .ak-logo { background: #FFFFFF; padding: 5px 12px; border-radius: 6px; box-sizing: content-box; }
+/* Where the logo sits on the page colour, not a white card, it gets the tile in light too (the JPEG's white would show as a box). */
+.ak-logo-tile { background: #FFFFFF; padding: 4px 8px; border-radius: 6px; box-sizing: content-box; border: 1px solid var(--line); }
