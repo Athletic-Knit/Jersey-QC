@@ -27,7 +27,7 @@
 // label keep today's look at the top; the lists put several of today's pages
 // on one label (repageLists). On the 2 x 1 in and sticker rolls every label
 // is exactly as before.
-import { binEntries, binFieldOf, binFor, boxParts, bySize, shortSize } from "./roster.js";
+import { binEntries, binFieldOf, binFor, boxParts, bySize, shortSize, twoPartBox } from "./roster.js";
 import { GARMENTS, MAX_SPOTS, SIDES, garment as garmentShape, sideLabel } from "./garments.js";
 import { packListZPL, packListRows, boxFaceZPL, signoffZPL } from "./packlabels.js";
 
@@ -420,15 +420,16 @@ function garmentZPL(l, size) {
 // ── Box labels ───────────────────────────────────────────────────────────────
 // One entry per box: { bin, label (the team or size), by, count, orderNumber }.
 // `boxes`: { [open box]: how many boxes that team or size is expected to
-// need from here } (the station works it out from the box model): a team on
-// box 5.1 expected to fill three gives BOX 5.1, 5.2 and 5.3, so the operator
-// can label the boxes before scanning. Without it, one label per open box.
+// need from here } (the station works it out from the box model). Boxes have whole numbers (the co-op,
+// 27 Nov 2026): the next box of a team gets the next free number only when it opens, so one label per open
+// box, and the next one prints at Box full. An order still on two-number names gets its expected boxes
+// labelled ahead as before: a team on box 5.1 expected to fill three gives BOX 5.1, 5.2 and 5.3.
 export function binLabels(roster, binMap, { orderNumber = "", boxes = null } = {}) {
   const by = binFieldOf(binMap);
   const counts = {};
   roster.forEach(r => { const b = binFor(binMap, r); if (b !== null) counts[b] = (counts[b] || 0) + 1; });
   return binEntries(roster, binMap).flatMap(({ label, bin }) => {
-    const [g, s] = boxParts(bin), n = s ? Math.max(1, Math.min(60, Math.round(Number(boxes?.[bin]) || 1))) : 1;
+    const [g, s] = boxParts(bin), n = s && twoPartBox(bin) ? Math.max(1, Math.min(60, Math.round(Number(boxes?.[bin]) || 1))) : 1;
     return Array.from({ length: n }, (_, i) => ({ bin: s ? `${g}.${s + i}` : bin, label, by, count: counts[bin] || 0, orderNumber: String(orderNumber || "") }));
   });
 }

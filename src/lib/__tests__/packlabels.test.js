@@ -152,15 +152,15 @@ describe("the packing list as a table (kind packlist)", () => {
   });
 });
 
-// The walk-through order at Finish order: U11 Tigers in box 1.1, U12 Bombers in box 2.1.
+// The walk-through order at Finish order: U11 Tigers in box 1, U12 Bombers in box 2 (whole numbers, the co-op, 27 Nov 2026).
 const roster = walkRoster();
 const pack = { orderNumber: "123456", customer: "Source for Sports", roster, binMap: buildBinMap(roster, {}, "team"), closedBins: [], carried: [], finished: true };
 const box = bin => packBoxes(pack).find(b => b.bin === bin);
 
 describe("the outside label (kind boxface)", () => {
   it("box 1 of the walk-through: the teams and sizes as in box / of order, what is not in it, Box 1 of 2", () => {
-    const l = boxFaceLabel(pack, box("1.1"));
-    expect(l).toEqual({ kind: "boxface", bin: "1.1", boxNo: 1, boxes: 2, orderNumber: "123456", customer: "Source for Sports",
+    const l = boxFaceLabel(pack, box("1"));
+    expect(l).toEqual({ kind: "boxface", bin: "1", boxNo: 1, boxes: 2, orderNumber: "123456", customer: "Source for Sports",
       teams: [{ team: "U11 Tigers", inBox: 10, ofOrder: 11 }],
       sizes: [{ size: "A-S", inBox: 5, ofOrder: 5 }, { size: "A-M", inBox: 3, ofOrder: 4 }, { size: "A-L", inBox: 2, ofOrder: 2 }],
       notIn: ["#19 A-M flagged"] });
@@ -173,31 +173,34 @@ describe("the outside label (kind boxface)", () => {
     expect(z).toContain("^PQ1");
   });
   it("box 2 of the walk-through: #44 is missing", () => {
-    const l = boxFaceLabel(pack, box("2.1"));
+    const l = boxFaceLabel(pack, box("2"));
     expect(l).toMatchObject({ boxNo: 2, boxes: 2, teams: [{ team: "U12 Bombers", inBox: 8, ofOrder: 9 }], notIn: ["#44 A-L missing"] });
     expect(l.sizes).toEqual([{ size: "A-S", inBox: 1, ofOrder: 1 }, { size: "A-M", inBox: 3, ofOrder: 3 }, { size: "A-L", inBox: 3, ofOrder: 4 }, { size: "A-XL", inBox: 1, ofOrder: 1 }]);
     same("boxface-walk-box2.zpl", boxFaceZPL(l, roll));
   });
   it("no customer: the box's team name; before Finish 'of N' is the plan's count, at least the boxes with garments", () => {
-    const open = { ...pack, customer: "", finished: false, plan: [{ bin: "1.1", boxes: 2, total: 0 }, { bin: "2.1", boxes: 1, total: 0 }] };
-    const l = boxFaceLabel(open, packBoxes(open).find(b => b.bin === "1.1"));
+    const open = { ...pack, customer: "", finished: false, plan: [{ bin: "1", boxes: 2, total: 0 }, { bin: "2", boxes: 1, total: 0 }] };
+    const l = boxFaceLabel(open, packBoxes(open).find(b => b.bin === "1"));
     expect(l.customer).toBe("U11 Tigers");
-    expect(l.boxes).toBe(3);   // box 1.1 may need a second box; 2.1 one
-    expect(boxFaceLabel({ ...open, plan: [] }, packBoxes(open).find(b => b.bin === "1.1")).boxes).toBe(2);
+    expect(l.boxes).toBe(3);   // box 1 may need a second box; box 2 one
+    expect(boxFaceLabel({ ...open, plan: [] }, packBoxes(open).find(b => b.bin === "1")).boxes).toBe(2);
   });
   it("a sealed box keeps its number: closed boxes in the order they were closed, then the open ones", () => {
-    // #2 LEACH not scanned yet; U12's box 2.1 is closed first, then 1.1; LEACH then passes into 1.2
+    // #2 LEACH not scanned yet; U12's box 2 is closed first (U12 goes on in box 3, the next free number),
+    // then U11's box 1 (U11 goes on in box 4); LEACH then passes into box 4. Box 3 stays empty and has no number.
     const r0 = roster.map(x => x.number === "2" && x.team === "U11 Tigers" ? { ...x, scanned: undefined } : x), bins = buildBinMap(r0, {}, "team");
     const no = (p, bin) => boxFaceLabel(p, packBoxes(p).find(b => b.bin === bin)).boxNo;
-    const c1 = closeBin(r0, bins, [], "2.1");
-    expect(no({ ...pack, roster: r0, binMap: c1.binMap, closedBins: c1.closed }, "2.1")).toBe(1);
-    const c2 = closeBin(r0, c1.binMap, c1.closed, "1.1");
+    const c1 = closeBin(r0, bins, [], "2");
+    expect(c1.newBin).toBe("3");
+    expect(no({ ...pack, roster: r0, binMap: c1.binMap, closedBins: c1.closed }, "2")).toBe(1);
+    const c2 = closeBin(r0, c1.binMap, c1.closed, "1");
+    expect(c2.newBin).toBe("4");
     const later = { ...pack, roster: r0.map(x => x.scanned ? x : { ...x, scanned: "pass" }), binMap: c2.binMap, closedBins: c2.closed };
-    expect(["2.1", "1.1", "1.2"].map(b => no(later, b))).toEqual([1, 2, 3]);
+    expect(["2", "1", "4"].map(b => no(later, b))).toEqual([1, 2, 3]);
   });
   it("the outside label: 'Not in this box' never takes more than its three lines, 'Box 1 of 2' stays clear of the WEIGHT box", () => {
     const notIn = Array.from({ length: 30 }, (_, i) => `#${i + 10} A-M flagged`);
-    const z = boxFaceZPL({ ...boxFaceLabel(pack, box("1.1")), notIn }, roll);
+    const z = boxFaceZPL({ ...boxFaceLabel(pack, box("1")), notIn }, roll);
     const line = z.match(/\^FDNot in this box: ([^^]+)\^FS/)[1];
     expect(line).toMatch(/ \+\d+ more$/);
     expect(Math.ceil(textUnits(`Not in this box: ${line}`) * 18 * 0.85)).toBeLessThanOrEqual(3 * 366 * 0.8);
@@ -206,13 +209,13 @@ describe("the outside label (kind boxface)", () => {
     expect(bx + Math.ceil(textUnits("Box 1 of 2") * bw * 0.85)).toBeLessThan(wx);
   });
   it("the box lists of a tall roll end with the outside label, the Print menu can print it alone, and a short roll gets none", () => {
-    const jobs = boxListJobs(pack, "1.1", { tall: true });
+    const jobs = boxListJobs(pack, "1", { tall: true });
     expect(jobs.map(l => l.kind || (l.title ? "count" : "rows"))).toEqual(["rows", "packlist", "count", "boxface"]);   // the NOT IN BOX list first (#19 is out of this team)   // the outside label last: it comes off the printer on top
-    expect(boxFaceJobs(pack).map(l => l.bin)).toEqual(["1.1", "2.1"]);
-    expect(boxListJobs(pack, "1.1").some(l => l.kind === "boxface")).toBe(false);
+    expect(boxFaceJobs(pack).map(l => l.bin)).toEqual(["1", "2"]);
+    expect(boxListJobs(pack, "1").some(l => l.kind === "boxface")).toBe(false);
   });
   it("the hub counts it as one label and lays a short roll out as one compact label", () => {
-    const l = boxFaceLabel(pack, box("1.1"));
+    const l = boxFaceLabel(pack, box("1"));
     const job = printJob([l], roll, "binlist");
     expect(job.count).toBe(1); expect(job.zpl).toContain("Box 1 of 2");
     expect(printJob([l], labelSize("2x1"), "binlist").zpl).toContain("^FDBox 1 of 2^FS");

@@ -14,13 +14,24 @@ describe("binLabels", () => {
   it("one entry per box, by team, with the garment count and the order number", () => {
     const labels = binLabels(roster, buildBinMap(roster, {}, "team"), { orderNumber: 264247 });
     expect(labels).toEqual([
-      { bin: "1.1", label: "Navy", by: "team", count: 2, orderNumber: "264247" },
-      { bin: "2.1", label: "Red",  by: "team", count: 1, orderNumber: "264247" },
-      { bin: "3.1", label: "No team", by: "team", count: 1, orderNumber: "264247" },   // every jersey is in a box
+      { bin: "1", label: "Navy", by: "team", count: 2, orderNumber: "264247" },
+      { bin: "2", label: "Red",  by: "team", count: 1, orderNumber: "264247" },
+      { bin: "3", label: "No team", by: "team", count: 1, orderNumber: "264247" },   // every jersey is in a box
     ]);
   });
-  it("boxes: so many labels for a team that will fill several, one for the others", () => {
+  // Boxes have whole numbers (the co-op, 27 Nov 2026): a team's next box gets the next free number only
+  // when it opens, so it cannot be labelled ahead. One label per open box, whatever `boxes` expects.
+  it("whole-number boxes: one label per open box, even for a team expected to fill several", () => {
     const map = buildBinMap(roster, {}, "team");
+    const labels = binLabels(roster, map, { orderNumber: 264247, boxes: { "1": 3 } });
+    expect(labels.map(l => [l.bin, l.label])).toEqual([["1", "Navy"], ["2", "Red"], ["3", "No team"]]);
+    expect(labels[0]).toEqual({ bin: "1", label: "Navy", by: "team", count: 2, orderNumber: "264247" });
+    // a team already on a later box (Navy 4, after box 1 was closed) gets that box's label, in box order
+    expect(binLabels(roster, { ...map, navy: "4" }, { boxes: { "4": 2 } }).map(l => [l.bin, l.label])).toEqual([["2", "Red"], ["3", "No team"], ["4", "Navy"]]);
+  });
+  // An order started before whole numbers keeps its two-number names, and its expected boxes are labelled ahead as before.
+  it("two-number boxes (an order started before): so many labels for a team that will fill several, one for the others", () => {
+    const map = { navy: "1.1", red: "2.1", "?": "3.1" };
     const labels = binLabels(roster, map, { orderNumber: 264247, boxes: { "1.1": 3 } });
     expect(labels.map(l => [l.bin, l.label])).toEqual([["1.1", "Navy"], ["1.2", "Navy"], ["1.3", "Navy"], ["2.1", "Red"], ["3.1", "No team"]]);
     expect(labels.slice(0, 3).every(l => l.count === 2 && l.by === "team" && l.orderNumber === "264247")).toBe(true);
@@ -29,7 +40,7 @@ describe("binLabels", () => {
   });
   it("by size: boxes in rack order", () => {
     const labels = binLabels(roster, buildBinMap(roster, {}, "size"));
-    expect(labels.map(l => [l.bin, l.label, l.count, l.by])).toEqual([["1.1", "Y-M", 1, "size"], ["2.1", "A-L", 2, "size"], ["3.1", "A-XL", 1, "size"]]);
+    expect(labels.map(l => [l.bin, l.label, l.count, l.by])).toEqual([["1", "Y-M", 1, "size"], ["2", "A-L", 2, "size"], ["3", "A-XL", 1, "size"]]);
     expect(labels[0].orderNumber).toBe("");
   });
   it("no bin map: no labels", () => {
@@ -137,8 +148,8 @@ describe("ZPL", () => {
     const z = labelsZPL(labels);
     expect((z.match(/\^XA/g) || []).length).toBe(3);
     expect((z.match(/\^XZ/g) || []).length).toBe(3);
-    expect(z).toContain("^FDBOX 1.1^FS");
-    expect(z).toContain("^FDBOX 2.1^FS");
+    expect(z).toContain("^FDBOX 1^FS");
+    expect(z).toContain("^FDBOX 2^FS");
     expect(z.endsWith("\n")).toBe(true);
   });
 });
@@ -147,14 +158,14 @@ describe("ZPL", () => {
 describe("jerseyLabel", () => {
   const byTeam = buildBinMap(roster, {}, "team"), bySize = buildBinMap(roster, {}, "size");
   it("by team: the box and the team", () => {
-    expect(jerseyLabel(roster[1], byTeam, { orderNumber: 264247 })).toEqual({ bin: "1.1", by: "team", value: "navy", orderNumber: "264247" });
-    expect(jerseyLabel(roster[2], byTeam)).toEqual({ bin: "2.1", by: "team", value: "Red", orderNumber: "" });
+    expect(jerseyLabel(roster[1], byTeam, { orderNumber: 264247 })).toEqual({ bin: "1", by: "team", value: "navy", orderNumber: "264247" });
+    expect(jerseyLabel(roster[2], byTeam)).toEqual({ bin: "2", by: "team", value: "Red", orderNumber: "" });
   });
   it("by size: the box and the size", () => {
-    expect(jerseyLabel(roster[0], bySize)).toEqual({ bin: "2.1", by: "size", value: "A-L", orderNumber: "" });
+    expect(jerseyLabel(roster[0], bySize)).toEqual({ bin: "2", by: "size", value: "A-L", orderNumber: "" });
   });
   it("a garment with no team is in the No team box; an order with no boxes says the team, or the size when there is no team", () => {
-    expect(jerseyLabel(roster[3], byTeam)).toEqual({ bin: "3.1", by: "team", value: "", orderNumber: "" });
+    expect(jerseyLabel(roster[3], byTeam)).toEqual({ bin: "3", by: "team", value: "", orderNumber: "" });
     expect(jerseyLabel(roster[0], null)).toMatchObject({ bin: "", by: "team", value: "Navy" });
     expect(jerseyLabel(roster[3], null)).toMatchObject({ bin: "", by: "size", value: "A-XL" });
   });
@@ -219,7 +230,7 @@ describe("flagLabel", () => {
   const entry = { id: 5, match: roster[2], status: "flagged", reason: "Loose, missing or broken stitching", timestamp: "2026-11-06 14:05:12", operator: "Priya" };
   it("from a log entry with a roster row: number, name, team, size, box, the tag the caller gives, the reason, order, station and time", () => {
     expect(flagLabel(entry, byTeam, { orderNumber: 264247, station: "st-station1", tag: "STITCHER" })).toEqual({
-      number: "3", name: "LEE", tag: "STITCHER", reason: "Loose, missing or broken stitching", team: "Red", size: "A-L", bin: "2.1",
+      number: "3", name: "LEE", tag: "STITCHER", reason: "Loose, missing or broken stitching", team: "Red", size: "A-L", bin: "2",
       orderNumber: "264247", station: "St 1", garment: "", spots: [],
     });
   });

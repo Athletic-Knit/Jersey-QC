@@ -25,7 +25,7 @@
 //                                    order start and finish, the station layout
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
 import { flushSync } from "react-dom";
-import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeLetter, shortSize, sizeChoiceGroups, LIST_SORTS, shipWithOf, orderList, shipParts, shipJoin, shipNorm, shipPress, shipRemove, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
+import { parseCSV, parseExcel, normaliseRosterRows, buildBinMap, binFor, binEntries, binCount, binFieldOf, binOfRow, binContents, closeBin, dropFromClosed, binOrder, boxParts, twoPartBox, modernBins, BIN_BY, displayColumns, extraColumns, CORE_COLUMNS, orderNumberOf , nextRowId, teamKey, sortRoster, ROSTER_SORTS, rosterChoices, rosterMatches, shortages, jerseyList, blankGroups, sortCandidates, lastSizeRank, lastSizeLetter, shortSize, sizeChoiceGroups, LIST_SORTS, shipWithOf, orderList, shipParts, shipJoin, shipNorm, shipPress, shipRemove, ALL_KEY, BLANK_KEY } from "./lib/roster.js";
 import { findMatches, differingFields, isDone } from "./lib/match.js";
 import { normNum, norm, nameMatches } from "./lib/text.js";
 import { summarise, summariseLog, exportRosterXLSX, exportLogCSV, exportDaySheetXLSX, exportCompareXLSX, localTimeStamp, localDateStamp } from "./lib/export.js";
@@ -2922,7 +2922,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 44, fontWeight: 900, color: "var(--k-blue-ink)", minWidth: 150, textAlign: "center", lineHeight: 1, whiteSpace: "nowrap" }}>Box {bin}</div>
               <div style={{ textAlign: "left" }}>
                 <div style={{ fontSize: 26, fontWeight: 700, color: "var(--k-ink-1)" }}>{label}</div>
-                <div style={{ fontSize: 16, color: "var(--k-ink-3)" }}>{total} {total === 1 ? "garment" : "garments"} to go · {boxes === 1 ? "1 box" : `${boxes} boxes: ${bin} to ${boxParts(bin)[0]}.${boxParts(bin)[1] + boxes - 1}`}</div>
+                <div style={{ fontSize: 16, color: "var(--k-ink-3)" }}>{total} {total === 1 ? "garment" : "garments"} to go · {boxes === 1 ? "1 box" : twoPartBox(bin) ? `${boxes} boxes: ${bin} to ${boxParts(bin)[0]}.${boxParts(bin)[1] + boxes - 1}` : `about ${boxes} boxes: the next ones get their numbers and labels at Box full`}</div>
                 {carried > 0 && <div style={{ fontSize: 16, fontWeight: 800, color: "var(--k-sky-ink)" }}>📦 Already open: {carried} from order {from} in it. Use that box, no new label.</div>}
               </div>
             </div>
@@ -3225,7 +3225,7 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
           </div>
         )}
         {open.length > 0 && <div style={{ fontSize: 16, color: "var(--k-ink-3)", margin: "14px 0 8px" }}>
-          {by === "all" ? "The whole order, box after box" : `Sorted by ${by}`}. Print list prints what is in the box now. The box stays open. Box full closes the box and starts the next one (5.1, then 5.2).
+          {by === "all" ? "The whole order, box after box" : `Sorted by ${by}`}. Print list prints what is in the box now. The box stays open. Box full closes the box and starts the next one, with the next free number.
         </div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {open.map(b => (
@@ -4350,7 +4350,7 @@ export default function App() {
     }
     setThumb(null); setOverlay(null); setShowRosterComplete(false); waitPedalRef.current = false; setWaitPedal(false);
     // Every order has a box: one team or size, or an order that is not
-    // sorted, starts in Box 1.1. The box screen shows on every order, as the
+    // sorted, starts in Box 1. The box screen shows on every order, as the
     // box labels are printed from it.
     // A box an earlier ship-with order left open is this order's open box for its team or size
     // (it keeps its number: its BOX label is already inside it); the others number around it.

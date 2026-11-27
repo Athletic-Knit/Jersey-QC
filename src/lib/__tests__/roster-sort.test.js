@@ -41,11 +41,11 @@ describe("the roster table's sort", () => {
   });
   it("by box uses the box the station says a jersey is in, done ones first inside a box", () => {
     const bins = buildBinMap(roster, {}, "team");
-    const closed = { 2: "1.1" };                       // row 2 sits in a closed box, its team has moved on to 1.2
-    const binOf = r => closed[r._id] || (bins[String(r.team).toLowerCase()] === "1.1" ? "1.2" : bins[String(r.team).toLowerCase()]);
+    const closed = { 2: "1" };                         // row 2 sits in closed box 1; Blue has moved on to box 3, the next free number (the co-op, 27 Nov 2026)
+    const binOf = r => closed[r._id] || (bins[String(r.team).toLowerCase()] === "1" ? "3" : bins[String(r.team).toLowerCase()]);
     const out = sortRoster(roster, "bin", bins, { binOf });
-    expect(ids(out)).toEqual([2, 4, 1, 5, 3]);         // box 1.1, then 1.2, then 2.1: its two done jerseys before the flagged one
-    expect(ids(sortRoster(roster, "bin", bins, { binOf, doneFirst: false })).slice(2)).toEqual([3, 5, 1]);
+    expect(ids(out)).toEqual([2, 1, 5, 3, 4]);         // box 1, then 2 (Red: its two done jerseys before the flagged one), then 3
+    expect(ids(sortRoster(roster, "bin", bins, { binOf, doneFirst: false }))).toEqual([2, 3, 5, 1, 4]);
   });
   it("leaves the roster itself alone and an unknown sort as it is", () => {
     const copy = roster.slice();
