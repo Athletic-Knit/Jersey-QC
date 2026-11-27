@@ -101,6 +101,27 @@ body { overflow: hidden; overscroll-behavior: none; }
   --k-orange-ink: #8F4A00;
   --k-stone-ink: #55607A;
   --k-stone-ink-2: #3C4762;
+  --k-tint-blue: rgba(0,81,155,0.12);
+  --k-tint-blue-faint: rgba(0,81,155,0.07);
+  --k-tint-blue-line: rgba(0,81,155,0.45);
+  --k-tint-green: rgba(30,123,58,0.12);
+  --k-tint-green-faint: rgba(30,123,58,0.07);
+  --k-tint-green-line: rgba(30,123,58,0.45);
+  --k-tint-amber: rgba(178,106,0,0.12);
+  --k-tint-amber-faint: rgba(178,106,0,0.07);
+  --k-tint-amber-line: rgba(178,106,0,0.45);
+  --k-tint-red: rgba(203,23,32,0.12);
+  --k-tint-red-faint: rgba(203,23,32,0.07);
+  --k-tint-red-line: rgba(203,23,32,0.45);
+  --k-tint-violet: rgba(107,63,160,0.12);
+  --k-tint-violet-faint: rgba(107,63,160,0.07);
+  --k-tint-violet-line: rgba(107,63,160,0.45);
+  --k-tint-sky: rgba(10,135,181,0.12);
+  --k-tint-sky-faint: rgba(10,135,181,0.07);
+  --k-tint-sky-line: rgba(10,135,181,0.45);
+  --k-on-red: #FFFFFF;
+  --k-scrim: rgba(16,26,46,0.92);
+  --k-scrim-lite: rgba(16,26,46,0.6);
 }
 :root[data-theme="dark"] {
   --k-page: #0D1424;
@@ -161,6 +182,27 @@ body { overflow: hidden; overscroll-behavior: none; }
   --k-orange-ink: #FFC08A;
   --k-stone-ink: #A2ADC6;
   --k-stone-ink-2: #BCC4DA;
+  --k-tint-blue: rgba(143,176,255,0.16);
+  --k-tint-blue-faint: rgba(143,176,255,0.09);
+  --k-tint-blue-line: rgba(143,176,255,0.5);
+  --k-tint-green: rgba(111,208,140,0.16);
+  --k-tint-green-faint: rgba(111,208,140,0.09);
+  --k-tint-green-line: rgba(111,208,140,0.5);
+  --k-tint-amber: rgba(255,181,71,0.16);
+  --k-tint-amber-faint: rgba(255,181,71,0.09);
+  --k-tint-amber-line: rgba(255,181,71,0.5);
+  --k-tint-red: rgba(255,107,117,0.16);
+  --k-tint-red-faint: rgba(255,107,117,0.09);
+  --k-tint-red-line: rgba(255,107,117,0.5);
+  --k-tint-violet: rgba(183,156,255,0.16);
+  --k-tint-violet-faint: rgba(183,156,255,0.09);
+  --k-tint-violet-line: rgba(183,156,255,0.5);
+  --k-tint-sky: rgba(92,200,240,0.16);
+  --k-tint-sky-faint: rgba(92,200,240,0.09);
+  --k-tint-sky-line: rgba(92,200,240,0.5);
+  --k-on-red: #0D1424;
+  --k-scrim: rgba(5,9,18,0.92);
+  --k-scrim-lite: rgba(5,9,18,0.65);
 }
 
 /* Type. Barlow for the interface text (brand body face, 400/500/600). Atkinson

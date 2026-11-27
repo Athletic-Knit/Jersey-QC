@@ -545,7 +545,7 @@ function DataTools() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <label htmlFor="adm-clear" style={{ position: "absolute", left: -9999 }}>Type {want}</label>
             <input id="adm-clear" style={{ ...st.input, maxWidth: 280 }} value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={want} autoComplete="off" />
-            <button style={{ ...st.pri, background: "var(--fail)", borderColor: "var(--fail)", color: "#fff", ...(confirm.trim().toLowerCase() === want ? {} : { opacity: 0.45, cursor: "not-allowed" }) }} disabled={confirm.trim().toLowerCase() !== want || !d.writable || !!busy} onClick={() => act("clear", "/data/clear", { confirm }, r => `Test data cleared (${r.files} order files). The backup is data\\backups\\${r.backup}.`)}>{busy === "clear" ? "Clearing…" : "Back up, then clear"}</button>
+            <button style={{ ...st.pri, background: "var(--fail)", borderColor: "var(--fail)", color: "var(--k-on-red)", ...(confirm.trim().toLowerCase() === want ? {} : { opacity: 0.45, cursor: "not-allowed" }) }} disabled={confirm.trim().toLowerCase() !== want || !d.writable || !!busy} onClick={() => act("clear", "/data/clear", { confirm }, r => `Test data cleared (${r.files} order files). The backup is data\\backups\\${r.backup}.`)}>{busy === "clear" ? "Clearing…" : "Back up, then clear"}</button>
           </div>
         </> : <p style={{ margin: 0, color: "var(--text-dim)" }}>Not on this server: clearing test data is only for the development and testing servers.</p>}
       </section>

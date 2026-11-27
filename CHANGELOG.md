@@ -712,3 +712,7 @@ Every change made from the code review of 23 Nov 2026, one entry per change, new
 - **Asked for (the co-op):** a way back to the app from the admin panel.
 - **What changed:** "← Back to the app" at the right of the admin panel's stage bar, on its sign-in page and when signed in; it opens the app's sign-in screen.
 - **Tests:** `admin.test.js` checks the link. 1075 tests pass. On 5174: the link took the admin sign-in page back to the app's sign-in.
+
+## 2026-11-27 · Brand UI, phase C: no literal colours left on the screens
+- **What changed:** every wash, tint and dialog scrim in App.jsx and the admin panel is now a token in index.css (`--k-tint-blue/green/amber/red/violet/sky`, with `-faint` and `-line`, `--k-scrim`, `--k-scrim-lite`, `--k-on-red`), light and dark. The idle screen is brand amber, the wall view uses the brand dark palette, the solid red buttons use the brand red. Kept literal on purpose: black behind the camera and photos, the pills and text laid over the camera video, shadows, the wall view's own colours, white on the logo tile. CLAUDE.md notes the fonts and the brand.
+- **Tests:** eslint and the whole suite pass.

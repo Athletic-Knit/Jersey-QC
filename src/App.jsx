@@ -101,7 +101,7 @@ const titleSt   = { fontFamily: FONT_DISPLAY, fontWeight: 700, color: "var(--k-b
 const titleBig  = { ...titleSt, fontWeight: 800, fontStyle: "italic" };                                                   // the big screen titles
 const modalBg   = { position: "fixed", inset: 0, background: "var(--k-page)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto" };
 const modalCard = { background: "var(--k-card)", borderRadius: 10, border: "1px solid var(--k-rule)", padding: 40, width: 560, maxWidth: "90vw" };
-const errSt     = { fontSize: 15, color: "var(--k-red-ink)", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 };
+const errSt     = { fontSize: 15, color: "var(--k-red-ink)", marginBottom: 12, padding: "10px 14px", background: "var(--k-tint-red-faint)", borderRadius: 6 };
 const bigBtn    = { width: "100%", padding: "15px", borderRadius: 8, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 600, fontSize: 19, cursor: "pointer" };
 
 // A log entry's colour by its status: green passed, red flagged, amber undone or missing.
@@ -182,10 +182,10 @@ function ShipWithField({ value, onChange, placeholder }) {
     <div>
       <div style={{ ...inputSt, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", padding: "6px 10px" }}>
         {done.map((n, i) => (
-          <span key={i + n} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#0c4a6e", color: "#e0f2fe", borderRadius: 14, padding: "3px 4px 3px 11px", fontSize: 16, fontWeight: 700 }}>
+          <span key={i + n} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--k-bg-sky)", color: "var(--k-sky-ink-3)", border: "1px solid var(--k-sky)", borderRadius: 14, padding: "3px 4px 3px 11px", fontSize: 16, fontWeight: 700 }}>
             {n}
             <button type="button" aria-label={`Remove ${n}`} onMouseDown={e => e.preventDefault()} onClick={() => onChange(shipRemove(value, i))}
-              style={{ border: "none", background: "rgba(255,255,255,0.18)", color: "#fff", borderRadius: "50%", width: 24, height: 24, fontSize: 14, lineHeight: 1, cursor: "pointer", padding: 0 }}>✕</button>
+              style={{ border: "none", background: "var(--k-tint-sky)", color: "var(--k-sky-ink-3)", borderRadius: "50%", width: 24, height: 24, fontSize: 14, lineHeight: 1, cursor: "pointer", padding: 0 }}>✕</button>
           </span>
         ))}
         <input ref={ref} value={cur} inputMode="numeric" placeholder={done.length ? "next number" : placeholder}
@@ -258,7 +258,7 @@ function IdleWatch({ pulse, onSpell }) {
   if (!idle || idle.pulse !== pulse) return null;
   const fmt = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 2500, background: "#f59e0b", color: "#1c1917", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", fontFamily: FONT_UI, textAlign: "center", padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 2500, background: "var(--k-amber)", color: "var(--k-on-blue)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", fontFamily: FONT_UI, textAlign: "center", padding: 24 }}>
       <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", opacity: 0.9 }}>Idle for</div>
       <div style={{ fontSize: "clamp(64px, 18vw, 180px)", fontWeight: 900, lineHeight: 1, margin: "16px 0" }}>{fmt(idle.minutes)}</div>
     </div>
@@ -272,7 +272,7 @@ function IdleWatch({ pulse, onSpell }) {
 const RosterRow = memo(function RosterRow({ r, cols, hasBins, bin, canSupervise, onMark }) {
   return (
     <tr style={{
-      background: r.scanned === "pass" ? "rgba(34,197,94,0.07)" : r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned ? "rgba(245,158,11,0.07)" : "transparent",
+      background: r.scanned === "pass" ? "var(--k-tint-green-faint)" : r.scanned === "flag" ? "var(--k-tint-red-faint)" : r.scanned ? "var(--k-tint-amber-faint)" : "transparent",
       borderBottom: "1px solid var(--k-field)",
     }}>
       <td style={{ ...tdSt, textAlign: "center" }}>
@@ -506,7 +506,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
               const blocked = BLOCKED_ROLES.includes(r.id);   // under development: nobody signs in as it
               return (
               <button key={r.id} onClick={blocked ? undefined : () => pickRole(r)} disabled={!!onCancel && r.id !== role} aria-disabled={blocked || undefined} title={blocked ? "Under development" : undefined}
-                style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: role === r.id ? "var(--k-blue)" : "var(--k-rule-2)", color: role === r.id ? "var(--k-strong)" : "var(--k-ink-3)", background: role === r.id ? "rgba(59,130,246,0.18)" : "transparent", opacity: blocked || (onCancel && r.id !== role) ? 0.4 : 1, cursor: blocked ? "not-allowed" : "pointer" }}>
+                style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: role === r.id ? "var(--k-blue)" : "var(--k-rule-2)", color: role === r.id ? "var(--k-strong)" : "var(--k-ink-3)", background: role === r.id ? "var(--k-tint-blue)" : "transparent", opacity: blocked || (onCancel && r.id !== role) ? 0.4 : 1, cursor: blocked ? "not-allowed" : "pointer" }}>
                 {r.label}{blocked && <div style={{ fontSize: 12, fontWeight: 400, marginTop: 2 }}>under development</div>}
               </button>
               );
@@ -519,7 +519,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${STATIONS.length},1fr)`, gap: 6 }}>
               {STATIONS.map(s => { const by = busyBy(s.id); return (
                 <button key={s.id} onClick={() => pickStation(s.id)} disabled={!!onCancel && s.id !== station} title={by ? `In use by ${by} on another PC` : ""}
-                  style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: station === s.id ? (by ? "var(--k-red)" : "var(--k-blue-ink)") : by ? "#7f1d1d" : "var(--k-rule-2)", color: station === s.id ? "var(--k-strong)" : by ? "var(--k-red-ink)" : "var(--k-ink-3)", background: station === s.id ? (by ? "rgba(239,68,68,0.14)" : "rgba(96,165,250,0.16)") : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
+                  style={{ ...btnGhost, padding: "12px 6px", fontSize: 16, borderColor: station === s.id ? (by ? "var(--k-red)" : "var(--k-blue-ink)") : by ? "var(--k-tint-red-line)" : "var(--k-rule-2)", color: station === s.id ? "var(--k-strong)" : by ? "var(--k-red-ink)" : "var(--k-ink-3)", background: station === s.id ? (by ? "var(--k-tint-red)" : "var(--k-tint-blue)") : "transparent", opacity: onCancel && s.id !== station ? 0.4 : 1 }}>
                   {s.label}{by && <div style={{ fontSize: 13, fontWeight: 400, color: "var(--k-red-ink)", marginTop: 2 }}>in use · {by}</div>}
                 </button>
               ); })}
@@ -571,7 +571,7 @@ function BinByPicker({ value, onChange }) {
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {BIN_BY.map(t => (
         <button key={t.id} type="button" onClick={() => onChange(t.id)} title={t.hint}
-          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: value === t.id ? 700 : 400 }}>
+          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: value === t.id ? "var(--k-tint-blue)" : "transparent", color: value === t.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: value === t.id ? 700 : 400 }}>
           {t.label} <span style={{ fontSize: 14, color: "var(--k-ink-3)", fontWeight: 400 }}>· {t.hint}</span>
         </button>
       ))}
@@ -586,7 +586,7 @@ function JerseyTypePicker({ value, onChange }) {
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {JERSEY_TYPES.map(t => (
         <button key={t.id} type="button" onClick={() => onChange(value === t.id ? "" : t.id)} title={t.hint}
-          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: value === t.id ? "rgba(96,165,250,0.15)" : "transparent", color: value === t.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: value === t.id ? 700 : 400 }}>
+          style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: value === t.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: value === t.id ? "var(--k-tint-blue)" : "transparent", color: value === t.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: value === t.id ? 700 : 400 }}>
           {t.label} <span style={{ fontSize: 14, color: "var(--k-ink-3)", fontWeight: 400 }}>· {t.construction}</span>
         </button>
       ))}
@@ -608,7 +608,7 @@ function GarmentPicker({ value, onChange }) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {GARMENT_MENU.filter(g => g.group === group).map(g => (
             <button key={g.id} type="button" onClick={() => onChange(g.id)} aria-pressed={v === g.id}
-              style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: v === g.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: v === g.id ? "rgba(96,165,250,0.15)" : "transparent", color: v === g.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: v === g.id ? 700 : 400 }}>
+              style={{ ...btnGhost, padding: "9px 14px", fontSize: 16, borderColor: v === g.id ? "var(--k-blue-ink)" : "var(--k-rule-3)", background: v === g.id ? "var(--k-tint-blue)" : "transparent", color: v === g.id ? "var(--k-blue-ink-2)" : "var(--k-ink-2)", fontWeight: v === g.id ? 700 : 400 }}>
               {g.label}
             </button>
           ))}
@@ -834,7 +834,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
         {/* The orders the supervisor sent are behind a button, beside Unfinished orders (the owner,
             19 Nov 2026: they used to fill the top of this screen). Picked, the order shows here. */}
         {picked && (
-          <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, border: "2px solid var(--k-green)", background: "rgba(34,197,94,0.1)", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, border: "2px solid var(--k-green)", background: "var(--k-tint-green)", display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ flex: 1, fontSize: 18, fontWeight: 800, color: "var(--k-strong)" }}>✓ Order {picked.orderNumber || "—"} <span style={{ fontWeight: 400, color: "var(--k-ink-3)" }}>· {picked.rows.length} garments · from {picked.by || "the supervisor"}</span></div>
             <button onClick={() => setShowAssigned(true)} style={{ ...btnGhost, padding: "6px 14px", fontSize: 15 }}>Change</button>
           </div>
@@ -845,7 +845,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
           {onPickUp && <button onClick={() => setShowUnfinished(true)} title="Orders put aside with Finish later, and the ones the supervisor gave to this station" style={{ ...btnGhost, flex: 1, padding: "12px 14px", fontSize: 18, fontWeight: 800, borderColor: unfinishedCount ? "var(--k-amber)" : "var(--k-rule-2)", color: unfinishedCount ? "var(--k-amber-ink-2)" : "var(--k-ink-3)" }}>⏸ Unfinished orders · {unfinishedCount}</button>}
         </div>
         {showAssigned && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue-ink)", padding: 30, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
               <div style={STICKY_HEAD}>
                 <div style={{ ...titleSt, fontSize: 32, flex: 1 }}>📥 Assigned orders</div>
@@ -860,7 +860,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
               {hubRosters.map(r => (
                 <button key={r.id} onClick={() => { if (takenElsewhere(r)) return; pickRoster(r); setShowAssigned(false); }} disabled={takenElsewhere(r)}
                   title={takenElsewhere(r) ? `${stationLabel(r.takenBy.station)} is working on this order — one station per order` : undefined}
-                  style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "var(--k-green)" : "var(--k-rule-2)", color: picked?.id === r.id ? "var(--k-strong)" : "var(--k-ink-3)", background: picked?.id === r.id ? "rgba(34,197,94,0.12)" : "transparent", opacity: takenElsewhere(r) ? 0.5 : 1, cursor: takenElsewhere(r) ? "not-allowed" : "pointer" }}>
+                  style={{ ...btnGhost, textAlign: "left", padding: "8px 12px", borderColor: picked?.id === r.id ? "var(--k-green)" : "var(--k-rule-2)", color: picked?.id === r.id ? "var(--k-strong)" : "var(--k-ink-3)", background: picked?.id === r.id ? "var(--k-tint-green)" : "transparent", opacity: takenElsewhere(r) ? 0.5 : 1, cursor: takenElsewhere(r) ? "not-allowed" : "pointer" }}>
                   <div style={{ fontSize: 17, fontWeight: 700 }}>Order {r.orderNumber || "—"} <span style={{ fontWeight: 400, color: "var(--k-ink-3)" }}>· {r.rowCount} garments · {r.fileName}{r.jerseyType ? ` · ${jerseyTypeLabel(r.jerseyType)}` : ""}{r.binBy && r.binBy !== "team" ? ` · ${BIN_BY.find(b => b.id === r.binBy)?.label.toLowerCase() || r.binBy}` : ""}</span>{r.forStation && !r.takenBy && <span style={{ fontWeight: 700, color: "var(--k-blue-ink)", marginLeft: 8 }}>for this station</span>}</div>
                   <div style={{ fontSize: 14, color: "var(--k-ink-3)" }}>{r.by ? `sent by ${r.by} · ` : ""}{new Date(r.createdAt).toLocaleString()}</div>
                   {r.takenBy && <div style={{ fontSize: 14, fontWeight: 700, color: takenElsewhere(r) ? "var(--k-amber)" : "var(--k-green-ink)" }}>{takenElsewhere(r) ? `⛔ In progress on ${stationLabel(r.takenBy.station)} · ${r.takenBy.operator || "—"} · since ${new Date(r.takenBy.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "↻ Started on this station — pick it to continue"}</div>}
@@ -879,7 +879,7 @@ function OrderSetupModal({ operatorName, role, xlsxReady, onStart, onSignOut, on
             }} />
         )}
         {showUnfinished && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-amber)", padding: 30, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
               <div style={STICKY_HEAD}>
                 <div style={{ ...titleSt, fontSize: 32, flex: 1 }}>⏸ Unfinished orders</div>
@@ -969,7 +969,7 @@ function LiveFrame({ stream, rotation, maxWidth = "100%" }) {
   return (
     <div style={{ position: "relative", height: "100%", maxWidth, display: "flex", alignItems: "center", justifyContent: "center" }}>
       {/* contain, never cover: the operator must see the whole frame the photo will keep */}
-      <video ref={ref} autoPlay muted playsInline style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", transform: `rotate(${rotation || 0}deg)`, display: "block", borderRadius: 12, border: "3px solid #fbbf24", boxSizing: "border-box", background: "#000" }} />
+      <video ref={ref} autoPlay muted playsInline style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", transform: `rotate(${rotation || 0}deg)`, display: "block", borderRadius: 12, border: "3px solid var(--k-amber)", boxSizing: "border-box", background: "#000" }} />
       <div style={{ position: "absolute", top: 8, left: 10, fontSize: 16, fontWeight: 800, color: "#fff", background: "rgba(0,0,0,0.6)", padding: "4px 12px", borderRadius: 10 }}>● Live</div>
     </div>
   );
@@ -1127,7 +1127,7 @@ export function PhotoLightbox({ photo, onClose }) {
   const dbl = e => { if (e.target.closest("[data-ctl]")) return; if (view.s > 1) fit(); else zoomBy(2, ...centre(e.clientX, e.clientY)); };
   const pic = pics[idx];
   if (!pic) return null;
-  const btn = { background: "rgba(30,41,59,0.9)", color: "#fff", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 10, fontSize: 22, fontWeight: 800, padding: "8px 16px", cursor: "pointer", minWidth: 48 };
+  const btn = { background: "rgba(21,29,51,0.92)", color: "#fff", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 10, fontSize: 22, fontWeight: 800, padding: "8px 16px", cursor: "pointer", minWidth: 48 };
   const caption = [pic.damage ? `Damage photo ${pics.slice(0, idx + 1).filter(p => p.damage).length} of ${pics.filter(p => p.damage).length}` : "Scan photo", set.caption].filter(Boolean).join(" · ");
   return (
     <div ref={stage} onClick={onStageClick} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl}
@@ -1189,7 +1189,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
   const th = { textAlign: "left", fontSize: 10, color: "var(--k-ink-4)", textTransform: "uppercase", letterSpacing: 0.5, padding: "6px 8px", borderBottom: "1px solid var(--k-rule)", position: "sticky", top: 0, background: "var(--k-page)" };
   const td = { padding: "6px 8px", borderBottom: "1px solid var(--k-card)", fontSize: 13, verticalAlign: "top" };
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1900, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1900, background: "var(--k-scrim-lite)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px, 100%)", height: "min(820px, 100%)", background: "var(--k-page)", border: "1px solid var(--k-rule-2)", borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", color: "var(--k-ink-1)" }}>
         <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--k-rule)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1225,7 +1225,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                 {(tab === "roster" ? rows : rows.filter(r => r.scanned === "flag" || r.scanned === "manual")).map((r, i) => {
                   const e = latestByRow.get(r._id);
                   return (
-                    <tr key={r._id ?? i} style={{ background: r.scanned === "flag" ? "rgba(239,68,68,0.07)" : r.scanned === "manual" ? "rgba(245,158,11,0.07)" : "transparent" }}>
+                    <tr key={r._id ?? i} style={{ background: r.scanned === "flag" ? "var(--k-tint-red-faint)" : r.scanned === "manual" ? "var(--k-tint-amber-faint)" : "transparent" }}>
                       <td style={{ ...td, color: colour(r.scanned), fontWeight: 700, whiteSpace: "nowrap" }}>{label(r.scanned)}</td>
                       <td style={td}>{r.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{r.number}</td><td style={td}>{r.team || ""}</td><td style={{ ...td, color: "var(--k-amber-ink-2)" }}>{shortSize(r.size) || ""}</td>
                       <td style={{ ...td, color: "var(--k-blue-ink)" }}>{rec.bins && binOfRow(rec.bins, rec.closedBins, r) !== null ? `Box ${binOfRow(rec.bins, rec.closedBins, r)}` : ""}</td>
@@ -1236,7 +1236,7 @@ export function OrderView({ station, order, run = 0, stationLabel, onClose, onDo
                   );
                 })}
                 {tab === "problems" && offRoster.map((e, i) => (
-                  <tr key={"off" + i} style={{ background: "rgba(239,68,68,0.07)" }}>
+                  <tr key={"off" + i} style={{ background: "var(--k-tint-red-faint)" }}>
                     <td style={{ ...td, color: "var(--k-red)", fontWeight: 700, whiteSpace: "nowrap" }}>NOT ON ROSTER</td>
                     <td style={td}>{e.name || "—"}</td><td style={{ ...td, fontWeight: 700 }}>{e.number}</td><td style={td}>{e.team || ""}</td><td style={{ ...td, color: "var(--k-amber-ink-2)" }}>{shortSize(e.size) || ""}</td><td style={td}></td>
                     <td style={{ ...td, color: "var(--k-ink-2)" }}><RouteTag item={e} /> {e.reason}{e.resolution ? <div style={{ color: "var(--k-ink-3)", fontSize: 12 }}>→ {e.resolution}</div> : null}</td>
@@ -1319,7 +1319,7 @@ function UnfinishedPile({ by, onClose }) {
   };
   const waited = e => (e.parkedAt && seenAt ? Math.max(0, Math.floor((seenAt - e.parkedAt) / 86400000)) : 0);   // days since it was put aside, as of the last load
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2100, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-amber)", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ ...titleSt, fontSize: 32 }}>⏸ Unfinished orders{list ? ` · ${list.length}` : ""}</div>
@@ -1341,7 +1341,7 @@ function UnfinishedPile({ by, onClose }) {
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {STATIONS.map(s => (
                     <button key={s.id} onClick={() => act(e.assignedTo === "st-" + s.id ? hub.releaseUnfinished(e.id) : hub.assignUnfinished(e.id, "st-" + s.id, by))} title={e.assignedTo === "st-" + s.id ? "Take it back from this station" : `Send it to ${s.label}: it shows on that station's order screen`}
-                      style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: e.assignedTo === "st-" + s.id ? "var(--k-blue-ink)" : "var(--k-rule-2)", color: e.assignedTo === "st-" + s.id ? "var(--k-strong)" : "var(--k-ink-3)", background: e.assignedTo === "st-" + s.id ? "rgba(59,130,246,0.2)" : "transparent" }}>
+                      style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: e.assignedTo === "st-" + s.id ? "var(--k-blue-ink)" : "var(--k-rule-2)", color: e.assignedTo === "st-" + s.id ? "var(--k-strong)" : "var(--k-ink-3)", background: e.assignedTo === "st-" + s.id ? "var(--k-tint-blue)" : "transparent" }}>
                       → {s.label}
                     </button>
                   ))}
@@ -1353,7 +1353,7 @@ function UnfinishedPile({ by, onClose }) {
                   <div style={{ fontSize: 15, color: "var(--k-ink-2)", marginBottom: 8 }}>Tick garments, then: <strong>Back and good</strong> — they count as passed ("checked off by supervisor"). <strong>Ship short</strong> — the order goes without them. An extra garment (not on the order) is closed either way. When none is left the order is closed.</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 6 }}>
                     {entry.out.map(j => (
-                      <label key={jkey(j)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: ticked.has(jkey(j)) ? "rgba(34,197,94,0.15)" : "var(--k-page)", border: `1px solid ${ticked.has(jkey(j)) ? "var(--k-green)" : "var(--k-rule)"}`, cursor: "pointer" }}>
+                      <label key={jkey(j)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: ticked.has(jkey(j)) ? "var(--k-tint-green)" : "var(--k-page)", border: `1px solid ${ticked.has(jkey(j)) ? "var(--k-green)" : "var(--k-rule)"}`, cursor: "pointer" }}>
                         <input type="checkbox" checked={ticked.has(jkey(j))} onChange={() => setTicked(t => { const n = new Set(t); if (n.has(jkey(j))) n.delete(jkey(j)); else n.add(jkey(j)); return n; })} style={{ width: 20, height: 20 }} />
                         <strong style={{ fontFamily: FONT_DISPLAY, fontSize: 20 }}>#{j.number || "—"}</strong>
                         {j.name && <span style={{ fontFamily: FONT_READ }}>{j.name}</span>}
@@ -1509,17 +1509,17 @@ function SupervisorPanel({ operatorName, onSignOut }) {
     const rows = Math.max(active.length, 1), rowH = Math.min(18, 82 / rows);
     const f = k => `${(rowH * k).toFixed(2)}cqh`;
     return (
-      <div onClick={() => setWall(false)} style={{ position: "fixed", inset: 0, zIndex: 1950, background: "#000", color: "#fff", fontFamily: FONT_UI, display: "flex", flexDirection: "column", padding: "2cqh 2cqw", boxSizing: "border-box", containerType: "size", cursor: "pointer", userSelect: "none" }}>
+      <div onClick={() => setWall(false)} style={{ position: "fixed", inset: 0, zIndex: 1950, background: "#0D1424", color: "#fff", fontFamily: FONT_UI, display: "flex", flexDirection: "column", padding: "2cqh 2cqw", boxSizing: "border-box", containerType: "size", cursor: "pointer", userSelect: "none" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "1.5cqh", flexShrink: 0 }}>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "7cqh", fontWeight: 900, lineHeight: 1, color: openCount > 0 ? "#f87171" : "#4ade80" }}>{openCount > 0 ? `${openCount} NEED YOU` : "ALL CLEAR"}</div>
-          <div style={{ fontSize: "3cqh", color: "#94a3b8", display: "flex", alignItems: "center", gap: "1.5cqw" }}><img src={akLogo} alt="Athletic Knit" style={{ height: "4.5cqh", background: "#fff", padding: "0.5cqh 0.8cqh", borderRadius: "0.8cqh" }} /><span>{todayTotal} {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} live · {new Date(clock).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: "7cqh", fontWeight: 900, lineHeight: 1, color: openCount > 0 ? "#FF6B75" : "#6FD08C" }}>{openCount > 0 ? `${openCount} NEED YOU` : "ALL CLEAR"}</div>
+          <div style={{ fontSize: "3cqh", color: "#A2ADC6", display: "flex", alignItems: "center", gap: "1.5cqw" }}><img src={akLogo} alt="Athletic Knit" style={{ height: "4.5cqh", background: "#fff", padding: "0.5cqh 0.8cqh", borderRadius: "0.8cqh" }} /><span>{todayTotal} {todayTotal === 1 ? "garment" : "garments"} today · {liveCount} of {active.length} live · {new Date(clock).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>
         </div>
-        {hubDown && <div style={{ background: "#7f1d1d", fontSize: "3cqh", fontWeight: 700, padding: "1cqh 2cqw", borderRadius: "1cqh", marginBottom: "1.5cqh" }}>⚠ The hub stopped answering at {new Date(hubDown).toLocaleTimeString()} — nothing here is live.</div>}
+        {hubDown && <div style={{ background: "#3B1420", color: "#FFCDD1", fontSize: "3cqh", fontWeight: 700, padding: "1cqh 2cqw", borderRadius: "1cqh", marginBottom: "1.5cqh" }}>⚠ The hub stopped answering at {new Date(hubDown).toLocaleTimeString()} — nothing here is live.</div>}
         <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: `repeat(${rows}, 1fr)`, gap: "1.2cqh" }}>
           {active.slice().sort(byName).map(s => {
             const open = openOn(s), stale = age(s) > 30, c = s.counts || {};
             const total = c.total ?? 0, done = total - (c.remaining ?? 0);
-            const col = open ? "#ef4444" : stale ? "#475569" : (c.manual > 0 || c.missing > 0 || c.short > 0) ? "#f59e0b" : "#22c55e";
+            const col = open ? "#FF6B75" : stale ? "#5B6C9C" : (c.manual > 0 || c.missing > 0 || c.short > 0) ? "#FFB547" : "#6FD08C";
             const top = (s.attention || []).filter(a => !a.resolution).sort(bySeverity)[0];
             const line = open
               ? (top ? <><RouteTag item={top} size={f(0.2)} /> {top.jersey} — {top.reason}{open > 1 ? ` · +${open - 1} more` : ""}</> : `${open} still open from earlier orders`)
@@ -1530,20 +1530,20 @@ function SupervisorPanel({ operatorName, onSignOut }) {
               <div key={s.id} style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr) auto", alignItems: "center", gap: "2cqw", background: `${col}26`, borderLeft: `2.5cqw solid ${col}`, borderRadius: "1cqh", padding: "0 2cqw", minHeight: 0, overflow: "hidden" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: FONT_DISPLAY, fontSize: f(0.46), fontWeight: 900, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{stationLabel(s.id)}</div>
-                  <div style={{ fontSize: f(0.2), color: "#cbd5e1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.operatorName || "—"} · order {s.orderNumber || "—"}</div>
+                  <div style={{ fontSize: f(0.2), color: "#D2D8E8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.operatorName || "—"} · order {s.orderNumber || "—"}</div>
                 </div>
-                <div style={{ fontSize: f(0.26), fontWeight: 700, color: stale && !open ? "#94a3b8" : "#fff", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{line}</div>
+                <div style={{ fontSize: f(0.26), fontWeight: 700, color: stale && !open ? "#A2ADC6" : "#fff", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{line}</div>
                 <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   <span style={{ fontFamily: FONT_DISPLAY, fontSize: f(0.5), fontWeight: 900, lineHeight: 1 }}>{total > 0 ? done : "—"}</span>
-                  {total > 0 && <span style={{ fontSize: f(0.24), color: "#94a3b8" }}> / {total}</span>}
-                  {total > 0 && c.remaining > 0 && !stale && s.rate ? <div style={{ fontSize: f(0.18), color: "#94a3b8" }}>{Math.round(s.rate)}/h · {fmtMin(s.etaMin)} left</div> : null}
+                  {total > 0 && <span style={{ fontSize: f(0.24), color: "#A2ADC6" }}> / {total}</span>}
+                  {total > 0 && c.remaining > 0 && !stale && s.rate ? <div style={{ fontSize: f(0.18), color: "#A2ADC6" }}>{Math.round(s.rate)}/h · {fmtMin(s.etaMin)} left</div> : null}
                 </div>
               </div>
             );
           })}
-          {active.length === 0 && <div style={{ fontSize: "5cqh", color: "#64748b", alignSelf: "center", textAlign: "center" }}>No station reporting</div>}
+          {active.length === 0 && <div style={{ fontSize: "5cqh", color: "#A2ADC6", alignSelf: "center", textAlign: "center" }}>No station reporting</div>}
         </div>
-        <div style={{ fontSize: "2cqh", color: "#475569", marginTop: "1cqh", textAlign: "right", flexShrink: 0 }}>Wall view{parked.length ? ` · ${parked.length} ${parked.length === 1 ? "station" : "stations"} not reporting` : ""} · click or press Esc to go back</div>
+        <div style={{ fontSize: "2cqh", color: "#5B6C9C", marginTop: "1cqh", textAlign: "right", flexShrink: 0 }}>Wall view{parked.length ? ` · ${parked.length} ${parked.length === 1 ? "station" : "stations"} not reporting` : ""} · click or press Esc to go back</div>
       </div>
     );
   }
@@ -1561,7 +1561,7 @@ function SupervisorPanel({ operatorName, onSignOut }) {
       </div>
       {showPile && <UnfinishedPile by={operatorName} onClose={() => setShowPile(false)} />}
       {hubDown && (
-        <div style={{ background: "#7f1d1d", color: "#fff", padding: "10px 16px", fontSize: 14, fontWeight: 700, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+        <div style={{ background: "var(--k-red)", color: "var(--k-on-red)", padding: "10px 16px", fontSize: 14, fontWeight: 700, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <span>⚠ The hub stopped answering at {new Date(hubDown).toLocaleTimeString()} — nothing below is live. Stations keep scanning on their own. Is the server window still open on the host PC?</span>
           <button onClick={refresh} style={{ ...btnGhost, padding: "4px 10px", color: "var(--k-strong)", borderColor: "var(--k-strong)" }}>Retry</button>
         </div>
@@ -1830,7 +1830,7 @@ export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled,
   const sizeFont = sizeBig ? (big ? "clamp(55px, 5.8vw, 84px)" : "clamp(46px, 4.9vw, 70px)") : bigFont;
   return (
     <div onClick={disabled ? undefined : onClick} onMouseEnter={disabled ? undefined : onHover} data-sel={selected ? "1" : undefined}
-      style={{ display: "flex", alignItems: "center", gap: 12, padding: big ? "8px 16px 8px 18px" : "6px 14px 6px 16px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "color-mix(in srgb, var(--k-strong) 8%, transparent)" : selected ? accent : "color-mix(in srgb, var(--k-strong) 12%, transparent)"}`, background: disabled ? "color-mix(in srgb, var(--k-strong) 2%, transparent)" : selected ? "rgba(245,158,11,0.18)" : "color-mix(in srgb, var(--k-strong) 4%, transparent)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...(back ? { boxShadow: "inset 10px 0 0 var(--k-sky)", paddingLeft: 24 } : {}), ...liftSt(selected && !disabled) }}>
+      style={{ display: "flex", alignItems: "center", gap: 12, padding: big ? "8px 16px 8px 18px" : "6px 14px 6px 16px", borderRadius: 14, minWidth: 0, border: `3px solid ${disabled ? "color-mix(in srgb, var(--k-strong) 8%, transparent)" : selected ? accent : "color-mix(in srgb, var(--k-strong) 12%, transparent)"}`, background: disabled ? "color-mix(in srgb, var(--k-strong) 2%, transparent)" : selected ? "var(--k-tint-amber)" : "color-mix(in srgb, var(--k-strong) 4%, transparent)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, ...(back ? { boxShadow: "inset 10px 0 0 var(--k-sky)", paddingLeft: 24 } : {}), ...liftSt(selected && !disabled) }}>
       <span style={{ fontFamily: FONT_DISPLAY, fontSize: bigFont, fontWeight: 900, lineHeight: 1, color: disabled || !number ? "var(--k-ink-4)" : "var(--k-strong)", whiteSpace: "nowrap", minWidth: "1.4em", flexShrink: 0 }}>{/* 1.4em holds "#22", so the middles of two-digit tiles line up; a three-digit number widens its own zone (the middle is narrow beside the camera, so no room is kept for digits that are not there) */}
         {number ? <><span style={{ fontSize: "0.6em", fontWeight: 800, opacity: 0.7 }}>#</span>{number}</> : "—"}
       </span>
@@ -1849,7 +1849,7 @@ export function CandidateRow({ c, diff = [], extraCols = [], selected, disabled,
         )}
       </div>
       {size && (
-        <span style={{ fontFamily: FONT_DISPLAY, fontSize: sizeFont, fontWeight: 900, lineHeight: 1, letterSpacing: 1, whiteSpace: "nowrap", padding: "6px 14px", borderRadius: 12, border: `3px solid ${disabled ? "color-mix(in srgb, var(--k-strong) 10%, transparent)" : "rgba(245,158,11,0.75)"}`, background: disabled ? "transparent" : "rgba(245,158,11,0.14)", color: disabled ? "var(--k-ink-4)" : "var(--k-strong)", flexShrink: 0 }}>{size}</span>
+        <span style={{ fontFamily: FONT_DISPLAY, fontSize: sizeFont, fontWeight: 900, lineHeight: 1, letterSpacing: 1, whiteSpace: "nowrap", padding: "6px 14px", borderRadius: 12, border: `3px solid ${disabled ? "color-mix(in srgb, var(--k-strong) 10%, transparent)" : "var(--k-tint-amber-line)"}`, background: disabled ? "transparent" : "var(--k-tint-amber)", color: disabled ? "var(--k-ink-4)" : "var(--k-strong)", flexShrink: 0 }}>{size}</span>
       )}
       {!disabled && <span style={hintSt(selected, accent, 0)} aria-hidden="true">←</span>}
     </div>
@@ -2253,13 +2253,13 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
             {(hasSize || binNum !== null) && (
               <div style={{ containerType: "size", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", gap: "3cqh" }}>
                 {hasSize && (
-                  <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid var(--k-green)", background: "rgba(34,197,94,0.14)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
+                  <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid var(--k-green)", background: "var(--k-tint-green)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
                     <div style={{ fontSize: `min(${binNum !== null ? 7 : 12}cqh, ${binNum !== null ? 14 : 20}cqw)`, color: "var(--k-green-ink-2)", fontWeight: 900, letterSpacing: 3, lineHeight: 1 }}>SIZE</div>
                     <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${binNum !== null ? 34 : 70}cqh, ${Math.min(80, Math.floor(130 / Math.max(1, String(shortSize(match.size)).length)))}cqw)`, fontWeight: 900, color: "var(--k-strong)", letterSpacing: 1, lineHeight: 1, whiteSpace: "nowrap" }}>{shortSize(match.size)}</div>{/* by width too: four letters (A-XL, A-XS) used to wrap onto two lines (the owner, 19 Nov 2026) */}
                   </div>
                 )}
                 {binNum !== null && (
-                  <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid var(--k-blue)", background: "rgba(59,130,246,0.16)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
+                  <div style={{ flex: 1, minHeight: 0, borderRadius: 24, border: "5px solid var(--k-blue)", background: "var(--k-tint-blue)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 4cqw", boxSizing: "border-box" }}>
                     <div style={{ fontSize: `min(${hasSize ? 7 : 12}cqh, ${hasSize ? 14 : 20}cqw)`, color: "var(--k-blue-ink-2)", fontWeight: 900, letterSpacing: 3, lineHeight: 1 }}>BOX</div>
                     {/* The digit is limited by the box width: one digit may be wider than two, two than three (Barlow Condensed is about half an em a digit). */}
                     <div style={{ fontFamily: FONT_DISPLAY, fontSize: `min(${hasSize ? 36 : 72}cqh, ${String(binNum).length === 1 ? 120 : String(binNum).length === 2 ? 80 : String(binNum).length === 3 ? 58 : 44}cqw)`, fontWeight: 900, color: "var(--k-strong)", lineHeight: 0.95 }}>{binNum}</div>
@@ -2270,7 +2270,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
           </div>
           {extras.length > 0 && (
             <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", justifyContent: "center", flexShrink: 0 }}>
-              {extras.map(x => <span key={x} style={{ padding: "8px 18px", borderRadius: 12, border: "3px solid var(--k-amber)", background: "rgba(245,158,11,0.15)", color: "var(--k-strong)", fontWeight: 900, fontSize: "clamp(20px, 3vw, 32px)" }}>{x}</span>)}
+              {extras.map(x => <span key={x} style={{ padding: "8px 18px", borderRadius: 12, border: "3px solid var(--k-amber)", background: "var(--k-tint-amber)", color: "var(--k-strong)", fontWeight: 900, fontSize: "clamp(20px, 3vw, 32px)" }}>{x}</span>)}
             </div>
           )}
           {state.note && <div style={{ marginTop: 12, fontSize: 20, color: "var(--k-amber-ink-2)" }}>✎ {state.note}</div>}
@@ -2298,7 +2298,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
                   const on = ticked.has(c.id), next = !on && toTick[0]?.id === c.id;
                   return (
                     <button key={c.id} onClick={() => toggleTick(c.id)} aria-pressed={on}
-                      style={{ padding: "7px 16px", borderRadius: 999, cursor: "pointer", border: `3px solid ${on ? "var(--k-green)" : next ? "var(--k-amber-ink-2)" : "rgba(134,239,172,0.55)"}`, background: on ? "var(--k-green)" : "rgba(34,197,94,0.10)", color: on ? "var(--k-page)" : "var(--k-strong)", fontWeight: 800, fontSize: "clamp(18px, 2.1vw, 23px)", whiteSpace: "nowrap", fontFamily: "inherit" }}>
+                      style={{ padding: "7px 16px", borderRadius: 999, cursor: "pointer", border: `3px solid ${on ? "var(--k-green)" : next ? "var(--k-amber-ink-2)" : "var(--k-tint-green-line)"}`, background: on ? "var(--k-green)" : "var(--k-tint-green)", color: on ? "var(--k-page)" : "var(--k-strong)", fontWeight: 800, fontSize: "clamp(18px, 2.1vw, 23px)", whiteSpace: "nowrap", fontFamily: "inherit" }}>
                       {on ? "☑" : "☐"} {c.label}{inspect?.phase === "quick" && !c.quick ? " ⚠" : ""}
                     </button>
                   );
@@ -2309,7 +2309,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", alignItems: "center", padding: "0 20px" }}>{/* a quick look: the common faults, big, to look at, nothing to tick (the owner, 23 Nov 2026) */}
                 <span style={{ fontSize: 18, color: "var(--k-green-ink-2)", fontWeight: 700, marginRight: 6 }}>Look at</span>
                 {lookAt.map(c => (
-                  <span key={c.id} style={{ padding: "8px 22px", borderRadius: 999, border: "3px solid var(--k-amber-ink-2)", background: "rgba(252,211,77,0.16)", color: "var(--k-strong)", fontWeight: 900, fontSize: "clamp(22px, 2.6vw, 30px)", whiteSpace: "nowrap" }}>{c.label}</span>
+                  <span key={c.id} style={{ padding: "8px 22px", borderRadius: 999, border: "3px solid var(--k-amber-ink-2)", background: "var(--k-tint-amber)", color: "var(--k-strong)", fontWeight: 900, fontSize: "clamp(22px, 2.6vw, 30px)", whiteSpace: "nowrap" }}>{c.label}</span>
                 ))}
               </div>
               )}
@@ -2319,7 +2319,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
                 </div>
               )}
               {notes && (
-                <div style={{ marginTop: 12, padding: "8px 18px", borderRadius: 12, background: "rgba(245,158,11,0.16)", border: "2px solid rgba(245,158,11,0.55)", color: "var(--k-amber-ink-3)", fontWeight: 700, fontSize: "clamp(18px, 2vw, 24px)", textAlign: "center", maxWidth: 900 }}>
+                <div style={{ marginTop: 12, padding: "8px 18px", borderRadius: 12, background: "var(--k-tint-amber)", border: "2px solid var(--k-tint-amber-line)", color: "var(--k-amber-ink-3)", fontWeight: 700, fontSize: "clamp(18px, 2vw, 24px)", textAlign: "center", maxWidth: 900 }}>
                   📝 {notes}
                 </div>
               )}
@@ -2380,7 +2380,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
           </div>
           <div style={{ fontSize: "clamp(26px, 4vw, 44px)", fontWeight: 900, color: accent, margin: "8px 0 16px", textAlign: "center", padding: "0 24px", lineHeight: 1.1 }}>{mode === "listFlag" ? "What is wrong?" : state.kind === "dup" ? "Duplicate — what size is it?" : "Not on the roster — what size is it?"}</div>
           {state.threw && (
-            <div style={{ fontSize: "clamp(20px, 2.4vw, 28px)", fontWeight: 800, color: "var(--k-red-ink-3)", background: "rgba(239,68,68,0.15)", border: "2px solid var(--k-red)", borderRadius: 12, padding: "8px 18px", marginBottom: 14, textAlign: "center" }}>
+            <div style={{ fontSize: "clamp(20px, 2.4vw, 28px)", fontWeight: 800, color: "var(--k-red-ink-3)", background: "var(--k-tint-red)", border: "2px solid var(--k-red)", borderRadius: 12, padding: "8px 18px", marginBottom: 14, textAlign: "center" }}>
               🗑 Throw away the tickets that printed for {state.threw}. Pick the right size.
             </div>
           )}
@@ -2392,7 +2392,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
                   <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 10 }}>
                     {options.map((o, i) => o.group !== gi ? null : (
                       <button key={o.id} onClick={() => fire(o)} onMouseEnter={() => hover(i)} data-sel={i === selectedIdx ? "1" : undefined}
-                        style={{ padding: "12px 6px", borderRadius: 14, border: `3px solid ${i === selectedIdx ? accent : "color-mix(in srgb, var(--k-strong) 14%, transparent)"}`, background: i === selectedIdx ? "rgba(245,158,11,0.18)" : "color-mix(in srgb, var(--k-strong) 4%, transparent)", color: "var(--k-strong)", cursor: "pointer", fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 3.4vw, 50px)", fontWeight: 800, lineHeight: 1, ...liftSt(i === selectedIdx) }}>
+                        style={{ padding: "12px 6px", borderRadius: 14, border: `3px solid ${i === selectedIdx ? accent : "color-mix(in srgb, var(--k-strong) 14%, transparent)"}`, background: i === selectedIdx ? "var(--k-tint-amber)" : "color-mix(in srgb, var(--k-strong) 4%, transparent)", color: "var(--k-strong)", cursor: "pointer", fontFamily: FONT_DISPLAY, fontSize: "clamp(30px, 3.4vw, 50px)", fontWeight: 800, lineHeight: 1, ...liftSt(i === selectedIdx) }}>
                         {o.label}
                       </button>
                     ))}
@@ -2402,7 +2402,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               <div style={{ display: "flex", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
                 {options.map((o, i) => o.group !== undefined ? null : (
                   <button key={o.id} onClick={() => fire(o)} onMouseEnter={() => hover(i)} data-sel={i === selectedIdx ? "1" : undefined}
-                    style={{ flex: 1, minWidth: 220, padding: "16px 20px", borderRadius: 14, border: `3px solid ${i === selectedIdx ? accent : o.on ? "var(--k-green)" : "color-mix(in srgb, var(--k-strong) 14%, transparent)"}`, background: o.on ? "rgba(34,197,94,0.2)" : i === selectedIdx ? "rgba(245,158,11,0.18)" : "color-mix(in srgb, var(--k-strong) 4%, transparent)", color: "var(--k-strong)", cursor: "pointer", fontSize: "clamp(22px, 2.4vw, 30px)", fontWeight: 800, ...liftSt(i === selectedIdx) }}>
+                    style={{ flex: 1, minWidth: 220, padding: "16px 20px", borderRadius: 14, border: `3px solid ${i === selectedIdx ? accent : o.on ? "var(--k-green)" : "color-mix(in srgb, var(--k-strong) 14%, transparent)"}`, background: o.on ? "var(--k-tint-green)" : i === selectedIdx ? "var(--k-tint-amber)" : "color-mix(in srgb, var(--k-strong) 4%, transparent)", color: "var(--k-strong)", cursor: "pointer", fontSize: "clamp(22px, 2.4vw, 30px)", fontWeight: 800, ...liftSt(i === selectedIdx) }}>
                     {o.label}
                   </button>
                 ))}
@@ -2414,7 +2414,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               const sel = i === selectedIdx;
               return (
                 <button key={o.id} onClick={() => fire(o)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderRadius: 14, border: `3px solid ${sel ? accent : "color-mix(in srgb, var(--k-strong) 14%, transparent)"}`, background: sel ? "rgba(245,158,11,0.18)" : "color-mix(in srgb, var(--k-strong) 4%, transparent)", color: "var(--k-strong)", cursor: "pointer", textAlign: "left", ...liftSt(sel) }}>
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderRadius: 14, border: `3px solid ${sel ? accent : "color-mix(in srgb, var(--k-strong) 14%, transparent)"}`, background: sel ? "var(--k-tint-amber)" : "color-mix(in srgb, var(--k-strong) 4%, transparent)", color: "var(--k-strong)", cursor: "pointer", textAlign: "left", ...liftSt(sel) }}>
                   <span style={{ fontFamily: o.id.startsWith("sz") ? FONT_DISPLAY : FONT_UI, fontSize: o.id.startsWith("sz") ? "clamp(34px, 3.6vw, 52px)" : 22, fontWeight: 800, lineHeight: 1 }}>{o.label}</span>
                   <span style={hintSt(sel, accent)} aria-hidden="true">←</span>
                 </button>
@@ -2585,7 +2585,7 @@ export function ScanOverlay({ state, actions, binMap, extraCols, notes, jerseyTy
               const sel = i === selectedIdx;
               return (
                 <div key={o.id} onClick={() => fire(o)} onMouseEnter={() => hover(i)} data-sel={sel ? "1" : undefined}
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 12, minWidth: 0, border: `3px solid ${sel ? accent : "color-mix(in srgb, var(--k-strong) 12%, transparent)"}`, background: sel ? "rgba(167,139,250,0.18)" : "color-mix(in srgb, var(--k-strong) 4%, transparent)", cursor: "pointer", ...liftSt(sel) }}>
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderRadius: 12, minWidth: 0, border: `3px solid ${sel ? accent : "color-mix(in srgb, var(--k-strong) 12%, transparent)"}`, background: sel ? "var(--k-tint-violet)" : "color-mix(in srgb, var(--k-strong) 4%, transparent)", cursor: "pointer", ...liftSt(sel) }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 24, fontWeight: 700, color: "var(--k-strong)" }}>{o.label}</div>
                   </div>
@@ -2622,7 +2622,7 @@ function ResultCard({ result, onResolve, canResolve = true }) {
   const isManual  = result.status === S_MANUAL && !result.resolution && !result.outcome;    // entered by hand, awaiting sign-off (an order saved before 20 Nov 2026)
   const isFlagged = (result.status === S_FLAGGED && !result.outcome) || isManual;           // accepted or rejected: resolved, still a flag in the reports (M6)
   return (
-    <div style={{ ...card, border: `1px solid ${statusColor(result.status)}`, background: isFlagged ? "rgba(239,68,68,0.06)" : "rgba(148,163,184,0.06)", padding: "6px 10px" }}>
+    <div style={{ ...card, border: `1px solid ${statusColor(result.status)}`, background: isFlagged ? "var(--k-tint-red-faint)" : "color-mix(in srgb, var(--k-ink-5) 8%, transparent)", padding: "6px 10px" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         {result.thumb && <img src={result.thumb} alt="" style={{ width: 44, height: 33, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
         <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
@@ -2641,9 +2641,9 @@ function ResultCard({ result, onResolve, canResolve = true }) {
       {isFlagged && canResolve && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--k-rule)" }}>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button onClick={() => onResolve(result.id, "accept", note)} style={{ ...btnSm, background: "rgba(34,197,94,0.15)",  color: "var(--k-green)", border: "1px solid var(--k-green)" }}>✓ Accept — counts as passed</button>
-            <button onClick={() => onResolve(result.id, "reject", note)} style={{ ...btnSm, background: "rgba(239,68,68,0.15)",  color: "var(--k-red)", border: "1px solid var(--k-red)" }}>✗ Reject — sent for rework</button>
-            <button onClick={() => onResolve(result.id, "note",   note)} style={{ ...btnSm, background: "rgba(99,102,241,0.15)", color: "var(--k-indigo)", border: "1px solid var(--k-indigo)" }}>📝 Note only</button>
+            <button onClick={() => onResolve(result.id, "accept", note)} style={{ ...btnSm, background: "var(--k-tint-green)",  color: "var(--k-green)", border: "1px solid var(--k-green)" }}>✓ Accept — counts as passed</button>
+            <button onClick={() => onResolve(result.id, "reject", note)} style={{ ...btnSm, background: "var(--k-tint-red)",  color: "var(--k-red)", border: "1px solid var(--k-red)" }}>✗ Reject — sent for rework</button>
+            <button onClick={() => onResolve(result.id, "note",   note)} style={{ ...btnSm, background: "var(--k-tint-violet)", color: "var(--k-indigo)", border: "1px solid var(--k-indigo)" }}>📝 Note only</button>
           </div>
           <input value={note} onChange={e => setNote(e.target.value)} placeholder="Optional note…"
             style={{ marginTop: 8, width: "100%", boxSizing: "border-box", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--k-rule-3)", background: "var(--k-field)", color: "var(--k-ink-1)", fontSize: 15 }} />
@@ -2689,7 +2689,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
   const selSt = { ...inputSt, padding: "8px 12px", fontSize: 16 };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2200, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim-lite)", zIndex: 2200, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 12, border: "1px solid var(--k-rule)", padding: 28, width: 540, maxWidth: "92vw", maxHeight: "92%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 16 }}>⚙ Settings</div>
 
@@ -2798,7 +2798,7 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
         </div>
 
         {problems.length > 0 && (
-          <div style={{ fontSize: 15, color: "var(--k-red-ink)", marginBottom: 12, padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: 6 }}>
+          <div style={{ fontSize: 15, color: "var(--k-red-ink)", marginBottom: 12, padding: "10px 14px", background: "var(--k-tint-red-faint)", borderRadius: 6 }}>
             {problems.map(p => <div key={p}>{p}</div>)}
           </div>
         )}
@@ -2835,7 +2835,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
     error:    `Could not print the labels: ${print.message}`,
   }[print.status];
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       {/* Fits any screen height: the title, words and buttons always show, only the list of boxes scrolls (it ran off a screen with the taskbar showing, 20 Nov 2026). */}
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue)", padding: "28px 44px", maxWidth: 680, width: "90vw", maxHeight: "96%", display: "flex", flexDirection: "column", textAlign: "center", boxSizing: "border-box" }}>
         <div style={{ fontSize: 48, marginBottom: 4, flexShrink: 0 }}>🗂️</div>
@@ -2847,7 +2847,7 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
           {autoPrint ? "The labels are printing: stick one inside each box before scanning." : "Print the box labels when the boxes are set out, and stick one inside each box before scanning."} How many boxes is an estimate; a box that fills sooner gets its next label at Box full.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 22, flex: "1 1 auto", minHeight: 120, overflowY: "auto" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "12px 22px", borderRadius: 12, background: "rgba(239,68,68,0.1)", border: "1px solid var(--k-red)", order: 99 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "12px 22px", borderRadius: 12, background: "var(--k-tint-red)", border: "1px solid var(--k-red)", order: 99 }}>
             <div style={{ fontFamily: FONT_DISPLAY, fontSize: 34, fontWeight: 900, color: "var(--k-red-ink)", minWidth: 150, flexShrink: 0, textAlign: "center", lineHeight: 1, whiteSpace: "nowrap" }}>DAMAGED</div>
             <div style={{ textAlign: "left", fontSize: 17, color: "var(--k-red-ink-3)" }}>One more box, off to the side, for flagged garments. It is the same box all day: print its label from the Print menu when you need one.</div>
           </div>
@@ -2903,7 +2903,7 @@ function ReplayFinder({ onPick, onClose, stationLabel }) {
   };
   const missing = state.sources.filter(s => s.label === "floor" && !s.found);
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px dashed var(--k-purple-2)", padding: 30, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ ...titleSt, fontSize: 32, flex: 1 }}>▶ Replay an order</div>
@@ -2969,7 +2969,7 @@ function StillOutModal({ orderNumber, groups, rowOf, binOf, onPass, onClose }) {
     </div>
   ) : null);
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-sky)", padding: 28, maxWidth: 900, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ ...titleSt, fontSize: 32, flex: 1 }}>🔧 Still out on order {orderNumber}</div>
@@ -3054,7 +3054,7 @@ function PackingRow({ b, sh, cap, asking, unfolded, onAsk, onUnfold, onFull, onL
         <div style={{ fontSize: 18, color: "var(--k-ink-2)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span><strong style={{ color: "var(--k-green-ink)" }}>{b.count}</strong> scanned · <strong style={{ color: toScan > 0 ? "var(--k-amber-ink)" : "var(--k-green-ink)" }}>{toScan}</strong> to scan{b.count > 0 && cap ? ` · about ${Math.round(b.weight)} lb of ${cap}` : ""}</span>
           {b.box && <span title="The size of box this many garments fill" style={{ fontWeight: 800, color: "var(--k-amber-ink-2)", whiteSpace: "nowrap" }}>→ {b.box}</span>}
-          {st === "printed" && <span style={{ fontSize: 16, fontWeight: 800, color: "var(--k-green-ink-2)", border: "1px solid var(--k-green)", borderRadius: 999, padding: "2px 12px", background: "rgba(34,197,94,0.12)", whiteSpace: "nowrap" }}>✓ List printed · {b.count} pcs</span>}
+          {st === "printed" && <span style={{ fontSize: 16, fontWeight: 800, color: "var(--k-green-ink-2)", border: "1px solid var(--k-green)", borderRadius: 999, padding: "2px 12px", background: "var(--k-tint-green)", whiteSpace: "nowrap" }}>✓ List printed · {b.count} pcs</span>}
           {toScan > 0 && <button onClick={() => onUnfold(b.bin)} title="The garments still to scan for this box" style={{ ...btnGhost, fontSize: 15, padding: "4px 12px" }}>{unfolded ? "▲ Hide" : "▼ Show"} the {toScan} left</button>}
         </div>
         {unfolded && (sh?.waiting || []).length > 0 && (
@@ -3117,7 +3117,7 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
   const bigBtn = { ...btnPri, fontSize: 20, padding: "14px 28px", whiteSpace: "nowrap", background: tone, color: "var(--k-page)" };
   const pcs = n => `${n} ${n === 1 ? "garment" : "garments"}`;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2400, display: "flex", alignItems: "center", justifyContent: "center" }}>{/* above the done screen (2300) and the Finish confirm (1600), which open it; below the Print menu (2500) */}
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2400, display: "flex", alignItems: "center", justifyContent: "center" }}>{/* above the done screen (2300) and the Finish confirm (1600), which open it; below the Print menu (2500) */}
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-green)", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ ...titleBig, fontSize: 36, whiteSpace: "nowrap" }}>📦 Packing · order {orderNumber || "—"}</div>
@@ -3126,7 +3126,7 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
         </div>
         {/* The Now strip: one sentence, one button that does it. */}
-        <div style={{ marginTop: 16, padding: "14px 20px", borderRadius: 14, border: `2px solid ${tone}`, background: "rgba(34,197,94,0.08)", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 16, padding: "14px 20px", borderRadius: 14, border: `2px solid ${tone}`, background: "var(--k-tint-green-faint)", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 260 }}>
             <div style={{ fontSize: 26, fontWeight: 900, color: "var(--k-ink-1)" }}>{now.text}</div>
             <div style={{ fontSize: 18, color: "var(--k-ink-2)", marginTop: 2 }}>
@@ -3152,7 +3152,7 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
           ))}
         </div>
         {damaged.length > 0 && (
-          <div style={{ ...rowSt, marginTop: 10, borderColor: "var(--k-red)", background: "rgba(239,68,68,0.08)" }}>
+          <div style={{ ...rowSt, marginTop: 10, borderColor: "var(--k-red)", background: "var(--k-tint-red-faint)" }}>
             <div style={{ fontFamily: FONT_DISPLAY, fontSize: 32, fontWeight: 900, color: "var(--k-red-ink)", minWidth: 120, lineHeight: 1 }}>DAMAGED</div>
             <div style={{ flex: 1, fontSize: 17, color: "var(--k-red-ink-3)" }}>{pcs(damaged.length)} flagged: {jerseyList(damaged, 8)}</div>
             {onDamagedList && <button onClick={onDamagedList} title="Print the list of what is in the DAMAGED box: number, name, team and why" style={{ ...btnGhost, fontSize: 17, padding: "10px 18px", borderColor: "var(--k-red)", color: "var(--k-red-ink-3)", whiteSpace: "nowrap" }}>🖨 Print list</button>}
@@ -3222,7 +3222,7 @@ function IssuesModal({ missing, dups, flagged, binOf, onClose }) {
     </div>
   );
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-amber)", padding: 30, maxWidth: 1300, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ ...titleSt, fontSize: 34, flex: 1 }}>Missing · Duplicate · Flagged</div>
@@ -3344,7 +3344,7 @@ function HistoryModal({ log, roster, binOf, onFlag, onClose }) {
         <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
           {rows.length === 0 && <div style={{ color: "var(--k-ink-3)", padding: 24, textAlign: "center", fontSize: 17 }}>Nothing scanned yet.</div>}
           {rows.map(l => { const st = stateOf(l); return (
-            <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 10, background: st === "flag" ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.06)", border: "1px solid var(--k-rule)" }}>
+            <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 10, background: st === "flag" ? "var(--k-tint-red-faint)" : "var(--k-tint-green-faint)", border: "1px solid var(--k-rule)" }}>
               {l.thumb && <img src={l.thumb} alt="" style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
               <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 28, lineHeight: 1 }}>#{l.match.number}{l.match.name ? <span style={{ fontFamily: FONT_READ, fontWeight: 700 }}>{` · ${l.match.name}`}</span> : ""}</span>
               {l.match.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: "var(--k-green-ink)", fontWeight: 800 }}>{shortSize(l.match.size)}</span>}
@@ -3391,7 +3391,7 @@ function BlanksModal({ groups, boxOf, last, sticker, scanKey, onCount, onFlag, o
   const name = g => [g.team, shortSize(g.size), g.style].filter(Boolean).join(" · ") || "Blank garment";
   const left = groups.reduce((t, g) => t + (g.total - g.done - g.flagged), 0);
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue)", padding: 30, maxWidth: 860, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ ...titleBig, fontSize: 36 }}>Blank garments</div>
@@ -3402,7 +3402,7 @@ function BlanksModal({ groups, boxOf, last, sticker, scanKey, onCount, onFlag, o
           Nothing is printed on these, so the camera has nothing to read. Look the garment over, then press the button of its {groups.some(g => g.team) ? "team and " : ""}size. Each press counts one, prints its sticker and puts it in its box. The pedal counts one more of the kind you pressed last.
         </div>
         {last && (
-          <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 8, background: "rgba(34,197,94,0.1)", border: "1px solid var(--k-green)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 17, color: "var(--k-ink-1)" }}>
+          <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 8, background: "var(--k-tint-green)", border: "1px solid var(--k-green)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 17, color: "var(--k-ink-1)" }}>
             <span style={{ flex: 1 }}><strong style={{ color: "var(--k-green-ink)" }}>Counted:</strong> {[last.match?.team, shortSize(last.match?.size), last.match?.style].filter(Boolean).join(" · ")}{boxOf(last.match) !== null ? <> → <strong style={{ color: "var(--k-blue-ink)" }}>Box {boxOf(last.match)}</strong></> : null}{sticker ? <span style={{ color: "var(--k-ink-3)" }}> · {sticker}</span> : null}</span>
             <button onClick={() => onUndo(last.match._id)} style={{ ...btnGhost, fontSize: 14, padding: "6px 12px" }}>Undo</button>
           </div>
@@ -3441,7 +3441,7 @@ function FinishedModal({ orderNumber, status, onReprint, onPrint, onPacking, onN
   const colour = { printing: "var(--k-ink-3)", done: "var(--k-green-ink)", error: "var(--k-red-ink)", none: "var(--k-amber-ink)" }[status?.status] || "var(--k-ink-3)";
   const busy = status?.status === "printing" || sendingLast;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-green)", padding: 44, maxWidth: 680, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
         <div style={{ fontSize: 56, marginBottom: 10 }}>🏁</div>
         <div style={{ ...titleBig, fontSize: 40, marginBottom: 12 }}>Order {orderNumber || "—"} is done</div>
@@ -3456,7 +3456,7 @@ function FinishedModal({ orderNumber, status, onReprint, onPrint, onPacking, onN
           <button onClick={onBack} disabled={busy} title="The order is not closed yet: go back to it" style={{ ...btnGhost, fontSize: 16, padding: "14px 20px", opacity: busy ? 0.5 : 1 }}>← Back to this order</button>
         </div>
         {unsent && (
-          <div style={{ marginTop: 18, padding: "12px 16px", borderRadius: 10, border: "2px solid var(--k-red)", background: "rgba(239,68,68,0.1)", textAlign: "left" }}>
+          <div style={{ marginTop: 18, padding: "12px 16px", borderRadius: 10, border: "2px solid var(--k-red)", background: "var(--k-tint-red)", textAlign: "left" }}>
             <div style={{ fontSize: 17, color: "var(--k-red-ink-2)", fontWeight: 700, marginBottom: 10 }}>⚠ {unsent}</div>
             <button onClick={onNewAnyway} onKeyDown={e => e.preventDefault()} title="Only when the server cannot be reached and the order is safe elsewhere" style={{ ...btnGhost, fontSize: 15, padding: "8px 14px", borderColor: "var(--k-red)", color: "var(--k-red-ink-2)" }}>Start a new order anyway — this order is deleted from this station</button>
           </div>
@@ -3536,7 +3536,7 @@ function PrintModal({ current = null, tagOf, onClose }) {
   const smBtn  = { ...btnGhost, fontSize: 15, padding: "6px 12px", whiteSpace: "nowrap" };
   const of = b => `Box ${b.bin}`;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2500, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue)", padding: 30, maxWidth: 860, width: "94vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={STICKY_HEAD}>
           <div style={{ ...titleBig, fontSize: 36 }}>🖨 Print</div>
@@ -3671,7 +3671,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
     { label: "Unscanned", value: remaining,  color: remaining ? "var(--k-amber)" : "var(--k-ink-4)" },
   ];
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
       {/* Fits the screen whatever the order (the owner, 19 Nov 2026: on a 30-box order it ran off the
           bottom and Finish could not be reached): the title, the counts and the buttons always show,
           and only the lists in the middle scroll, as one. */}
@@ -3688,7 +3688,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
         </div>
         <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", margin: "0 -8px", padding: "0 8px" }}>
         {lacking > 0 && (
-          <div style={{ marginBottom: 12, padding: "12px 16px", borderRadius: 10, border: "2px solid var(--k-amber)", background: "rgba(245,158,11,0.1)", textAlign: "left" }}>
+          <div style={{ marginBottom: 12, padding: "12px 16px", borderRadius: 10, border: "2px solid var(--k-amber)", background: "var(--k-tint-amber)", textAlign: "left" }}>
             <div style={{ fontSize: 19, fontWeight: 900, color: "var(--k-amber-ink)", marginBottom: 6 }}>⚠ Before the boxes are sealed: {lacking} {lacking === 1 ? "garment is" : "garments are"} in no box</div>
             {short.map(x => (
               <div key={x.bin} style={{ fontSize: 16, color: "var(--k-ink-1)", lineHeight: 1.45 }}>
@@ -3700,7 +3700,7 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
           </div>
         )}
         {shipWith.length > 0 && openOnes.length > 0 && (
-          <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: 10, border: "2px solid var(--k-sky)", background: "rgba(56,189,248,0.08)", textAlign: "left" }}>
+          <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: 10, border: "2px solid var(--k-sky)", background: "var(--k-tint-sky-faint)", textAlign: "left" }}>
             <div style={{ fontSize: 19, fontWeight: 900, color: "var(--k-sky-ink)", marginBottom: 4 }}>📦 Ships with order {shipWith.join(", ")}</div>
             <div style={{ fontSize: 15, color: "var(--k-ink-2)", marginBottom: 8 }}>Leave a box open if it is not full: it waits for order {shipWith.join(", ")} of the same {bins[0]?.by === "size" ? "size" : "team"}, and its list prints when it is full. Close it if it is full (45–50 lb).</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -3710,8 +3710,8 @@ function FinishOrderModal({ orderNumber, roster, offRosterFlags = 0, scans = 0, 
                   <div key={b.bin} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 8, background: "var(--k-page)" }}>
                     <span style={{ fontWeight: 800, color: "var(--k-blue-ink)", minWidth: 70 }}>Box {b.bin}</span>
                     <span style={{ flex: 1, minWidth: 0, fontSize: 16 }}>{b.label} · {b.count} {b.count === 1 ? "garment" : "garments"}{b.box ? <span style={{ color: "var(--k-ink-3)" }}> · {b.box}</span> : null}</span>
-                    <button onClick={() => setKeep(k => { const n = new Set(k); n.add(b.bin); return n; })} style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: open ? "var(--k-sky)" : "var(--k-rule-2)", color: open ? "var(--k-strong)" : "var(--k-ink-3)", background: open ? "rgba(56,189,248,0.25)" : "transparent" }}>{open ? "✓ " : ""}Leave open</button>
-                    <button onClick={() => setKeep(k => { const n = new Set(k); n.delete(b.bin); return n; })} style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: !open ? "var(--k-green)" : "var(--k-rule-2)", color: !open ? "var(--k-strong)" : "var(--k-ink-3)", background: !open ? "rgba(34,197,94,0.25)" : "transparent" }}>{!open ? "✓ " : ""}Full — close it</button>
+                    <button onClick={() => setKeep(k => { const n = new Set(k); n.add(b.bin); return n; })} style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: open ? "var(--k-sky)" : "var(--k-rule-2)", color: open ? "var(--k-strong)" : "var(--k-ink-3)", background: open ? "var(--k-tint-sky)" : "transparent" }}>{open ? "✓ " : ""}Leave open</button>
+                    <button onClick={() => setKeep(k => { const n = new Set(k); n.delete(b.bin); return n; })} style={{ ...btnGhost, fontSize: 14, padding: "6px 10px", borderColor: !open ? "var(--k-green)" : "var(--k-rule-2)", color: !open ? "var(--k-strong)" : "var(--k-ink-3)", background: !open ? "var(--k-tint-green)" : "transparent" }}>{!open ? "✓ " : ""}Full — close it</button>
                   </div>
                 );
               })}
@@ -3764,7 +3764,7 @@ function RosterCompleteModal({ roster, offRosterFlags = 0, canExport = true, onE
   ].filter(s => s.value > 0 || s.label === "Passed");
   const open = count("flag") + offRosterFlags + count("manual") + count("missing") + count("short");
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 1600, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: `2px solid ${open ? "var(--k-amber)" : "var(--k-green)"}`, padding: 44, maxWidth: 640, width: "90vw", textAlign: "center", boxSizing: "border-box" }}>
         <div style={{ fontSize: 64, marginBottom: 12 }}>{open ? "📋" : "🎉"}</div>
         <div style={{ fontSize: 36, fontWeight: 900, color: open ? "var(--k-amber)" : "var(--k-green)", marginBottom: 10 }}>{open ? "Every garment accounted for" : "Order complete"}</div>
@@ -5727,20 +5727,20 @@ export default function App() {
       </div>
 
       {(notes || jerseyType) && (
-        <div style={{ background: "rgba(245,158,11,0.10)", borderBottom: "1px solid rgba(245,158,11,0.35)", padding: "9px 16px", fontSize: 16, color: "var(--k-amber-ink-2)", flexShrink: 0, display: "flex", gap: 14, alignItems: "center" }}>
+        <div style={{ background: "var(--k-tint-amber)", borderBottom: "1px solid var(--k-tint-amber-line)", padding: "9px 16px", fontSize: 16, color: "var(--k-amber-ink-2)", flexShrink: 0, display: "flex", gap: 14, alignItems: "center" }}>
           {jerseyType && <span style={{ border: "1px solid var(--k-blue-ink)", color: "var(--k-blue-ink-2)", borderRadius: 999, padding: "2px 12px", fontWeight: 700, whiteSpace: "nowrap" }}>{jerseyTypeLabel(jerseyType)} · {jerseyTypeOf(jerseyType)?.construction}</span>}
           {notes && <span><strong>Order notes:</strong> {notes}</span>}
         </div>
       )}
 
       {sessionStarted && orderSetBy && (
-        <div style={{ background: "rgba(34,197,94,0.12)", borderBottom: "1px solid rgba(34,197,94,0.4)", padding: "9px 16px", fontSize: 16, color: "var(--k-green-ink-3)", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ background: "var(--k-tint-green)", borderBottom: "1px solid var(--k-tint-green-line)", padding: "9px 16px", fontSize: 16, color: "var(--k-green-ink-3)", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <span>🔢 <strong>{orderSetBy.by || "The supervisor"} set this order's number to {orderSetBy.orderNumber}.</strong> Reports and the board use it from now on.</span>
           <button onClick={() => setOrderSetBy(null)} title="Hide" style={{ background: "transparent", border: 0, color: "var(--k-green-ink-3)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 8px" }}>✕</button>
         </div>
       )}
       {sessionStarted && newRosters.length > 0 && (
-        <div style={{ background: "rgba(59,130,246,0.12)", borderBottom: "1px solid rgba(59,130,246,0.4)", padding: "9px 16px", fontSize: 16, color: "var(--k-blue-ink-3)", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ background: "var(--k-tint-blue)", borderBottom: "1px solid var(--k-tint-blue-line)", padding: "9px 16px", fontSize: 16, color: "var(--k-blue-ink-3)", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <span>📋 <strong>{newRosters.map(r => `Order ${r.orderNumber || "—"} from ${r.by || "the supervisor"} (${r.rowCount} ${r.rowCount === 1 ? "garment" : "garments"}${r.forStation ? ", for this station" : ""})`).join(" · ")}</strong> is waiting for you — it is offered when this order ends, or on Finish order.</span>
           <button onClick={() => setNewRosters([])} title="Hide" style={{ background: "transparent", border: 0, color: "var(--k-blue-ink-3)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 8px" }}>✕</button>
         </div>
@@ -5774,7 +5774,7 @@ export default function App() {
               <div style={{ display: "flex", borderBottom: "1px solid var(--k-rule)" }}>
                 {["camera", "upload"].map(m => (
                   <button key={m} onClick={() => { setInputMode(m); if (m === "upload") stopCamera(); }}
-                    style={{ flex: 1, padding: "11px 0", border: "none", background: inputMode === m ? "rgba(59,130,246,0.1)" : "transparent", color: inputMode === m ? "var(--k-blue-ink)" : "var(--k-ink-4)", fontWeight: 700, fontSize: 16, borderBottom: inputMode === m ? "2px solid var(--k-blue)" : "2px solid transparent", cursor: "pointer" }}>
+                    style={{ flex: 1, padding: "11px 0", border: "none", background: inputMode === m ? "var(--k-tint-blue)" : "transparent", color: inputMode === m ? "var(--k-blue-ink)" : "var(--k-ink-4)", fontWeight: 700, fontSize: 16, borderBottom: inputMode === m ? "2px solid var(--k-blue)" : "2px solid transparent", cursor: "pointer" }}>
                     {m === "camera" ? "📷 Webcam" : "🖼 Upload"}
                   </button>
                 ))}
@@ -5788,7 +5788,7 @@ export default function App() {
                     {!cameraOn && (
                       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
                         <span style={{ fontSize: 52 }}>📷</span>
-                        <span style={{ fontSize: 20, color: "#94a3b8" }}>Camera off</span>
+                        <span style={{ fontSize: 20, color: "#A2ADC6" }}>Camera off</span>
                       </div>
                     )}
                     {cameraOn && (
@@ -5797,23 +5797,23 @@ export default function App() {
                       </div>
                     )}
                     {scanning && (
-                      <div style={{ position: "absolute", inset: 0, background: "rgba(59,130,246,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <div style={{ position: "absolute", inset: 0, background: "var(--k-tint-blue)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <div style={{ color: "#fff", fontWeight: 700, fontSize: 26, background: "rgba(0,0,0,0.65)", padding: "14px 32px", borderRadius: 999 }}>⏳ Reading…</div>
                       </div>
                     )}
                     {cameraOn && !scanning && (
                       <>
                         <div style={{ position: "absolute", top: 10, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(0,0,0,0.65)", padding: "8px 16px", borderRadius: 999 }}>
-                          <div style={{ width: 12, height: 12, borderRadius: "50%", background: armed && handsFree ? "#f59e0b" : handsFreePaused || (waitPedal && handsFree) ? "#94a3b8" : "#22c55e", boxShadow: `0 0 5px ${armed && handsFree ? "#f59e0b" : handsFreePaused || (waitPedal && handsFree) ? "#94a3b8" : "#22c55e"}` }} />
-                          <span style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9" }}>{armed && handsFree ? "Waiting for the next garment…" : handsFreePaused ? `Hands-free paused — ${keyLabel} to scan` : !settings.autoScan ? `Hands-free off — ${keyLabel} to scan` : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : waitPedal ? `Flagged — press ${keyLabel} to scan the next garment` : "Ready"}</span>
+                          <div style={{ width: 12, height: 12, borderRadius: "50%", background: armed && handsFree ? "#FFB547" : handsFreePaused || (waitPedal && handsFree) ? "#A2ADC6" : "#6FD08C", boxShadow: `0 0 5px ${armed && handsFree ? "#FFB547" : handsFreePaused || (waitPedal && handsFree) ? "#A2ADC6" : "#6FD08C"}` }} />
+                          <span style={{ fontSize: 17, fontWeight: 700, color: "#EEF1F8" }}>{armed && handsFree ? "Waiting for the next garment…" : handsFreePaused ? `Hands-free paused — ${keyLabel} to scan` : !settings.autoScan ? `Hands-free off — ${keyLabel} to scan` : roster.length > 0 && remaining === 0 ? "Order done — hands-free off" : waitPedal ? `Flagged — press ${keyLabel} to scan the next garment` : "Ready"}</span>
                         </div>
                         {!sorting && checksLeft > 0 && (
-                          <div title="After a mistake the next garments are read twice and must agree before a green" style={{ position: "absolute", top: 54, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(37,99,235,0.85)", padding: "8px 16px", borderRadius: 999 }}>
+                          <div title="After a mistake the next garments are read twice and must agree before a green" style={{ position: "absolute", top: 54, right: 10, display: "flex", alignItems: "center", gap: 9, background: "rgba(0,81,155,0.92)", padding: "8px 16px", borderRadius: 999 }}>
                             <span style={{ fontSize: 17, fontWeight: 700, color: "#fff" }}>Double-checking · {checksLeft} to go</span>
                           </div>
                         )}
-                        <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.65)", color: "#e2e8f0", fontSize: 15, padding: "6px 14px", borderRadius: 999, whiteSpace: "nowrap" }}>
-                          Press <kbd style={{ background: "#1e293b", padding: "2px 7px", borderRadius: 4, fontSize: 15, fontWeight: 700 }}>{keyLabel}</kbd> to scan
+                        <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.65)", color: "#EEF1F8", fontSize: 15, padding: "6px 14px", borderRadius: 999, whiteSpace: "nowrap" }}>
+                          Press <kbd style={{ background: "#2A3555", padding: "2px 7px", borderRadius: 4, fontSize: 15, fontWeight: 700 }}>{keyLabel}</kbd> to scan
                         </div>
                       </>
                     )}
@@ -5824,7 +5824,7 @@ export default function App() {
                       : <>
                           <button onClick={stopCamera} title="Stop the camera" style={{ ...btnGhost, width: 56, fontSize: 18 }}>■</button>
                           <button onClick={toggleHandsFree} title={!settings.autoScan ? "Turn hands-free scanning on" : handsFreePaused ? "Resume hands-free scanning" : `Pause hands-free — the camera stays on and ${keyLabel} still scans`}
-                            style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, borderColor: "var(--k-amber)", color: "var(--k-amber-ink-2)", background: handsFree ? "rgba(245,158,11,0.14)" : "transparent", whiteSpace: "nowrap" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
+                            style={{ ...btnGhost, padding: "0 14px", fontSize: 16, fontWeight: 700, borderColor: "var(--k-amber)", color: "var(--k-amber-ink-2)", background: handsFree ? "var(--k-tint-amber)" : "transparent", whiteSpace: "nowrap" }}>{handsFree ? "⏸ Pause scan" : "▶ Hands-free"}</button>
                           <button onClick={() => { gateRef.current.disarm(); setArmed(false); doTriggerScan(); }} disabled={scanning || anyDialogOpen || !!overlay}
                             style={{ ...btnPri, flex: 1, fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, letterSpacing: 1, padding: "14px", opacity: scanning ? 0.4 : 1 }}>
                             {scanning ? "Reading…" : "⚡ SCAN"}
@@ -5861,7 +5861,7 @@ export default function App() {
               )}
 
               {lastConfirmed && (
-                <div style={{ padding: "10px 14px", borderTop: "1px solid var(--k-rule)", display: "flex", alignItems: "center", gap: 14, background: "rgba(34,197,94,0.06)", flexShrink: 0, flexWrap: "wrap" }}>
+                <div style={{ padding: "10px 14px", borderTop: "1px solid var(--k-rule)", display: "flex", alignItems: "center", gap: 14, background: "var(--k-tint-green-faint)", flexShrink: 0, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 14, color: "var(--k-ink-3)", whiteSpace: "nowrap" }}>Last passed</span>
                   <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 30, lineHeight: 1 }}>#{lastConfirmed.match?.number}{lastConfirmed.match?.name ? <span style={{ fontFamily: FONT_READ, fontWeight: 700 }}>{` · ${lastConfirmed.match.name}`}</span> : ""}</span>
                   {lastConfirmed.match?.size && <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, lineHeight: 1, color: "var(--k-green-ink)", fontWeight: 800 }}>{shortSize(lastConfirmed.match.size)}</span>}
@@ -5895,7 +5895,7 @@ export default function App() {
                 <div style={{ padding: "8px 14px", borderTop: "1px solid var(--k-rule)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>{/* one line, short labels, never under the roster (the owner, 19 Nov 2026) */}
                   {stillOut.total > 0 && <button onClick={() => setShowStillOut(true)} title="The garments this order is waiting for: back from repair, missing, extra. Scan one when it comes back, or pass it here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", borderColor: "var(--k-sky)", color: "var(--k-sky-ink)" }}>🔧 Still out · {stillOut.total}</button>}
                   <button onClick={() => setShowHistory(true)} title="Every garment scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap" }}>🕘 History · {new Set(log.filter(l => l.match && l.match._id !== undefined && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).map(l => l.match._id)).size}</button>
-                  <button onClick={() => setShowPacking(true)} title="Packing: what to do next, each box with its list (Print list, Box full), and the order summary" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "#b91c1c", borderColor: "var(--k-red)", color: "#fff" } : { borderColor: "var(--k-green)", color: "var(--k-green-ink-2)" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Packing"}</button>
+                  <button onClick={() => setShowPacking(true)} title="Packing: what to do next, each box with its list (Print list, Box full), and the order summary" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "var(--k-red)", borderColor: "var(--k-red)", color: "var(--k-on-red)" } : { borderColor: "var(--k-green)", color: "var(--k-green-ink-2)" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Packing"}</button>
                   <button onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: issues.missing.length + issues.dups.length + issues.flagged.length ? "var(--k-amber)" : "var(--k-rule-2)" }}>
                     ⚠ Mis <span style={{ color: "var(--k-amber-ink)" }}>{issues.missing.length}</span> · Dup <span style={{ color: "var(--k-purple)" }}>{issues.dups.length}</span> · Flag <span style={{ color: "var(--k-red-ink)" }}>{issues.flagged.length}</span>
                   </button>
@@ -5988,7 +5988,7 @@ export default function App() {
                     const on = [sizeFilter, teamFilter, boxFilter, doneFilter].filter(Boolean).length;
                     return (
                       <button onClick={() => setShowFilters(v => !v)} title="Show only one size, team or box, or only what is done or still to do" aria-expanded={showFilters}
-                        style={{ ...btnGhost, marginLeft: 6, padding: "3px 12px", fontSize: 14, display: "flex", alignItems: "center", gap: 7, borderColor: on || showFilters ? "var(--k-blue-ink)" : "var(--k-rule-2)", color: on || showFilters ? "var(--k-strong)" : "var(--k-ink-3)", background: on ? "rgba(96,165,250,0.15)" : "transparent", fontWeight: on ? 800 : 500 }}>
+                        style={{ ...btnGhost, marginLeft: 6, padding: "3px 12px", fontSize: 14, display: "flex", alignItems: "center", gap: 7, borderColor: on || showFilters ? "var(--k-blue-ink)" : "var(--k-rule-2)", color: on || showFilters ? "var(--k-strong)" : "var(--k-ink-3)", background: on ? "var(--k-tint-blue)" : "transparent", fontWeight: on ? 800 : 500 }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5L3 5z" /></svg>
                         Filters{on ? ` · ${on}` : ""} <span style={{ fontSize: 11 }}>{showFilters ? "▲" : "▼"}</span>
                       </button>
