@@ -807,8 +807,11 @@ describe("Admin on the sign-in screen (the co-op, 27 Nov 2026)", () => {
     expect(src).toMatch(/const ROLE_CHOICES = \[\.\.\.ROLES, ADMIN_CHOICE\];/);
     expect(src).toMatch(/u\.search = "\?view=admin"/);
     const submit = src.slice(src.indexOf("  const submit = async () => {"), src.indexOf("  const onEnter = e =>"));
-    expect(submit.indexOf("if (isAdmin) { openAdminPanel(); return; }")).toBeGreaterThan(-1);
+    // Signed in to the panel already: straight there; else the panel's own /login with the name and password typed here.
+    expect(submit).toMatch(/if \(adminS\.signedIn\) \{ openAdminPanel\(\); return; \}/);
+    expect(submit).toMatch(/await adminSignIn\(\)/);
     expect(submit.indexOf("if (isAdmin)")).toBeLessThan(submit.indexOf("checkPin("));
+    expect(src).toMatch(/fetch\("\/api\/admin\/login"/);
     expect(src).toMatch(/\{PIN_REQUIRED && !isAdmin && \(/);   // no PIN keypad for Admin
   });
 });

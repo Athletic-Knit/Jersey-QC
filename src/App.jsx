@@ -437,6 +437,29 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   useEffect(() => { choiceRef.current = nameChoice; }, [nameChoice]);
   const [pinFocus, setPinFocus] = useState(false);   // only the field's highlight follows focus; the keypad is always there
   const [error, setError] = useState(null);
+  // Admin (the co-op, 27 Nov 2026): signed in to the panel already → only "Open the admin panel";
+  // else its name and password right here (the panel's own /login, which sets its cookie).
+  const [adminS, setAdminS] = useState(null);      // null: asking; { setup, signedIn, name }; { missing: true }: no admin panel on this server
+  const [adminName, setAdminName] = useState(() => { try { return localStorage.getItem("jerseyqc.admin.name") || ""; } catch { return ""; } });
+  const [adminPw, setAdminPw] = useState("");
+  useEffect(() => {
+    if (role !== ADMIN_CHOICE.id) return;
+    let on = true;
+    fetch("/api/admin/session", { credentials: "same-origin" })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then(j => { if (on) setAdminS(j && typeof j.setup === "boolean" ? j : { missing: true }); })
+      .catch(() => { if (on) setAdminS({ missing: true }); });
+    return () => { on = false; };
+  }, [role]);
+  const adminSignIn = async () => {
+    if (!adminName.trim()) { setError("Type your name: it goes in the change log."); return; }
+    if (!adminPw) { setError("Type the admin password."); return; }
+    const r = await fetch("/api/admin/login", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: adminName.trim(), password: adminPw }) });
+    let j = {}; try { j = await r.json(); } catch { /* empty */ }
+    if (!r.ok) { setAdminPw(""); setError(j.error || `The server answered ${r.status}.`); return; }
+    try { localStorage.setItem("jerseyqc.admin.name", adminName.trim()); } catch { /* fine */ }
+    openAdminPanel();
+  };
   useEffect(() => {
     let on = true;
     loadFloorConfig().then(c => {
@@ -473,7 +496,13 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
   const checkingRef = useRef(false);
   const submit = async () => {
     if (checkingRef.current) return;
-    if (isAdmin) { openAdminPanel(); return; }   // the panel asks for its password
+    if (isAdmin) {
+      if (!adminS || adminS.missing || !adminS.setup) return;
+      if (adminS.signedIn) { openAdminPanel(); return; }
+      checkingRef.current = true; setChecking(true);
+      try { await adminSignIn(); } catch (e) { setError(`The server did not answer (${e.message}).`); } finally { checkingRef.current = false; setChecking(false); }
+      return;
+    }
     if (PIN_REQUIRED) {
       checkingRef.current = true; setChecking(true);
       const r = await checkPin(pinOwner.id, pin).finally(() => { checkingRef.current = false; setChecking(false); });
@@ -495,7 +524,7 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
       {/* Two columns, so the whole sign-in fits one screen with no scrolling:
           who and where on the left with the Sign in button, the PIN and its
           keypad on the right. On a narrow screen the columns stack. */}
-      <div style={{ ...modalCard, padding: "24px 32px", width: PIN_REQUIRED ? 940 : 600, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
+      <div style={{ ...modalCard, padding: "24px 32px", width: 940, maxWidth: "94vw", maxHeight: "96%", overflowY: "auto", boxSizing: "border-box" }}>
         {/* The letterhead (the co-op, 27 Nov 2026): a white band across the card's top in both themes, a brand-blue rule
             under it, the logo on the left and the title on the right. The logo is a JPEG on white, so the white belongs to
             the band and dark mode shows no white patch around it. The band's colours are the light brand set on purpose. */}
@@ -526,12 +555,6 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "16px 32px", alignItems: "stretch", minHeight: SIGNIN_BODY_MIN }}>
         <div style={{ flex: "1 1 340px", minWidth: 0, display: "flex", flexDirection: "column" }}>
-        {role === "supervisor" && (
-          <div style={{ marginBottom: 14, fontSize: 16, color: "var(--k-ink-2)", lineHeight: 1.45 }}>
-            <label style={labelSt}>The board</label>
-            The supervisor's board: every station's progress, the flags waiting on you, rosters to send and the day's orders. No station to pick.
-          </div>
-        )}
         {atStation(role) && (
           <div style={{ marginBottom: 12 }}>
             <label style={labelSt}>Which station?</label>
@@ -543,14 +566,20 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
                 </button>
               ); })}
             </div>
-            <div style={{ fontSize: 14, color: "var(--k-ink-3b)", marginTop: 6 }}>{busyBy(station) ? <span style={{ color: "var(--k-red-ink)" }}>{stDef?.label} is in use by {busyBy(station)} on another PC right now.</span> : <>Each station has its own PIN. The supervisor's board shows this page as {stDef?.label}.</>}</div>
+            {busyBy(station) && <div style={{ fontSize: 14, color: "var(--k-red-ink)", marginTop: 6 }}>{stDef?.label} is in use by {busyBy(station)} on another PC right now.</div>}
           </div>
         )}
-        {isAdmin && (
-          <div style={{ marginBottom: 14, fontSize: 16, color: "var(--k-ink-2)", lineHeight: 1.45 }}>
-            <label style={labelSt}>The admin panel</label>
-            The admin panel, for the developers: the server's health, operators, printers, station defaults, data and floor rules.
+        {isAdmin && adminS && !adminS.missing && adminS.setup && adminS.signedIn && (
+          <div style={{ marginBottom: 14, fontSize: 17, color: "var(--k-ink-2)" }}>Signed in as <strong style={{ color: "var(--k-strong)" }}>{adminS.name}</strong></div>
+        )}
+        {isAdmin && adminS && !adminS.missing && adminS.setup && !adminS.signedIn && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelSt} htmlFor="adm-name">Your name</label>
+            <input id="adm-name" value={adminName} onChange={e => setAdminName(e.target.value)} onKeyDown={onEnter} autoComplete="username" style={inputSt} />
           </div>
+        )}
+        {isAdmin && adminS && (adminS.missing || !adminS.setup) && (
+          <div style={errSt}>{adminS.missing ? "This server has no admin panel." : "The admin panel is not set up on this server: JQC_ADMIN_PASSWORD is not in its .env.local."}</div>
         )}
         {!isAdmin && <div style={{ marginBottom: 14 }}>
           <label style={labelSt}>Your name</label>
@@ -569,16 +598,17 @@ function SignInModal({ onSignIn, initial, onCancel, title }) {   // onCancel + t
         </div>}
         <div style={{ marginTop: "auto" }} />
         {error && <div style={errSt}>{error}</div>}
-        <button onClick={submit} disabled={checking} style={checking ? { ...bigBtn, opacity: 0.6 } : bigBtn}>{checking ? "Checking the PIN…" : isAdmin ? "Open the admin panel →" : onCancel ? "Take over →" : "Sign in →"}</button>
+        {(() => { const off = checking || (isAdmin && (!adminS || adminS.missing || !adminS.setup)); return (
+        <button onClick={submit} disabled={off} style={off ? { ...bigBtn, opacity: 0.6 } : bigBtn}>{checking ? (isAdmin ? "Signing in…" : "Checking the PIN…") : isAdmin ? (adminS?.signedIn ? "Open the admin panel →" : "Sign in to the admin panel →") : onCancel ? "Take over →" : "Sign in →"}</button>
+        ); })()}
         {onCancel && <button onClick={onCancel} style={{ ...btnGhost, width: "100%", marginTop: 8 }}>← Back, keep the current operator</button>}
         </div>
-        {PIN_REQUIRED && isAdmin && (
-          <div style={{ flex: "1 1 300px", minWidth: 0, display: "flex", flexDirection: "column" }}>
-            <label style={labelSt}>Password</label>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: 24, textAlign: "center", border: "1px dashed var(--k-rule-2)", borderRadius: 8, background: "var(--k-field)", color: "var(--k-ink-2)", fontSize: 16, lineHeight: 1.45 }}>
-              <span style={{ fontSize: 40, lineHeight: 1 }} aria-hidden="true">🔒</span>
-              No PIN here. The admin panel asks for its own password on the next page.
-            </div>
+        {isAdmin && (
+          <div style={{ flex: "1 1 300px", minWidth: 0 }}>
+            {adminS && !adminS.missing && adminS.setup && !adminS.signedIn && <>
+              <label style={labelSt} htmlFor="adm-pw">Admin password</label>
+              <input id="adm-pw" type="password" value={adminPw} onChange={e => setAdminPw(e.target.value)} onKeyDown={onEnter} autoComplete="current-password" autoFocus style={inputSt} />
+            </>}
           </div>
         )}
         {PIN_REQUIRED && !isAdmin && (
