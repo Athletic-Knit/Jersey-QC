@@ -2,7 +2,10 @@
 // test can read them.
 //
 // The "Back from repair" button is on this screen because a flagged jersey that is scanned
-// again may have come back from repair (the owner, 20 Nov 2026).
+// again may have come back from repair (the owner, 20 Nov 2026). Since 26 Nov 2026 a flagged
+// row is open to the matcher from its first flag (scanRoster in App.jsx: a tap-only list on an
+// order not parked, a green on a picked-up one), so a scan never lands here for a flagged row;
+// the flagged branch below is kept as a safety net, with its rule tested (dupoptions.test.js).
 //
 // WHY: a flagged jersey is often still under the camera when the operator presses the
 // pedal again. "Back from repair — pass it" used to be the first, pre-selected button, so

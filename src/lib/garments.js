@@ -6,17 +6,16 @@
 // the damage (the owner, 23 Nov 2026).
 //
 // The floor makes many styles but only a handful of silhouettes, so there is
-// one outline per garment KIND (hockey, tee, tank, hoodie, pants, socks …).
-// The outlines are our own simplified polygons, drawn by hand against the flat
-// line drawings in the company catalogue (2026 catalogue, pages 85–104, the
-// "custom sublimation patterns"). The catalogue's pictures are not copied here.
+// one outline per garment KIND (hockey jersey, hoodie, pants, socks …), taken
+// from the company's own flat drawings (assets/garments/*.svg, see "The
+// thirteen kinds" below).
 //
 // Coordinates: every point is [x, y] in 0–1 of the garment's own box, x to the
 // right and y DOWN (as on a screen and on the Zebra). The box is `aspect`
 // times as wide as it is tall, so a drawing scales it to any room by
-// multiplying x by the width and y by the height. The outline is the same
-// shape seen from the front and from the back; the details (neck, placket,
-// hood, zip, pocket, waistband) differ and are open polylines.
+// multiplying x by the width and y by the height. The FRONT and the BACK each
+// have their own outline (`outlines`) and lines (`detail`: seams, collar,
+// hood, zip, pocket), in the same box.
 //
 // Left and right are always as the operator SEES that side: a spot on the
 // left of the back view is "left", although it is the wearer's right. That is
@@ -25,26 +24,15 @@
 // garments.js also runs on the hub (labels.js draws the outlines on the
 // ticket), so it never imports config.js.
 
+import { SHAPES } from "./garment-shapes.js";
+
 export const SIDES = ["front", "back"];
 export const SIDE_LABELS = { front: "Front", back: "Back" };
 // The operator marks at most this many spots; then Done (the owner, 23 Nov 2026).
 export const MAX_SPOTS = 3;
 export const DEFAULT_GARMENT = "hockey";
 
-// ── Drawing helpers ──────────────────────────────────────────────────────────
-// Garments are symmetric, so each outline is written as its LEFT half, from
-// the top of the centre line round the left edge to the bottom of the centre
-// line, and mirrored. Writing half the points keeps both sides identical.
-function mirrorOutline(leftHalf) {
-  const right = leftHalf.slice().reverse()
-    .filter(([x]) => x !== 0.5)                       // the centre points are shared
-    .map(([x, y]) => [round(1 - x), y]);
-  return [...leftHalf, ...right];
-}
 const round = v => Math.round(v * 1000) / 1000;
-// A detail line and its mirror image (a cuff on each sleeve, a pocket each side).
-const both = line => [line, line.map(([x, y]) => [round(1 - x), y])];
-const hline = (x0, x1, y) => [[x0, y], [x1, y]];
 
 // A named area, used to put a spot into words. `rect` is [x0, y0, x1, y1];
 // `side` keeps it to one side (the pouch pocket is only on the front).
@@ -78,179 +66,83 @@ const shoulders = (x0, x1, y0, y1) => [
   area("right-shoulder", "right shoulder", [round(1 - x1), y0, round(1 - x0), y1]),
 ];
 
-// ── The eleven kinds ─────────────────────────────────────────────────────────
-// Each traced from the flat named beside it (page of the 2026 catalogue).
-// Shapes are drawn as if the garment lies flat and square on the table, so
-// the catalogue's three-quarter sleeves are straightened out. A cuff line is
-// the sleeve's opening moved a little up the sleeve, both ends on its edges.
-
-// Hockey (ZH101, p. 85; H550 and the other hockey jerseys): square shoulders,
-// wide sleeves angled down, a wide straight body, a yoke seam across the chest
-// in front, V-neck (or lace neck) in front and a round neck behind.
-const hockey = {
-  id: "hockey", label: "Hockey jersey", aspect: 1.5,
-  outline: mirrorOutline([[0.5, 0.07], [0.43, 0.03], [0.4, 0], [0.27, 0.02], [0, 0.5], [0.11, 0.64], [0.245, 0.4], [0.245, 1], [0.5, 1]]),
-  detail: {
-    front: [[[0.43, 0.03], [0.5, 0.16], [0.57, 0.03]], [[0.45, 0.041], [0.5, 0.12], [0.55, 0.041]], hline(0.245, 0.755, 0.2),
-      ...both([[0.02, 0.465], [0.13, 0.605]]), hline(0.245, 0.755, 0.95)],
-    back: [[[0.43, 0.03], [0.47, 0.085], [0.5, 0.095], [0.53, 0.085], [0.57, 0.03]],
-      ...both([[0.02, 0.465], [0.13, 0.605]]), hline(0.245, 0.755, 0.95)],
-  },
-  regions: [area("collar", "collar", [0.4, 0.04, 0.6, 0.16]), ...shoulders(0.245, 0.43, 0, 0.12),
-    ...sleeves(0.245, 0, 0.7), ...bodyGrid(0.245, 0.12, 0.755, 1)],
+// ── The thirteen kinds ───────────────────────────────────────────────────────
+// The outlines and the lines on them are the company's own flat drawings
+// (assets/garments/*.svg, the owner, 26 Nov 2026), turned into points by
+// tools/svg-garments.mjs (src/lib/garment-shapes.js, generated). Each view has
+// its own outline: the back of a hoodie is not the front of one. Here: the
+// name, the menu group, the captions of the two views and the named areas,
+// set against the generated shapes (0–1 of the garment's box).
+// More kinds come from the same folder as they are needed (the owner: "we
+// don't need all of them yet").
+const kind = (id, label, group, regions, more = {}) => {
+  const s = SHAPES[id];
+  return { id, label, group, aspect: s.aspect, outlines: s.outline, outline: s.outline.front,
+    detail: { front: [...s.detail.front, ...(more.extra?.front || [])], back: [...s.detail.back, ...(more.extra?.back || [])] },
+    sides: more.sides || SIDE_LABELS, regions };
 };
+// A sleeved top: `seam` is the x of the body's left side seam (the sleeve is
+// left of it), `armpit` the y under the arm, `neck` the collar's box, `at` a
+// point in the middle of the left sleeve.
+const top = ({ seam, armpit, neck, neckLabel = "collar", neckId = "collar", shoulderY = [0, 0.13], at }) => [
+  area(neckId, neckLabel, neck),
+  ...shoulders(seam, neck[0], shoulderY[0], shoulderY[1]),
+  ...sleeves(seam, 0, armpit, at),
+  ...bodyGrid(seam, neck[3], round(1 - seam), 1),        // from under the collar: the shoulders (before it) keep their corners
+];
+// Two legs, top to bottom in bands: [[id, label, y0, y1], …].
+const legs = bands => bands.flatMap(([id, label, y0, y1]) => [
+  area(`left-${id}`, `left ${label}`, [0, y0, 0.5, y1]), area(`right-${id}`, `right ${label}`, [0.5, y0, 1, y1])]);
+// One piece seen from the side or flat (a sock, a pant leg from the side): bands top to bottom.
+const bands = list => list.map(([id, label, y0, y1]) => area(id, label, [0, y0, 1, y1]));
 
-// Short-sleeve jersey or tee (ZS11, p. 101): set-in short sleeves, V or crew neck.
-const tee = {
-  id: "tee", label: "Short-sleeve jersey", aspect: 1.1,
-  outline: mirrorOutline([[0.5, 0.07], [0.42, 0.02], [0.38, 0], [0.22, 0.05], [0, 0.28], [0.1, 0.4], [0.2, 0.31], [0.2, 1], [0.5, 1]]),
-  detail: {
-    front: [[[0.42, 0.02], [0.5, 0.18], [0.58, 0.02]], ...both([[0.03, 0.255], [0.125, 0.375]]), hline(0.2, 0.8, 0.96)],
-    back: [[[0.42, 0.02], [0.46, 0.08], [0.5, 0.095], [0.54, 0.08], [0.58, 0.02]], ...both([[0.03, 0.255], [0.125, 0.375]]), hline(0.2, 0.8, 0.96)],
-  },
-  regions: [area("collar", "collar", [0.38, 0.04, 0.62, 0.14]), ...shoulders(0.2, 0.42, 0, 0.12),
-    ...sleeves(0.2, 0, 0.42), ...bodyGrid(0.2, 0.12, 0.8, 1)],
-};
+const hockey = kind("hockey", "Hockey jersey", "Hockey",
+  top({ seam: 0.316, armpit: 0.45, neck: [0.42, 0, 0.58, 0.1], shoulderY: [0, 0.15], at: [0.15, 0.2] }));
+const hockeypants = kind("hockeypants", "Hockey pant shell", "Hockey", [
+  area("waistband", "waistband", [0.15, 0, 0.85, 0.14]), area("centre", "centre panel", [0.44, 0.14, 0.56, 0.6]),
+  ...legs([["upper", "upper leg", 0.14, 0.6], ["lower", "lower leg", 0.6, 1]])]);
+const socks = kind("socks", "Hockey socks", "Hockey",
+  bands([["top", "top band", 0, 0.08], ["upper", "upper", 0.08, 0.4], ["middle", "middle", 0.4, 0.7], ["lower", "lower (ankle)", 0.7, 1]]));
+const basketball = kind("basketball", "Basketball jersey", "Basketball", [
+  area("collar", "neck", [0.36, 0, 0.64, 0.12]), ...shoulders(0.18, 0.36, 0, 0.22), ...bodyGrid(0.001, 0.22, 0.999, 1)]);
+const pantRegions = waist => [area("waistband", "waistband", waist),
+  ...legs([["thigh", "thigh", 0.07, 0.4], ["knee", "knee", 0.4, 0.7], ["lower", "lower leg", 0.7, 1]])];
+const basketballpants = kind("basketballpants", "Basketball pants", "Basketball", pantRegions([0.1, 0, 0.9, 0.07]));
+const baseball = kind("baseball", "Baseball jersey", "Baseball", [
+  area("buttons", "button placket", [0.475, 0.08, 0.525, 1], "front"),
+  ...top({ seam: 0.204, armpit: 0.38, neck: [0.41, 0, 0.59, 0.12], shoulderY: [0, 0.12], at: [0.1, 0.2] })]);
+// The two drawings are the legs seen from the side: the first has the back
+// pocket on its left, so it is the wearer's right side.
+const baseballpants = kind("baseballpants", "Baseball pants", "Baseball",
+  bands([["waistband", "waistband", 0, 0.07], ["hip", "hip and thigh", 0.07, 0.4], ["knee", "knee", 0.4, 0.7], ["lower", "lower leg", 0.7, 1]]),
+  { sides: { front: "Right side", back: "Left side" } });
+const hoodie = kind("hoodie", "Hoodie", "Apparel", [
+  area("pocket", "pouch pocket", [0.38, 0.66, 0.62, 1], "front"),
+  ...top({ seam: 0.337, armpit: 0.46, neck: [0.41, 0, 0.59, 0.18], neckId: "hood", neckLabel: "hood", shoulderY: [0.1, 0.18], at: [0.17, 0.33] })]);
+const jacket = kind("jacket", "Jacket", "Apparel", [
+  area("zip", "zip", [0.48, 0.08, 0.52, 1], "front"),
+  ...top({ seam: 0.337, armpit: 0.43, neck: [0.43, 0, 0.57, 0.1], shoulderY: [0.05, 0.14], at: [0.17, 0.3] })]);
+const longtee = kind("longtee", "Long-sleeve shirt", "Apparel",
+  top({ seam: 0.307, armpit: 0.4, neck: [0.43, 0, 0.57, 0.07], shoulderY: [0, 0.12], at: [0.15, 0.24] }));
+const pants = kind("pants", "Pants", "Apparel", pantRegions([0.14, 0.02, 0.86, 0.07]));
+const shorts = kind("shorts", "Shorts", "Apparel", [
+  area("waistband", "waistband", [0.22, 0, 0.78, 0.11]),
+  ...legs([["upper", "upper leg", 0.11, 0.55], ["lower", "lower leg", 0.55, 1]])]);
+// The drawing's zip is a filled strip, not a line: drawn here.
+const garmentbag = kind("garmentbag", "Garment bag", "Apparel", [
+  area("loop", "hanger loop", [0.4, 0, 0.56, 0.092]), area("zip", "zip", [0.47, 0.1, 0.535, 1], "back"),
+  ...bodyGrid(0.001, 0.092, 0.999, 1)], { extra: { back: [[[0.503, 0.1], [0.503, 0.99]]] } });
 
-// Long-sleeve shirt (ZVL11, p. 100; A1900, warm-up shirts): long sleeves
-// hanging down beside the body, crew or V neck.
-const longtee = {
-  id: "longtee", label: "Long-sleeve shirt", aspect: 1.35,
-  outline: mirrorOutline([[0.5, 0.07], [0.42, 0.02], [0.38, 0], [0.25, 0.04], [0.02, 0.8], [0.12, 0.84], [0.25, 0.38], [0.25, 1], [0.5, 1]]),
-  detail: {
-    front: [[[0.42, 0.02], [0.45, 0.08], [0.5, 0.1], [0.55, 0.08], [0.58, 0.02]], ...both([[0.035, 0.755], [0.13, 0.79]]), hline(0.25, 0.75, 0.96)],
-    back: [[[0.42, 0.02], [0.46, 0.06], [0.5, 0.07], [0.54, 0.06], [0.58, 0.02]], ...both([[0.035, 0.755], [0.13, 0.79]]), hline(0.25, 0.75, 0.96)],
-  },
-  regions: [area("collar", "collar", [0.38, 0.04, 0.62, 0.14]), ...shoulders(0.25, 0.42, 0, 0.12),
-    ...sleeves(0.25, 0, 0.86, [0.16, 0.5]), ...bodyGrid(0.25, 0.12, 0.75, 1)],
-};
-
-// Baseball full-button jersey (ZBA71, p. 93; BA5500): short sleeves, a
-// placket of buttons down the front and a rounded shirt-tail hem.
-const button = {
-  id: "button", label: "Button jersey", aspect: 1.15,
-  outline: mirrorOutline([[0.5, 0.06], [0.42, 0.02], [0.38, 0], [0.21, 0.04], [0, 0.3], [0.1, 0.42], [0.21, 0.32], [0.21, 0.92], [0.3, 0.98], [0.5, 1]]),
-  detail: {
-    front: [[[0.42, 0.02], [0.48, 0.13]], [[0.58, 0.02], [0.52, 0.13]], [[0.48, 0.13], [0.48, 0.997]], [[0.52, 0.13], [0.52, 0.997]],
-      ...[0.24, 0.4, 0.56, 0.72, 0.88].map(y => hline(0.49, 0.51, y)), ...both([[0.03, 0.275], [0.125, 0.395]])],
-    back: [[[0.42, 0.02], [0.46, 0.07], [0.5, 0.085], [0.54, 0.07], [0.58, 0.02]], ...both([[0.03, 0.275], [0.125, 0.395]])],
-  },
-  regions: [area("collar", "collar", [0.38, 0.03, 0.62, 0.13]), area("buttons", "button placket", [0.47, 0.1, 0.53, 1], "front"),
-    ...shoulders(0.21, 0.42, 0, 0.1), ...sleeves(0.21, 0, 0.44), ...bodyGrid(0.21, 0.1, 0.79, 1)],
-};
-
-// Tank or singlet (ZB11, p. 95; basketball, track, scrimmage vests): no
-// sleeves, flat shoulder straps, deep armholes and a round scoop neck. The
-// front has a double binding round the neck (the trim of the sublimated
-// tanks), the back a single one, so the two views differ at a glance.
-const tank = {
-  id: "tank", label: "Tank / singlet", aspect: 0.75,
-  outline: mirrorOutline([[0.5, 0.16], [0.43, 0.14], [0.39, 0.07], [0.38, 0], [0.28, 0], [0.27, 0.1], [0.24, 0.22], [0.19, 0.3], [0.13, 0.34], [0.13, 1], [0.5, 1]]),
-  detail: {
-    front: [[[0.37, 0.005], [0.375, 0.075], [0.42, 0.16], [0.5, 0.18], [0.58, 0.16], [0.625, 0.075], [0.63, 0.005]],
-      [[0.36, 0.005], [0.363, 0.08], [0.412, 0.175], [0.5, 0.198], [0.588, 0.175], [0.637, 0.08], [0.64, 0.005]],
-      ...both([[0.29, 0.005], [0.282, 0.1], [0.253, 0.228], [0.2, 0.313], [0.135, 0.355]]), hline(0.13, 0.87, 0.96)],
-    back: [[[0.37, 0.005], [0.375, 0.075], [0.42, 0.16], [0.5, 0.18], [0.58, 0.16], [0.625, 0.075], [0.63, 0.005]],
-      ...both([[0.29, 0.005], [0.282, 0.1], [0.253, 0.228], [0.2, 0.313], [0.135, 0.355]]), hline(0.13, 0.87, 0.96)],
-  },
-  regions: [area("collar", "neck", [0.4, 0.12, 0.6, 0.24]), ...shoulders(0.13, 0.43, 0, 0.2), ...bodyGrid(0.13, 0.2, 0.87, 1)],
-};
-
-// Football jersey (ZF101, p. 97): very wide shoulders, short sleeves, a long
-// body and a yoke seam across the chest.
-const football = {
-  id: "football", label: "Football jersey", aspect: 1.2,
-  outline: mirrorOutline([[0.5, 0.07], [0.42, 0.02], [0.38, 0], [0.14, 0.06], [0, 0.22], [0.04, 0.36], [0.17, 0.3], [0.17, 1], [0.5, 1]]),
-  detail: {
-    front: [[[0.42, 0.02], [0.5, 0.15], [0.58, 0.02]], hline(0.17, 0.83, 0.24), ...both([[0.025, 0.2], [0.065, 0.345]]), hline(0.17, 0.83, 0.96)],
-    back: [[[0.42, 0.02], [0.46, 0.07], [0.5, 0.085], [0.54, 0.07], [0.58, 0.02]], hline(0.17, 0.83, 0.24), ...both([[0.025, 0.2], [0.065, 0.345]]), hline(0.17, 0.83, 0.96)],
-  },
-  regions: [area("collar", "collar", [0.38, 0.04, 0.62, 0.14]), ...shoulders(0.17, 0.42, 0, 0.12),
-    ...sleeves(0.17, 0, 0.37), ...bodyGrid(0.17, 0.12, 0.83, 1)],
-};
-
-// Hoodie (ZAL2010P, p. 87; A3050 and the other hoodies): a hood above the
-// shoulders, long sleeves, a pouch pocket and a ribbed waist in front.
-const hoodie = {
-  id: "hoodie", label: "Hoodie", aspect: 1.25,
-  outline: mirrorOutline([[0.5, 0], [0.41, 0.01], [0.35, 0.06], [0.33, 0.15], [0.24, 0.19], [0.02, 0.87], [0.13, 0.9], [0.25, 0.43], [0.25, 1], [0.5, 1]]),
-  detail: {
-    front: [[[0.38, 0.17], [0.39, 0.08], [0.44, 0.04], [0.5, 0.035], [0.56, 0.04], [0.61, 0.08], [0.62, 0.17]],
-      [[0.38, 0.17], [0.5, 0.2], [0.62, 0.17]], ...both([[0.46, 0.195], [0.455, 0.32]]),
-      [[0.33, 0.93], [0.36, 0.72], [0.64, 0.72], [0.67, 0.93]], hline(0.25, 0.75, 0.93), ...both([[0.035, 0.83], [0.13, 0.86]])],
-    back: [[[0.5, 0], [0.5, 0.18]], [[0.34, 0.15], [0.42, 0.18], [0.5, 0.19], [0.58, 0.18], [0.66, 0.15]],
-      hline(0.25, 0.75, 0.93), ...both([[0.035, 0.83], [0.13, 0.86]])],
-  },
-  regions: [area("hood", "hood", [0.33, 0, 0.67, 0.19]), area("pocket", "pouch pocket", [0.34, 0.72, 0.66, 0.93], "front"),
-    area("waistband", "waistband", [0.25, 0.93, 0.75, 1]), ...shoulders(0.25, 0.34, 0.15, 0.25),
-    ...sleeves(0.25, 0.15, 0.92, [0.17, 0.55]), ...bodyGrid(0.25, 0.19, 0.75, 0.93)],
-};
-
-// Zip jacket or tracksuit top (ZAL2710, p. 87; ZAT jackets): a stand-up
-// collar, a zip from collar to hem, long sleeves and a waistband.
-const jacket = {
-  id: "jacket", label: "Zip jacket", aspect: 1.25,
-  outline: mirrorOutline([[0.5, 0.01], [0.4, 0], [0.38, 0.05], [0.26, 0.07], [0.03, 0.86], [0.13, 0.9], [0.26, 0.42], [0.26, 1], [0.5, 1]]),
-  detail: {
-    front: [[[0.5, 0.01], [0.5, 1]], [[0.385, 0.05], [0.44, 0.075], [0.5, 0.08], [0.56, 0.075], [0.615, 0.05]],
-      hline(0.26, 0.74, 0.94), ...both([[0.045, 0.82], [0.135, 0.855]])],
-    back: [[[0.385, 0.05], [0.44, 0.07], [0.5, 0.075], [0.56, 0.07], [0.615, 0.05]], hline(0.26, 0.74, 0.94), ...both([[0.045, 0.82], [0.135, 0.855]])],
-  },
-  regions: [area("collar", "collar", [0.38, 0, 0.62, 0.11]), area("zip", "zip", [0.47, 0.11, 0.53, 0.94], "front"),
-    area("waistband", "waistband", [0.26, 0.94, 0.74, 1]), ...shoulders(0.26, 0.38, 0.03, 0.14),
-    ...sleeves(0.26, 0.03, 0.92, [0.17, 0.55]), ...bodyGrid(0.26, 0.11, 0.74, 0.94)],
-};
-
-// Shorts (ZBS91, p. 96; every *S1700 short; the H901 / ZH9xx hockey pant
-// shells, which are knee length): a straight waistband, legs flaring a
-// little, the crotch about two thirds down.
-const shorts = {
-  id: "shorts", label: "Shorts", aspect: 1.35,
-  outline: mirrorOutline([[0.5, 0], [0.12, 0], [0.02, 0.97], [0.46, 1], [0.5, 0.66]]),
-  detail: {
-    front: [hline(0.11, 0.89, 0.1), ...both([[0.47, 0.1], [0.46, 0.22]]), ...both([[0.025, 0.92], [0.45, 0.95]])],
-    back: [hline(0.11, 0.89, 0.1), [[0.5, 0.1], [0.5, 0.66]], ...both([[0.025, 0.92], [0.45, 0.95]])],
-  },
-  regions: [area("waistband", "waistband", [0.1, 0, 0.9, 0.1]),
-    area("left-upper", "upper left leg", [0.05, 0.1, 0.5, 0.5]), area("right-upper", "upper right leg", [0.5, 0.1, 0.95, 0.5]),
-    area("left-lower", "lower left leg", [0, 0.5, 0.5, 1]), area("right-lower", "lower right leg", [0.5, 0.5, 1, 1])],
-};
-
-// Pants (ZBAP61, p. 94; baseball and track pants): two long legs tapering
-// to the hem, a waistband and a fly in front, pockets behind.
-const pants = {
-  id: "pants", label: "Pants", aspect: 0.55,
-  outline: mirrorOutline([[0.5, 0], [0.14, 0], [0.08, 0.3], [0.12, 1], [0.46, 1], [0.5, 0.3]]),
-  detail: {
-    front: [hline(0.136, 0.864, 0.05), [[0.54, 0.05], [0.54, 0.2], [0.5, 0.25]], ...both([[0.115, 0.97], [0.46, 0.97]])],
-    back: [hline(0.136, 0.864, 0.05), ...both([[0.24, 0.11], [0.4, 0.11]]), ...both([[0.115, 0.97], [0.46, 0.97]])],
-  },
-  regions: [area("waistband", "waistband", [0.1, 0, 0.9, 0.06]),
-    area("left-thigh", "left thigh", [0.08, 0.06, 0.5, 0.35]), area("right-thigh", "right thigh", [0.5, 0.06, 0.92, 0.35]),
-    area("left-knee", "left knee", [0.08, 0.35, 0.5, 0.7]), area("right-knee", "right knee", [0.5, 0.35, 0.92, 0.7]),
-    area("left-lower", "lower left leg", [0.08, 0.7, 0.5, 1]), area("right-lower", "lower right leg", [0.5, 0.7, 0.92, 1])],
-};
-
-// Socks (ZH702, p. 85; HS630, HS2100): one sock, an open tube wide at the
-// top and narrowing to the ankle. Front and back are the two faces of it.
-const socks = {
-  id: "socks", label: "Socks", aspect: 0.35,
-  outline: mirrorOutline([[0.5, 0], [0.08, 0], [0.12, 0.55], [0.22, 1], [0.5, 1]]),
-  detail: {
-    front: [hline(0.085, 0.915, 0.07), hline(0.21, 0.79, 0.96)],
-    back: [hline(0.085, 0.915, 0.07), [[0.5, 0.07], [0.5, 0.96]], hline(0.21, 0.79, 0.96)],
-  },
-  regions: [area("top", "top band", [0, 0, 1, 0.1]), area("upper", "upper", [0, 0.1, 1, 0.4]),
-    area("middle", "middle", [0, 0.4, 1, 0.7]), area("lower", "lower (ankle)", [0, 0.7, 1, 1])],
-};
-
-export const GARMENTS = { hockey, tee, longtee, button, tank, football, hoodie, jacket, shorts, pants, socks };
+export const GARMENTS = { hockey, hockeypants, socks, basketball, basketballpants, baseball, baseballpants, hoodie, jacket, longtee, pants, shorts, garmentbag };
 export const GARMENT_IDS = Object.keys(GARMENTS);
+export const GARMENT_GROUPS = [...new Set(GARMENT_IDS.map(id => GARMENTS[id].group))];
 // Object.hasOwn, not GARMENTS[kind]: the kind comes from roster files and hub
 // request bodies, and "constructor" or "__proto__" must not pass as a kind.
 const isKind = kind => typeof kind === "string" && Object.hasOwn(GARMENTS, kind);
 // The shape of a kind; an unknown or empty kind is hockey.
 export const garment = kind => GARMENTS[isKind(kind) ? kind : DEFAULT_GARMENT];
+// The caption of one view ("Front", "Back"; the baseball pants' "Right side").
+export const sideLabel = (kind, side) => garment(kind).sides[side] || SIDE_LABELS[side] || "";
 
 // ── Style codes → kind ───────────────────────────────────────────────────────
 // A roster may carry a "Style" column (kept as `style`). Exact codes first,
@@ -262,79 +154,62 @@ export const garment = kind => GARMENTS[isKind(kind) ? kind : DEFAULT_GARMENT];
 // "any letter and a digit".
 export const GARMENT_STYLES = {
   // Not garments that are inspected with an outline: toques, caps, a belt,
-  // scarves, pennants, banners, garment bags. They have no kind, so the row
-  // falls back to the order's garment.
+  // scarves, pennants, banners. They have no kind, so the row falls back to
+  // the order's garment.
   none: {
-    exact: ["A1830", "BA101", "AT200"],                // hockey toque (p. 38) and its custom code; adjustable belt (p. 56)
+    exact: ["A1830", "BA101", "AT200",                // hockey toque (p. 38) and its custom code; adjustable belt (p. 56)
+      "ZBA76"],                                        // a sleeveless baseball top in the button series (p. 93): no drawing yet
     prefixes: [/^(ZAA|AH|BAH)/],                       // ZAA accessories (p. 91); caps and hats
   },
+  // Only codes whose garment has a drawing (the 13 kinds, 26 Nov 2026). Tees,
+  // tanks of other sports, football, volleyball, soccer and track have none
+  // yet, so their rows use the order's garment.
   exact: {
     // Hockey jerseys (pp. 4–27).
     H550: "hockey", H8000: "hockey", H7500: "hockey", H7100: "hockey", H6500: "hockey", H6400: "hockey",
     H6100: "hockey", H6250: "hockey", H6000: "hockey", H686: "hockey",
-    SV100: "tank",                                     // scrimmage vest
-    HS630: "socks", HS2100: "socks", HS1100: "socks", HS825: "socks", BA90: "socks",
-    H901: "shorts",                                    // pant shells (p. 23): knee length, shaped like shorts
+    HS630: "socks", HS2100: "socks", HS1100: "socks", HS825: "socks",
+    H901: "hockeypants",                               // pant shells (p. 23)
     // Apparel.
     A3050: "hoodie", A3025: "hoodie", A3087: "hoodie", A3000: "hoodie",
     A1845: "hoodie", A1840: "hoodie", A1835: "hoodie", A1834: "hoodie",
-    A1810: "tee", A1375: "tee", A1800: "tee", A2500: "tee", A1900: "longtee",
-    AS1700: "shorts",
+    A1900: "longtee", AS1700: "shorts",
     // Baseball.
-    BA5500: "button", BA5200: "button",
-    BA1763: "tee", BA1343: "tee", BA1344: "tee", BA1347: "tee", BA1333: "tee", BA1375: "tee", BA1800: "tee",
-    BA1900: "longtee", BA601L: "tank",
-    BA2650: "pants", BA2655: "pants", BA2690: "pants", BA2695: "pants",
-    BA1391: "pants", BA1390: "pants", BA1380: "pants", BA1385L: "pants", BA1371: "pants",
+    BA5500: "baseball", BA5200: "baseball", BA1900: "longtee",
+    BA2650: "baseballpants", BA2655: "baseballpants", BA2690: "baseballpants", BA2695: "baseballpants",
+    BA1391: "baseballpants", BA1390: "baseballpants", BA1380: "baseballpants", BA1385L: "baseballpants", BA1371: "baseballpants",
     BAS1700: "shorts",
-    // Basketball, lacrosse, volleyball, soccer, track.
-    B1715: "tank", B2115: "tank", BS1700: "shorts",
-    LF302: "tank", LF601L: "tank", LS1700: "shorts",
-    V1333: "tee", V1375: "tee", V1800: "tee", V1900: "longtee", V601L: "tank", VS1700: "shorts",
-    S1333: "tee", S1375: "tee", S1800: "tee", S1900: "longtee", SS1700: "shorts",
-    T220: "tank", T205: "tank", T101: "tank",
-    // Sleeveless custom jerseys among sleeved series: baseball (p. 93), field
-    // lacrosse (p. 98), volleyball (p. 100).
-    ZBA16: "tank", ZBA17: "tank", ZBA26: "tank", ZBA27: "tank", ZBA36: "tank", ZBA76: "tank",
-    ZLF16: "tank", ZLF17: "tank", ZV16: "tank", ZV17: "tank", ZV26: "tank", ZV27: "tank",
+    // Basketball; the other sports' shorts and long sleeves.
+    B1715: "basketball", B2115: "basketball", BS1700: "shorts",
+    LS1700: "shorts", V1900: "longtee", VS1700: "shorts", S1900: "longtee", SS1700: "shorts",
     // The custom codes printed under each in-stock product ("Available in
     // custom A600", pp. 4–75), where every product carrying the code is the
-    // same kind. Left out because they cover more than one kind: A200 (A1810
-    // polo, A1900 long sleeve), BA200 (tees, BA1900 long sleeve, BA601L
-    // tank), BA300 (BA5200 full button, BA1763 and BA1343 tees), V200 and
-    // S200 (tees, a long sleeve, V601L tank): those rows use the order's garment.
-    H845: "hockey", H680: "hockey", H950: "shorts", HS640: "socks", HS925: "socks", SV80: "tank",
-    A600: "hoodie", A500: "hoodie", A400: "hoodie", A100: "tee",
+    // same kind. Left out because they cover more than one kind: A200, BA200,
+    // BA300, V200 and S200: those rows use the order's garment.
+    H845: "hockey", H680: "hockey", H950: "hockeypants", HS640: "socks", HS925: "socks",
+    A600: "hoodie", A500: "hoodie", A400: "hoodie",
     AS200: "shorts", AS100: "shorts",
-    BA400: "button", BA100: "tee", BA900: "pants", BA750: "pants", BAS200: "shorts", BAS100: "shorts",
-    B500: "tank", B200: "tank", B100: "tank", B300: "tank", BS200: "shorts", BS100: "shorts",
-    LF100: "tank", LF200: "tank", LS200: "shorts", LS100: "shorts",
-    V100: "tee", VS200: "shorts", VS100: "shorts",
-    S100: "tee", SS200: "shorts", SS100: "shorts",
-    T200: "tank", T100: "tank",
+    BA400: "baseball", BA900: "baseballpants", BA750: "baseballpants", BAS200: "shorts", BAS100: "shorts",
+    B500: "basketball", B200: "basketball", B100: "basketball", B300: "basketball", BS200: "shorts", BS100: "shorts",
+    LS200: "shorts", LS100: "shorts", VS200: "shorts", VS100: "shorts", SS200: "shorts", SS100: "shorts",
   },
   // Checked in order, first match wins: the longer, more particular prefixes
   // come before the short ones they start with (ZH7 socks before ZH hockey,
-  // ZBAS shorts before ZBA tees).
+  // ZBAS shorts before ZBA jerseys). A code no rule knows says nothing.
   prefixes: [
     [/^HS\d{3,4}/, "socks"], [/^ZH7/, "socks"],
-    [/^(H9|ZH9)/, "shorts"],                            // pant shells (pp. 23, 86)
-    [/^H\d{3,4}/, "hockey"], [/^ZH/, "hockey"],
-    [/^(ZAP|ZBP|ZBAP|ZF9)/, "pants"],
+    [/^(H9|ZH9)/, "hockeypants"],                       // pant shells (pp. 23, 86)
+    [/^H\d{3,4}/, "hockey"], [/^ZH/, "hockey"], [/^ZLB/, "hockey"],   // box lacrosse jerseys are cut like hockey
+    [/^ZBAP/, "baseballpants"], [/^ZBP/, "basketballpants"], [/^ZAP/, "pants"],
     [/^(AS|BS|LS|SS|VS|TS|BAS)\d{4}/, "shorts"],
-    [/^(ZBS|ZVS|ZSS|ZTS|ZRS|ZS5|ZL9|ZLS|ZAS|ZBAS|ZBA9|ZCS|ZCB)/, "shorts"],
-    [/^ZLR/, "tank"],                                   // reversible lacrosse pinnie (p. 98)
-    [/^ZLF/, "tee"], [/^ZLB/, "hockey"],                // field lacrosse shirts; box lacrosse jerseys
-    [/^ZF/, "football"],
-    [/^(ZBA7|ZBA8|BA5\d{3})/, "button"],
+    [/^(ZBS|ZVS|ZSS|ZTS|ZRS|ZS5|ZL9|ZLS|ZAS|ZBAS|ZBA9)/, "shorts"],
+    [/^(ZBA7|ZBA8|BA5\d{3})/, "baseball"],
+    [/^(ZB\d|ZBR|B\d{4})/, "basketball"],
     // Apparel (p. 87, 92): ZAL26xx/27xx are zip sweatshirts and ZAL37xx a zip
     // jacket; ZAL20xx and ZAL33xx are hoodies; every other ZAL has long sleeves.
     [/^ZAT/, "jacket"], [/^ZAL(26|27|37)\d\d/, "jacket"], [/^ZAL(20|33)\d\d/, "hoodie"], [/^ZAL/, "longtee"],
     [/^A3\d{3}/, "hoodie"],
     [/^(ZVL|ZBWL)/, "longtee"],
-    [/^ZTC/, "tee"], [/^ZT\d/, "tank"],
-    [/^(ZBR|ZB\d|BR\d{4}|B\d{4}|SV\d{3}|LF\d{3}|T\d{3})/, "tank"],
-    [/^(ZBA|ZBW|ZS|ZV|ZA|ZR|ZC|BA\d{4}|[SV]\d{4}|A\d{4})/, "tee"],
   ],
 };
 
@@ -371,8 +246,8 @@ export function garmentOf(row, orderGarment) {
 
 // Is the point (0–1 coordinates) on the garment? Ray casting against the
 // outline: a tap beside the garment is not a spot.
-export function insideGarment(kind, x, y) {
-  const pts = garment(kind).outline;
+export function insideGarment(kind, x, y, side = "front") {
+  const g = garment(kind), pts = g.outlines[side] || g.outline;
   let inside = false;
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
     const [xi, yi] = pts[i], [xj, yj] = pts[j];
@@ -411,7 +286,7 @@ export function spotWords(kind, spots) {
       const r = regionOf(kind, side, Number(s.x), Number(s.y));
       if (r && !words.includes(r.label)) words.push(r.label);
     }
-    return words.length ? `${SIDE_LABELS[side]}: ${words.join(", ")}` : "";
+    return words.length ? `${sideLabel(kind, side)}: ${words.join(", ")}` : "";
   }).filter(Boolean).join(" · ");
 }
 
@@ -451,6 +326,6 @@ export function spotAt(kind, side, x, y) {
   if (!SIDES.includes(side) || !Number.isFinite(x) || !Number.isFinite(y)) return null;
   const r = v => Math.round(v * 1000) / 1000;
   const sx = r(x), sy = r(y);
-  if (sx < 0 || sx > 1 || sy < 0 || sy > 1 || !insideGarment(kind, sx, sy)) return null;
+  if (sx < 0 || sx > 1 || sy < 0 || sy > 1 || !insideGarment(kind, sx, sy, side)) return null;
   return { side, x: sx, y: sy };
 }

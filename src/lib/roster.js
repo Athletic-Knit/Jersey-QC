@@ -348,19 +348,21 @@ export const BIN_BY = [
   { id: "size", label: "By size", hint: "boxes per size" },
   { id: "none", label: "Not sorted", hint: "the whole order in one run of boxes" },
 ];
-// On the floor a bin is a box, and it has a name of two numbers: "5.2" is the
-// second box of sort 5 (a team, a size, or the whole order). The first number
-// never changes for a team or size; the second counts its boxes as they fill
-// (owner, 12 Nov 2026). The code still says "bin" for the thing itself.
-// An older saved order has plain numbers (3): they read as box 3, no second number.
+// On the floor a bin is a box, and it is named by a whole number (the co-op, 27 Nov 2026): every box of
+// the order gets the next free number when it opens, 1, 2, 3 …, and keeps it. The first boxes go to the
+// teams (or sizes) in order; a box that is full is followed by the next free number, so one team's boxes
+// need not be side by side (Hawks 1 and 31). A box is never renumbered, so a label inside it stays right.
+// The team or size a box belongs to is its key in the bin map (or `key` on a closed entry), never its number.
+// Orders started before kept two numbers ("5.2": the second box of sort 5, owner, 12 Nov 2026); they still
+// read, sort and carry on with their own scheme (5.2 → 5.3). The code still says "bin" for the thing itself.
 export const boxParts = b => { const m = String(b ?? "").trim().match(/^(\d+)(?:\.(\d+))?$/); return m ? [Number(m[1]), Number(m[2] || 0)] : [1e9, 0]; };
 // Box order for sorting: 2.1 before 2.2 before 10.1.
 export const binOrder = (a, b) => { const x = boxParts(a), y = boxParts(b); return (x[0] - y[0]) || (x[1] - y[1]); };
 const groupOf = b => boxParts(b)[0];
-// An order saved before the boxes had two numbers: its open bin 3 becomes box
-// 3.1, so a resumed order shows and prints box names like every new one.
-export const modernBins = binMap => !binMap ? binMap
-  : Object.fromEntries(Object.entries(binMap).map(([k, b]) => [k, k !== "__by" && boxParts(b)[1] === 0 && boxParts(b)[0] < 1e9 ? `${boxParts(b)[0]}.1` : b]));
+// A box name of two numbers ("5.2"): an order started before whole numbers.
+export const twoPartBox = b => /^\d+\.\d+$/.test(String(b ?? "").trim());
+// Kept for saved sessions: plain numbers are box names again (they were turned into "3.1" while boxes had two numbers).
+export const modernBins = binMap => binMap;
 export const ALL_KEY = "*";
 export const ALL_LABEL = "Whole order";
 // Rows with nothing in the field the order is sorted by (a blank team on a
@@ -460,7 +462,11 @@ export const lastSizeLetter = lastSize => { const g = SIZE_GROUPS[sizeRank(lastS
 export function sortCandidates(rows, by = "size", { lastSize = "", after = null } = {}) {
   if (after) by = "size";
   const near = r => after ? (lastSize && !sameSize(r.size, lastSize) ? 1 : 0) : lastSizeRank(r.size, lastSize);
-  const rank = r => (after && after(r) ? 3 : 0) + near(r);
+  // Still out (back from repair, or marked missing and found) comes at the very end of the list,
+  // after everything else (the co-op, 26 Nov 2026); a row marked missing before one flagged on
+  // this order (cameBack.live, in the DAMAGED box): a garment that turns up is more likely the
+  // missing one (Fable's final review, 26 Nov 2026).
+  const rank = r => (r.cameBack ? (r.cameBack.live ? 20 : 10) : 0) + (after && after(r) ? 3 : 0) + near(r);
   const num  = r => { const n = parseInt(String(r.number ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : 999; };
   const team = (a, b) => String(a.team || "").localeCompare(String(b.team || ""), undefined, { sensitivity: "base", numeric: true });
   const size = (a, b) => bySize(a.size || "", b.size || "");
@@ -530,7 +536,7 @@ export function buildBinMap(roster, existing = {}, by, taken = []) {
   const whole = () => {
     if (!roster.length) return {};
     let n = 1; while (gone.includes(n)) n++;
-    return { [ALL_KEY]: binFieldOf(existing) === "all" && existing[ALL_KEY] !== undefined ? existing[ALL_KEY] : `${n}.1`, __by: "all" };
+    return { [ALL_KEY]: binFieldOf(existing) === "all" && existing[ALL_KEY] !== undefined ? existing[ALL_KEY] : `${n}`, __by: "all" };
   };
   if (field === "all") return whole();
   const keep  = binFieldOf(existing) === field ? existing : {};          // switching the field starts the bins over
@@ -541,12 +547,12 @@ export function buildBinMap(roster, existing = {}, by, taken = []) {
   for (const key of keys) {
     if (map[key] !== undefined) continue;
     while (used.has(next)) next++;
-    map[key] = `${next}.1`; used.add(next);
+    map[key] = `${next}`; used.add(next);
   }
   if (!Object.keys(map).length) return whole();                          // nothing to sort by: one bin
   if (map[BLANK_KEY] === undefined && roster.some(r => !teamKey(r[field]))) {
     while (used.has(next)) next++;
-    map[BLANK_KEY] = `${next}.1`;
+    map[BLANK_KEY] = `${next}`;
   }
   return field === "size" ? { ...map, __by: "size" } : map;
 }
@@ -575,13 +581,18 @@ export function binOfRow(binMap, closed, row) {
   return binFor(binMap, row);
 }
 
-// The box that follows `bin` for the same team or size: 5.1 → 5.2. The second
-// number is one more than any box of that sort has had, open or closed.
+// The box that follows `bin` for the same team or size: the next free whole number, one more than any
+// box of the order has had, open or closed (3 → 7 when 6 is the highest). An order still on two-number
+// names carries on with them: 5.1 → 5.2.
 export function nextBinNumber(binMap, closed = [], bin) {
-  const g = groupOf(bin);
   const all = [...Object.entries(binMap || {}).filter(([k]) => k !== "__by").map(([, b]) => b), ...closed.map(c => c.bin)];
-  const last = all.filter(b => groupOf(b) === g).reduce((m, b) => Math.max(m, boxParts(b)[1]), 0);
-  return `${g}.${Math.max(1, last) + 1}`;
+  if (twoPartBox(bin)) {
+    const g = groupOf(bin);
+    const last = all.filter(b => groupOf(b) === g).reduce((m, b) => Math.max(m, boxParts(b)[1]), 0);
+    return `${g}.${Math.max(1, last) + 1}`;
+  }
+  const top = all.map(b => boxParts(b)[0]).filter(n => n < 1e9).reduce((m, n) => Math.max(m, n), 0);
+  return `${top + 1}`;
 }
 
 // The rows in `bin` right now, open or closed.

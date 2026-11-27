@@ -1,4 +1,4 @@
-// Every order has a box ("1.1"), and the list of what is in it does not print the box size.
+// Every order has a box ("1": boxes have whole numbers, the co-op, 27 Nov 2026), and the list of what is in it does not print the box size.
 import { describe, it, expect } from "vitest";
 import { boxFor, boxLimits, DEFAULT_BOXES } from "../boxes.js";
 import { buildBinMap, binFor, binEntries, binCount, binFieldOf, closeBin, binContents, ALL_LABEL } from "../roster.js";
@@ -32,47 +32,47 @@ describe("the box a bin is packed in", () => {
 const row = (i, o = {}) => ({ _id: i, name: `P${i}`, number: String(i + 1), team: "Navy", size: "A-L", scanned: false, ...o });
 
 describe("every order has a box", () => {
-  it("one team is Box 1.1", () => {
+  it("one team is Box 1", () => {
     const roster = [row(0), row(1)];
     const map = buildBinMap(roster, {}, "team");
     expect(binCount(map)).toBe(1);
-    expect(binFor(map, roster[0])).toBe("1.1");
-    expect(binEntries(roster, map)).toEqual([{ label: "Navy", bin: "1.1" }]);
+    expect(binFor(map, roster[0])).toBe("1");
+    expect(binEntries(roster, map)).toEqual([{ label: "Navy", bin: "1" }]);
   });
   it("a one-piece order has a box too, and goes in a bag", () => {
     const roster = [row(0, { scanned: "pass" })];
     const map = buildBinMap(roster, {}, "team");
-    expect(binContents(roster, map, [], "1.1").length).toBe(1);
+    expect(binContents(roster, map, [], "1").length).toBe(1);
     expect(boxFor(1).label).toBe("Bag");
   });
   it("an order that is not sorted, or has nothing to sort by, is one run of boxes for the whole order", () => {
     const roster = [row(0, { team: "Navy" }), row(1, { team: "Red" })];
     const none = buildBinMap(roster, {}, "none");
-    expect(none).toEqual({ "*": "1.1", __by: "all" });
+    expect(none).toEqual({ "*": "1", __by: "all" });
     expect(binFieldOf(none)).toBe("all");
-    expect(binFor(none, roster[0])).toBe("1.1"); expect(binFor(none, roster[1])).toBe("1.1");
-    expect(binEntries(roster, none)).toEqual([{ label: ALL_LABEL, bin: "1.1" }]);
+    expect(binFor(none, roster[0])).toBe("1"); expect(binFor(none, roster[1])).toBe("1");
+    expect(binEntries(roster, none)).toEqual([{ label: ALL_LABEL, bin: "1" }]);
     const bare = [{ _id: 0, name: "A", number: "1" }, { _id: 1, name: "B", number: "2" }];
     expect(binFieldOf(buildBinMap(bare, {}, "team"))).toBe("all");
-    expect(binFor(buildBinMap(bare, {}, "size"), bare[1])).toBe("1.1");
+    expect(binFor(buildBinMap(bare, {}, "size"), bare[1])).toBe("1");
     expect(buildBinMap([], {}, "none")).toEqual({});
   });
   it("the whole-order box closes like any other and keeps its new name when rows are added", () => {
     const roster = [row(0, { scanned: "pass" }), row(1, { scanned: "pass" }), row(2)];
     const map = buildBinMap(roster, {}, "none");
-    const r = closeBin(roster, map, [], "1.1", 1000);
-    expect(r.newBin).toBe("1.2"); expect(r.entry.ids).toEqual([0, 1]); expect(r.entry.label).toBe(ALL_LABEL);
-    expect(binFor(r.binMap, roster[2])).toBe("1.2");
+    const r = closeBin(roster, map, [], "1", 1000);
+    expect(r.newBin).toBe("2"); expect(r.entry.ids).toEqual([0, 1]); expect(r.entry.label).toBe(ALL_LABEL);
+    expect(binFor(r.binMap, roster[2])).toBe("2");
     const again = buildBinMap([...roster, row(3)], r.binMap, undefined, r.closed.map(c => c.bin));
-    expect(binFor(again, row(3))).toBe("1.2");
+    expect(binFor(again, row(3))).toBe("2");
   });
   it("its sticker still says the team or the size, and its box label has no 'by' line", () => {
     const roster = [row(0)], map = buildBinMap(roster, {}, "none");
-    expect(jerseyLabel(roster[0], map, { orderNumber: "5" })).toEqual({ bin: "1.1", by: "team", value: "Navy", orderNumber: "5" });
+    expect(jerseyLabel(roster[0], map, { orderNumber: "5" })).toEqual({ bin: "1", by: "team", value: "Navy", orderNumber: "5" });
     const l = binLabels(roster, map, { orderNumber: "5" })[0];
-    expect(l).toMatchObject({ bin: "1.1", label: ALL_LABEL, count: 1 });
+    expect(l).toMatchObject({ bin: "1", label: ALL_LABEL, count: 1 });
     const zpl = binLabelZPL(l, labelSize("2x1"));
-    expect(zpl).toContain("^FDBOX 1.1^FS");
+    expect(zpl).toContain("^FDBOX 1^FS");
     expect(zpl).not.toMatch(/by team|by size/);
     expect(zpl).toContain("^FDOrder 5^FS");   // the order alone: no "by", no jersey count
   });
@@ -146,11 +146,11 @@ describe("a row with nothing to sort by", () => {
   it("has a box of its own, is in its contents, and a by-size order does the same", () => {
     const roster = [row(0), row(1, { team: "", scanned: "pass" }), row(2, { team: "Red" })];
     const map = buildBinMap(roster, {}, "team");
-    expect(binFor(map, roster[1])).toBe("3.1");
-    expect(binContents(roster, map, [], "3.1").map(r => r._id)).toEqual([1]);
+    expect(binFor(map, roster[1])).toBe("3");
+    expect(binContents(roster, map, [], "3").map(r => r._id)).toEqual([1]);
     expect(binEntries(roster, map).map(e => e.label)).toEqual(["Navy", "Red", "No team"]);
     const bySize = buildBinMap([row(0), row(1, { size: "" })], {}, "size");
-    expect(binFor(bySize, row(1, { size: "" }))).toBe("2.1");
+    expect(binFor(bySize, row(1, { size: "" }))).toBe("2");
   });
 });
 describe("the box model learns from a heavy bin that went in one box", () => {

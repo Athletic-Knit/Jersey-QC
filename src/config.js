@@ -1,4 +1,5 @@
 // ── Floor configuration ───────────────────────────────────────────────────────
+import { KEY_DEFAULTS } from "./lib/keydefaults.js";
 import { DEFAULT_MODEL, DEFAULT_EFFORT, DEFAULT_THINKING } from "./lib/vision.js";
 import { DEFAULT_GARMENT, GARMENTS, GARMENT_IDS } from "./lib/garments.js";
 
@@ -22,12 +23,14 @@ export const OPERATORS = String(import.meta.env.VITE_OPERATORS || "Person 1,Pers
 // one press; only a check a flag added (REASON_CHECK) must be ticked, for the
 // next 5 jerseys. "Decoration" is one check for the name, the number, the
 // logos and the crest (it was two, "Name & Number" and "Logos", until 23 Nov 2026).
+// `reasons`: the flag reasons that ask for the check on the next garments (REASON_CHECK below).
+// The admin panel's Floor rules can replace the whole list (src/lib/checks.js, the co-op, 27 Nov 2026).
 export const CHECKS = [
-  { id: "decoration", label: "Decoration",    quick: true },
-  { id: "size",       label: "Size tag",      quick: true },
-  { id: "fabric",     label: "Fabric damage" },
-  { id: "holes",      label: "Holes" },
-  { id: "thread",     label: "Thread damage" },
+  { id: "decoration", label: "Decoration",    quick: true, reasons: ["wrong_decoration", "logo", "print"] },   // the name, the number, a logo or crest, sublimated graphics
+  { id: "size",       label: "Size tag",      quick: true, reasons: ["label", "no_size_tag"] },
+  { id: "fabric",     label: "Fabric damage",              reasons: ["mark", "mark_stays"] },
+  { id: "holes",      label: "Holes",                      reasons: ["fabric"] },
+  { id: "thread",     label: "Thread damage",              reasons: ["twill", "stitching", "loose_thread", "thread_stays"] },
 ];
 export const CHECKLIST = CHECKS.map(c => c.label);   // the words alone, for anything that only lists them
 // The check a flag adds: the next INSPECT_FULL jerseys stay on a quick look
@@ -35,12 +38,7 @@ export const CHECKLIST = CHECKS.map(c => c.label);   // the words alone, for any
 // the damage reasons; 23 Nov 2026 for every reason: "when we flag something it
 // should ask for that flag to be checked off for the next 5 jerseys"). A
 // reason with no check here (Others, a typed reason) restarts Inspect fully.
-export const REASON_CHECK = {
-  wrong_decoration: "decoration", logo: "decoration", print: "decoration",   // the name, the number, a logo or crest, sublimated graphics: all decoration
-  label: "size", no_size_tag: "size",
-  mark: "fabric", mark_stays: "fabric", fabric: "holes", twill: "thread", stitching: "thread",
-  loose_thread: "thread", thread_stays: "thread",
-};
+export const REASON_CHECK = Object.fromEntries(CHECKS.flatMap(c => c.reasons.map(r => [r, c.id])));
 
 // The resolution of the flag written when dirt or a loose thread is dealt with at the
 // station: still a flag, resolved at once (the owner, 25 Nov 2026).
@@ -102,7 +100,7 @@ export const jerseyTypeLabel = id => jerseyTypeOf(id)?.label || "";
 // step and on the flag ticket: the ids and labels straight from
 // src/lib/garments.js, which holds the shapes. Hockey by default: the most common order (the owner,
 // 24 Nov 2026). A row whose `style` the catalogue table knows uses its own kind.
-export const GARMENT_MENU = GARMENT_IDS.map(id => ({ id, label: GARMENTS[id].label }));
+export const GARMENT_MENU = GARMENT_IDS.map(id => ({ id, label: GARMENTS[id].label, group: GARMENTS[id].group }));
 export const DEFAULT_ORDER_GARMENT = DEFAULT_GARMENT;
 
 export const REASONS_BY_CONSTRUCTION = {
@@ -118,42 +116,37 @@ export function reasonsFor(jerseyType) {
   return t ? REASONS_BY_CONSTRUCTION[t.construction] : ALL_REASONS_MENU;
 }
 
-// Role gate. This is a convenience gate so a passer-by cannot use a station,
-// NOT security: anything in the browser bundle can be read by anyone on the
-// network. Real sign-in arrives with the roster server. Set PINs in .env.local:
-//   VITE_PIN_INSPECTOR=…  VITE_PIN_PACKER=…  VITE_PIN_SUPERVISOR=…  VITE_PIN_ADMIN=…
-// and VITE_PIN_REQUIRED=false to switch the gate off.
+// Role gate, so a passer-by cannot use a station. The PINs are checked by the server
+// (admin panel phase 7, src/lib/pins.js, POST /api/admin/pin): the page holds none. Set them
+// in .env.local as JQC_PIN_INSPECTOR=… (no VITE_ prefix, so they never reach a browser; the
+// old VITE_PIN_… names still work), and VITE_PIN_REQUIRED=false to switch the gate off.
 const env = import.meta.env;
 export const ROLES = [
-  { id: "inspector",  label: "Inspector",  pin: env.VITE_PIN_INSPECTOR  || "1111" },
+  { id: "inspector",  label: "Inspector" },
   // A sorter only sorts (the owner, 19 Nov 2026): no cleaning, no inspection. Signs in at a
   // station with the station's PIN, like an inspector; no quick look, no full inspection, no
   // double-check, no damage photo, and the only flags are No size tag, Duplicate and Not on the roster.
-  { id: "sorter",     label: "Sorter",     pin: env.VITE_PIN_SORTER     || "4444" },
-  { id: "packer",     label: "Packer",     pin: env.VITE_PIN_PACKER     || "2222" },
-  { id: "supervisor", label: "Supervisor", pin: env.VITE_PIN_SUPERVISOR || "3333" },
-  { id: "admin",      label: "Admin",      pin: env.VITE_PIN_ADMIN      || "9999" },
+  { id: "sorter",     label: "Sorter" },
+  { id: "packer",     label: "Packer" },
+  { id: "supervisor", label: "Supervisor" },
 ];
+// There is no Admin role (removed 26 Nov 2026, the co-op): developers use the admin panel
+// (?view=admin), signed in with a password the server checks (admin-plugin.js).
 export const PIN_REQUIRED = (env.VITE_PIN_REQUIRED ?? "true") !== "false";
 
 // The scanning stations. An operator picks their station at sign-in and
 // enters that station's PIN; the page then runs as ?station=station1 so the
 // supervisor's board, the saved order and the hub all know it as "Station 1".
-// Set PINs in .env.local: VITE_PIN_STATION1=…  VITE_PIN_STATION2=…  VITE_PIN_STATION3=…
+// Their PINs: JQC_PIN_STATION1=… in .env.local (src/lib/pins.js).
 export const STATIONS = [
-  { id: "station1", label: "Station 1", pin: env.VITE_PIN_STATION1 || "1001" },
-  { id: "station2", label: "Station 2", pin: env.VITE_PIN_STATION2 || "1002" },
-  { id: "station3", label: "Station 3", pin: env.VITE_PIN_STATION3 || "1003" },
+  { id: "station1", label: "Station 1" },
+  { id: "station2", label: "Station 2" },
+  { id: "station3", label: "Station 3" },
 ];
 export const stationOf = id => STATIONS.find(s => s.id === id) || null;
 
 export const DEFAULT_SETTINGS = {
-  scanKey: "Enter",       // take a picture (only when no screen is open). Enter, the same as Select, so one pedal does both (the owner, 17 Nov 2026; it was B)
-  confirmKey: "Enter",    // select the highlighted option on any screen
-  cancelKey: "KeyA",      // move the highlight down (↓ also works)
-  upKey: "ArrowUp",       // move the highlight up (↑ also works)
-  retryKey: "KeyR",       // retry the scan wherever it is offered; nothing is recorded
-  byHandKey: "KeyW",      // open "Enter by hand" wherever it is offered (a failed read, a pick list)
+  ...KEY_DEFAULTS,        // scan Enter, select Enter, down A, up ↑, retry R, by hand W (src/lib/keydefaults.js, which the server reads too)
   rotation: 180,          // 0 | 90 | 180 | 270 — how the camera is mounted
   cameraId: "",           // "" = browser default
   autoScan: true,         // hands-free: scan when the jersey changes and settles
@@ -161,16 +154,18 @@ export const DEFAULT_SETTINGS = {
   stickers: false,        // print a sticker (bin + team or size) on the server's label printer for every passed jersey. Off unless a station turns it on (the owner, 17 Nov 2026)
   flagTickets: true,      // print a flag ticket (2 x 1 in: where it goes and why) for every flagged jersey
   binLists: true,         // print what is in a box (2 x 1 in: a count label, then fourteen jerseys a label) when it is closed: full, or the order finished
-  // Which roll each kind of label prints on (Settings → Label printer; the owner, 25 Nov 2026: 2 x 4 for all by default).
+  // Which roll each kind of label prints on (Settings → Label printer; the owner, 26 Nov 2026: 2 x 3 for everything,
+  // replacing 25 Nov's 2 x 4).
   // The station sends it with every print; the hub lays the label out for that roll and sends a 1 x 0.5 one to the
   // station's sticker printer, the others to its ticket printer (JERSEY_FLAG_PRINTER…, else the sticker printer).
-  stickerRoll: "2x4",     // stickers on passed jerseys
-  flagRoll: "2x4",        // flag tickets
-  boxRoll: "2x4",         // box labels, box lists, count labels, the DAMAGED list
+  stickerRoll: "2x3",     // stickers on passed jerseys
+  flagRoll: "2x3",        // flag tickets
+  boxRoll: "2x3",         // box labels, box lists, count labels, the DAMAGED list
   boxAutoPrint: false,    // the set-out screen prints the box labels by itself when an order starts. Off: only its button prints them (the owner, 25 Nov 2026)
   boxWeights: false,      // estimate a bin's weight and warn near the cap. Off: the operator judges the weight until a scale is connected to the station
   boxWeightCap: 45,       // lb: no box heavier than this, when boxWeights is on (src/lib/boxmodel.js)
   listSort: "size",       // the pick list's order: "size" | "team" | "number" (LIST_SORTS in roster.js; the owner, 19 Nov 2026: by size, the tag is all the operator checks)
+  theme: "light",         // "dark" | "light" | "system" (follow the PC). Light is the default (brand-ui, 27 Nov 2026); a station that chose Dark in Settings keeps it
 };
 
 // ── Where a flagged jersey goes, from the reason the operator picked ────────
@@ -240,8 +235,8 @@ export function severityOf(reason) {
 // The label rolls a station can choose in Settings → Label printer (the owner, 25 Nov 2026).
 // The hub accepts the same four (LABEL_ROLLS in hub-plugin.js).
 export const LABEL_ROLLS = [
-  { id: "2x4",   label: "2 × 4 in" },
   { id: "2x3",   label: "2 × 3 in" },
+  { id: "2x4",   label: "2 × 4 in" },
   { id: "2x1",   label: "2 × 1 in" },
   { id: "1x0.5", label: "1 × ½ in" },
 ];

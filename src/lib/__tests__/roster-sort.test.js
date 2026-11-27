@@ -41,11 +41,11 @@ describe("the roster table's sort", () => {
   });
   it("by box uses the box the station says a jersey is in, done ones first inside a box", () => {
     const bins = buildBinMap(roster, {}, "team");
-    const closed = { 2: "1.1" };                       // row 2 sits in a closed box, its team has moved on to 1.2
-    const binOf = r => closed[r._id] || (bins[String(r.team).toLowerCase()] === "1.1" ? "1.2" : bins[String(r.team).toLowerCase()]);
+    const closed = { 2: "1" };                         // row 2 sits in closed box 1; Blue has moved on to box 3, the next free number (the co-op, 27 Nov 2026)
+    const binOf = r => closed[r._id] || (bins[String(r.team).toLowerCase()] === "1" ? "3" : bins[String(r.team).toLowerCase()]);
     const out = sortRoster(roster, "bin", bins, { binOf });
-    expect(ids(out)).toEqual([2, 4, 1, 5, 3]);         // box 1.1, then 1.2, then 2.1: its two done jerseys before the flagged one
-    expect(ids(sortRoster(roster, "bin", bins, { binOf, doneFirst: false })).slice(2)).toEqual([3, 5, 1]);
+    expect(ids(out)).toEqual([2, 1, 5, 3, 4]);         // box 1, then 2 (Red: its two done jerseys before the flagged one), then 3
+    expect(ids(sortRoster(roster, "bin", bins, { binOf, doneFirst: false }))).toEqual([2, 3, 5, 1, 4]);
   });
   it("leaves the roster itself alone and an unknown sort as it is", () => {
     const copy = roster.slice();
@@ -115,6 +115,11 @@ describe("the pick list follows the last confirmed jersey's size (25 Nov 2026)",
     expect(got("team")).toEqual(got("size"));
     // A list with no twin keeps the family step.
     expect(sortCandidates(rows.filter(r => r.number === "6"), "size", { lastSize: "Y-L" }).map(r => r.size)).toEqual(["Y-L", "Y-S", "A-S", "A-M"]);
+  });
+  it("rows still out (back from repair, found) come at the very end, whatever the sort and the last size (the co-op, 26 Nov 2026)", () => {
+    const rows = [{ _id: 1, number: "6", size: "L-M", cameBack: { was: "flag" } }, { _id: 2, number: "6", size: "A-S" }, { _id: 3, number: "6", size: "Y-XL", cameBack: { was: "missing" } }, { _id: 4, number: "6", size: "L-M" }];
+    expect(sortCandidates(rows, "size", { lastSize: "L-M" }).map(r => r._id)).toEqual([4, 2, 1, 3]);   // the still-out ones last, the last size first among them
+    expect(sortCandidates(rows, "team").slice(-2).every(r => r.cameBack)).toBe(true);
   });
   it("the line under the header knows whether the size or only its family is on the list", () => {
     expect(lastSizeRank("L-S", "L-S")).toBe(0);

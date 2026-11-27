@@ -8,7 +8,7 @@
 // hub's flag events turned into the same shape); `planLabels` are the box
 // labels the station expects the order to need (the open order only).
 // Nothing here prints: each function returns the labels for hub.printLabels.
-import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, boxParts, inBin, groupSize, shortSize, bySize, teamKey } from "./roster.js";
+import { binContents, binEntries, binFieldOf, binFor, binOfRow, binOrder, inBin, groupSize, shortSize, bySize, teamKey } from "./roster.js";
 import { binListLabels, jerseyLabel, flagLabel, damagedListLabels, listLabels } from "./labels.js";
 import { packListLabel } from "./packlabels.js";
 import { garmentOf } from "./garments.js";
@@ -24,13 +24,20 @@ export function ordersInBox(pack, bin, rows) {
   const n = new Map(); rows.forEach(r => { const o = r.carried ? r.order || "?" : String(pack?.orderNumber || ""); n.set(o, (n.get(o) || 0) + 1); });
   return [...n].map(([o, k]) => `${o} (${k})`).join(" + ");
 }
-// Every box of the order (see above): { bin, label, open, rows, count }.
+// The team or size a box belongs to: its key in the bin map, or the key its closed entry kept. Boxes have
+// whole numbers (the co-op, 27 Nov 2026), so the number no longer says which team a box is (Hawks 1 and 31).
+export function keyOfBox(pack, bin) {
+  const binMap = pack?.binMap, closed = pack?.closedBins || [];
+  return Object.entries(binMap || {}).find(([k, v]) => k !== "__by" && v === bin)?.[0] ?? closed.find(c => c.bin === bin)?.key;
+}
+// Every box of the order (see above): { bin, key, label, open, rows, count }.
 export function packBoxes(pack) {
   const { roster = [], binMap = null } = pack || {};
   const closedBins = pack?.closedBins || [];
   if (!binMap) return [];
-  const closed = closedBins.map(c => ({ bin: c.bin, label: c.label, open: false }));
-  const open   = binEntries(roster, binMap).map(e => ({ bin: e.bin, label: e.label, open: true }));
+  const keyOpen = bin => Object.entries(binMap).find(([k, v]) => k !== "__by" && v === bin)?.[0];
+  const closed = closedBins.map(c => ({ bin: c.bin, key: c.key, label: c.label, open: false }));
+  const open   = binEntries(roster, binMap).map(e => ({ bin: e.bin, key: keyOpen(e.bin), label: e.label, open: true }));
   return [...closed, ...open]
     .map(b => { const rows = [...binContents(roster, binMap, closedBins, b.bin), ...carriedRows(pack, b.bin)]; return { ...b, rows, count: rows.length }; })
     .sort((a, b) => binOrder(a.bin, b.bin));
@@ -113,7 +120,7 @@ export function boxListJobs(pack, bin, { tall = false } = {}) {
   // its NOT IN BOX list says so (the third check, 24 Nov 2026: Finish order printed it, the Print
   // menu did not). An empty box AFTER a closed one is where a jersey that comes back would go; its
   // group's last box is the closed one, which carries the NOT IN BOX list.
-  const alone = b => b.open && b.count === 0 && !boxes.some(x => !x.open && boxParts(x.bin)[0] === boxParts(b.bin)[0]);
+  const alone = b => b.open && b.count === 0 && !boxes.some(x => !x.open && x.key !== undefined && x.key === b.key);
   return boxes.filter(b => (b.count > 0 || alone(b)) && (bin === undefined || b.bin === bin))
     .flatMap(b => [
       ...(isLastBox(pack, b.bin) ? notInBoxJobs(pack, b.bin, b.label) : []),
@@ -137,8 +144,8 @@ export function boxListJobs(pack, bin, { tall = false } = {}) {
 //                             jerseys still to scan) prints the list.
 export function finishNotInBoxJobs(pack, bin, label = "", count = 0) {
   if (count > 0) return notInBoxJobs(pack, bin, label);
-  const g = boxParts(bin)[0];
-  const last = (pack?.closedBins || []).filter(c => boxParts(c.bin)[0] === g).sort((a, b) => binOrder(b.bin, a.bin))[0];
+  const g = keyOfBox(pack, bin);
+  const last = g === undefined ? null : (pack?.closedBins || []).filter(c => c.key === g).sort((a, b) => binOrder(b.bin, a.bin))[0];
   if (!last) return notInBoxJobs(pack, bin, label);
   const now = notInBox(pack, last.bin).map(x => String(x.row._id));
   const was = Array.isArray(last.notIn) ? last.notIn.map(String) : null;
@@ -181,11 +188,11 @@ export function notInBoxJobs(pack, bin, label = "") {
 // from the hub) nothing more will be scanned, so a jersey never scanned is
 // short and the group's last box lists it.
 export function isLastBox(pack, bin) {
-  const g = boxParts(bin)[0];
-  if (packBoxes(pack).some(x => boxParts(x.bin)[0] === g && binOrder(x.bin, bin) > 0 && x.count > 0)) return false;
+  const g = keyOfBox(pack, bin);
+  if (packBoxes(pack).some(x => g !== undefined && x.key === g && x.bin !== bin && binOrder(x.bin, bin) > 0 && x.count > 0)) return false;
   if (pack?.finished || pack?.past) return true;
   const binMap = pack?.binMap, closed = pack?.closedBins || [];
-  const key = Object.entries(binMap || {}).find(([k, v]) => k !== "__by" && v === bin)?.[0] ?? closed.find(c => c.bin === bin)?.key;
+  const key = keyOfBox({ binMap, closedBins: closed }, bin);
   if (key === undefined) return false;
   return !(pack?.roster || []).some(r => !r.scanned && binFor(binMap, r) === binMap[key]);
 }

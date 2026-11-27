@@ -8,6 +8,9 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import hubPlugin from './hub-plugin.js'
+import adminPlugin from './admin-plugin.js'
+import guardPlugin from './guard-plugin.js'
+import aiProxyPlugin from './ai-proxy.js'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import process from 'node:process'
 
@@ -41,7 +44,8 @@ export function printerEnv(env) {
 // rename it to take the key off the page. A request that brings its own key
 // (the test tools do) keeps it.
 export function anthropicKey(env) { return env.CLAUDE_API_KEY || env.VITE_CLAUDE_API_KEY || "" }
-// The proxy's settings for /api/anthropic; `log` writes one line per call.
+// The OLD open proxy's settings, kept only for vite.config.diag.js (AK-NB-164, not in git). Every
+// stage uses ai-proxy.js now (phase 6, 26 Nov 2026): only the app's own reads, counted.
 export function anthropicProxy(env, { log = false } = {}) {
   const key = anthropicKey(env)
   const stamp = () => new Date().toLocaleTimeString('en-CA', { hour12: false })
@@ -66,14 +70,13 @@ export default defineConfig(({ mode }) => {
   // basicSsl serves over HTTPS with a self-signed cert.
   // Required: browsers only allow getUserMedia (the camera) on a secure
   // origin, so scanning stations on the LAN cannot use http://<ip>:5173.
-  plugins: [react(), basicSsl(), hubPlugin(printerEnv(env))],
+  // adminPlugin: the developers' admin panel (?view=admin), read only on production unless JQC_ADMIN_WRITE=1.
+  // guardPlugin first: data\, .env.local and the like are never served (guard-plugin.js).
+  plugins: [guardPlugin(), react(), basicSsl(), hubPlugin(printerEnv(env)), adminPlugin({ stage: 'production', port: 5173, env }), aiProxyPlugin({ env })],
   server: {
     host: true,          // bind all interfaces so other PCs on the network can reach it
     port: 5173,
     strictPort: true,    // fail loudly rather than drifting to 5174
-    proxy: {
-      '/api/anthropic': anthropicProxy(env, { log: true }),
-    }
   }
   }
 })

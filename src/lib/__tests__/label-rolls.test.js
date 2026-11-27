@@ -31,10 +31,11 @@ const STICKER = [{ bin: "1.1", by: "team", value: "Navy", orderNumber: "264247" 
 afterEach(() => setPrintRolls({}));
 
 describe("the rolls", () => {
-  it("four rolls, the same at the station and the hub; 2 x 4 for every kind by default", () => {
-    expect(LABEL_ROLLS.map(r => r.id)).toEqual(HUB_ROLLS);
+  it("four rolls, the same at the station and the hub; 2 x 3 for every kind by default (the owner, 26 Nov 2026)", () => {
+    expect([...LABEL_ROLLS.map(r => r.id)].sort()).toEqual([...HUB_ROLLS].sort());
+    expect(LABEL_ROLLS[0].id).toBe("2x3");                         // the floor's roll first in Settings
     expect(HUB_ROLLS).toEqual(["2x4", "2x3", "2x1", "1x0.5"]);
-    expect([DEFAULT_SETTINGS.stickerRoll, DEFAULT_SETTINGS.flagRoll, DEFAULT_SETTINGS.boxRoll]).toEqual(["2x4", "2x4", "2x4"]);
+    expect([DEFAULT_SETTINGS.stickerRoll, DEFAULT_SETTINGS.flagRoll, DEFAULT_SETTINGS.boxRoll]).toEqual(["2x3", "2x3", "2x3"]);
   });
   it("each kind of print takes its own setting", () => {
     setPrintRolls({ stickerRoll: "1x0.5", flagRoll: "2x3", boxRoll: "2x1" });

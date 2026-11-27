@@ -139,11 +139,15 @@ describe("one garment: the same number and size on several teams of a roster wit
     const someDone = tens.map((r, i) => i < 2 ? { ...r, scanned: "pass" } : r);
     expect(findMatches(someDone, "", "10")).toMatchObject({ type: "exact", match: { _id: 2 } });
   });
-  it("two sizes, a doubtful read, a typed entry or a roster with names stay a list", () => {
+  it("the number typed by hand goes green the same way (the co-op, 25 Nov 2026: #3 typed with two U16 and two U18 A-M #3 open)", () => {
+    const threes = [row(0, "", "3", { team: "U16 MENS", size: "A-M" }), row(1, "", "3", { team: "U16 MENS", size: "A-M" }), row(2, "", "3", { team: "U18 MENS", size: "A-M" }), row(3, "", "3", { team: "U18 MENS", size: "A-M" })];
+    expect(findMatches(threes, "", "3", { typed: true })).toMatchObject({ type: "exact", match: { _id: 0 } });
+    expect(findMatches([...threes, row(4, "", "3", { size: "A-L" })], "", "3", { typed: true }).type).toBe("pick");   // two sizes: still a list
+  });
+  it("two sizes, a doubtful read or a roster with names stay a list", () => {
     const mixed = [...tens.slice(0, 3), row(9, "", "10", { team: "Owls", size: "A-S" })];
     expect(findMatches(mixed, "", "10").type).toBe("pick");
     expect(findMatches(tens, "", "10", { numberComplete: false }).type).toBe("pick");
-    expect(findMatches(tens, "", "10", { typed: true }).type).toBe("pick");
     const named = [...tens, row(20, "Nguyen", "23")];
     expect(findMatches(named, "", "10").type).not.toBe("exact");
   });

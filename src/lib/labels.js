@@ -27,8 +27,8 @@
 // label keep today's look at the top; the lists put several of today's pages
 // on one label (repageLists). On the 2 x 1 in and sticker rolls every label
 // is exactly as before.
-import { binEntries, binFieldOf, binFor, boxParts, bySize, shortSize } from "./roster.js";
-import { GARMENTS, MAX_SPOTS, SIDES, garment as garmentShape } from "./garments.js";
+import { binEntries, binFieldOf, binFor, boxParts, bySize, shortSize, twoPartBox } from "./roster.js";
+import { GARMENTS, MAX_SPOTS, SIDES, garment as garmentShape, sideLabel } from "./garments.js";
 import { packListZPL, packListRows, boxFaceZPL, signoffZPL } from "./packlabels.js";
 
 // "1x0.5" (inches, width x height) → dots at the printer's resolution.
@@ -277,7 +277,8 @@ export function flagPanels(kind, size) {
   const g = garmentShape(kind), { aspect } = g;
   // The outline's own box in 0–1: a pair of pants or a sock does not fill its
   // garment box from side to side, and is scaled by what it really covers.
-  const xs = g.outline.map(p => p[0]), ys = g.outline.map(p => p[1]);
+  const all = SIDES.flatMap(side => g.outlines[side]);            // both views, so they draw at one scale
+  const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
   const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
   const shape = aspect * (bx1 - bx0) / Math.max(0.01, by1 - by0);   // the outline's width over its height
   const rule = band + FLAG_LIFT + 8;                              // under the black column, which ends at band + FLAG_LIFT + 4
@@ -307,13 +308,75 @@ export function flagPanels(kind, size) {
   return { rule, margin: m, across, panels: { front: panel(0), back: panel(1) } };
 }
 
-// One straight line between two points, in dots: ^GB when it is (nearly)
-// level or upright, else ^GD, a diagonal in its box (R leans like /, L like \).
-function segment([xa, ya], [xb, yb], t) {
-  const dx = xb - xa, dy = yb - ya, x = Math.min(xa, xb), y = Math.min(ya, yb);
-  if (Math.abs(dy) < 3) return `^FO${x},${y}^GB${Math.max(t, Math.abs(dx))},${t},${t}^FS`;
-  if (Math.abs(dx) < 3) return `^FO${x},${y}^GB${t},${Math.max(t, Math.abs(dy))},${t}^FS`;
-  return `^FO${x},${y}^GD${Math.abs(dx)},${Math.abs(dy)},${t},B,${(dx > 0) !== (dy > 0) ? "R" : "L"}^FS`;
+// The garment is sent as ONE picture a side (^GFA), drawn here on the
+// printer's own dot grid from the drawing's curves: a curve sent as many short
+// ^GB / ^GD lines printed as stairs, each piece rounded to whole dots on its
+// own (the owner's test ticket, 26 Nov 2026). Lines are drawn with a round pen
+// (`width` dots across): every dot within half the width of a segment is black.
+function penLine(bits, w, h, [xa, ya], [xb, yb], width) {
+  const r = width / 2, r2 = r * r;
+  const x0 = Math.max(0, Math.floor(Math.min(xa, xb) - r)), x1 = Math.min(w - 1, Math.ceil(Math.max(xa, xb) + r));
+  const y0 = Math.max(0, Math.floor(Math.min(ya, yb) - r)), y1 = Math.min(h - 1, Math.ceil(Math.max(ya, yb) + r));
+  const dx = xb - xa, dy = yb - ya, len2 = dx * dx + dy * dy || 1;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const px = x + 0.5, py = y + 0.5;                                // the dot's centre
+    const t = Math.max(0, Math.min(1, ((px - xa) * dx + (py - ya) * dy) / len2));
+    const ex = px - xa - t * dx, ey = py - ya - t * dy;
+    if (ex * ex + ey * ey <= r2) bits[y * w + x] = 1;
+  }
+}
+// Zebra's ASCII compression of ^GFA hex: a run of one hex digit as a count
+// (G–Y = 1–19, g–z = 20–400) then the digit; "," ends a row of white, ":"
+// repeats the row above. A label of lines is mostly white, so it stays small.
+function runCode(n) {
+  let out = "";
+  while (n > 400) { out += "z"; n -= 400; }
+  if (n >= 20) { out += String.fromCharCode(0x66 + Math.floor(n / 20)); n %= 20; }   // g = 20 … z = 400
+  if (n > 0) out += String.fromCharCode(0x46 + n);                                     // G = 1 … Y = 19
+  return out;
+}
+function gfaRow(hex) {
+  const end = hex.replace(/0+$/, "");
+  if (!end) return ",";
+  let out = "";
+  for (let i = 0; i < end.length;) {
+    let j = i; while (j < end.length && end[j] === end[i]) j++;
+    const n = j - i;
+    out += (n > 1 ? runCode(n) : "") + end[i];
+    i = j;
+  }
+  return end.length < hex.length ? out + "," : out;
+}
+// A bitmap (1 = black) of w × h dots as ^FO…^GFA…^FS at x, y.
+export function bitmapZPL(x, y, bits, w, h) {
+  const bpr = Math.ceil(w / 8), rows = [];
+  let prev = null;
+  for (let r = 0; r < h; r++) {
+    let hex = "";
+    for (let b = 0; b < bpr; b++) {
+      let v = 0;
+      for (let k = 0; k < 8; k++) { const c = b * 8 + k; if (c < w && bits[r * w + c]) v |= 0x80 >> k; }
+      hex += v.toString(16).toUpperCase().padStart(2, "0");
+    }
+    rows.push(hex === prev ? ":" : gfaRow(hex));
+    prev = hex;
+  }
+  return `^FO${x},${y}^GFA,${bpr * h},${bpr * h},${bpr},${rows.join("")}^FS`;
+}
+// One side of the garment as a picture: its outline (closed) and its lines,
+// in the panel's frame (`at` turns a 0–1 point into label dots).
+function garmentBitmap(g, side, at, p) {
+  const x0 = p.x, y0 = p.y + p.cap + p.capGap, w = p.w, h = p.y + p.h - y0;
+  if (w <= 0 || h <= 0) return "";
+  const bits = new Uint8Array(w * h);
+  const loc = pt => { const [x, y] = at(pt); return [x - x0, y - y0]; };
+  const o = g.outlines[side].map(loc);
+  o.forEach((pt, i) => penLine(bits, w, h, pt, o[(i + 1) % o.length], OUTLINE_DOTS));
+  for (const poly of g.detail[side] || []) {
+    const q = poly.map(loc);
+    for (let i = 1; i < q.length; i++) penLine(bits, w, h, q[i - 1], q[i], DETAIL_DOTS);
+  }
+  return bitmapZPL(x0, y0, bits, w, h);
 }
 // The garment, FRONT and BACK, with the spots: the lines of a tall ticket under its band.
 function garmentZPL(l, size) {
@@ -327,18 +390,15 @@ function garmentZPL(l, size) {
   SIDES.forEach(side => {
     const p = panels[side];
     const at = ([x, y]) => [Math.round(p.dx + x * p.dw), Math.round(p.dy + y * p.dh)];
-    if (side === "front") out.push(tight(p.x, p.y, p.cap, p.w, `FRONT · ${g.label}`));
+    const atF = ([x, y]) => [p.dx + x * p.dw, p.dy + y * p.dh];       // the drawing: not rounded, the pen works between dots
+    const cap = sideLabel(kind, side).toUpperCase();
+    if (side === "front") out.push(tight(p.x, p.y, p.cap, p.w, `${cap} · ${g.label}`));
     else {   // with nothing marked, the BACK caption says so: every tall ticket looks the same
       const lw = spots.length ? p.w : Math.round(p.w * 0.4);
-      out.push(tight(p.x, p.y, p.cap, lw, "BACK"));
+      out.push(tight(p.x, p.y, p.cap, lw, cap));
       if (!spots.length) out.push(line(p.x + lw, p.y, p.cap, p.w - lw, "R", "Not marked"));
     }
-    const pts = g.outline.map(at);
-    pts.forEach((pt, i) => out.push(segment(pt, pts[(i + 1) % pts.length], OUTLINE_DOTS)));
-    (g.detail[side] || []).forEach(poly => {
-      const q = poly.map(at);
-      for (let i = 1; i < q.length; i++) out.push(segment(q[i - 1], q[i], DETAIL_DOTS));
-    });
+    out.push(garmentBitmap(g, side, atF, p));
     // The spots of this side, numbered as they were marked (1–3 over both
     // sides, as on the station): a filled dot with its number in white, and a
     // ring round it so it stands out from the lines under it. Kept inside
@@ -360,15 +420,16 @@ function garmentZPL(l, size) {
 // ── Box labels ───────────────────────────────────────────────────────────────
 // One entry per box: { bin, label (the team or size), by, count, orderNumber }.
 // `boxes`: { [open box]: how many boxes that team or size is expected to
-// need from here } (the station works it out from the box model): a team on
-// box 5.1 expected to fill three gives BOX 5.1, 5.2 and 5.3, so the operator
-// can label the boxes before scanning. Without it, one label per open box.
+// need from here } (the station works it out from the box model). Boxes have whole numbers (the co-op,
+// 27 Nov 2026): the next box of a team gets the next free number only when it opens, so one label per open
+// box, and the next one prints at Box full. An order still on two-number names gets its expected boxes
+// labelled ahead as before: a team on box 5.1 expected to fill three gives BOX 5.1, 5.2 and 5.3.
 export function binLabels(roster, binMap, { orderNumber = "", boxes = null } = {}) {
   const by = binFieldOf(binMap);
   const counts = {};
   roster.forEach(r => { const b = binFor(binMap, r); if (b !== null) counts[b] = (counts[b] || 0) + 1; });
   return binEntries(roster, binMap).flatMap(({ label, bin }) => {
-    const [g, s] = boxParts(bin), n = s ? Math.max(1, Math.min(60, Math.round(Number(boxes?.[bin]) || 1))) : 1;
+    const [g, s] = boxParts(bin), n = s && twoPartBox(bin) ? Math.max(1, Math.min(60, Math.round(Number(boxes?.[bin]) || 1))) : 1;
     return Array.from({ length: n }, (_, i) => ({ bin: s ? `${g}.${s + i}` : bin, label, by, count: counts[bin] || 0, orderNumber: String(orderNumber || "") }));
   });
 }

@@ -3,14 +3,16 @@
 // once, the owner, 17 Nov 2026), and where a flag goes and what it weighs on
 // the supervisor board.
 import { describe, it, expect } from "vitest";
+import { pinFor } from "../pins.js";
 import { JERSEY_TYPES, reasonsFor, jerseyTypeLabel, REASONS, REASON_CHECK, MARK_STAYS, THREAD_STAYS, reasonCategory, routeOfReason, severityOf, STATIONS, stationOf, ROLES } from "../../config.js";
 
 describe("stations", () => {
   it("three stations, each with its own PIN, none equal to the supervisor's", () => {
     expect(STATIONS.map(s => s.label)).toEqual(["Station 1", "Station 2", "Station 3"]);
-    const pins = STATIONS.map(s => s.pin);
+    const pins = STATIONS.map(s => pinFor({}, s.id).pin);
     expect(new Set(pins).size).toBe(3);
-    expect(pins).not.toContain(ROLES.find(r => r.id === "supervisor").pin);
+    expect(pins).not.toContain(pinFor({}, "supervisor").pin);
+    expect(ROLES.concat(STATIONS).every(r => !("pin" in r))).toBe(true);   // the page holds no PIN (phase 7)
     expect(stationOf("station2").label).toBe("Station 2");
     expect(stationOf("line1")).toBeNull();
   });

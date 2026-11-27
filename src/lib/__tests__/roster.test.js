@@ -82,10 +82,10 @@ describe("bins", () => {
   const roster = [{ team: "Ravens" }, { team: "ravens " }, { team: "Hawks" }, { team: "" }];
   it("case-folds and trims team names", () => {
     const m = buildBinMap(roster);
-    expect(m).toEqual({ hawks: "1.1", ravens: "2.1", "?": "3.1" });   // a row with no team: the "No team" box
-    expect(binFor(m, "Ravens")).toBe("2.1");
-    expect(binFor(m, "ravens ")).toBe("2.1");
-    expect(binFor(m, { team: "" })).toBe("3.1");
+    expect(m).toEqual({ hawks: "1", ravens: "2", "?": "3" });   // a row with no team: the "No team" box
+    expect(binFor(m, "Ravens")).toBe("2");
+    expect(binFor(m, "ravens ")).toBe("2");
+    expect(binFor(m, { team: "" })).toBe("3");
     expect(binFor(buildBinMap([{ team: "Ravens" }, { team: "Hawks" }]), { team: "" })).toBeNull();   // every row has a team: no such bin
   });
   it("pins existing bins when the roster is replaced", () => {
@@ -93,19 +93,19 @@ describe("bins", () => {
     const second = buildBinMap([{ team: "Hawks" }, { team: "Wolves" }], first);
     expect(second.hawks).toBe(first.hawks);
     expect(second.ravens).toBe(first.ravens);
-    expect(second.wolves).toBe("3.1");
+    expect(second.wolves).toBe("3");
   });
   it("lists entries with the roster's spelling", () => {
-    expect(binEntries(roster, buildBinMap(roster))).toEqual([{ label: "Hawks", bin: "1.1" }, { label: "Ravens", bin: "2.1" }, { label: "No team", bin: "3.1" }]);
+    expect(binEntries(roster, buildBinMap(roster))).toEqual([{ label: "Hawks", bin: "1" }, { label: "Ravens", bin: "2" }, { label: "No team", bin: "3" }]);
   });
   it("by size: one box per size, youth before adult, XS before 3XL; the row says which field", () => {
     const r = [{ team: "Ravens", size: "A-L" }, { team: "Hawks", size: "Y-M" }, { team: "Ravens", size: "A-XS" }, { team: "Hawks", size: "a-l " }, { team: "Hawks", size: "A-3XL" }];
     const m = buildBinMap(r, {}, "size");
     expect(m.__by).toBe("size");
-    expect(binEntries(r, m)).toEqual([{ label: "Y-M", bin: "1.1" }, { label: "A-XS", bin: "2.1" }, { label: "A-L", bin: "3.1" }, { label: "A-3XL", bin: "4.1" }]);
-    expect(binFor(m, { team: "Hawks", size: "A-L" })).toBe("3.1");
+    expect(binEntries(r, m)).toEqual([{ label: "Y-M", bin: "1" }, { label: "A-XS", bin: "2" }, { label: "A-L", bin: "3" }, { label: "A-3XL", bin: "4" }]);
+    expect(binFor(m, { team: "Hawks", size: "A-L" })).toBe("3");
     expect(binFor(m, { team: "Hawks" })).toBeNull();
-    expect(binFor(buildBinMap(r), { team: "Hawks", size: "A-L" })).toBe("1.1");   // by team, the size is ignored
+    expect(binFor(buildBinMap(r), { team: "Hawks", size: "A-L" })).toBe("1");   // by team, the size is ignored
   });
   it("switching the field starts the bins over; the same field keeps them", () => {
     const r = [{ team: "Ravens", size: "A-L" }, { team: "Hawks", size: "A-M" }];
@@ -159,7 +159,8 @@ describe("order number in the roster file", () => {
 });
 
 // A box that is full: it is closed with what was in it, and its team or size
-// carries on in its next box (1.1 → 1.2).
+// carries on in the next free box number of the whole order (the co-op,
+// 27 Nov 2026: boxes have whole numbers; Navy 1 and Red 2, Navy's next is 3).
 describe("closing a full box", () => {
   const rows = [
     { _id: 0, name: "SMITH", number: "7",  team: "Navy", size: "A-L",  scanned: "pass" },
@@ -168,40 +169,50 @@ describe("closing a full box", () => {
     { _id: 3, name: "PATEL", number: "12", team: "Navy", size: "A-XL", scanned: false },
     { _id: 4, name: "KIM",   number: "4",  team: "Navy", size: "A-S",  scanned: "flag" },
   ];
-  const map = buildBinMap(rows, {}, "team");   // Navy 1.1, Red 2.1
-  it("the closed box keeps its rows, the team moves to its next box", () => {
-    expect(map).toEqual({ navy: "1.1", red: "2.1" });
-    const r = closeBin(rows, map, [], "1.1", 1000);
-    expect(r.newBin).toBe("1.2");
-    expect(r.binMap).toEqual({ navy: "1.2", red: "2.1" });
-    expect(r.entry).toEqual({ bin: "1.1", key: "navy", label: "Navy", ids: [0, 1], closedAt: 1000 });   // passed and by hand; not the flag, not the unscanned
-    expect(binOfRow(r.binMap, r.closed, rows[0])).toBe("1.1");    // already in the closed box
-    expect(binOfRow(r.binMap, r.closed, rows[3])).toBe("1.2");    // still to scan: the new box
-    expect(binContents(rows, r.binMap, r.closed, "1.1").map(x => x._id)).toEqual([0, 1]);
+  const map = buildBinMap(rows, {}, "team");   // Navy 1, Red 2
+  it("the closed box keeps its rows, the team moves to the next free box number", () => {
+    expect(map).toEqual({ navy: "1", red: "2" });
+    const r = closeBin(rows, map, [], "1", 1000);
+    expect(r.newBin).toBe("3");                                   // one more than the highest box of the order
+    expect(r.binMap).toEqual({ navy: "3", red: "2" });
+    expect(r.entry).toEqual({ bin: "1", key: "navy", label: "Navy", ids: [0, 1], closedAt: 1000 });   // passed and by hand; not the flag, not the unscanned
+    expect(binOfRow(r.binMap, r.closed, rows[0])).toBe("1");      // already in the closed box
+    expect(binOfRow(r.binMap, r.closed, rows[3])).toBe("3");      // still to scan: the new box
+    expect(binContents(rows, r.binMap, r.closed, "1").map(x => x._id)).toEqual([0, 1]);
     const later = rows.map(x => x._id === 3 ? { ...x, scanned: "pass" } : x);
-    expect(binContents(later, r.binMap, r.closed, "1.2").map(x => x._id)).toEqual([3]);
+    expect(binContents(later, r.binMap, r.closed, "3").map(x => x._id)).toEqual([3]);
   });
-  it("closing again never reuses a box name; a box that is not open is not closed", () => {
-    const a = closeBin(rows, map, [], "1.1");
-    const b = closeBin(rows, a.binMap, a.closed, "1.2");
-    expect(b.newBin).toBe("1.3");
-    expect(b.entry.ids).toEqual([]);                              // nothing went in box 1.2 yet
-    expect(closeBin(rows, b.binMap, b.closed, "1.1")).toBeNull(); // box 1.1 is closed already
-    expect(closeBin(rows, b.binMap, b.closed, "1.2")).toBeNull();
-    expect(closeBin(rows, b.binMap, b.closed, 1)).toBeNull();     // a plain number is not a box of this order
-    expect(nextBinNumber(b.binMap, b.closed, "1.3")).toBe("1.4");
-    expect(nextBinNumber(b.binMap, b.closed, "2.1")).toBe("2.2"); // the other team counts its own boxes
+  it("closing again never reuses a box number; a box that is not open is not closed", () => {
+    const a = closeBin(rows, map, [], "1");                       // Navy 1 -> 3
+    const b = closeBin(rows, a.binMap, a.closed, "3");            // Navy 3 -> 4
+    expect(b.newBin).toBe("4");
+    expect(b.entry.ids).toEqual([]);                              // nothing went in box 3 yet
+    expect(closeBin(rows, b.binMap, b.closed, "1")).toBeNull();   // box 1 is closed already
+    expect(closeBin(rows, b.binMap, b.closed, "3")).toBeNull();
+    expect(closeBin(rows, b.binMap, b.closed, "1.1")).toBeNull(); // a two-number name is not a box of this order
+    expect(nextBinNumber(b.binMap, b.closed, "4")).toBe("5");
+    expect(nextBinNumber(b.binMap, b.closed, "2")).toBe("5");     // the other team takes the next free number of the order too
+    const c = closeBin(rows, b.binMap, b.closed, "2");            // Red 2 -> 5: one team's boxes need not be side by side
+    expect(c.binMap).toEqual({ navy: "4", red: "5" });
+    expect(c.closed.map(x => [x.bin, x.key])).toEqual([["1", "navy"], ["3", "navy"], ["2", "red"]]);
   });
-  it("1.1 then 1.2 gives 1.3; box names sort by their numbers, not as text", () => {
-    const a = closeBin(rows, map, [], "1.1");
-    expect(a.newBin).toBe("1.2");
-    const b = closeBin(rows, a.binMap, a.closed, "1.2");
-    expect(b.newBin).toBe("1.3");
-    expect(b.binMap).toEqual({ navy: "1.3", red: "2.1" });
-    expect(b.closed.map(c => c.bin)).toEqual(["1.1", "1.2"]);
+  it("with three teams, closing the first box opens box 4, not 1.2; a closed box's number is never handed out again", () => {
+    const three = [...rows, { _id: 5, name: "", number: "20", team: "White", size: "A-L", scanned: false }];
+    const m = buildBinMap(three, {}, "team");                     // Navy 1, Red 2, White 3
+    expect(m).toEqual({ navy: "1", red: "2", white: "3" });
+    const a = closeBin(three, m, [], "1");
+    expect(a.newBin).toBe("4");
+    const b = closeBin(three, a.binMap, a.closed, "4");           // the highest box is now closed: 5, never 4 again
+    expect(b.newBin).toBe("5");
+    expect(nextBinNumber({ navy: "2" }, [{ bin: "9", key: "red", ids: [] }], "2")).toBe("10");
+  });
+  it("box names sort by their numbers, not as text; whole numbers and two-number names both read", () => {
     expect(boxParts("5.2")).toEqual([5, 2]);
     expect(boxParts("10.1")).toEqual([10, 1]);
-    expect(boxParts(3)).toEqual([3, 0]);                          // an older saved order: a plain number
+    expect(boxParts("3")).toEqual([3, 0]);                        // a whole-number box
+    expect(boxParts(3)).toEqual([3, 0]);
+    expect(binOrder("2", "10")).toBeLessThan(0);
+    expect(["10", "4", "31", "2", "1"].sort(binOrder)).toEqual(["1", "2", "4", "10", "31"]);
     expect(binOrder("2.1", "10.1")).toBeLessThan(0);
     expect(binOrder("5.2", "5.10")).toBeLessThan(0);
     expect(["10.1", "5.10", "2.1", "5.2", "5.1"].sort(binOrder)).toEqual(["2.1", "5.1", "5.2", "5.10", "10.1"]);
@@ -213,19 +224,57 @@ describe("closing a full box", () => {
     expect(r.entry.label).toBe("A-L");
     expect(r.entry.ids).toEqual([0, 2]);
   });
-  it("an un-checked row leaves the closed box; rows added later for a new team get the next unused first number", () => {
-    const r = closeBin(rows, map, [], "1.1");
+  it("an un-checked row leaves the closed box; rows added later for a new team get a number no box has had", () => {
+    const r = closeBin(rows, map, [], "1");                       // Navy 1 -> 3
     const closed = dropFromClosed(r.closed, 0);
     expect(closed[0].ids).toEqual([1]);
     const more = [...rows, { _id: 5, name: "", number: "20", team: "Green", size: "A-L", scanned: false }];
-    expect(buildBinMap(more, r.binMap, undefined, r.closed.map(c => c.bin))).toEqual({ navy: "1.2", red: "2.1", green: "3.1" });
+    expect(buildBinMap(more, r.binMap, undefined, r.closed.map(c => c.bin))).toEqual({ navy: "3", red: "2", green: "4" });   // 1 is closed, 2 and 3 are open
   });
 });
 
-describe("an order saved before boxes had two numbers", () => {
-  it("its open bins become the first box of their number; new-style names and the sort field are left alone", () => {
-    expect(modernBins({ navy: 1, red: 3 })).toEqual({ navy: "1.1", red: "3.1" });
-    expect(modernBins({ "y-m": 2, "a-l": "4.2", __by: "size" })).toEqual({ "y-m": "2.1", "a-l": "4.2", __by: "size" });
+// An order started before whole numbers keeps its two-number names and carries
+// on with them exactly as before (owner, 12 Nov 2026): 1.1 then 1.2 gives 1.3,
+// and each team counts its own boxes.
+describe("an order started with two-number box names", () => {
+  const rows = [
+    { _id: 0, name: "SMITH", number: "7",  team: "Navy", size: "A-L",  scanned: "pass" },
+    { _id: 1, name: "JONES", number: "9",  team: "Navy", size: "A-M",  scanned: "manual" },
+    { _id: 2, name: "LEE",   number: "3",  team: "Red",  size: "A-L",  scanned: "pass" },
+    { _id: 3, name: "PATEL", number: "12", team: "Navy", size: "A-XL", scanned: false },
+  ];
+  const map = { navy: "1.1", red: "2.1" };                        // as such an order was saved
+  it("1.1 then 1.2 gives 1.3; the other team counts its own boxes; a plain number is not one of its boxes", () => {
+    const a = closeBin(rows, map, [], "1.1", 1000);
+    expect(a.newBin).toBe("1.2");
+    expect(a.entry).toEqual({ bin: "1.1", key: "navy", label: "Navy", ids: [0, 1], closedAt: 1000 });
+    expect(binOfRow(a.binMap, a.closed, rows[3])).toBe("1.2");
+    const b = closeBin(rows, a.binMap, a.closed, "1.2");
+    expect(b.newBin).toBe("1.3");
+    expect(b.binMap).toEqual({ navy: "1.3", red: "2.1" });
+    expect(b.closed.map(c => c.bin)).toEqual(["1.1", "1.2"]);
+    expect(closeBin(rows, b.binMap, b.closed, "1.1")).toBeNull();
+    expect(closeBin(rows, b.binMap, b.closed, 1)).toBeNull();
+    expect(nextBinNumber(b.binMap, b.closed, "1.3")).toBe("1.4");
+    expect(nextBinNumber(b.binMap, b.closed, "2.1")).toBe("2.2");
+  });
+  it("rows added later for a new team get the next unused first number", () => {
+    const r = closeBin(rows, map, [], "1.1");
+    const more = [...rows, { _id: 5, name: "", number: "20", team: "Green", size: "A-L", scanned: false }];
+    const m = buildBinMap(more, r.binMap, undefined, r.closed.map(c => c.bin));
+    expect(m.navy).toBe("1.2");
+    expect(m.red).toBe("2.1");
+    expect(m.green).toBe("3");                                    // a team new to the order gets a whole number
+  });
+});
+
+// Saved sessions are still passed through modernBins. While boxes had two
+// numbers it turned a plain 3 into 3.1; plain numbers are box names again
+// (the co-op, 27 Nov 2026), so it leaves every name as it is.
+describe("modernBins", () => {
+  it("leaves whole numbers, two-number names and the sort field alone", () => {
+    expect(modernBins({ navy: "1", red: "3" })).toEqual({ navy: "1", red: "3" });
+    expect(modernBins({ "y-m": "2", "a-l": "4.2", __by: "size" })).toEqual({ "y-m": "2", "a-l": "4.2", __by: "size" });
     expect(modernBins(null)).toBeNull();
   });
 });
@@ -236,7 +285,7 @@ describe("what a box is short of before it is sealed", () => {
   const map = buildBinMap(roster, {}, "team");
   it("lists, per open box, what is not scanned and what will not arrive", () => {
     const s = shortages(roster, map, []);
-    expect(s.map(x => [x.bin, x.label, x.toScan, x.flagged, x.missing])).toEqual([["1.1", "Navy", 0, 1, 1], ["2.1", "Red", 1, 0, 0]]);
+    expect(s.map(x => [x.bin, x.label, x.toScan, x.flagged, x.missing])).toEqual([["1", "Navy", 0, 1, 1], ["2", "Red", 1, 0, 0]]);
     expect(s[0].short.map(x => x._id)).toEqual([3, 4]);
     expect(s[1].waiting.map(x => x._id)).toEqual([6]);
   });
@@ -246,8 +295,8 @@ describe("what a box is short of before it is sealed", () => {
     expect(shortages(roster.map(x => ({ ...x, scanned: "pass" })), map, [])).toEqual([]);
   });
   it("after a box is closed the shortage is the next box's", () => {
-    const c = closeBin(roster, map, [], "1.1");
-    expect(shortages(roster, c.binMap, c.closed).map(x => x.bin)).toEqual(["1.2", "2.1"]);
+    const c = closeBin(roster, map, [], "1");                     // Navy 1, Red 2, White 3: Navy goes on in box 4
+    expect(shortages(roster, c.binMap, c.closed).map(x => [x.bin, x.label])).toEqual([["2", "Red"], ["4", "Navy"]]);
   });
   it("names the jerseys for a screen line", () => {
     expect(jerseyList([r(3, "Navy"), r(4, "Navy")])).toBe("#3, #4");

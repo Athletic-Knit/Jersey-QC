@@ -4,7 +4,7 @@
 // scanpolicy.js turns that into the station's result screen. The rules are in
 // the comment above findMatches.
 import { norm, normNum, nameMatches, nameWords, editDistance } from "./text.js";
-import { narrowByColour } from "./colour.js";
+import { narrowByColour, rowColourText } from "./colour.js";
 import { sameSize } from "./roster.js";
 
 // A row is done when it passed, was entered by hand (status "manual", only on
@@ -194,17 +194,23 @@ function sameReadRows(rows, read, reason, eligible = rows) {
 // the open rows of the number read that are all the SAME size are the same
 // garment, made for different teams' players ("when we scan #10 and it lists 6
 // different #10, all different teams but the same size, it does not matter which
-// one we select"). A clean camera read goes green on the first of them, in roster
-// order; it goes in that row's box. Rows of more than one size, or (with a colour
-// column) of more than one colour once the colour seen has narrowed them, stay a
-// list; so does a typed entry, a doubtful read (N1) and a roster with names.
+// one we select"). A clean camera read, or the number typed by hand, goes green on
+// the first of them, in roster order; it goes in that row's box. Rows of more than
+// one size, or (with a colour column) of more than one colour once the colour seen
+// has narrowed them, stay a list; so does a doubtful read (N1) and a roster with names.
 function oneGarment(rows, read, numberOnly, typed, number) {
-  if (!numberOnly || typed || isDoubtfulRead(number, read)) return null;
-  const open = rows.filter(r => !isDone(r));
+  if (!numberOnly || (!typed && isDoubtfulRead(number, read))) return null;
+  // Rows still out last, so the green goes on a garment not yet scanned; among them one marked
+  // missing before one flagged on this order (cameBack.live): a garment that turns up is the
+  // missing one, never the one in the DAMAGED box (Fable's final review, 26 Nov 2026).
+  const rank = r => (!r.cameBack ? 0 : r.cameBack.live ? 2 : 1);
+  const open = rows.filter(r => !isDone(r)).sort((a, b) => rank(a) - rank(b));
   if (open.length < 2) return null;
   const { rows: agree, strong } = narrowByColour(open, read);
   const pool = strong && agree.length ? agree : open;
-  const colourOf = r => norm(r.colour ?? r.color ?? "");
+  const colourOf = r => norm(rowColourText(r));
+  // A size must be known: rows with no size are not known to be one garment (Fable's final review).
+  if (!String(pool[0].size ?? "").trim()) return null;
   if (!pool.every(r => sameSize(r.size, pool[0].size) && colourOf(r) === colourOf(pool[0]))) return null;
   return { type: "exact", match: pool[0], sameGarment: pool.length };
 }
