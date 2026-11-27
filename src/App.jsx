@@ -2879,7 +2879,13 @@ function SettingsPanel({ settings, cameras, onSave, onClose }) {
 // on a station whose Settings → Label printer switch is on, `boxAutoPrint`) they
 // print as the screen opens, as they all did from 12 Nov 2026, and the button
 // prints them again. Opened later from the Boxes dialog it only prints on the button.
-function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, onPrinted, onConfirm }) {
+function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, onPrinted, onConfirm, onBack = null }) {   // onBack: opened from Packing, it goes back there
+  useEffect(() => {
+    if (!onBack) return;
+    const h = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onBack(); } };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [onBack]);
   const [print, setPrint] = useState({ status: autoPrint && labels.length ? "printing" : "idle" });
   const fired = useRef(false);
   const send = useCallback(() => hub.printLabels(labels, { kind: "binticket", station: stationId() })   // the 2 x 1 in roll, like the label of a bin opened when another was full
@@ -2923,8 +2929,8 @@ function BinSetupModal({ entries, by = "team", labels = [], autoPrint = false, o
           ))}
         </div>
         <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-          <button onClick={onConfirm} style={{ padding: "16px 40px", borderRadius: 10, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 700, fontSize: 21, cursor: "pointer" }}>
-            Boxes ready — start scanning
+          <button onClick={onBack || onConfirm} style={{ padding: "16px 40px", borderRadius: 10, border: "none", background: "var(--k-blue)", color: "var(--k-on-blue)", fontWeight: 700, fontSize: 21, cursor: "pointer" }}>
+            {onBack ? <>← Back to Packing <Kbd>Esc</Kbd></> : "Boxes ready — start scanning"}
           </button>
           {labels.length > 0 && (
             <button onClick={doPrint} disabled={print.status === "printing"} title="Print one label per box on the server's label printer"
@@ -3153,17 +3159,16 @@ function PackingRow({ b, sh, cap, asking, unfolded, onAsk, onUnfold, onFull, onL
 
 // `finished`: opened from the "Order N is done" screen; the Now strip only says so (the lists
 // printed at Finish are not in `listPrinted`, and nothing is left to scan or finish).
-function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short = {}, damaged = [], toScan = 0, summary, stats, status, summaryLabels = 0, finished = false,
+function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short = {}, damaged = [], toScan = 0, summary, stats, status, summaryLabels = 0, finished = false, startTab = "packing",
   onPrintList, onPrintAll, onFull, onReprint, onDamagedList, onLabels, onExport, onPrintSummary, onFinish, onClose }) {
   const [asking, setAsking] = useState(null);       // { bin, mode: "full" | "list" }
   const [unfolded, setUnfolded] = useState(null);   // the box whose jerseys still to scan are listed
-  const [summaryOpen, setSummaryOpen] = useState(false);   // the summary, laid over the Packing screen (the co-op, 27 Nov 2026)
-  const summaryOpenRef = useRef(false);
-  useEffect(() => { summaryOpenRef.current = summaryOpen; }, [summaryOpen]);
+  // Two tabs on one screen, "Packing / Summary" (the co-op, 27 Nov 2026): one place to find both, one Close.
+  const [tab, setTab] = useState(startTab === "summary" ? "summary" : "packing");
   useEffect(() => {
-    // Esc closes the summary when it is up, else the Packing screen; Enter does nothing (the pedal is Enter: a reflex press must not print or finish anything).
+    // Esc closes; Enter does nothing (the pedal is Enter: a reflex press must not print or finish anything).
     const h = e => {
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (summaryOpenRef.current) setSummaryOpen(false); else onClose(); }
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); }
       else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); }
     };
     window.addEventListener("keydown", h, true);
@@ -3182,14 +3187,27 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
     <div style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2400, display: "flex", alignItems: "center", justifyContent: "center" }}>{/* above the done screen (2300) and the Finish confirm (1600), which open it; below the Print menu (2500) */}
       <div style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-green)", padding: 30, maxWidth: 1100, width: "96vw", maxHeight: "94%", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ ...STICKY_HEAD, alignItems: "center", gap: 12 }}>
-          <div style={{ ...titleBig, fontSize: 36, whiteSpace: "nowrap" }}>📦 Packing · order {orderNumber || "—"}</div>
+          <div role="tablist" aria-label="Packing or summary" style={{ display: "flex", borderRadius: 12, border: "2px solid var(--k-blue)", overflow: "hidden" }}>
+            {[["packing", "📦 Packing"], ["summary", "📋 Summary"]].map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+                style={{ border: "none", padding: "8px 22px", fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 800, fontStyle: "italic", whiteSpace: "nowrap", cursor: "pointer", background: tab === id ? "var(--k-blue)" : "transparent", color: tab === id ? "var(--k-on-blue)" : "var(--k-blue-ink)" }}>{label}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "var(--k-ink-2)", whiteSpace: "nowrap" }}>Order {orderNumber || "—"}</div>
           <div style={{ flex: 1 }} />
-          {/* Summary and its print up here, in reach whatever is scrolled, in one row with Box labels and Close (the co-op, 27 Nov 2026). */}
-          <button onClick={() => setSummaryOpen(true)} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>📋 Summary</button>
-          <button onClick={() => onPrintSummary(false)} disabled={printing} title="The count label, the FAILED list and the MISSING list" style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap", opacity: printing ? 0.5 : 1 }}>🖨 Print summary · {summaryLabels} {summaryLabels === 1 ? "label" : "labels"}</button>
-          {onLabels && <button onClick={onLabels} title="The box labels of this order, to print again" style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>🖨 Box labels</button>}
+          {tab === "packing" && onLabels && <button onClick={onLabels} title="The box labels of this order, to print again" style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>🖨 Box labels</button>}
+          {tab === "summary" && onExport && <button onClick={onExport} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>⬇ Excel</button>}
+          {tab === "summary" && <button onClick={() => onPrintSummary(false)} disabled={printing} title="The count label, the FAILED list and the MISSING list" style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap", opacity: printing ? 0.5 : 1 }}>🖨 Print summary · {summaryLabels} {summaryLabels === 1 ? "label" : "labels"}</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
         </div>
+        {tab === "summary" && (
+          <div style={{ marginTop: 14 }}>
+            {status && <div style={{ marginBottom: 10, fontSize: 17, fontWeight: 600, color: status.status === "done" ? "var(--k-green-ink)" : status.status === "printing" ? "var(--k-ink-3)" : "var(--k-amber-ink)" }}>{status.status === "printing" ? "🖨 Printing… " : "🖨 "}{status.text}</div>}
+            <SummaryCounts summary={summary} stats={stats} />
+            <OrderSummaryBody summary={summary} bins={[]} />{/* the boxes are the Packing tab's rows */}
+          </div>
+        )}
+        {tab === "packing" && <>
         {/* The Now strip: one sentence, one button that does it. */}
         <div style={{ marginTop: 16, padding: "14px 20px", borderRadius: 14, border: `2px solid ${tone}`, background: "var(--k-tint-green-faint)", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 260 }}>
@@ -3240,26 +3258,8 @@ function PackingScreen({ orderNumber, by = "team", open, closed, cap = 45, short
           {onFinish && <button onClick={onFinish} style={{ ...btnGhost, fontSize: 17, padding: "12px 24px", borderColor: "var(--k-green)", color: "var(--k-green-ink-2)" }}>🏁 Finish order</button>}
           <button onClick={onClose} style={{ ...btnGhost, fontSize: 17, padding: "12px 24px" }}>Close <Kbd light>Esc</Kbd></button>
         </div>
+        </>}
       </div>
-      {/* The summary over the Packing screen, its head (Print, Excel, Close) kept on top while it scrolls. */}
-      {summaryOpen && (
-        <div onClick={() => setSummaryOpen(false)} style={{ position: "fixed", inset: 0, background: "var(--k-scrim)", zIndex: 2450, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Order summary" style={{ background: "var(--k-card)", borderRadius: 16, border: "2px solid var(--k-blue)", padding: 30, maxWidth: 1000, width: "94vw", maxHeight: "92%", overflowY: "auto", boxSizing: "border-box" }}>
-            <div style={STICKY_HEAD}>
-              <div style={{ ...titleBig, fontSize: 32, whiteSpace: "nowrap" }}>📋 Summary · order {orderNumber || "—"}</div>
-              <div style={{ flex: 1 }} />
-              {onExport && <button onClick={onExport} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>⬇ Excel</button>}
-              <button onClick={() => onPrintSummary(false)} disabled={printing} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap", opacity: printing ? 0.5 : 1 }}>🖨 Print summary · {summaryLabels} {summaryLabels === 1 ? "label" : "labels"}</button>
-              <button onClick={() => setSummaryOpen(false)} style={{ ...btnGhost, fontSize: 16, padding: "8px 16px", whiteSpace: "nowrap" }}>Close <Kbd light>Esc</Kbd></button>
-            </div>
-            {status && <div style={{ marginTop: 10, fontSize: 17, fontWeight: 600, color: status.status === "done" ? "var(--k-green-ink)" : status.status === "printing" ? "var(--k-ink-3)" : "var(--k-amber-ink)" }}>{status.status === "printing" ? "🖨 Printing… " : "🖨 "}{status.text}</div>}
-            <div style={{ marginTop: 10 }}>
-              <SummaryCounts summary={summary} stats={stats} />
-              <OrderSummaryBody summary={summary} bins={[]} />{/* the boxes are the Packing screen's rows */}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -5637,7 +5637,8 @@ export default function App() {
       )}
 
       {showBinSetup && binMap && (
-        <BinSetupModal entries={boxPlan} by={binFieldOf(binMap)} labels={boxPlanLabels} autoPrint={boxAuto} onPrinted={boxesLabelled} onConfirm={() => { setShowBinSetup(false); setBoxAuto(false); }} />
+        <BinSetupModal entries={boxPlan} by={binFieldOf(binMap)} labels={boxPlanLabels} autoPrint={boxAuto} onPrinted={boxesLabelled} onConfirm={() => { setShowBinSetup(false); setBoxAuto(false); }}
+          onBack={showBinSetup === "packing" ? () => { setShowBinSetup(false); setShowPacking(true); } : null} />
       )}
 
 
@@ -5683,10 +5684,10 @@ export default function App() {
       )}
       {/* No Box labels on the done screen: the set-out screen (z 1500) would open under it; the Print menu has them (review, 25 Nov 2026). */}
       {showPacking && (
-        <PackingScreen orderNumber={orderNumber} by={binFieldOf(binMap)} open={packOpen} closed={closedList} cap={boxCap} short={shortByBox} damaged={flaggedRows}
+        <PackingScreen startTab={showPacking === "summary" ? "summary" : "packing"} orderNumber={orderNumber} by={binFieldOf(binMap)} open={packOpen} closed={closedList} cap={boxCap} short={shortByBox} damaged={flaggedRows}
           toScan={summaryNow.counts.notScanned} summary={summaryNow} stats={summaryStats} status={binPrint} summaryLabels={summaryLabelCount} finished={!!finished}
           onPrintList={printBoxList} onPrintAll={printAllLists} onFull={binFull} onReprint={reprintBinList} onDamagedList={printDamagedList}
-          onLabels={finished ? null : () => { setShowPacking(false); setBoxAuto(false); setShowBinSetup(true); }}
+          onLabels={finished ? null : () => { setShowPacking(false); setBoxAuto(false); setShowBinSetup("packing"); }}
           onExport={canSupervise ? () => exportRosterXLSX(roster, log, exportMeta, rosterCols, binOf) : null}
           onPrintSummary={printSummary}
           onFinish={finished ? null : () => { setShowPacking(false); askFinish(); }}
@@ -5757,7 +5758,7 @@ export default function App() {
       )}
       {showFinish && (
         <FinishOrderModal orderNumber={orderNumber} roster={roster} offRosterFlags={summaryNow.counts.extra} scans={log.length} binLists={finishLists.length} bins={binSummary.filter(b => b.count > 0)} short={shortList} shipWith={shipWith}
-          onConfirm={finishOrder} onCancel={() => closeDialog(() => setShowFinish(false))} onSummary={() => { setShowFinish(false); setShowPacking(true); }} />
+          onConfirm={finishOrder} onCancel={() => closeDialog(() => setShowFinish(false))} onSummary={() => { setShowFinish(false); setShowPacking("summary"); }} />
       )}
 
       {/* Header */}
@@ -5966,7 +5967,7 @@ export default function App() {
                 <div style={{ padding: "8px 14px", borderTop: "1px solid var(--k-rule)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>{/* one line, short labels, never under the roster (the owner, 19 Nov 2026) */}
                   {stillOut.total > 0 && <button onClick={() => setShowStillOut(true)} title="The garments this order is waiting for: back from repair, missing, extra. Scan one when it comes back, or pass it here" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", borderColor: "var(--k-sky)", color: "var(--k-sky-ink)" }}>🔧 Still out · {stillOut.total}</button>}
                   <button onClick={() => setShowHistory(true)} title="Every garment scanned this order, latest first — flag one after the fact" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap" }}>🕘 History · {new Set(log.filter(l => l.match && l.match._id !== undefined && (l.status === S_PASS || l.status === S_FLAGGED || l.status === S_MANUAL)).map(l => l.match._id)).size}</button>
-                  <button onClick={() => setShowPacking(true)} title="Packing: what to do next, each box with its list (Print list, Box full), and the order summary" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "var(--k-red)", borderColor: "var(--k-red)", color: "var(--k-on-red)" } : { borderColor: "var(--k-green)", color: "var(--k-green-ink-2)" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Packing"}</button>
+                  <button onClick={() => setShowPacking(true)} title="Packing: what to do next, each box with its list (Print list, Box full), and the order summary" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", ...(heavyBin ? { background: "var(--k-red)", borderColor: "var(--k-red)", color: "var(--k-on-red)" } : { borderColor: "var(--k-green)", color: "var(--k-green-ink-2)" }) }}>{heavyBin ? `📦 Box ${heavyBin.bin} ~${Math.round(heavyBin.weight)} lb — close it` : "📦 Packing / Summary"}</button>
                   <button onClick={() => setShowIssues(true)} title="The lists of what is missing, what came twice and what is flagged" style={{ ...btnGhost, padding: "7px 14px", fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", borderColor: issues.missing.length + issues.dups.length + issues.flagged.length ? "var(--k-amber)" : "var(--k-rule-2)" }}>
                     ⚠ Mis <span style={{ color: "var(--k-amber-ink)" }}>{issues.missing.length}</span> · Dup <span style={{ color: "var(--k-purple)" }}>{issues.dups.length}</span> · Flag <span style={{ color: "var(--k-red-ink)" }}>{issues.flagged.length}</span>
                   </button>
